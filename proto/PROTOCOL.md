@@ -133,6 +133,12 @@ backgroundCmap, tileidx and color256idx. They are perceived display data, not
 permission to query unseen level state. Window clears and level changes reset
 the semantic map; full public checkpoints remain the review authority.
 
+Carried armor perception may additionally report `armorAccessible`: physical
+layering/embedding only. It does not test hidden curses or promise that removal
+will succeed. The adapter uses this to avoid the raw port's outermost-armor
+autoselection when the caller actually selected a covered inner garment.
+Absent legacy access information remains unknown; it is not filled from labels.
+
 ## 4. Engine input requests
 
 The engine emits `input` with a numeric id and a `params.kind`. The raw reply

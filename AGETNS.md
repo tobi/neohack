@@ -13,6 +13,8 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
   infer identity from labels, accelerator assignment or row order. Choice IDs
   are returned integers accepted unchanged by `choose`; item refs stay strings.
   Older pins lacking object bindings fail explicitly instead of being upgraded.
+  Equipment dispatch/candidates use class, current usage and engine physical
+  armor access; never select armor removal for a ring or infer layers from labels.
 - `client/explorer-app.js` is the Lit application. The reusable map is
   `nh-map3d.js` + `map-surface.js` + `map-presentation.js`: procedural models,
   GPU/keyboard lifecycle, and pure bounded display preparation. No engine rules.
@@ -85,5 +87,6 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 - `test:browser:inspection` covers zero-turn facts, pending decisions, replay/import races, legacy unknowns and mobile focus.
 - `test:browser:salvage` creates its own isolated native fixture, retires it, then verifies engine-free import/review of the copied prefix.
 - `test:browser:pickup` exercises real two-object menu controls, pending save/resume, single-object selection and engine-free backward/forward review.
+- `test:browser:equipment` covers ring candidates, Left/Right choice, pending resume, the Remove control and read-only equipment history.
 
 See [GOAL.md](GOAL.md) and [client/README.md](client/README.md) for run instructions.

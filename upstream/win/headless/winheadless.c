@@ -1064,6 +1064,13 @@ hl_perceived_object(JBuf *jb, struct obj *o, boolean carried)
     jb_key(jb, "class"); jb_str(jb, hl_object_class(o->oclass));
     jb_key(jb, "quantity"); jb_int(jb, o->quan);
     if (carried) {
+        if (o->oclass == ARMOR_CLASS) {
+            /* Visible physical layering/embedding only, not curse state or
+             * a claim that taking it off will be safe or successful. */
+            jb_key(jb, "armorAccessible");
+            jb_bool(jb, o != uskin && !(o == uarm && uarmc)
+                    && !(o == uarmu && (uarm || uarmc)));
+        }
         /* Physical use of your own possessions is known; do not expose
            artifact powers, BUC state, charges, or other hidden properties. */
         jb_key(jb, "usage"); jb_begin_arr(jb);

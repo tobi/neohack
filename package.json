@@ -19,6 +19,7 @@
     "test:browser:storage": "bun client/tests/storage-browser.ts",
     "test:browser:salvage": "bun client/tests/salvage-browser.ts",
     "test:browser:pickup": "bun client/tests/pickup-browser.ts",
+    "test:browser:equipment": "bun client/tests/equipment-browser.ts",
     "test:reconstruction-browser": "bun client/tests/reconstruction-browser.ts",
     "reconstruct": "bun tools/reconstruct-run.ts",
     "salvage": "bun tools/salvage-run.ts",

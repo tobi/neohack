@@ -144,6 +144,15 @@ identical display labels. An older pin without bindings returns
 `itemMappingUnavailable` for targeted menu pickup rather than guessing another
 object. Saved pins are not automatically upgraded.
 
+Equipment actions use reported class and current physical `usage`, not item
+labels. `equip`/`wear` offer unworn armor, rings and amulets; `remove`/`takeoff`
+offer worn eligible items. Accessory removal cannot substitute armor, and
+covered armor cannot substitute its outer layer. The engine supplies physical
+armor-access facts without disclosing curse state. Older pins with uncertain
+physical use/layering fail closed rather than guessing. Body armor can require
+several actual turns; do not repeat an intent to finish it. Ring placement
+choices are labeled Left/Right; submit their returned integer IDs.
+
 Use the offered decision kind and limits. Inventory letters and raw command
 indices are not public controls. A target is not speech. Eligibility does not
 imply that an item is safe to consume. Confirmations require a real user choice.

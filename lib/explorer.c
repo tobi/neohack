@@ -153,6 +153,7 @@ typedef struct {
     char category[24];      /* perceived object class, not name heuristics */
     unsigned usage;
     int usage_known;
+    int armor_access_known, armor_accessible;
 } inv_item_t;
 
 static const char *const USAGE_NAMES[] = { "worn", "wielded", "offhand", "alternate", "quivered", "attached", NULL };
@@ -1316,6 +1317,8 @@ ingest_belongings(game_t *g, const char *params)
                     item->label = name; name = NULL;
                     item->letter = (char) slot;
                     item->quantity = (int) quantity;
+                    if (mj_find(obj, "armorAccessible", &v))
+                        item->armor_access_known = mj_bool(v, &item->armor_accessible);
                     if (mj_find(obj, "usage", &v) && *v.p == '[') {
                         mj_arr_it uses = { 0 }; mj_val use; uses.first = 1;
                         item->usage_known = 1;
@@ -2947,8 +2950,15 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
             mj_key(b, "options");
             mj_arr(b);
             for (i = 0; ch[i]; i++) {
-                char label[8];
+                char label[8]; size_t k;
                 snprintf(label, sizeof label, "%c", ch[i]);
+                /* The bound ring-put-on flow uses rightleftchars. Present
+                 * its semantic choice, not a terminal-letter instruction. */
+                if ((!strcmp(ch, "rl") || !strcmp(ch, "lr")) &&
+                    (!strcmp(g->operation.action, "equip") || !strcmp(g->operation.action, "wear")))
+                    for (k = 0; k < g->ninv; k++)
+                        if (g->inv[k].letter == g->operation.item_letter && !strcmp(g->inv[k].category, "ring"))
+                            snprintf(label, sizeof label, "%s", ch[i] == 'r' ? "Right" : "Left");
                 mj_obj(b);
                 mj_key(b, "id"); mj_intv(b, (long long) i);
                 mj_key(b, "label"); mj_strv(b, label);
@@ -3700,6 +3710,45 @@ eligible_item(const char *action, const char *label, const char *category)
 }
 
 static int
+equipment_action(const char *action)
+{
+    return !strcmp(action, "equip") || !strcmp(action, "wear") ||
+        !strcmp(action, "remove") || !strcmp(action, "takeoff");
+}
+
+static int
+equipment_key(const char *action, const char *category)
+{
+    int removing = !strcmp(action, "remove") || !strcmp(action, "takeoff");
+    if (!strcmp(category, "armor")) return removing ? 'T' : 'W';
+    if (!strcmp(category, "ring") || !strcmp(category, "amulet")) return removing ? 'R' : 'P';
+    return -1; /* Never infer an equipment route from a display name. */
+}
+
+static int
+eligible_carried(game_t *g, const char *action, const inv_item_t *item)
+{
+    if (equipment_action(action)) {
+        int removing = !strcmp(action, "remove") || !strcmp(action, "takeoff");
+        if (equipment_key(action, item->category) < 0 || !g->perception_fresh || !item->usage_known) return 0;
+        if (removing && !strcmp(item->category, "armor")) {
+            if (item->armor_access_known) {
+                if (!item->armor_accessible) return 0;
+            } else {
+                /* Older pins can auto-select the outermost armor. With more
+                 * than one worn piece, no layer/row may stand in for our item. */
+                size_t i, count = 0;
+                for (i = 0; i < g->ninv; i++)
+                    if (!strcmp(g->inv[i].category, "armor") && (g->inv[i].usage & 1U)) count++;
+                if (count > 1) return 0;
+            }
+        }
+        return removing ? !!(item->usage & 1U) : !(item->usage & 1U); /* engine-issued worn */
+    }
+    return eligible_item(action, item->label, item->category);
+}
+
+static int
 action_uses_floor(const char *action)
 {
     return !strcmp(action, "eat") || !strcmp(action, "pickup");
@@ -3759,7 +3808,7 @@ collect_candidates(game_t *g, const char *action, cand_t *out, size_t cap)
     size_t n = 0, i;
     for (i = 0; strcmp(action, "pickup") && i < g->ninv && n < cap; i++) {
         const char *label = g->inv[i].label ? g->inv[i].label : "";
-        if (!eligible_item(action, label, g->inv[i].category))
+        if (!eligible_carried(g, action, &g->inv[i]))
             continue;
         snprintf(out[n].ref, sizeof out[n].ref, "%s", g->inv[i].ref);
         out[n].label = label;
@@ -3800,6 +3849,15 @@ resolve_item_arg(nhx_t *x, game_t *g, const char *action, const char *args,
         *emsg = "inventory is not known and the world is busy";
         return -1;
     }
+    if (equipment_action(action)) {
+        int known = g->structured_perception && g->perception_fresh;
+        for (i = 0; i < g->ninv; i++) if (!g->inv[i].usage_known) known = 0;
+        if (!known) {
+            *ecode = "equipmentKnowledgeUnavailable";
+            *emsg = "current item class and physical use are required; no equipment was guessed";
+            return -1;
+        }
+    }
     npool = collect_candidates(g, action, pool, sizeof pool / sizeof pool[0]);
     if (!npool) {
         *ecode = "unavailable";
@@ -3833,7 +3891,7 @@ resolve_item_arg(nhx_t *x, game_t *g, const char *action, const char *args,
                 return -1;
             }
             for (i = 0; strcmp(action, "pickup") && i < g->ninv; i++) {
-                if (!strcmp(id, g->inv[i].ref) && eligible_item(action, g->inv[i].label, g->inv[i].category)) {
+                if (!strcmp(id, g->inv[i].ref) && eligible_carried(g, action, &g->inv[i])) {
                     g->operation.item_letter = g->inv[i].letter;
                     g->operation.floor_index = -1;
                     g->operation.floor_object_id = 0;
@@ -4390,6 +4448,14 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
     size_t msg_start0 = (size_t) ev_from, msg_count0 = g->msg_count;
     int step;
     (void) x;
+    if (!g->operation.keypos && equipment_action(action)) {
+        size_t i;
+        for (i = 0; i < g->ninv; i++)
+            if (g->inv[i].letter == g->operation.item_letter && eligible_carried(g, action, &g->inv[i])) break;
+        if (i == g->ninv)
+            return envelope_error(g, req_id, action, "equipmentKnowledgeUnavailable", "chosen equipment is not currently available; no substitute was selected");
+        cmd = g->operation.cmdkey = equipment_key(action, g->inv[i].category);
+    }
     /* The engine holds an unanswered resting prompt: answer it first.
      * Awaiting before sending would hang until the timeout, since the
      * engine emits nothing new while its prompt stands. */
@@ -5381,17 +5447,6 @@ run_scripted(nhx_t *x, game_t *g, const char *action, const char *args,
             if (rc < 0)
                 return envelope_synth(g, req_id, action, "blocked",
                                       ev_from, 0, ecode, emsg);
-        }
-        if ((!strcmp(action, "equip") || !strcmp(action, "wear")) &&
-            g->operation.item_letter) {
-            /* Rings and amulets go on with 'P', armor with 'W'. */
-            size_t i;
-            for (i = 0; i < g->ninv; i++)
-                if (g->inv[i].letter == g->operation.item_letter &&
-                    g->inv[i].label &&
-                    (label_has(g->inv[i].label, "ring") ||
-                     label_has(g->inv[i].label, "amulet")))
-                    g->operation.cmdkey = 80;
         }
         return drive_loop(x, g, req_id, turn0, you0_x, you0_y, had_you,
                           ev_from, &bumped, 0);

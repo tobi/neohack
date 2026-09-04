@@ -39,6 +39,7 @@ const ITEMS = [
   "eat",
   "drink",
   "equip",
+  "remove",
   "wield",
   "read",
   "apply",

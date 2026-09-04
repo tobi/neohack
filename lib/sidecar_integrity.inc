@@ -127,6 +127,7 @@ sidecar_validate(game_t *g, const char *text)
             !( (!strcmp(action, "move") || !strcmp(action, "wait")) && strchr("hjklyubn.", (int) command) && command > 0) &&
             !( !strcmp(action, "climb") && (command == '<' || command == '>')) &&
             !( (!strcmp(action, "equip") || !strcmp(action, "wear")) && command == 'P') &&
+            !( (!strcmp(action, "remove") || !strcmp(action, "takeoff")) && command == 'R') &&
             !( !strcmp(action, "new_game") && command == 0)) error = "operation command is not bound to its action";
         free(action); if (error) return error;
         if (!mj_find(v.p, "decKind", &field) ||

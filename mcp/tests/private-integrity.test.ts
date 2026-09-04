@@ -97,8 +97,11 @@ for (const mode of [
     } finally {
       await b.close();
     }
-  });
+  }, 20000);
 
+// The fixture RPC budget is 12s and owned-process cleanup has its own 5s
+// bound. Do not let Bun's default 5s deadline preempt those diagnostics or
+// kill the test before its no-engine/no-rewrite assertions can run.
 for (const mode of [
   "torn",
   "shortened",
@@ -155,7 +158,7 @@ for (const mode of [
     } finally {
       await b.close();
     }
-  });
+  }, 20000);
 
 for (const mode of ["wrong-id", "default-answer"])
   test(`a ${mode} at an actual engine prompt aborts instead of guessing`, async () => {
