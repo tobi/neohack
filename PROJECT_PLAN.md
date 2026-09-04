@@ -55,6 +55,16 @@ Continuation controller: idle loop **1** (30-wake bound). Keep this plan current
 - `tools/drain-server.ts BASE [--apply]` saves only worlds already loaded by that server; it never resumes an archived world. Used before each deployment; the loaded world stayed at T=14. All existing run data was preserved.
 - The 3311 candidate server remains an older loaded bridge. Restart before comparisons. Upgrade all old bridges sharing a root before relying on leases; pre-lease binaries do not participate.
 
+## Source control / private import
+
+- User requested commits and private GitHub import to **tobi/neonethack**.
+- Root Git repository initialized; `origin` is `https://github.com/tobi/neonethack.git` and GitHub visibility was verified PRIVATE before pushing.
+- Commit history separates the licensed upstream snapshot (`04834a93165482a28257bac282543e3583658622`) from the explorer/viewer implementation and clean-checkout build fixes. The original nested `upstream/.git` remains intact locally; do not push to its public NetHack origin.
+- SDKs, dependencies, build outputs, credentials, and run histories are excluded. A staged-file credential-pattern scan found no matching secrets.
+- Fresh-clone validation caught missing CLI/play linkage and a missing headless entry in window-system metadata; both were fixed in source templates rather than relying on generated local Makefiles. A source-only fresh clone now builds and passes 24 tests, broader acceptance 10 pass/5 skip, and MCP smoke. Evidence: `/tmp/ascent/publish/fresh-check.log`.
+- Incomplete legacy reconstruction scaffolding is deliberately **not committed**: local stash `WIP: isolated legacy reconstruction scaffolding (requires reconstruction.inc)` (currently stash@{0}); full backups and detailed next-step design are in `/tmp/ascent/reconstruction-wip/`. Apply it only when continuing implementation and keep it out of verified commits until complete.
+- Future verified milestones should be committed and pushed to the private root origin. No force pushes or publishing runtime histories.
+
 ## Next continuation priorities
 
 1. Implement explicit **isolated** legacy input-log → public-perception conversion, without overwriting source runs or using viewer playback to send commands. Respect run leases and pinned legacy engine versions. Validate input logs before reconstruction; label unverified reconstruction honestly. Old engines lack the new terrain/item perceptions, so support observed-glyph fallback or report limits; do not claim unknown historical state is exact.
