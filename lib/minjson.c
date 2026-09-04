@@ -2,6 +2,7 @@
 #include "minjson.h"
 
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -98,6 +99,82 @@ mj_find(const char *json, const char *key, mj_val *out)
         }
         return 0;
     }
+}
+
+static int
+valid_string(const char **cursor)
+{
+    const unsigned char *p = (const unsigned char *) *cursor;
+    if (*p++ != '"') return 0;
+    while (*p && *p != '"') {
+        if (*p < 0x20) return 0;
+        if (*p++ == '\\') {
+            unsigned char c = *p++;
+            if (!c) return 0;
+            if (c == 'u') {
+                int i;
+                for (i = 0; i < 4; i++, p++)
+                    if (!((*p >= '0' && *p <= '9') || (*p >= 'a' && *p <= 'f') || (*p >= 'A' && *p <= 'F'))) return 0;
+            } else if (!strchr("\"\\/bfnrt", c)) return 0;
+        }
+    }
+    if (*p != '"') return 0;
+    *cursor = (const char *) p + 1;
+    return 1;
+}
+
+static int
+valid_value(const char **cursor, int depth)
+{
+    const char *p = skip_ws(*cursor);
+    if (depth > 32) return 0;
+    if (*p == '"') {
+        if (!valid_string(&p)) return 0;
+    } else if (*p == '{' || *p == '[') {
+        int object = *p == '{';
+        char end = object ? '}' : ']';
+        p = skip_ws(p + 1);
+        if (*p != end) for (;;) {
+            if (object) {
+                if (!valid_string(&p)) return 0;
+                p = skip_ws(p); if (*p++ != ':') return 0;
+            }
+            if (!valid_value(&p, depth + 1)) return 0;
+            p = skip_ws(p);
+            if (*p == end) break;
+            if (*p++ != ',') return 0;
+            p = skip_ws(p);
+        }
+        p++;
+    } else if (!strncmp(p, "true", 4)) p += 4;
+    else if (!strncmp(p, "false", 5)) p += 5;
+    else if (!strncmp(p, "null", 4)) p += 4;
+    else {
+        if (*p == '-') p++;
+        if (*p == '0') p++;
+        else {
+            if (*p < '1' || *p > '9') return 0;
+            while (*p >= '0' && *p <= '9') p++;
+        }
+        if (*p == '.') {
+            p++; if (*p < '0' || *p > '9') return 0;
+            while (*p >= '0' && *p <= '9') p++;
+        }
+        if (*p == 'e' || *p == 'E') {
+            p++; if (*p == '+' || *p == '-') p++;
+            if (*p < '0' || *p > '9') return 0;
+            while (*p >= '0' && *p <= '9') p++;
+        }
+    }
+    *cursor = p;
+    return 1;
+}
+
+int
+mj_valid(const char *json)
+{
+    const char *p = json;
+    return json && valid_value(&p, 0) && !*skip_ws(p);
 }
 
 static int
@@ -211,8 +288,11 @@ mj_int(mj_val v, long long *out)
     long long n;
     if (!out)
         return 0;
+    errno = 0;
     n = strtoll(v.p, &end, 10);
-    if (end == v.p)
+    if (end == v.p || errno == ERANGE ||
+        (*end && *end != ',' && *end != '}' && *end != ']' &&
+         *end != ' ' && *end != '\t' && *end != '\r' && *end != '\n'))
         return 0;
     *out = n;
     return 1;

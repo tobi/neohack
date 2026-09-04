@@ -124,6 +124,19 @@ replay seeking so a jump does not depict a fictitious walk through the dungeon.
 The archive implementation does not import the engine bridge. IDs and paths
 are validated. These routes do not mutate worlds.
 
+## Explicit legacy reconstruction
+
+`POST /runs/:id/reconstruct` with `{confirm:true}` starts an isolated worker;
+`GET /reconstructions/:jobId` reads its status. This management operation is
+separate from read-only playback and from the live bridge queue. It requires a
+source engine, static data, a seeded input log, and a working Linux sandbox.
+There is no automatic or unsandboxed fallback.
+
+Derived frames carry `response.provenance.kind === 'reconstruction'`, an
+unverified/read-only label, fingerprints, and input counts. Display that
+provenance on replay and import; never promote the archive into a live world.
+See [docs/RECONSTRUCTION.md](../docs/RECONSTRUCTION.md).
+
 ## Recording format v1
 
 Each NDJSON line is:
@@ -150,7 +163,9 @@ versions fail explicitly. Recorded decisions are displayed read-only.
 
 ## Deployment boundary
 
-By default the server listens on loopback. Cross-origin MCP requests are denied
-unless their origin is explicitly allowed via `MCP_ALLOWED_ORIGINS`. This is not
+By default the server listens on loopback. Unexpected Host names are rejected
+to prevent simple DNS rebinding. Cross-origin MCP requests are denied unless
+their origin is explicitly allowed via `MCP_ALLOWED_ORIGINS`; configured
+reverse-proxy origins also authorize their Host names. This is not
 multi-user authentication. Only expose the service inside a trusted environment
 until authentication and per-run authorization are implemented.

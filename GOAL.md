@@ -128,14 +128,19 @@ Normal exact request retries and observational reads do not append duplicate
 perception frames. Playback/seek does not launch an engine. Full checkpoints
 prevent future map state from leaking backwards in a replay.
 
-Legacy input-only runs are listed honestly as requiring conversion. No existing
-logs are overwritten, and conversion must be explicit and isolated. When an old
-session has no engine pin, resume preserves its existing playground executable
-before recreating the playground.
+Legacy input-only runs now offer explicit sandboxed reconstruction. No existing
+logs are overwritten. Only source inputs, pinned engine, and static data enter
+the sandbox; results carry unverified/read-only provenance and are published
+only after validation. Normal playback never executes those inputs. See
+[docs/RECONSTRUCTION.md](docs/RECONSTRUCTION.md).
+
+When an old live session has no engine pin, resume preserves its existing
+playground executable before recreating the playground.
 
 ## Remaining work / caveats
 
-- Explicit legacy input-log conversion into public perception recordings.
+- Legacy reconstruction is available, but original calendar/options/observations
+  were not captured. It must remain labeled unverified; no exact-history claim.
 - Real locked-door, multi-level descent, pet exchange, terminal/death, and
   bounded-interruption scenarios (the old suite's remaining skips).
 - Complete strict argument validation, richer semantic engine prompt context,

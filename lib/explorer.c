@@ -109,6 +109,8 @@ static const char *const VITAL_NAMES[NSTATUS] = {
 static const char *
 band_kind(int glyph)
 {
+    if (glyph >= NO_GLYPH_NUM - 2)
+        return "terrain"; /* unexplored/nothing are not objects */
     if (glyph < ALLY_LO)
         return "creature";
     if (glyph < INVIS_LO)
@@ -193,6 +195,13 @@ typedef struct game {
     char location_id[80];
     int structured_perception;
     int replaying;          /* resume lockstep: suspend live auto-answers */
+    int recording_only;
+    char reconstruction_source[65];
+    char reconstruction_input_hash[32];
+    char reconstruction_engine_hash[32];
+    char reconstruction_data_hash[32];
+    long long reconstruction_step, reconstruction_total;
+    long long deadline_ms;
     /* tracked perception */
     cell_t cells[MAP_H][MAP_W];
     unsigned char terrain[MAP_H][MAP_W]; /* terrain_t memory */
@@ -240,6 +249,8 @@ static void args_key_of(const char *args, mj_Buf *b);
 static int req_reserve(game_t *g, const char *rid, const char *key);
 static void req_restore_seen(game_t *g);
 static char *req_saved_result(game_t *g, req_entry_t *e);
+static char *run_reconstruct(nhx_t *x, const char *args);
+static int record_frame(game_t *g, const char *request, const char *response);
 
 static char *
 fail_envelope(const char *session_id, const char *req_id,
@@ -499,6 +510,7 @@ sidecar_save(game_t *g)
     mj_obj(&b);
     mj_key(&b, "revision"); mj_intv(&b, g->revision);
     mj_key(&b, "frameCount"); mj_intv(&b, g->frame_count);
+    mj_key(&b, "recordingOnly"); mj_boolv(&b, g->recording_only);
     mj_key(&b, "inventoryRev"); mj_intv(&b, g->inventory_rev);
     mj_key(&b, "nextDecision"); mj_intv(&b, g->next_decision);
     mj_key(&b, "nextRef"); mj_intv(&b, g->next_ref);
@@ -626,6 +638,10 @@ sidecar_load(game_t *g)
     if (mj_find(text, "frameCount", &v)) {
         long long n;
         if (mj_int(v, &n)) g->frame_count = n;
+    }
+    if (mj_find(text, "recordingOnly", &v)) {
+        int flag = 0;
+        if (mj_bool(v, &flag)) g->recording_only = flag;
     }
     if (mj_find(text, "inventoryRev", &v)) {
         long long n;
@@ -795,12 +811,13 @@ semantic_reload(game_t *g)
     g->revision = g->frame_count = 0;
     g->next_decision = g->next_ref = 1;
     g->inventory_rev = -1;
+    g->recording_only = 0;
     g->have_operation = 0;
     memset(&g->operation, 0, sizeof g->operation);
     g->operation.floor_index = g->operation.dir_code = -1;
     g->operation.cmdkey = -2;
     sidecar_load(g);
-    req_restore_seen(g);
+    if (!g->recording_only) req_restore_seen(g);
 }
 
 /* A durable request-id reservation precedes every engine-affecting request.
@@ -1056,49 +1073,6 @@ menu_clear(menu_t *m)
     memset(m, 0, sizeof *m);
 }
 
-/* Visible sign + color to terrain semantics (adapter knowledge). */
-static terrain_t
-terrain_of(int ch, int color)
-{
-    switch (ch) {
-    case '-':
-    case '|':
-        return T_WALL;
-    case '.':
-        return T_FLOOR;
-    case '#':
-        return T_CORRIDOR;
-    case '+':
-        return T_DOOR_CLOSED;
-    case '<':
-        return T_STAIRS_UP;
-    case '>':
-        return T_STAIRS_DOWN;
-    case '_':
-        return T_ALTAR;
-    case '{':
-        return T_FOUNTAIN;
-    case '\\':
-        return T_THRONE;
-    case '^':
-        return T_TRAP;
-    case ' ':
-        return T_DARK;
-    case '}':
-        if (color == 1 || color == 9)
-            return T_LAVA;
-        if (color == 4 || color == 12 || color == 14)
-            return T_WATER;
-        return T_SINK;
-    case '"':
-        if (color == 2 || color == 3 || color == 10)
-            return T_GRASS;
-        return T_UNKNOWN;
-    default:
-        return T_UNKNOWN;
-    }
-}
-
 /* Symbol values are from the vendored defsym.h, provided by the engine's
  * glyph_to_cmap on already perceived glyphs (not live hidden terrain). */
 static terrain_t
@@ -1281,8 +1255,20 @@ ingest(game_t *g, const char *line)
                                 g->terrain[y][x] = (unsigned char) terrain_from_cmap((int) symbol);
                             else if (background >= 0)
                                 g->terrain[y][x] = (unsigned char) terrain_from_cmap((int) background);
-                            else if (gg >= CMAP_LO && gg < STRANGE_LO)
-                                g->terrain[y][x] = (unsigned char) terrain_of((int) cc, (int) fc);
+                            else if (gg >= CMAP_LO && gg < STRANGE_LO) {
+                                /* Legacy ports omit cmap. Decode their observed
+                                 * glyph using the same vendored display.h layout,
+                                 * not ambiguous display marks such as | and -. */
+                                int legacy = gg == CMAP_LO ? 0 :
+                                    gg < CMAP_LO + 56 ? 1 + ((int) gg - CMAP_LO - 1) % 11 :
+                                    gg < CMAP_LO + 77 ? 12 + ((int) gg - CMAP_LO - 56) :
+                                    gg < CMAP_LO + 82 ? 33 : 34 + ((int) gg - CMAP_LO - 82);
+                                g->terrain[y][x] = (unsigned char) terrain_from_cmap(legacy);
+                            }
+                        }
+                        if (gg >= NO_GLYPH_NUM - 2) {
+                            g->cells[y][x].present = 0;
+                            g->terrain[y][x] = T_UNKNOWN;
                         }
                         push_saw(g, (int) x, (int) y, (int) gg, (int) cc, (int) fc);
                     }
@@ -1433,6 +1419,13 @@ ingest(game_t *g, const char *line)
         if (mj_find(params, "type", &tv) && mj_int(tv, &t) && t == 3 &&
             mj_find(params, "window", &wv) && mj_int(wv, &w))
             g->map_win = (int) w;
+    } else if (!strcmp(method, "window_clear")) {
+        mj_val wv;
+        long long w;
+        if (mj_find(params, "window", &wv) && mj_int(wv, &w) && w == g->map_win) {
+            memset(g->cells, 0, sizeof g->cells);
+            memset(g->terrain, T_UNKNOWN, sizeof g->terrain);
+        }
     } else if (!strcmp(method, "cursor")) {
         mj_val wv, xv, yv;
         long long w, x, y;
@@ -1845,11 +1838,26 @@ pending_fill(game_t *g, long long id, const char *kind, const char *params)
 
 /* Read+ingest until an input request is pending (1), the engine ends (0),
  * or the timeout/error hits (-1). Auto-answers narration pauses inline. */
+static long long
+monotonic_ms(void)
+{
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (long long) t.tv_sec * 1000 + t.tv_nsec / 1000000;
+}
+
 static int
 await_prompt(game_t *g, int timeout_ms)
 {
     for (;;) {
-        char *line = nh_session_read_line(g->eng, timeout_ms);
+        int remaining = timeout_ms;
+        char *line;
+        if (g->deadline_ms) {
+            long long left = g->deadline_ms - monotonic_ms();
+            if (left <= 0) { errno = ETIMEDOUT; return -1; }
+            if (remaining < 0 || left < remaining) remaining = (int) left;
+        }
+        line = nh_session_read_line(g->eng, remaining);
         mj_val mv, idv, kv, pv;
         char *method = NULL;
         long long id = -1;
@@ -2057,7 +2065,7 @@ game_get(nhx_t *x, const char *id, int create)
     snprintf(g->id, sizeof g->id, "%s", id);
     snprintf(g->dir, sizeof g->dir, "%s/%s", x->sessions_dir, id);
     snprintf(g->playground, sizeof g->playground, "%s/playground", g->dir);
-    if (mkdir_p(g->dir) < 0 || mkdir_p(g->playground) < 0) {
+    if (mkdir_p(g->dir) < 0) {
         free(g);
         return NULL;
     }
@@ -2443,6 +2451,26 @@ emit_heard_chrono(game_t *g, mj_Buf *b)
         mj_strv(b, g->messages[(g->msg_start + base + i) % NMSG] ?
                 g->messages[(g->msg_start + base + i) % NMSG] : "");
     mj_endarr(b);
+}
+
+static void
+emit_provenance(game_t *g, mj_Buf *b)
+{
+    if (!g->recording_only) return;
+    mj_key(b, "provenance"); mj_obj(b);
+    mj_key(b, "kind"); mj_strv(b, "reconstruction");
+    mj_key(b, "sourceSessionId"); mj_strv(b, g->reconstruction_source);
+    mj_key(b, "verification"); mj_strv(b, "unverified");
+    mj_key(b, "readOnly"); mj_boolv(b, 1);
+    mj_key(b, "inputFingerprint"); mj_strv(b, g->reconstruction_input_hash);
+    mj_key(b, "engineFingerprint"); mj_strv(b, g->reconstruction_engine_hash);
+    mj_key(b, "nhdatFingerprint"); mj_strv(b, g->reconstruction_data_hash);
+    mj_key(b, "answersConsumed"); mj_intv(b, g->reconstruction_step);
+    mj_key(b, "answersTotal"); mj_intv(b, g->reconstruction_total);
+    mj_key(b, "complete"); mj_boolv(b, g->reconstruction_step == g->reconstruction_total);
+    mj_key(b, "note");
+    mj_strv(b, "Rebuilt from stored inputs using the source engine and data. Input ids matched, but original observations, calendar and runtime options were not captured; this is not a verified original recording. Legacy item/terrain knowledge may be incomplete.");
+    mj_endobj(b);
 }
 
 static void
@@ -3091,6 +3119,7 @@ envelope(game_t *g, const char *req_id,
     mj_endarr(&b);
     mj_endobj(&b);
     emit_observation(g, &b);
+    emit_provenance(g, &b);
     emit_events_window(g, &b, ev_from);
     if (want_decision && g->pending.waiting &&
         emit_decision(g, &b, want_item, dec_kind, sizeof dec_kind)) {
@@ -4529,6 +4558,7 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
         free(name);
         return fail_envelope(id, req_id, "noGame", "cannot create session");
     }
+    if (g->recording_only) { free(name); return fail_envelope(id, req_id, "readOnlyRecording", "a reconstructed recording cannot be used as a live world"); }
     if (lease_acquire(g) < 0) { free(name); return lease_error(g, req_id); }
     /* Never truncate an existing run merely because a caller reused an id. */
     {
@@ -4683,6 +4713,8 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
     int acquired = lease_acquire(g);
     if (acquired < 0) return lease_error(g, req_id);
     if (acquired) semantic_reload(g);
+    if (g->recording_only)
+        return fail_envelope(g->id, req_id, "readOnlyRecording", "this is a derived recording, not a live world; use the read-only archive viewer");
     log = log_read(g, &nlog);
     if (!log || nlog < 2) {
         for (i = 0; i < nlog; i++) free(log[i]);
@@ -5314,6 +5346,10 @@ nhx_dispatch(nhx_t *x, const char *request_json)
         sid = mj_str(v);
     if (mj_find(request_json, "requestId", &v))
         req_id = mj_str(v);
+    if (!strcmp(tool, "reconstruct_run")) {
+        free(tool); free(sid); free(req_id);
+        return run_reconstruct(x, request_json);
+    }
     if (!strcmp(tool, "new_game")) {
         free(tool);
         free(sid);
@@ -5495,6 +5531,7 @@ record_frame(game_t *g, const char *request, const char *response)
     mj_key(&b, "depth"); mj_strv(&b, g->status[20] ? g->status[20] : "unknown");
     mj_key(&b, "ended"); mj_boolv(&b, g->ended);
     emit_end(g, &b);
+    emit_provenance(g, &b);
     mj_endobj(&b);
     ok = b.ok && fputs(b.buf, f) >= 0 && fflush(f) == 0 && fsync(fileno(f)) == 0;
     if (fclose(f)) ok = 0;
@@ -5502,6 +5539,8 @@ record_frame(game_t *g, const char *request, const char *response)
     if (!ok || rename(temp, meta)) return -1;
     return 0;
 }
+
+#include "reconstruction.inc"
 
 char *
 nhx_call(nhx_t *x, const char *request_json)
@@ -5511,6 +5550,7 @@ nhx_call(nhx_t *x, const char *request_json)
     int retry = 0;
     game_t *g;
     if (!x || !request_json) return NULL;
+    if (!mj_valid(request_json)) return fail_envelope("", NULL, "invalidJson", "request must be a complete JSON object");
     if (mj_find(request_json, "tool", &v)) tool = mj_str(v);
     if (mj_find(request_json, "sessionId", &v)) sid = mj_str(v);
     if (mj_find(request_json, "requestId", &v)) rid = mj_str(v);

@@ -394,7 +394,9 @@ export class NhMap3D extends LitElement {
       this._location = obs?.location?.id;
       this._buildTerrain(cells);
       if (locationChanged || !this._hasFit) {
+        const following = this.follow;
         this.fit();
+        if (following && obs?.you) this.focusSelf();
         this._hasFit = true;
       }
     }
@@ -1117,6 +1119,9 @@ export class NhMap3D extends LitElement {
       delta = new THREE.Vector3(p.x, 0, p.y).sub(this.controls.target);
     this.camera.position.add(delta);
     this.controls.target.add(delta);
+    const offset = this.camera.position.clone().sub(this.controls.target);
+    if (offset.length() > 24)
+      this.camera.position.copy(this.controls.target).add(offset.setLength(24));
     this.controls.update();
   }
   rotate() {

@@ -4,6 +4,8 @@
 import { serve } from "bun";
 import { handleMcp } from "../../mcp/src/http";
 import { runStore } from "../../mcp/src/runs";
+import { reconstructor } from "../../mcp/src/reconstruct";
+import { hostAllowed } from "../../mcp/src/origin";
 import { resolve } from "node:path";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -16,8 +18,10 @@ const server = serve({
   maxRequestBodySize: 1024 * 1024,
   async fetch(req) {
     const url = new URL(req.url);
+    if (!hostAllowed(req)) return new Response("Host is not permitted", {status:403});
     // The world API (MCP Streamable HTTP): POST/GET/DELETE /mcp.
     if (url.pathname === "/mcp") return handleMcp(req);
+    if (url.pathname.startsWith("/reconstructions/") || /^\/runs\/[A-Za-z0-9_-]+\/reconstruct$/.test(url.pathname)) return reconstructor.handle(req);
     if (url.pathname === "/runs" || url.pathname.startsWith("/runs/")) return runStore.handle(req);
     if (url.pathname === "/api-docs") {
       return new Response(renderDocsPage(await Bun.file(`${CLIENT_DIR}/API.md`).text()), {

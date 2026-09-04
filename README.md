@@ -12,8 +12,9 @@ play and read-only review of recorded runs.
 - **CLI, MCP stdio and HTTP bindings** use the same core.
 
 This is an active development project. The working baseline is tested; the full
-[API design](API_DESING.md) is not yet implemented. In particular, conversion of
-legacy input-only runs, several game scenarios, and further hardening remain.
+[API design](API_DESING.md) is not yet implemented. Historical equivalence of
+legacy reconstructions is not guaranteed; further scenario coverage and
+hardening remain.
 See [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Quick start (Linux)
@@ -51,7 +52,7 @@ bun mcp/accept.ts
 bun mcp/smoke.ts
 ```
 
-The regression suite currently contains 24 tests. The broader acceptance runner
+The regression suite includes real engine, lifecycle, recording, and sandbox tests. The broader acceptance runner
 reports unfinished scenarios as **skipped**, not as passing placeholders.
 
 For browser checks, start an isolated front and Chromium with CDP enabled:
@@ -61,6 +62,14 @@ PORT=3311 SESSIONS_DIR=/tmp/neonethack-tests bun run dev
 # In another terminal, with Chromium listening on CDP port 9333:
 APP_URL=http://127.0.0.1:3311 bun run test:browser
 ```
+
+## Legacy runs
+
+Legacy input-only runs can be explicitly reconstructed from the run library or
+with `tools/reconstruct-run.ts`. This requires Linux bubblewrap/prlimit and runs
+in a separate sandbox, never the live engine queue. Originals are preserved;
+results are labeled **unverified reconstruction** and remain read-only.
+See [reconstruction documentation](docs/RECONSTRUCTION.md).
 
 ## Project map
 

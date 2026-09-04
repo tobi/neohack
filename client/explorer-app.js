@@ -92,6 +92,7 @@ export class ExplorerView extends LitElement {
       "playing",
       "speed",
       "seeking",
+      "reconstruction",
     ].map((k) => [k, { state: true }]),
   );
   static styles = theme;
@@ -125,6 +126,8 @@ export class ExplorerView extends LitElement {
     this._seekToken = 0;
     this._openToken = 0;
     this._playToken = 0;
+    this._jobToken = 0;
+    this.reconstruction = null;
     try {
       this.saved =
         localStorage.getItem(STORE) ||
@@ -139,10 +142,22 @@ export class ExplorerView extends LitElement {
     super.connectedCallback();
     window.addEventListener("keydown", this.onKey);
     this.refreshRuns();
+    const linkedRun = new URL(location.href).searchParams.get("run");
+    if (linkedRun && /^[A-Za-z0-9_-]{1,64}$/.test(linkedRun))
+      this.watch(
+        linkedRun,
+        Number(new URL(location.href).searchParams.get("frame") ?? 0),
+      );
+    try {
+      const job = localStorage.getItem("neonethack.reconstruction");
+      if (job) this.followReconstruction(job);
+    } catch {}
   }
   disconnectedCallback() {
     window.removeEventListener("keydown", this.onKey);
     this.pause();
+    this._jobToken++;
+    clearTimeout(this._jobTimer);
     super.disconnectedCallback();
   }
   get obs() {
@@ -414,6 +429,10 @@ export class ExplorerView extends LitElement {
     this._seekToken++;
     this._openToken++;
     this.mode = "live";
+    const url = new URL(location.href);
+    url.searchParams.delete("run");
+    url.searchParams.delete("frame");
+    history.replaceState(null, "", url);
     this.envelope = this.liveEnvelope;
     this.messages = this.liveMessages;
     this.selected = null;
@@ -427,7 +446,7 @@ export class ExplorerView extends LitElement {
           ? "Decision needed"
           : "Connected";
   }
-  async watch(id) {
+  async watch(id, frame = 0) {
     if (this.busy) return;
     this.pause();
     const token = ++this._openToken;
@@ -444,7 +463,7 @@ export class ExplorerView extends LitElement {
       this.recording = rec;
       this.targeting = null;
       this.selected = null;
-      await this.seek(0);
+      await this.seek(Number.isSafeInteger(frame) && frame >= 0 ? frame : 0);
     } catch (e) {
       this.error = e.message;
     }
@@ -459,6 +478,10 @@ export class ExplorerView extends LitElement {
           "Import is limited to 128 MB. Use the paged run library for larger recordings.",
         );
       this.recording = new LocalRecording(parseRecording(await file.text()));
+      const url = new URL(location.href);
+      url.searchParams.delete("run");
+      url.searchParams.delete("frame");
+      history.replaceState(null, "", url);
       this.mode = "replay";
       this.targeting = null;
       this.selected = null;
@@ -479,10 +502,21 @@ export class ExplorerView extends LitElement {
       this.playhead = index;
       this.selectedTile = null;
       this.status = "Replay · read-only";
+      if (this.recording.id) {
+        const url = new URL(location.href);
+        url.searchParams.set("run", this.recording.id);
+        url.searchParams.set("frame", String(index));
+        history.replaceState(null, "", url);
+      }
       this.messages = (this.obs.heard ?? [])
         .filter(Boolean)
         .map((text) => ({ text, kind: "heard", turn: this.obs.turn }))
         .reverse();
+      for (const event of this.envelope.events ?? [])
+        if (event.type === "shown") {
+          if (event.about) this.log(event.about, "system");
+          for (const text of event.items ?? []) this.log(text, "system");
+        }
       this.log(
         `${label(this.envelope.outcome?.action)} · ${label(this.envelope.outcome?.status)} · frame ${index + 1}`,
         "system",
@@ -748,7 +782,12 @@ export class ExplorerView extends LitElement {
           .value=${String(this.speed)}
           @change=${(e) => (this.speed = Number(e.target.value))}
         >
-          ${[0.5, 1, 2, 4].map((n) => html`<option value=${n}>${n}×</option>`)}</select
+          ${[0.5, 1, 2, 4].map(
+            (n) =>
+              html`<option value=${n} ?selected=${n === this.speed}>
+                ${n}×
+              </option>`,
+          )}</select
         ><span class="pill replay-badge">Read-only replay</span>${this.recording
           .id
           ? html`<a href=${`/runs/${this.recording.id}/export`}
@@ -778,6 +817,73 @@ export class ExplorerView extends LitElement {
       </div>
     </section>`;
   }
+  async reconstruct(id) {
+    if (this.busy || this.reconstruction?.state === "running") return;
+    if (
+      !confirm(
+        "Reconstruct this legacy input log in a separate sandbox? The original is preserved. The result is unverified because original observations, calendar and options were not captured.",
+      )
+    )
+      return;
+    this.pause();
+    this.reconstruction = { state: "running", sourceSessionId: id };
+    try {
+      const response = await fetch(`/runs/${id}/reconstruct`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.job)
+        throw Error(result.error || "Reconstruction could not start");
+      this.reconstruction = result.job;
+      try {
+        localStorage.setItem("neonethack.reconstruction", result.job.id);
+      } catch {}
+      this.followReconstruction(result.job.id);
+    } catch (e) {
+      this.reconstruction = { state: "failed", error: { message: e.message } };
+    }
+  }
+  followReconstruction(id) {
+    const token = ++this._jobToken,
+      started = performance.now();
+    clearTimeout(this._jobTimer);
+    const check = async () => {
+      if (token !== this._jobToken || !this.isConnected) return;
+      try {
+        const response = await fetch(`/reconstructions/${id}`, {
+          signal: AbortSignal.timeout(15000),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.job)
+          throw Error(data.error || "Cannot read reconstruction status");
+        if (token !== this._jobToken) return;
+        this.reconstruction = data.job;
+        if (data.job.state === "running") {
+          if (performance.now() - started > 240000)
+            throw Error(
+              "Monitoring timed out; refresh the run library to check for a completed archive.",
+            );
+          this._jobTimer = setTimeout(check, 1000);
+        } else {
+          try {
+            localStorage.removeItem("neonethack.reconstruction");
+          } catch {}
+          this.refreshRuns();
+        }
+      } catch (e) {
+        if (token === this._jobToken)
+          this.reconstruction = {
+            id,
+            state: "failed",
+            error: { message: e.message },
+          };
+      }
+    };
+    check();
+  }
   renderRuns() {
     return html`<section class="panel">
       <div class="panel-head">
@@ -806,6 +912,29 @@ export class ExplorerView extends LitElement {
             @change=${(e) => this.importRecording(e.target.files?.[0])}
           />
         </div>
+        ${this.reconstruction
+          ? html`<div class="reconstruction-status" role="status">
+              <strong
+                >${this.reconstruction.state === "running"
+                  ? "Reconstructing in an isolated worker…"
+                  : this.reconstruction.state === "completed"
+                    ? "Reconstruction ready · unverified"
+                    : "Reconstruction unavailable"}</strong
+              >
+              <p>
+                ${this.reconstruction.error?.message ||
+                "The original run is unchanged. Playback of the result is read-only."}
+              </p>
+              ${this.reconstruction.state === "completed"
+                ? html`<button
+                    class="small"
+                    @click=${() => this.watch(this.reconstruction.archiveId)}
+                  >
+                    Review reconstruction
+                  </button>`
+                : nothing}
+            </div>`
+          : nothing}
         <div class="run-list">
           ${this.runs
             .slice(0, 35)
@@ -813,14 +942,21 @@ export class ExplorerView extends LitElement {
               (r) =>
                 html`<button
                   class="run-row"
-                  ?disabled=${!r.replayReady || this.busy}
-                  title=${r.reason || "Review without starting an engine"}
-                  @click=${() => this.watch(r.sessionId)}
+                  ?disabled=${this.busy ||
+                  (!r.replayReady && this.reconstruction?.state === "running")}
+                  title=${r.replayReady
+                    ? "Review without starting an engine"
+                    : "Explicitly reconstruct this legacy log in a sandbox"}
+                  @click=${() =>
+                    r.replayReady
+                      ? this.watch(r.sessionId)
+                      : this.reconstruct(r.sessionId)}
                 >
-                  ${r.title?.trim() || r.sessionId}<span
+                  ${r.title?.trim() || r.sessionId}<span>${r.sessionId}</span
+                  ><span
                     >${r.replayReady
-                      ? `T ${r.turn ?? "?"} · ${r.depth ?? ""} · ${r.frames} frames`
-                      : "Legacy input log · conversion required"}</span
+                      ? `${r.provenance?.kind === "reconstruction" ? "Reconstructed · unverified · " : ""}T ${r.turn ?? "?"} · ${r.depth ?? ""} · ${r.frames} frames`
+                      : "Legacy input log · click to reconstruct"}</span
                   >
                 </button>`,
             )}
@@ -984,6 +1120,18 @@ export class ExplorerView extends LitElement {
         </div>
       </header>
       <main>
+        ${this.envelope?.provenance?.kind === "reconstruction"
+          ? html`<section class="provenance-banner" role="note">
+              <strong>Reconstructed history · unverified</strong>
+              <p>${this.envelope.provenance.note}</p>
+              <span
+                >Source ${this.envelope.provenance.sourceSessionId} ·
+                ${this.envelope.provenance.answersConsumed}/${this.envelope
+                  .provenance.answersTotal}
+                stored answers</span
+              >
+            </section>`
+          : nothing}
         ${this.error
           ? html`<div class="error-banner" role="alert">
               <span>${this.error}</span>${this.mode === "live"
@@ -1169,11 +1317,11 @@ export class ExplorerView extends LitElement {
               <div class="statusline">
                 ${noSession
                   ? "Start a world to see your belongings."
-                  : this.mode === "replay"
-                    ? "Belongings as known at this recorded moment."
-                    : o.inventoryKnown
-                      ? "Choose an item, then an action. Leave unselected to ask the world for candidates."
-                      : "Inventory knowledge is unavailable; no items are inferred."}
+                  : o.inventoryKnown !== true
+                    ? "Inventory was not captured at this point. This does not mean the pack was empty."
+                    : this.mode === "replay"
+                      ? "Belongings as known at this recorded moment."
+                      : "Choose an item, then an action. Leave unselected to ask the world for candidates."}
               </div>
             </section>
             ${this.selectedTile

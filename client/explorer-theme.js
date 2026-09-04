@@ -737,6 +737,28 @@ export const theme = css`
   .file-input {
     display: none;
   }
+  .provenance-banner,
+  .reconstruction-status {
+    padding: 12px 15px;
+    border: 1px solid #77613d;
+    border-radius: 8px;
+    background: #302a20;
+    color: #e8cc9d;
+    font-size: 12px;
+    margin-bottom: 14px;
+  }
+  .provenance-banner p,
+  .reconstruction-status p {
+    margin: 6px 0;
+  }
+  .provenance-banner span {
+    font:
+      10px ui-monospace,
+      monospace;
+  }
+  .run-row span {
+    overflow-wrap: anywhere;
+  }
   .toolbar-info {
     font:
       10px ui-monospace,

@@ -1,6 +1,7 @@
 // Read-only public-perception archives. No engine/core import: replay cannot act.
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { resolve, join, sep } from "node:path";
+import { hostAllowed } from "./origin";
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const json = (body: unknown, status = 200) =>
@@ -75,6 +76,7 @@ export function createRunStore(root: string) {
     return rows;
   }
   async function handle(req: Request): Promise<Response> {
+    if (!hostAllowed(req)) return json({ error: "Host is not permitted" }, 403);
     if (req.method !== "GET" && req.method !== "HEAD")
       return json({ error: "Read-only archive endpoint" }, 405);
     const url = new URL(req.url);

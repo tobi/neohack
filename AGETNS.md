@@ -11,6 +11,10 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
   reusable Three.js/Lit map component. They render observations, not engine rules.
 - `client/recording.js` and `mcp/src/runs.ts` review public perception recordings
   without starting or commanding an engine. Replay must remain read-only.
+- Legacy reconstruction is a separate explicit management operation:
+  `lib/reconstruction.inc` + `mcp/src/reconstruct.ts`. It runs in a dedicated
+  sandbox, preserves source data, and publishes only validated, unverified,
+  read-only archives. Never add an unsandboxed fallback.
 - Core action boundaries record checkpointed public events. Existing input logs
   are not event recordings and must not be silently converted in place.
 - Existing sessions and unrelated upstream changes must be preserved. Engine
@@ -40,8 +44,8 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
   checkout. Do not push project changes to its public NetHack origin. The root
   repository vendors the source tree with its original license and base SHA.
 - Never commit session histories, credentials, SDKs, dependency installations,
-  or generated binaries/bundles. Incomplete reconstruction work is stashed
-  locally until it compiles and passes its tests.
+  or generated binaries/bundles. Keep unfinished work out of verified commits;
+  the original reconstruction scaffold has now been integrated and tested.
 
 ## Checks
 

@@ -18,9 +18,9 @@ Continuation controller: idle loop **1** (30-wake bound). Keep this plan current
 ## Stages
 
 1. **Baseline repairs verified — core reliability.** Non-mutating engine perceptions replace pickup/inventory peeks; actual object classes and identities; target decisions; complete retry fingerprints; door symbols; conditions; pending-decision resume; engine pinning; existing-id truncation rejection. Real regressions pass. Further validation/lifecycle scenarios remain.
-2. **Integrated — recording/replay.** C records public response checkpoints + ordered events and a byte-offset index. Read-only `/runs` endpoints and bounded paged replay client work. Legacy input logs are listed honestly; explicit isolated conversion is still pending.
+2. **Integrated — recording/replay.** C records public response checkpoints + ordered events and a byte-offset index. Read-only `/runs` endpoints and bounded paged replay client work. Legacy input logs now support explicit sandboxed reconstruction with unverified/read-only provenance.
 3. **Integrated/browser-tested — Lit 3D viewer.** New `/play` is `client/explorer-app.js` + reusable `client/nh-map3d.js`. Local Lit/Three.js bundle; modeled actors/objects/terrain, camera/follow/cutaway/fallback, live controls, typed decisions, journal, library, timeline. No engine calls during replay (browser verified).
-4. **In progress — verification/hardening.** Real browser flows, desktop/mobile screenshots, native acceptance, MCP smoke and regressions pass. The old broad suite now correctly reports 10 pass / 5 skip. Address remaining scenarios, legacy conversion, lifecycle/security and recording durability before declaring this pass complete.
+4. **In progress — verification/hardening.** Real browser flows, desktop/mobile screenshots, native acceptance, MCP smoke and regressions pass. The old broad suite now correctly reports 10 pass / 5 skip. Address remaining scenarios, lifecycle/security edges and recording durability before declaring this pass complete.
 
 ## Known baseline failures
 
@@ -35,10 +35,10 @@ Continuation controller: idle loop **1** (30-wake bound). Keep this plan current
 
 ## Verified milestone and service ownership
 
-- Latest green checks: `bun test mcp/tests` = 24 tests / 133 assertions; native `test_explorer` green; MCP smoke PASS; broader MCP acceptance 10 pass / 5 skip.
+- Latest green checks: `bun test mcp/tests` = 36 tests / 194 assertions; native `test_explorer` green; MCP smoke PASS; broader MCP acceptance 10 pass / 5 skip.
 - Browser test `client/tests/browser.ts` passes live play/eat/confirmation/kick/save+resume, 3D rendering, read-only seek (0 core calls), and 390px mobile without overflow. Evidence `/tmp/ascent/takeover/browser-main/` and `/tmp/ascent/takeover/browser/`.
-- Main server restarted under our ownership in Herdr pane **w2G:p8**, port **3000**, normal repo session root. At last check PID 2812439 (verify identity before stopping). Log `/tmp/ascent/takeover/front.log`.
-- Candidate server in pane **w2G:p7**, port **3311**, sessions `/tmp/ascent/takeover/dev-sessions`. Its bridge process must be restarted to pick up rebuilt C changes.
+- Main server restarted under our ownership in Herdr pane **w2G:p8**, port **3000**, normal repo session root. At last check PID 3023114 (verify identity before stopping). Log `/tmp/ascent/takeover/front.log`.
+- Older candidate server in pane **w2G:p7**, port **3311**, sessions `/tmp/ascent/takeover/dev-sessions`; it is stale. Current reconstruction candidate is pane **w2G:pC**, port **3312**, sessions `/tmp/ascent/reconstruction/browser-sessions`, last PID 3016169 (verify before stopping).
 - Old review prototype remains in pane w2G:p6, port 3310; it is not the active application.
 - Latest additions are rebuilt and deployed on the main endpoint: `observation.here`, close-on-exec session pipes, CLI SIGPIPE handling, bridge decoder/deadline fixes, and replay race/picking refinements. Main-browser live/replay/mobile checks and the baseline regressions were re-run green after that deployment. The lifecycle pass below is now also deployed and verified. The candidate 3311 bridge may still be an older loaded process; restart it before backend comparisons.
 - Root package/build scripts and `bun.lock` now pin Lit/Three.js. Prettier is a dev dependency; formatting with mise failed due an unrelated global reshim GitHub rate limit, so project-local Prettier is used.
@@ -51,7 +51,7 @@ Continuation controller: idle loop **1** (30-wake bound). Keep this plan current
 - Fixed sidecar receipt-order restoration and strengthened generated run-id uniqueness.
 - Ten real lifecycle tests now cover competing bridges, handoff, cold item/target decisions, crash/confirmation receipt, >64 receipt retention, uncertain reservation, torn journal, engine-held lease after owner crash, and multiple worlds. Native C also tests competing handles within one process.
 - Tests: 24/24, 133 assertions; native C acceptance green; MCP smoke PASS. Browser live/replay/mobile test passed again after final deployment (0 replay engine calls).
-- Evidence: `/tmp/ascent/takeover/lifecycle/`. Main browser final evidence: `browser-final/report.json`. Main service remains pane w2G:p8, current PID 2812439 (verify before stopping).
+- Evidence: `/tmp/ascent/takeover/lifecycle/`. Main browser final evidence: `browser-final/report.json`. At that checkpoint main was pane w2G:p8, PID 2812439; use the latest service section before stopping anything.
 - `tools/drain-server.ts BASE [--apply]` saves only worlds already loaded by that server; it never resumes an archived world. Used before each deployment; the loaded world stayed at T=14. All existing run data was preserved.
 - The 3311 candidate server remains an older loaded bridge. Restart before comparisons. Upgrade all old bridges sharing a root before relying on leases; pre-lease binaries do not participate.
 
@@ -62,12 +62,23 @@ Continuation controller: idle loop **1** (30-wake bound). Keep this plan current
 - Commit history separates the licensed upstream snapshot (`04834a93165482a28257bac282543e3583658622`) from the explorer/viewer implementation and clean-checkout build fixes. The original nested `upstream/.git` remains intact locally; do not push to its public NetHack origin.
 - SDKs, dependencies, build outputs, credentials, and run histories are excluded. A staged-file credential-pattern scan found no matching secrets.
 - Fresh-clone validation caught missing CLI/play linkage and a missing headless entry in window-system metadata; both were fixed in source templates rather than relying on generated local Makefiles. A source-only fresh clone now builds and passes 24 tests, broader acceptance 10 pass/5 skip, and MCP smoke. Evidence: `/tmp/ascent/publish/fresh-check.log`.
-- Incomplete legacy reconstruction scaffolding is deliberately **not committed**: local stash `WIP: isolated legacy reconstruction scaffolding (requires reconstruction.inc)` (currently stash@{0}); full backups and detailed next-step design are in `/tmp/ascent/reconstruction-wip/`. Apply it only when continuing implementation and keep it out of verified commits until complete.
+- The original reconstruction scaffold was kept out of the initial publication. It has now been integrated with its implementation and tests; do not re-apply that old stash. Backups/design remain in `/tmp/ascent/reconstruction-wip/`.
 - Future verified milestones should be committed and pushed to the private root origin. No force pushes or publishing runtime histories.
+
+## Reconstruction pass (controller wake 3)
+
+- Initial private GitHub CI run 33831623432 completed successfully.
+- Implemented `lib/reconstruction.inc`: strict seeded NDJSON validation, original engine/static-data snapshots, lease checks, input-ID matching, bounded replay, public checkpoint capture, explicit unverified provenance, and read-only archive guards. Original run-data bytes are preserved.
+- Added a separate management worker (`mcp/src/reconstruct.ts`) using bubblewrap/prlimit, not the live bridge queue. Only required source artifacts enter read-only; future saves/blobs and unrelated home files are hidden; networking is isolated. No unsandboxed fallback. Completed outputs are streamed/validated and symlinks rejected before publication.
+- Browser and operator flows are available, with confirmation, job status, provenance banners, historical prompt display, and direct `?run=...&frame=...` replay links. Passive replay remains GET-only/engine-free. Host validation now closes the simple DNS-rebinding hole as well as enforcing Origin policy.
+- Tests: 36 pass, 194 assertions locally, including sandbox isolation, denied source writes, hidden future data, unsafe publication artifacts, and timeout cleanup. Reconstruction UI and existing live/replay/mobile browser flows pass.
+- Original seed904 (`/tmp/ascent/sess/mcp-mtm0m1ci-7pzwr`) reconstructed to **4,002 frames**. Final T=3640, position (17,3), HP38/38, XL3, AC6 and gold agree with the retained digest. This is endpoint corroboration, NOT full historical verification; warning remains.
+- Main library archive: **r-2890f8eda1a84f6090b5daac5a0f8fd9**. Review at `http://127.0.0.1:3000/play?run=r-2890f8eda1a84f6090b5daac5a0f8fd9&frame=4001`. No source histories were uploaded to GitHub.
+- Evidence: `/tmp/ascent/reconstruction/` (native/sandbox tests, browser-final, browser-live-final, seed-904-published.json, seed-904-comparison.json, seed-904-view-final). Main service was drained with its loaded world unchanged at T14 before restart.
 
 ## Next continuation priorities
 
-1. Implement explicit **isolated** legacy input-log → public-perception conversion, without overwriting source runs or using viewer playback to send commands. Respect run leases and pinned legacy engine versions. Validate input logs before reconstruction; label unverified reconstruction honestly. Old engines lack the new terrain/item perceptions, so support observed-glyph fallback or report limits; do not claim unknown historical state is exact.
+1. Check the new private CI run after this milestone. Ensure sandbox integration is genuinely exercised where user namespaces are available; never replace it with an unsandboxed fallback. Monitor/document legacy reconstruction limits and provenance, not an exact-history claim.
 2. Replace remaining skip scenarios with actual bounded pet/locked-door/level/death/interruption tests. Add structured engine terminal results rather than relying on arbitrary text; strict request validation, recording/index recovery, and bounded teardown still need work.
 3. Improve viewer interaction/accessibility/performance, WebGL fallback/recovery and larger maps; add inspect-self/here panels using returned data. Publish a standalone component bundle. Clean up owned browser-test tabs after evidence capture; do not touch unrelated tabs.
 4. Harden receipt/recording failure recovery without undoing the fail-closed reservation behavior. Consider immutable template/options/time provenance as well as engine binary pins for truly historical replay; don't assume seed alone controls calendar-dependent NetHack behavior.

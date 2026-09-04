@@ -144,7 +144,7 @@ export async function dispatch(raw: unknown): Promise<Record<string, unknown> | 
       return ok({
         protocolVersion: "2024-11-05",
         capabilities: { tools: {} },
-        serverInfo: { name: "neonethack-mcp", version: "0.4.0" },
+        serverInfo: { name: "neonethack-mcp", version: "0.5.0" },
       });
     } else if (msg.method === "ping") {
       return ok({});

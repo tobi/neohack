@@ -74,5 +74,5 @@ try {
 }
 await writeFile(`${out}/report.json`, JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));
-b.close();
+await b.close();
 process.exit(report.passed ? 0 : 1);

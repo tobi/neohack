@@ -425,7 +425,9 @@ doors, and pending-decision resume. A Lit/Three.js live/replay viewer and
 checkpointed public-perception recordings are implemented. See PROJECT_PLAN.md
 for the verified current milestone and remaining work.
 
-Open work includes legacy input-log conversion, additional scenario staging,
+Legacy reconstruction is now an explicit sandboxed management operation; its
+outputs remain labeled unverified and read-only (see docs/RECONSTRUCTION.md).
+Open work includes historical-equivalence limits, additional scenario staging,
 strict validation/engine context for every action, unsupported actions,
 crash-boundary archive recovery, and deployment hardening. The broader smoke
 suite reports unimplemented scenarios as SKIPs rather than passes.

@@ -32,6 +32,8 @@ int mj_is_null(mj_val v);
 const char *mj_raw(mj_val v, size_t *len_out);
 /* Owned canonical JSON: sorted object keys, normalized whitespace. */
 char *mj_canonical(mj_val v);
+/* Strict lexical JSON validation, including complete consumption and depth. */
+int mj_valid(const char *json);
 
 /* Walk the elements of an array value: init with the array value, then
  * call repeatedly; returns 1 per element, 0 at the end. */

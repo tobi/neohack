@@ -26,7 +26,7 @@ APP_URL=http://127.0.0.1:3311 bun run test:browser
 ```
 
 The browser test uses an existing Chromium CDP endpoint at
-`http://127.0.0.1:9333` (override `CDP_URL`). It creates its own tab. It exercises
+`http://127.0.0.1:9333` (override `CDP_URL`). It creates and closes its own tab (`KEEP_BROWSER_TAB=1` preserves it for debugging). It exercises
 real game actions and saves screenshots under `/tmp/ascent/takeover/browser`.
 
 ## Components and modules
@@ -82,16 +82,18 @@ Replay is read-only, including at recorded confirmations. Returning to Live
 restores the live observation; it does not rewind the engine. Seeking backwards
 replaces the full perceived map, so future terrain is not retained.
 
-Legacy `input.log.jsonl` files are **not** public perception recordings. They are
-listed as requiring explicit conversion, not silently replayed by the viewer.
-Existing run files are preserved. The core pins each run's engine executable
-before recreating its playground on resume.
+Legacy `input.log.jsonl` files are **not** public perception recordings. Their
+library entries offer explicit sandboxed reconstruction with a confirmation.
+The resulting archive is labeled **unverified** and cannot become a live game.
+Original files are preserved. See [reconstruction details](../docs/RECONSTRUCTION.md).
+Normal playback still never starts an engine. The core pins each live run's
+engine executable before recreating its playground on resume.
 
 ## Current limitations
 
 This is the first integrated 3D implementation, not a claim of full design
 completion. See `PROJECT_PLAN.md` and `API_DESING.md` for remaining work:
-legacy-run conversion, stronger scenario coverage, unsupported game actions,
+historical-verification limits, stronger scenario coverage, unsupported game actions,
 crash-boundary recording recovery, and richer semantic engine context. There
 is no multi-user authentication: the default service is loopback-only and is
 intended for a trusted local environment.

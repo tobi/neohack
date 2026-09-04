@@ -14,6 +14,7 @@
 // Expose it e.g. with: tailscale serve --bg 3100
 // Then any client on the tailnet enters at the served address + /mcp.
 import { dispatch, TOOLS } from "./server";
+import { originAllowed } from "./origin";
 
 const PORT = Number(process.env.MCP_PORT ?? 3100);
 const sessions = new Set<string>();
@@ -101,8 +102,7 @@ export async function handleDelete(req: Request): Promise<Response> {
 // /mcp so the play page and agents share one world-set, one process).
 export async function handleMcp(req: Request): Promise<Response> {
   const origin = req.headers.get("origin");
-  const allowed = (process.env.MCP_ALLOWED_ORIGINS ?? "").split(",").map(s => s.trim()).filter(Boolean);
-  if (origin && origin !== new URL(req.url).origin && !allowed.includes(origin))
+  if (!originAllowed(req))
     return json({ error: "Origin is not permitted" }, 403);
   let response: Response;
   if (req.method === "OPTIONS") response = new Response(null, { status: 204, headers: cors });
