@@ -8,6 +8,8 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <poll.h>
+#include <signal.h>
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -272,10 +274,19 @@ nh_session_ended(nh_session_t *s)
     return 0;
 }
 
+static long long
+close_clock_ms(void)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (long long) now.tv_sec * 1000 + now.tv_nsec / 1000000;
+}
+
 int
 nh_session_close(nh_session_t *s)
 {
     int status = -1;
+    long long deadline = close_clock_ms() + 2000;
     if (!s) {
         errno = EINVAL;
         return -1;
@@ -289,9 +300,11 @@ nh_session_close(nh_session_t *s)
         char drain[4096];
         for (;;) {
             struct pollfd pfd;
+            long long remaining = deadline - close_clock_ms();
+            if (remaining <= 0) break;
             pfd.fd = s->rfd;
             pfd.events = POLLIN;
-            if (poll(&pfd, 1, 500) <= 0)
+            if (poll(&pfd, 1, (int) remaining) <= 0)
                 break;
             if (read(s->rfd, drain, sizeof drain) <= 0)
                 break;
@@ -301,9 +314,20 @@ nh_session_close(nh_session_t *s)
     }
     if (!s->reaped) {
         pid_t w;
-        do {
-            w = waitpid(s->pid, &status, 0);
-        } while (w < 0 && errno == EINTR);
+        for (;;) {
+            w = waitpid(s->pid, &status, WNOHANG);
+            if (w < 0 && errno == EINTR) continue;
+            if (w != 0) break;
+            if (close_clock_ms() >= deadline) {
+                /* An exited/stopped/broken engine must not hold the bridge
+                 * queue and its run lease indefinitely. This is our child. */
+                kill(s->pid, SIGKILL);
+                do { w = waitpid(s->pid, &status, 0); }
+                while (w < 0 && errno == EINTR);
+                break;
+            }
+            poll(NULL, 0, 10);
+        }
         if (w == s->pid) {
             s->status = status;
             s->reaped = 1;

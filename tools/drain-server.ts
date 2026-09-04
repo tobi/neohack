@@ -37,7 +37,9 @@ const runs = (await list.json()).runs ?? [];
 const result = [];
 for (const run of runs) {
   const live = await tool("get_state", { sessionId: run.sessionId });
-  if (live.error || !live.observation) continue;
+  // Final observations remain readable after the engine has been retired.
+  // They are not loaded worlds and must not receive an end_session request.
+  if (live.error || !live.observation || live.ended) continue;
   const row: any = {
     sessionId: run.sessionId,
     turn: live.observation.turn,

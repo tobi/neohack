@@ -262,7 +262,8 @@ export class ExplorerView extends LitElement {
           .querySelector(".decision button, .decision input")
           ?.focus(),
       );
-    if (name === "end_session" || name === "new_game") this.refreshRuns();
+    if (d.ended || name === "end_session" || name === "new_game")
+      this.refreshRuns();
   }
   log(text, kind = "heard") {
     if (text?.trim())

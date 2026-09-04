@@ -61,6 +61,7 @@ For browser checks, start an isolated front and Chromium with CDP enabled:
 PORT=3311 SESSIONS_DIR=/tmp/neonethack-tests bun run dev
 # In another terminal, with Chromium listening on CDP port 9333:
 APP_URL=http://127.0.0.1:3311 bun run test:browser
+APP_URL=http://127.0.0.1:3311 bun run test:browser:terminal
 ```
 
 ## Legacy runs

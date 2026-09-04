@@ -9,6 +9,7 @@
     "build": "bun run build:engine && bun run build:core && bun run build:client",
     "test": "bun test mcp/tests",
     "test:browser": "bun client/tests/browser.ts",
+    "test:browser:terminal": "bun client/tests/terminal-browser.ts",
     "test:reconstruction-browser": "bun client/tests/reconstruction-browser.ts",
     "reconstruct": "bun tools/reconstruct-run.ts",
     "format": "prettier --write client/explorer-app.js client/explorer-theme.js client/nh-map3d.js client/recording.js client/world.js tools/*.ts mcp/src/runs.ts mcp/src/reconstruct.ts mcp/src/origin.ts mcp/tests/*.test.ts",

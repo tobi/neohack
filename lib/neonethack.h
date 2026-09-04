@@ -37,8 +37,9 @@ int nh_session_write(nh_session_t *s, const char *line);
  * or NULL on timeout (errno=EAGAIN) / EOF / error. */
 char *nh_session_read_line(nh_session_t *s, int timeout_ms);
 
-/* Close stdin, wait for the engine, free everything.
- * Returns the engine exit status (as from waitpid), or -1 on error. */
+/* Close stdin and drain/wait for at most two seconds of graceful shutdown.
+ * Kill and reap our child if it stalls; free everything. Callers must persist
+ * their input journal before closing. Returns waitpid status, or -1 on error. */
 int nh_session_close(nh_session_t *s);
 
 /* True once the engine has exited / the pipe hit EOF. */

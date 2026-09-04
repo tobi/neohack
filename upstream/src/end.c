@@ -1234,6 +1234,14 @@ really_done(int how)
 
     fixup_death(how); /* actually, fixup gm.multi_reason */
 
+#ifdef HEADLESS_GRAPHICS
+    /* Only really_done reaches here: life saving and wizard refusal have
+       already returned to play. Capture the cause before disclosure mutates
+       inventory and emits unrelated lists/messages. */
+    formatkiller(pbuf, (unsigned) sizeof pbuf, how, TRUE);
+    headless_terminal(how, pbuf, svm.moves);
+#endif
+
     if (how != PANICKED) {
         boolean silently = done_stopprint ? TRUE : FALSE;
 

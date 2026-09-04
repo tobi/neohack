@@ -284,6 +284,22 @@ test.skipIf(process.platform !== "linux")(
   15000,
 );
 
+test("a retired handle cannot append stale checkpoints after ownership changes", async () => {
+  const root = testDirectory(),
+    a = bridge(root),
+    b = bridge(root);
+  const g = await a.newGame();
+  await a.call("end_session", { sessionId: g.sessionId });
+  await b.call("resume", { sessionId: g.sessionId });
+  await b.call("act", { sessionId: g.sessionId, action: "wait" });
+  const frames = file(root, g.sessionId, "perceptions.jsonl");
+  const metadata = file(root, g.sessionId, "run.json");
+  const stale = await a.call("act", { sessionId: g.sessionId, action: "wait" });
+  expect(stale.error.code).toBe("noGame");
+  expect(file(root, g.sessionId, "perceptions.jsonl")).toBe(frames);
+  expect(file(root, g.sessionId, "run.json")).toBe(metadata);
+});
+
 test("closing an older world cannot strand another world through inherited pipe handles", async () => {
   const root = testDirectory(),
     a = bridge(root);

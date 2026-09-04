@@ -459,6 +459,28 @@ headless_get_nh_event(void)
 {
 }
 
+void
+headless_terminal(int how, const char *cause, long turn)
+{
+    const char *kind;
+    JBuf jb;
+    if (windowprocs.wp_id != wp_headless)
+        return;
+    kind = how < PANICKED ? "death"
+           : how == QUIT ? "quit"
+           : how == ESCAPED ? "escaped"
+           : how == ASCENDED ? "ascended" : "engineError";
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "kind"); jb_str(&jb, kind);
+    jb_key(&jb, "cause"); jb_str(&jb, cause ? cause : "");
+    jb_key(&jb, "turn"); jb_int(&jb, turn);
+    jb_key(&jb, "health"); jb_int(&jb, Upolyd ? u.mh : u.uhp);
+    jb_end_obj(&jb);
+    if (jb.ok)
+        rpc_notify("game_ended", jb.buf);
+    jb_free(&jb);
+}
+
 static void
 headless_exit_nhwindows(const char *str)
 {

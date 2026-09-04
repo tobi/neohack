@@ -191,7 +191,9 @@ typedef struct game {
     int you_x, you_y, have_you;
     int ended;
     char end_reason[64];
-    char death_cause[256];
+    char terminal_kind[32];
+    char terminal_cause[256];
+    long long terminal_turn;
     char location_id[80];
     int structured_perception;
     int replaying;          /* resume lockstep: suspend live auto-answers */
@@ -1196,6 +1198,12 @@ ingest(game_t *g, const char *line)
         owned_params = strndup(raw, len);
         if (owned_params) params = owned_params;
     }
+    /* Post-mortem disclosure mutates known items and may redraw status.
+     * Preserve the final gameplay perception during cold replay too. */
+    if (g->terminal_kind[0] && (!strcmp(method, "perception") ||
+        !strcmp(method, "snapshot") || !strcmp(method, "map_delta") ||
+        !strcmp(method, "status_update") || !strcmp(method, "window_clear") ||
+        !strcmp(method, "cursor"))) goto done;
     if (!strcmp(method, "perception")) {
         ingest_belongings(g, params);
     } else if (!strcmp(method, "snapshot") || !strcmp(method, "map_delta")) {
@@ -1309,9 +1317,7 @@ ingest(game_t *g, const char *line)
                 g->msg_start = (g->msg_start + 1) % NMSG;
             }
             push_heard(g, text);
-            if (strstr(text, "You die") || strstr(text, "killed by") ||
-                strstr(text, "You fry to a crisp"))
-                snprintf(g->death_cause, sizeof g->death_cause, "%s", text);
+            /* Narration is not authoritative evidence of a terminal state. */
         }
     } else if (!strcmp(method, "menu_start")) {
         mj_val wv;
@@ -1389,6 +1395,37 @@ ingest(game_t *g, const char *line)
             prompt = mj_str(pv);
         free(m->prompt);
         m->prompt = prompt ? prompt : strdup("");
+    } else if (!strcmp(method, "game_ended") && !g->terminal_kind[0]) {
+        mj_val kv, cv, tv, hv;
+        char *kind = NULL, *cause = NULL;
+        long long turn, hp;
+        if (mj_find(params, "kind", &kv)) kind = mj_str(kv);
+        if (mj_find(params, "cause", &cv)) cause = mj_str(cv);
+        if (kind && cause && mj_find(params, "turn", &tv) && mj_int(tv, &turn) && turn >= 0 &&
+            mj_find(params, "health", &hv) && mj_int(hv, &hp) &&
+            (!strcmp(kind, "death") || !strcmp(kind, "quit") ||
+             !strcmp(kind, "escaped") || !strcmp(kind, "ascended") || !strcmp(kind, "engineError"))) {
+            char number[32];
+            mj_Buf b;
+            snprintf(g->terminal_kind, sizeof g->terminal_kind, "%s", kind);
+            snprintf(g->terminal_cause, sizeof g->terminal_cause, "%s", cause);
+            g->terminal_turn = turn;
+            snprintf(number, sizeof number, "%lld", hp);
+            free(g->status[18]); g->status[18] = strdup(number);
+            push_felt(g, VITAL_NAMES[18], number);
+            snprintf(number, sizeof number, "%lld", turn);
+            free(g->status[16]); g->status[16] = strdup(number);
+            push_felt(g, VITAL_NAMES[16], number);
+            mj_init(&b); mj_obj(&b);
+            mj_key(&b, "type"); mj_strv(&b, "ended");
+            mj_key(&b, "kind"); mj_strv(&b, kind);
+            mj_key(&b, "cause"); mj_strv(&b, cause);
+            mj_key(&b, "turn"); mj_intv(&b, turn);
+            mj_endobj(&b);
+            if (b.ok) push_event(g, b.buf);
+            mj_free(&b);
+        }
+        free(kind); free(cause);
     } else if (!strcmp(method, "session_ended")) {
         mj_val rv;
         char *reason = NULL;
@@ -1863,6 +1900,8 @@ await_prompt(game_t *g, int timeout_ms)
         long long id = -1;
         if (!line) {
             if (nh_session_ended(g->eng)) {
+                if (!g->ended && !g->terminal_kind[0])
+                    snprintf(g->end_reason, sizeof g->end_reason, "engineError");
                 g->ended = 1;
                 return 0;
             }
@@ -1925,6 +1964,14 @@ await_prompt(game_t *g, int timeout_ms)
             ingest(g, line);
             free(method);
             free(line);
+            /* Life saving has already been ruled out. Optional post-game
+             * disclosures need no invented answers; teardown closes the UI.
+             * Historical answers still replay verbatim. */
+            if (g->terminal_kind[0] && !g->replaying) {
+                g->ended = 1;
+                pending_clear(g);
+                return 0;
+            }
             continue;
         }
         free(line);
@@ -2153,7 +2200,8 @@ tracked_clear(game_t *g)
         g->messages[i] = NULL;
     }
     g->msg_start = g->msg_count = 0;
-    g->death_cause[0] = '\0';
+    g->terminal_kind[0] = g->terminal_cause[0] = '\0';
+    g->terminal_turn = 0;
     g->location_id[0] = '\0';
     g->structured_perception = 0;
     for (i = 0; i < MAX_MENU_WINDOWS; i++)
@@ -3096,6 +3144,16 @@ envelope(game_t *g, const char *req_id,
     mj_Buf b;
     int i;
     char dec_kind[16] = "";
+    if (g->ended || g->terminal_kind[0]) {
+        want_decision = 0;
+        if (g->terminal_kind[0] && !strcmp(status, "needsChoice")) status = "completed";
+    }
+    if (!err_code && (!strcmp(g->terminal_kind, "engineError") ||
+        (g->ended && !strcmp(g->end_reason, "engineError")))) {
+        status = "unknown"; reason = err_code = "engineError";
+        err_msg = "engine terminated without a successful game result";
+        want_decision = 0;
+    }
     mj_init(&b);
     mj_obj(&b);
     mj_key(&b, "sessionId"); mj_strv(&b, g->id);
@@ -3127,7 +3185,7 @@ envelope(game_t *g, const char *req_id,
     } else {
         mj_key(&b, "decision"); mj_nullv(&b);
     }
-    mj_key(&b, "ended"); mj_boolv(&b, g->ended);
+    mj_key(&b, "ended"); mj_boolv(&b, g->ended || g->terminal_kind[0]);
     emit_end(g, &b);
     if (err_code) {
         mj_key(&b, "error"); mj_obj(&b);
@@ -4401,7 +4459,7 @@ envelope_synth(game_t *g, const char *req_id, const char *action,
     } else {
         mj_key(&b, "decision"); mj_nullv(&b);
     }
-    mj_key(&b, "ended"); mj_boolv(&b, g->ended);
+    mj_key(&b, "ended"); mj_boolv(&b, g->ended || g->terminal_kind[0]);
     emit_end(g, &b);
     if (err_code) {
         mj_key(&b, "error"); mj_obj(&b);
@@ -4692,10 +4750,14 @@ static char *
 run_get_state(nhx_t *x, game_t *g, const char *req_id)
 {
     (void) x;
-    if (!g->eng)
+    if (!g->eng && !(g->ended && strcmp(g->end_reason, "saved")))
         return fail_envelope(g->id, req_id, "noGame", "no live engine; resume first");
+    if (g->eng && !g->ended && nh_session_ended(g->eng)) {
+        g->ended = 1;
+        snprintf(g->end_reason, sizeof g->end_reason, "engineError");
+    }
     /* Read-only: return the standing offer without changing its identity. */
-    if (g->have_operation && g->operation.dec_pending == -2)
+    if (!g->ended && g->have_operation && g->operation.dec_pending == -2)
         return envelope_synth(g, req_id, "get_state", "completed",
                               g->event_seq, 1, NULL, NULL);
     return envelope(g, req_id, "get_state", "completed", NULL, 0, 0,
@@ -4796,6 +4858,11 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
         pending_clear(g);
     }
     g->replaying = 0;
+    if (g->terminal_kind[0]) {
+        g->ended = 1;
+        pending_clear(g);
+        g->have_operation = 0;
+    }
     while (rpos < nresp) free(responses[rpos++]);
     free(responses);
     if (g->have_operation && g->operation.dec_pending != -2 &&
@@ -5184,10 +5251,6 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
     char *action = NULL, *req_dup = NULL;
     long long exp_rev = -1;
     char *out = NULL;
-    if (!g->eng)
-        return fail_envelope(g->id, req_id, "noGame", "no live engine; resume first");
-    if (g->ended)
-        return envelope_error(g, req_id, "act", "gameEnded", "the world already ended");
     if (!mj_find(args, "action", &v) || (action = mj_str(v)) == NULL) {
         /* Replies continue the standing operation: no fresh action needed. */
         mj_val rv;
@@ -5225,6 +5288,18 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
                                   "requestId reused with different arguments");
         }
         free(key);
+    }
+    /* A fatal action's receipt survives engine teardown. */
+    if (g->eng && !g->ended && nh_session_ended(g->eng)) {
+        g->ended = 1;
+        snprintf(g->end_reason, sizeof g->end_reason, "engineError");
+    }
+    if (g->ended || !g->eng) {
+        const char *code = !strcmp(g->end_reason, "saved") ? "noGame" :
+            g->ended ? (!strcmp(g->end_reason, "engineError") ? "engineError" : "gameEnded") : "noGame";
+        char *error = envelope_error(g, req_id, action, code, "no live world; inspect its final observation or resume saved play");
+        free(action); free(req_dup);
+        return error;
     }
     if (g->request_index_corrupt) {
         char *error = envelope_error(g, req_id, action, "storageError", "request journal is incomplete or corrupt; no new command was sent");
@@ -5435,16 +5510,19 @@ nhx_dispatch(nhx_t *x, const char *request_json)
     }
 }
 
-/* Terminal result from the ended reason + observed messages. */
+/* Narration and a clean EOF cannot distinguish death, escape and victory. */
 static void
 emit_end(game_t *g, mj_Buf *b)
 {
     const char *kind = "unknown";
-    const char *cause = g->death_cause[0] ? g->death_cause : NULL;
-    size_t i;
-    if (!g->ended)
+    const char *cause = g->terminal_cause[0] ? g->terminal_cause : NULL;
+    if (!g->ended && !g->terminal_kind[0])
         return;
-    if (!strcmp(g->end_reason, "died") || g->death_cause[0])
+    if (g->terminal_kind[0])
+        kind = g->terminal_kind;
+    else if (!strcmp(g->end_reason, "engineError") || !strcmp(g->end_reason, "protocol"))
+        kind = "engineError";
+    else if (!strcmp(g->end_reason, "died"))
         kind = "death";
     else if (!strcmp(g->end_reason, "quit"))
         kind = "quit";
@@ -5454,21 +5532,13 @@ emit_end(game_t *g, mj_Buf *b)
         kind = "ascended";
     else if (!strcmp(g->end_reason, "escaped"))
         kind = "escaped";
-    /* cause: latest message naming what killed the hero */
-    for (i = 0; !cause && i < g->msg_count; i++) {
-        const char *m = g->messages[(g->msg_start + g->msg_count - 1 - i + NMSG * 2) % NMSG];
-        if (m && (strstr(m, "killed by") || strstr(m, "You die"))) {
-            cause = m;
-            break;
-        }
-    }
     mj_key(b, "end");
     mj_obj(b);
     mj_key(b, "kind"); mj_strv(b, kind);
     if (cause) {
         mj_key(b, "cause"); mj_strv(b, cause);
     }
-    mj_key(b, "turn"); mj_intv(b, turn_of(g));
+    mj_key(b, "turn"); mj_intv(b, g->terminal_kind[0] ? g->terminal_turn : turn_of(g));
     mj_endobj(b);
 }
 
@@ -5529,7 +5599,7 @@ record_frame(game_t *g, const char *request, const char *response)
     mj_key(&b, "frames"); mj_intv(&b, g->frame_count);
     mj_key(&b, "updatedAt"); mj_intv(&b, ms);
     mj_key(&b, "depth"); mj_strv(&b, g->status[20] ? g->status[20] : "unknown");
-    mj_key(&b, "ended"); mj_boolv(&b, g->ended);
+    mj_key(&b, "ended"); mj_boolv(&b, g->ended || g->terminal_kind[0]);
     emit_end(g, &b);
     emit_provenance(g, &b);
     mj_endobj(&b);
@@ -5547,7 +5617,7 @@ nhx_call(nhx_t *x, const char *request_json)
 {
     mj_val v;
     char *tool = NULL, *sid = NULL, *rid = NULL, *out;
-    int retry = 0;
+    int retry = 0, was_ended;
     game_t *g;
     if (!x || !request_json) return NULL;
     if (!mj_valid(request_json)) return fail_envelope("", NULL, "invalidJson", "request must be a complete JSON object");
@@ -5555,6 +5625,7 @@ nhx_call(nhx_t *x, const char *request_json)
     if (mj_find(request_json, "sessionId", &v)) sid = mj_str(v);
     if (mj_find(request_json, "requestId", &v)) rid = mj_str(v);
     g = sid ? game_get(x, sid, 0) : NULL;
+    was_ended = g && g->ended;
     if (g && rid && tool && !strcmp(tool, "act") && req_lookup(g, rid)) retry = 1;
     out = nhx_dispatch(x, request_json);
     if (out && mj_find(out, "sessionId", &v)) {
@@ -5564,17 +5635,25 @@ nhx_call(nhx_t *x, const char *request_json)
     }
     if (out && tool && !retry &&
         (!strcmp(tool, "new_game") || !strcmp(tool, "act") ||
-         !strcmp(tool, "resume") || !strcmp(tool, "end_session")) &&
+         !strcmp(tool, "resume") || !strcmp(tool, "end_session") ||
+         (!strcmp(tool, "get_state") && g && g->ended && !was_ended)) &&
         mj_find(out, "observation", &v)) {
         char *id = NULL;
         if (mj_find(out, "sessionId", &v)) id = mj_str(v);
         g = id ? game_get(x, id, 0) : NULL;
-        if (g && record_frame(g, request_json, out) < 0)
+        /* A retired handle may serve old receipts/snapshots, but cannot
+         * append to an archive now owned by another bridge. */
+        if (g && g->lease_fd >= 0 && record_frame(g, request_json, out) < 0)
             fprintf(stderr, "recording failed for %s: %s\n", id, strerror(errno));
         free(id);
     }
     /* End/failure releases ownership only after the last checkpoint and
      * sidecar are committed, so a new owner cannot race the old recorder. */
+    if (g && g->ended && g->eng) {
+        nh_session_close(g->eng);
+        g->eng = NULL;
+        pending_clear(g);
+    }
     if (g && !g->eng) lease_release(g);
     free(tool); free(sid); free(rid);
     return out;

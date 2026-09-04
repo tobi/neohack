@@ -381,6 +381,15 @@ Disclosure screens, inventory identification, and vanquished lists must not
 replace the recorded end result. Leaving a session is not automatically an
 in-game quit; specify save/persistence behavior separately.
 
+Implemented: the engine issues `game_ended` only after life saving has been
+ruled out. The C core preserves its kind/cause/turn and final health, freezes the
+final gameplay observation across post-mortem disclosure, and retires the engine
+without inventing disclosure answers. Final action receipts remain retryable
+and the final observation remains readable. Old engines without terminal facts
+remain unknown; an unexpected process loss is `engineError`, never death.
+Shutdown allows two seconds for graceful exit, then kills/reaps a stuck child;
+the durable input journal remains the recovery source.
+
 ## 10. Adapter architecture
 
 Build a semantic adapter, not a growing collection of English-prompt regexes.
@@ -421,7 +430,8 @@ re-run live auto-answering or resolve names differently midway through a replay.
 Status (2026-09-04): this remains the target contract, not a blanket completion
 claim. Core regressions now cover read-only food discovery, perceived item
 classes, stable object refs, missing targets, conflicting retry payloads, open
-doors, and pending-decision resume. A Lit/Three.js live/replay viewer and
+doors, real pet exchange, locked doors, fatal prayer, escape consent, process
+failure, bounded teardown, and pending-decision resume. A Lit/Three.js live/replay viewer and
 checkpointed public-perception recordings are implemented. See PROJECT_PLAN.md
 for the verified current milestone and remaining work.
 

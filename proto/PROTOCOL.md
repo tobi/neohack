@@ -80,6 +80,18 @@ serializing the address would leak ASLR and break determinism).
 `"$:"` or a tty `\GXXXXNNNN:` glyph escape and the port strips everything
 through the first `:` (per the `BL_GOLD` contract in `src/botl.c`).
 
+`game_ended {kind, cause, turn, health}` — an irrevocable engine outcome,
+issued from `really_done()` **after** life saving/wizard refusal and before
+post-game disclosure. `kind` is `death`, `quit`, `escaped`, `ascended`, or
+`engineError`; `cause` uses NetHack's own formatted killer/result. This is
+not inferred from a message or a closed pipe. The semantic core latches the
+result and final gameplay perception, then closes the completed engine without
+answering optional disclosure questions. Historical input replay may still
+consume previously recorded post-game answers, without changing that result.
+Older pinned engines may lack this notification; their generic exit is unknown,
+not proof of death or victory. `session_ended {reason}` is a transport/window
+closure notification and is not equivalent to `game_ended`.
+
 `menu_start {window, behavior}` / `menu_item {window, index, accel,
 groupacc, attr, color, text, itemflags, glyph?}` / `menu_end {window,
 prompt}` — items precede the pick request; picks are **ordinal indices**,

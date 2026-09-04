@@ -1007,6 +1007,9 @@ ATTRNORETURN extern void panic(const char *, ...) PRINTF_F(1, 2) NORETURN;
 #endif
 #if !defined(MAKEDEFS_C) && !defined(MDLIB_C) && !defined(CPPREGEX_C)
 extern void done(int);
+#ifdef HEADLESS_GRAPHICS
+extern void headless_terminal(int, const char *, long);
+#endif
 extern void container_contents(struct obj *, boolean, boolean, boolean);
 ATTRNORETURN extern void nh_terminate(int) NORETURN;
 extern void delayed_killer(int, int, const char *);
