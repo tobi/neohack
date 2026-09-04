@@ -1,5 +1,6 @@
 // Isolated CI browser fixture. Never attach to a user's browser/profile or API.
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
+import { waitForOwnedBrowser } from "./browser-readiness";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 const root = resolve(import.meta.dir, ".."),
@@ -64,37 +65,10 @@ const diagnostics = (async () => {
   } catch {}
 })();
 try {
-  const deadline = performance.now() + 20000;
-  let port = "",
-    browserPath = "";
-  while (performance.now() < deadline) {
-    try {
-      const lines = (
-        await readFile(join(profile, "DevToolsActivePort"), "utf8")
-      )
-        .trim()
-        .split("\n");
-      if (
-        /^\d+$/.test(lines[0]) &&
-        /^\/devtools\/browser\/[a-z0-9-]+$/i.test(lines[1] ?? "")
-      ) {
-        port = lines[0];
-        browserPath = lines[1];
-        break;
-      }
-    } catch {}
-    if (proc.exitCode !== null) throw Error(`Chrome exited: ${diagnostic}`);
-    await new Promise((r) => setTimeout(r, 25));
-  }
-  if (!port || proc.exitCode !== null)
-    throw Error("Chrome did not create its isolated debugging endpoint");
-  const version = await (
-    await fetch(`http://127.0.0.1:${port}/json/version`, {
-      signal: AbortSignal.timeout(5000),
-    })
-  ).json();
-  if (new URL(version.webSocketDebuggerUrl).pathname !== browserPath)
-    throw Error("Refusing to attach to a browser not owned by this fixture");
+  const endpoint = await waitForOwnedBrowser(
+    profile,
+    () => proc.exitCode !== null,
+  );
   const test = Bun.spawn(
     [process.execPath, join(root, "client/tests/renderer-browser.ts")],
     {
@@ -102,7 +76,7 @@ try {
       env: {
         ...process.env,
         APP_URL: `http://127.0.0.1:${server.port}`,
-        CDP_URL: `http://127.0.0.1:${port}`,
+        CDP_URL: endpoint,
         COMPONENT_ONLY: "1",
         COMPONENT_DEMO: "/demo.html",
         COMPONENT_BUNDLE: "/nh-map3d.js",
@@ -123,6 +97,9 @@ try {
   } finally {
     clearTimeout(timeout);
   }
+} catch (error) {
+  console.error(`Owned Chrome diagnostics:\n${diagnostic}`);
+  throw error;
 } finally {
   server.stop(true);
   if (proc.exitCode === null) proc.kill("SIGTERM");
