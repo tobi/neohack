@@ -1,0 +1,29 @@
+name: Build and contract tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: jdx/mise-action@v2
+        with:
+          install: false
+      - name: Native prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libncurses-dev uuid-dev
+          mise install lua@5.4.9
+          echo "LUA_HOME=$(mise where lua@5.4.9)" >> "$GITHUB_ENV"
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun test mcp/tests
+      - run: bun mcp/accept.ts
+      - run: bun mcp/smoke.ts

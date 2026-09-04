@@ -32,6 +32,17 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 - Do not claim the entire design is implemented: see the verified milestones and
   remaining work in the plan and runbook.
 
+## Source control
+
+- The project repository is the root Git repository; `origin` is private
+  `tobi/neonethack`. Commit verified milestones and push completed work there.
+- `upstream/.git`, when present locally, is the preserved original NetHack
+  checkout. Do not push project changes to its public NetHack origin. The root
+  repository vendors the source tree with its original license and base SHA.
+- Never commit session histories, credentials, SDKs, dependency installations,
+  or generated binaries/bundles. Incomplete reconstruction work is stashed
+  locally until it compiles and passes its tests.
+
 ## Checks
 
 - `bun run build` — engine, C bridge, local browser bundle.

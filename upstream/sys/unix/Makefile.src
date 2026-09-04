@@ -311,9 +311,9 @@ WINSHIMOBJ ?= winshim.o
 # NDJSON JSON-RPC 2.0 on stdio, no display or disk IO of its own
 #
 WINHEADLESSSRC ?= ../win/headless/winheadless.c ../win/headless/rpc.c \
-	../win/headless/json_min.c
+	../win/headless/json_min.c ../win/headless/cli.c ../win/headless/play.c
 WINHEADLESSOBJ ?= $(TARGETPFX)winheadless.o $(TARGETPFX)rpc.o \
-	$(TARGETPFX)json_min.o
+	$(TARGETPFX)json_min.o $(TARGETPFX)cli.o $(TARGETPFX)play.o
 
 #
 # Files for a BeOS InterfaceKit port -- not ready for prime time
@@ -1147,14 +1147,21 @@ $(TARGETPFX)curswins.o: ../win/curses/curswins.c $(HACK_H) \
 $(TARGETPFX)winshim.o: ../win/shim/winshim.c $(HACK_H)
 	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/shim/winshim.c
 $(TARGETPFX)winheadless.o: ../win/headless/winheadless.c $(HACK_H) \
-		../win/headless/rpc.h ../win/headless/json_min.h
+		../win/headless/rpc.h ../win/headless/json_min.h \
+		../win/headless/cli.h ../win/headless/play.h
 	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/headless/winheadless.c
 $(TARGETPFX)rpc.o: ../win/headless/rpc.c $(HACK_H) \
-		../win/headless/rpc.h ../win/headless/json_min.h
+		../win/headless/rpc.h ../win/headless/json_min.h \
+		../win/headless/cli.h ../win/headless/play.h
 	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/headless/rpc.c
 $(TARGETPFX)json_min.o: ../win/headless/json_min.c \
-		../win/headless/json_min.h
+		../win/headless/json_min.h ../win/headless/cli.h ../win/headless/play.h
 	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/headless/json_min.c
+$(TARGETPFX)cli.o: ../win/headless/cli.c ../win/headless/cli.h
+	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/headless/cli.c
+$(TARGETPFX)play.o: ../win/headless/play.c ../win/headless/play.h \
+		../win/headless/json_min.h
+	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/headless/play.c
 $(TARGETPFX)getline.o: ../win/tty/getline.c $(HACK_H) ../include/func_tab.h \
 		../include/wintty.h
 	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/tty/getline.c

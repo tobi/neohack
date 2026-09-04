@@ -2,7 +2,7 @@
 // Never run destructive `make install` over a populated game-data directory.
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { copyFile, rename, access, readdir } from "node:fs/promises";
+import { copyFile, rename, access, readdir, stat } from "node:fs/promises";
 const root = resolve(import.meta.dir, "..");
 const upstream = resolve(root, "upstream");
 const playground = resolve(upstream, "playground");
@@ -36,7 +36,23 @@ const flags = [
   "CHOWN=true",
   "CHGRP=true",
 ];
-if (!(await Bun.file(`${upstream}/src/Makefile`).exists())) {
+const generated = await stat(`${upstream}/src/Makefile`).catch(() => null);
+const inputs = [
+  "sys/unix/Makefile.src",
+  "sys/unix/Makefile.top",
+  "sys/unix/Makefile.dat",
+  "sys/unix/Makefile.doc",
+  "sys/unix/Makefile.utl",
+  "sys/unix/setup.sh",
+  "sys/unix/hints/headless.500",
+  ...(await readdir(`${upstream}/sys/unix/hints/include`)).map(
+    (name) => `sys/unix/hints/include/${name}`,
+  ),
+];
+const timestamps = await Promise.all(
+  inputs.map((path) => stat(`${upstream}/${path}`)),
+);
+if (!generated || timestamps.some((info) => info.mtimeMs > generated.mtimeMs)) {
   await run(
     ["sh", "sys/unix/setup.sh", "sys/unix/hints/headless.500"],
     upstream,
