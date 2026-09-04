@@ -40,6 +40,14 @@ jobs:
             /usr/bin/true
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: bun test mcp/tests
+      - run: bun test mcp/tests client/tests/*.test.ts
       - run: bun mcp/accept.ts
       - run: bun mcp/smoke.ts
+      - name: Standalone WebGL lifecycle (sandboxed headless Chrome)
+        run: bun tools/test-component-browser.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nh-map3d
+          path: client/dist/standalone/
+          if-no-files-found: error
+          retention-days: 14

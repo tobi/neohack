@@ -50,7 +50,9 @@ try {
     if(JSON.stringify(app.decision)!==JSON.stringify(decision))throw Error('Pending warning lost on resume');
     const map=app.shadowRoot.querySelector('nh-map3d');await map.updateComplete;
     const distance=map.camera.position.distanceTo(map.controls.target);
-    if(map.worldKey!==app.saved||distance>18)throw Error('New world retained the previous world camera framing');
+    const following=map.follow;map.fit();const fitted=map.camera.position.distanceTo(map.controls.target);
+    if(map.worldKey!==app.saved||distance>(following?Math.min(24,fitted):fitted)*1.05)throw Error('New world retained the previous world camera framing');
+    if(following)map.focusSelf();
     return {session:app.saved,turn:app.obs.turn,decision,cameraDistance:distance};
   })()`);
   await b.screenshot(`${out}/meal-warning.png`);

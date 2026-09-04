@@ -105,7 +105,8 @@ imply that an item is safe to consume. Confirmations require a real user choice.
 ## Reusable 3D component
 
 ```js
-import './nh-map3d.js';
+// Run `bun run build:component`, then serve/copy client/dist/standalone/.
+import './dist/standalone/nh-map3d.js';
 const map = document.createElement('nh-map3d');
 map.style.height = '500px';
 map.observation = response.observation;
@@ -115,10 +116,42 @@ document.body.append(map);
 ```
 
 Properties: `observation`, `worldKey` (optional world identity), `selected`, `follow`, `cutaway`, `labels`,
-`animateMoves`. Methods: `fit()`, `focusSelf()`, `rotate()`, `tileAt(x,y)`,
-`debug()`. Events: `tile-select`, `view-follow`, `renderer-error`.
-The renderer makes no game requests. Set `animateMoves=false` for arbitrary
-replay seeking so a jump does not depict a fictitious walk through the dungeon.
+`animateMoves`. Methods: `fit()`, `focusSelf()`, `rotate()`, `tileAt(clientX,clientY)`,
+`inspectAt(tileX,tileY)`, `show2D()`, `retry3D()`, `debug()`.
+Events: `tile-select` (the original supplied cell), `view-follow`,
+`renderer-error`, `renderer-state` (`empty`, `initializing`, `ready`, `lost`,
+`failed`, `2d`, `limited`, or `detached`). `retry3D()` reports initialization
+success; an actual GPU draw can still fail later and emit a renderer error.
+
+The single ESM bundle includes Lit, Three.js, styles and procedural assets; no
+application shell, engine, fetch, WebSocket or CDN is required. `demo.html`,
+README and dependency licenses accompany the build. The private CI workflow
+publishes it as the `nh-map3d` artifact after the browser lifecycle test passes.
+No additional license for project source is implied. The first custom-element
+registration wins; repeated imports export that same constructor. Do not mix
+bundle versions within one document.
+
+WebGL loss immediately exposes the 2D grid; restoration rebuilds resources
+from the **latest** observation. Explicit 2D mode survives detach/reconnect and
+releases its GPU context. Retry, failed initialization, draw exceptions and
+removal clean up controls, observers, textures and geometry. Rendering is
+on-demand and stops while hidden, off-screen, in 2D or settled. Reduced-motion
+preferences snap transitions. Level/world changes also snap rather than
+inventing a walk. Set `animateMoves=false` for arbitrary replay seeking.
+
+Focused arrows navigate an inspection cursor, Enter/Space inspect, Home/End
+and Page Up/Down navigate the bounded 2D window, and Escape leaves map focus.
+A host with global game shortcuts must ignore the map's composed event path;
+selection is never implicit movement or an answer to a game decision.
+
+Display bounds: 20,000 cells, integer coordinates within ±10,000, and 512
+combined detailed terrain/actor/object cells. Complex scenes use the 2D grid
+instead of allocating unbounded models. Its 80×24-cell window remains
+keyboard-navigable across larger maps. Invalid/duplicate/excess entries have a
+visible notice. Only the top object is modeled; the selection event retains
+all supplied objects. Figures are symbolic, not hidden stats or actual worn
+equipment. These are presentation bounds, not engine rules or a complete
+recording-schema validator.
 
 ## Read-only archive endpoints
 

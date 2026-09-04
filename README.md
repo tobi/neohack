@@ -47,7 +47,7 @@ the active application.
 ## Checks
 
 ```sh
-bun test mcp/tests
+bun test mcp/tests client/tests/*.test.ts
 bun mcp/accept.ts
 bun mcp/smoke.ts
 ```
@@ -63,10 +63,19 @@ For browser checks, start an isolated front and Chromium with CDP enabled:
 PORT=3311 SESSIONS_DIR=/tmp/neonethack-tests bun run dev
 # In another terminal, with Chromium listening on CDP port 9333:
 APP_URL=http://127.0.0.1:3311 bun run test:browser
+APP_URL=http://127.0.0.1:3311 bun run test:browser:renderer
 APP_URL=http://127.0.0.1:3311 bun run test:browser:terminal
 APP_URL=http://127.0.0.1:3311 bun run test:browser:scenarios
 APP_URL=http://127.0.0.1:3311 BROWSER_SESSIONS_DIR=/tmp/neonethack-tests bun run test:browser:recovery
 ```
+
+## Standalone map
+
+`bun run build:component` creates `client/dist/standalone/`: one self-contained
+ESM component, a no-engine demo, README and third-party licenses. Serve that
+folder over HTTP or use the private CI `nh-map3d` artifact. `/component-demo.html`
+previews it on the development front. `bun run test:component` runs its GPU
+lifecycle checks with an isolated, sandboxed headless Chrome profile.
 
 ## Recording recovery
 

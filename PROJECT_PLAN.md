@@ -35,7 +35,7 @@ Continuation controller: idle loop **1** (30-wake bound). Keep this plan current
 
 ## Verified milestone and service ownership
 
-- Latest green checks: `bun test mcp/tests` = **63 tests / 792 assertions**; native `test_explorer` green; MCP smoke PASS; broader MCP acceptance **15 pass / 0 skip**.
+- Latest green checks: `bun test mcp/tests client/tests/*.test.ts` = **68 tests / 814 assertions** (63 core/transport plus 5 presentation checks); native `test_explorer` green; MCP smoke PASS; broader MCP acceptance **15 pass / 0 skip**. Standalone real-browser GPU lifecycle tests also pass locally.
 - Browser test `client/tests/browser.ts` passes live play/eat/confirmation/kick/save+resume, 3D rendering, read-only seek (0 core calls), and 390px mobile without overflow. Evidence `/tmp/ascent/takeover/browser-main/` and `/tmp/ascent/takeover/browser/`.
 - Main server restarted under our ownership in Herdr pane **w2G:p8**, port **3000**, normal repo session root. At last check PID **3371760** (verify identity before stopping). Log `/tmp/ascent/takeover/front.log`.
 - Older candidate server in pane **w2G:p7**, port **3311**, sessions `/tmp/ascent/takeover/dev-sessions`; it is stale. Current reconstruction candidate is pane **w2G:pC**, port **3312**, sessions `/tmp/ascent/reconstruction/browser-sessions`, last PID **3371764** (verify before stopping).
@@ -110,11 +110,24 @@ Continuation controller: idle loop **1** (30-wake bound). Keep this plan current
 - Evidence: `/tmp/ascent/archive-recovery/` (tests-final.log, fault-tests2.log, accept.log, smoke.log, native-test.log, browser-final/, browser-main/, browser-scenarios/, browser-reconstruction/, browser-large/, large-readonly.json, drain reports). Candidate log: `/tmp/ascent/archive-recovery/candidate-front.log`.
 - Deliberately still open: explicit preserved-copy salvage for torn checkpoint data, full private-sidecar/input-journal recovery, and power-loss coverage beyond these injected boundaries. See `docs/RECORDING_RECOVERY.md`. No original runs or engine pins were upgraded or uploaded.
 
+## Viewer lifecycle, accessibility and standalone build (controller wake 7)
+
+- **bfbc747** passed CI **33848188525**.
+- Split the presentation-only component into procedural models (`nh-map3d.js`), renderer/input lifecycle (`map-surface.js`), and pure bounded preparation (`map-presentation.js`). No engine or transport dependency was added.
+- Actual WebGL loss/restoration cycles, failed/partial initialization, render exceptions, retry, 2D switching and detach/reconnect are tested. Restoration rebuilds the latest observation. GPU contexts, observers, controls, textures and geometry are released; explicit 2D preference survives reconnect.
+- Rendering is now on-demand and settles instead of drawing continuously. Hidden/off-screen views stop rendering. Reduced motion and discontinuous world/level changes snap positions. Texture pruning and bounded material keys prevent growth across glyph/color changes; water/lava are instanced.
+- Replaced the non-interactive ASCII fallback with a bounded, labeled keyboard grid. Arrows inspect, Enter selects, Home/End/Page keys navigate, Escape leaves map focus. Map keys no longer leak into game movement; the game controls have their own focusable keyboard zone. Fixed Escape cancellation when a decision button/input is focused, verified against a real prayer.
+- Large-scene policy is explicit: 20,000 accepted cells, ±10,000 integer coordinates, 512 detailed feature/actor/object cells, and an 80×24 2D window. Excess complexity uses usable 2D rather than allocating unbounded models. Fit uses projected bounds rather than clipping large maps. A 20,000-cell illustrative fixture rendered in ~1 second locally, with its projected extent inside the viewport; this is a presentation benchmark, not a game scenario.
+- `bun run build:component` creates the standalone single-file ESM bundle plus demo, README, optional source map and dependency licenses in `client/dist/standalone/`. Repeated imports share the registered constructor. No generated artifacts or extra license grants were committed.
+- `bun run test:component` serves only the built artifact, creates its own sandboxed headless Chrome profile/CDP endpoint, verifies ownership, tests real context loss/recovery, and cleans up. It does not attach to the user's browser or provide a game API. CI now runs this test and uploads a private `nh-map3d` artifact on success; no `--no-sandbox` workaround.
+- Candidate live/replay/mobile, renderer+keyboard integration, stairs/meal, terminal and recording-recovery browser flows pass. Main's original 4,002-frame deep link also passes with GET-only traffic and unchanged unverified provenance. Static assets were rebuilt; **no backend restart was needed** and the existing service PIDs remain unchanged.
+- Evidence: `/tmp/ascent/viewer-lifecycle/` (tests-final.log, isolated-final/, renderer-final/, live-final/, scenarios-final/, terminal-final/, recovery-final/, main-large/). Browser checks are not a complete cross-browser or screen-reader audit.
+
 ## Next continuation priorities
 
 1. Check the new private CI run after this milestone. Keep sandbox isolation genuinely exercised, without an unsandboxed fallback. Preserve honest unverified legacy provenance.
 2. Add explicit preserved-copy salvage if extending damaged journals; never auto-truncate or erase reservations. Audit private-sidecar/input-log integrity and older-pin perception freshness. Broader parser fuzzing, life-saving and other occupation fixtures remain open; do not re-stage the already passing stairs/meal cases.
-3. Improve viewer interaction/accessibility/performance, WebGL fallback/recovery and larger maps; add inspect-self/here panels using returned data. Publish a standalone component bundle. Clean up owned browser-test tabs after evidence capture; do not touch unrelated tabs.
+3. Build richer inspect-self/here panels using returned data; extend cross-browser/accessibility checks where useful. WebGL recovery, bounded large maps and standalone packaging are now tested, not future placeholders. Keep owned browser-test tabs/profiles cleaned up; do not touch unrelated tabs.
 4. Harden receipt/recording failure recovery without undoing the fail-closed reservation behavior. Consider immutable template/options/time provenance as well as engine binary pins for truly historical replay; don't assume seed alone controls calendar-dependent NetHack behavior.
 5. Reconcile retired sources/docs and engine conformance/WASM compatibility only after inspecting real changes; do not blindly regenerate vectors. Update test counts/known gaps and complete controller 1 only when done criteria are genuinely met.
 

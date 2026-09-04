@@ -33,8 +33,10 @@ real game actions and saves screenshots under `/tmp/ascent/takeover/browser`.
 
 - `explorer-app.js`: `<explorer-view>` — live/replay shell, actions, typed
   decisions, inventory, status, journal, run library, timeline.
-- `nh-map3d.js`: `<nh-map3d>` — presentation-only 3D map; receives an
-  `observation` object and emits `tile-select`. No engine dependency.
+- `nh-map3d.js`: `<nh-map3d>` — stylized models; receives an observation and
+  emits `tile-select`. No engine dependency.
+- `map-surface.js`: WebGL lifecycle, on-demand rendering, keyboard grid/fallback.
+- `map-presentation.js`: pure bounded display preparation; never game rules.
 - `world.js`: transport-only client for the MCP HTTP endpoint.
 - `recording.js`: versioned checkpoint validation and pure replay; remote
   recordings use only read-only `/runs` endpoints, never `/mcp`.
@@ -54,16 +56,43 @@ illustration of the reported mark/color, not undisclosed monster knowledge.
 
 - Drag to orbit; right-drag to pan; scroll/pinch to zoom.
 - Fit frames the known map; Follow tracks the explorer; rotate turns the camera.
-- Cutaway reduces wall height. 2D is an accessible fallback and is used if
-  WebGL initialization fails or the context is lost.
+- Cutaway reduces wall height. WebGL loss/failure exposes a keyboard-accessible
+  2D grid. Context restoration rebuilds the latest view; Retry 3D is also available.
+- Explicit 2D mode releases GPU resources and survives reconnect. Hidden and
+  settled maps do not continuously draw; reduced-motion preferences are honored.
 - Clicking a tile inspects its returned perception; it does not auto-walk.
-- Arrow keys / `hjklyubn` move by dungeon compass direction; `.` waits;
-  `<` / `>` climb. Movement shortcuts are disabled in inputs and during decisions.
+- **Map focus:** arrows inspect tiles, Enter selects, Escape leaves map focus.
+  The 2D grid supports Home/End and Page Up/Down across large maps.
+- **Game keyboard zone:** arrows / `hjklyubn` move, `.` waits, `<` / `>` climb.
+  Map inspection, form inputs and content-editable areas never issue game keys.
+  Escape cancels a cancellable decision even when its button/input is focused.
 
 Live observations are authoritative after every action. No per-move
 `get_state` request is needed. One game request is in flight at a time.
 Semantic errors and unanswered decisions remain visible; the UI never guesses
 an answer to recover from an unknown interaction.
+
+## Standalone component and renderer checks
+
+```sh
+bun run build:component
+# Serve client/dist/standalone/ over HTTP; open demo.html.
+bun run test:component       # own sandboxed headless Chrome + static-only fixture
+# Existing CDP + isolated live candidate, including keyboard/game isolation:
+APP_URL=http://127.0.0.1:3312 bun run test:browser:renderer
+```
+
+The bundle is a single ESM file with no application/engine dependency. A demo,
+README, optional source map and dependency licenses accompany it; private CI
+uploads the verified folder as `nh-map3d`. Source properties/methods and bounds
+are documented in [API.md](API.md). `worldKey` scopes level IDs between worlds.
+
+Renderer tests use explicitly illustrative presentation fixtures, not fabricated
+claims about game physics. They exercise actual WebGL context loss/restoration,
+partial construction and draw failures, reconnect, GPU release, reduced motion,
+idle/hidden behavior, bounded 2D navigation and 20,000-cell fitting. The live
+integration separately verifies one real move and typed Escape cancellation.
+This is not a complete screen-reader/browser compatibility audit.
 
 ## Review recordings
 
@@ -91,9 +120,8 @@ engine executable before recreating its playground on resume.
 
 ## Current limitations
 
-This is the first integrated 3D implementation, not a claim of full design
-completion. See `PROJECT_PLAN.md` and `API_DESING.md` for remaining work:
+This is a tested renderer milestone, not a claim of full design completion. See `PROJECT_PLAN.md` and `API_DESING.md` for remaining work:
 historical-verification limits, stronger scenario coverage, unsupported game actions,
-crash-boundary recording recovery, and richer semantic engine context. There
+explicit damaged-data salvage, private-journal recovery, and richer semantic engine context. There
 is no multi-user authentication: the default service is loopback-only and is
 intended for a trusted local environment.

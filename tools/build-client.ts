@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { buildComponent } from "./build-component";
 const root = resolve(import.meta.dir, "..");
 const result = await Bun.build({
   entrypoints: [resolve(root, "client/explorer-app.js")],
@@ -20,3 +21,4 @@ if (!result.success) {
 }
 for (const output of result.outputs)
   console.log(`${output.path} (${Math.round(output.size / 1024)} KB)`);
+await buildComponent();

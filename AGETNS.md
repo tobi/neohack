@@ -9,8 +9,10 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
   malformed intents before input/reservations. The headless engine publishes
   perceived belongings/terrain at semantic input boundaries and structured
   terminal/meal results. CLI and MCP forward; never silently strip bad fields.
-- `client/explorer-app.js` is the Lit application. `client/nh-map3d.js` is the
-  reusable Three.js/Lit map component. They render observations, not engine rules.
+- `client/explorer-app.js` is the Lit application. The reusable map is
+  `nh-map3d.js` + `map-surface.js` + `map-presentation.js`: procedural models,
+  GPU/keyboard lifecycle, and pure bounded display preparation. No engine rules.
+  Map-focused keys inspect, never act; game shortcuts belong outside map focus.
 - `client/recording.js` and `mcp/src/runs.ts` review public perception recordings
   without starting or commanding an engine. Replay must remain read-only.
 - Legacy reconstruction is a separate explicit management operation:
@@ -56,11 +58,13 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 ## Checks
 
 - `bun run build` — engine, C bridge, local browser bundle.
-- `bun test mcp/tests` — real-engine regressions plus pure recording tests.
+- `bun test mcp/tests client/tests/*.test.ts` — engine, storage, transport and pure presentation checks.
 - `bun mcp/accept.ts` — 15 real broad checks, currently no skips; not exhaustive engine coverage.
 - `bun mcp/smoke.ts` — live MCP wander, decisions, deterministic resume.
 - `APP_URL=http://127.0.0.1:3311 bun run test:browser` — actual Chromium flows.
 - `bun run test:browser:scenarios` / `test:browser:terminal` — real level/meal/death review (set `APP_URL` for the candidate).
 - `test:browser:recovery` requires the candidate's isolated `/tmp` `BROWSER_SESSIONS_DIR`; it must not target production.
+- `bun run build:component` builds the self-contained ESM distribution; `bun run test:component` uses its own sandboxed Chrome/static-only fixture. Never bypass Chrome or reconstruction sandboxing to make CI pass.
+- `test:browser:renderer` also checks keyboard/game isolation on an isolated candidate.
 
 See [GOAL.md](GOAL.md) and [client/README.md](client/README.md) for run instructions.

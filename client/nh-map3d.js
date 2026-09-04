@@ -1,343 +1,16 @@
-// A reusable presentation-only component. Both live play and replay supply
-// the same observation. No engine calls, pathfinding, or hidden terrain here.
-import { LitElement, html, css, nothing } from "lit";
+// Stylized models for the presentation-only map; lifecycle lives in map-surface.
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-
+import { MapSurface } from "./map-surface.js";
 const PALETTE = [
   0x161616, 0xba534d, 0x69a467, 0xab8253, 0x6486cb, 0xb480b9, 0x6cacb1,
   0xc4c6be, 0x89918e, 0xe89459, 0x91ca75, 0xe7cc84, 0x8ca9e2, 0xdba2d2,
   0x8bd4d2, 0xeae9dc,
 ];
-const MARKS = {
-  wall: "#",
-  floor: ".",
-  corridor: "#",
-  closedDoor: "+",
-  openDoor: "·",
-  stairsUp: "<",
-  stairsDown: ">",
-  fountain: "{",
-  water: "~",
-  lava: "~",
-  altar: "_",
-  trap: "^",
-  bars: "#",
-  tree: "T",
-  grave: "|",
-  ice: ".",
-};
 const jitter = (x, y) =>
   ((Math.imul(x + 31, 73856093) ^ Math.imul(y + 71, 19349663)) >>> 0) /
   4294967295;
-const valid = (t) =>
-  t &&
-  Number.isFinite(t.x) &&
-  Number.isFinite(t.y) &&
-  (!["unknown", "dark"].includes(t.terrain?.type) ||
-    (t.occupant?.mark && t.occupant.mark !== "\\u0000") ||
-    t.objects?.length);
 
-export class NhMap3D extends LitElement {
-  static properties = {
-    observation: { attribute: false },
-    worldKey: { type: String, attribute: "world-key" },
-    selected: { attribute: false },
-    follow: { type: Boolean, reflect: true },
-    cutaway: { type: Boolean, reflect: true },
-    labels: { type: Boolean },
-    animateMoves: { type: Boolean },
-    fallback: { state: true },
-    failure: { state: true },
-  };
-  static styles = css`
-    :host {
-      display: block;
-      position: relative;
-      min-height: 330px;
-      height: 100%;
-      background: radial-gradient(ellipse at 45% 45%, #1d2b2e, #0c1318 75%);
-      overflow: hidden;
-      border-radius: inherit;
-      outline: none;
-      touch-action: none;
-    }
-    .viewport {
-      position: absolute;
-      inset: 0;
-    }
-    canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-      outline: none;
-    }
-    .tools {
-      position: absolute;
-      right: 13px;
-      top: 12px;
-      display: flex;
-      gap: 5px;
-      z-index: 2;
-    }
-    .tools button {
-      font:
-        12px system-ui,
-        sans-serif;
-      color: #d9e5e0;
-      background: #122026e8;
-      border: 1px solid #3b514f;
-      border-radius: 6px;
-      padding: 6px 9px;
-      cursor: pointer;
-      box-shadow: 0 3px 8px #0003;
-    }
-    .tools button[aria-pressed="true"] {
-      color: #92e0bf;
-      border-color: #638e78;
-    }
-    .tools button:hover {
-      background: #324740;
-    }
-    .tools button:focus-visible {
-      outline: 2px solid #96e8be;
-      outline-offset: 2px;
-    }
-    .hint {
-      position: absolute;
-      left: 14px;
-      bottom: 11px;
-      color: #91a8ac;
-      font:
-        10px ui-monospace,
-        monospace;
-      pointer-events: none;
-      text-shadow: 0 1px 3px #000;
-    }
-    .empty {
-      position: absolute;
-      inset: 0;
-      display: grid;
-      place-content: center;
-      text-align: center;
-      gap: 12px;
-      color: #97aaa9;
-      font:
-        14px system-ui,
-        sans-serif;
-      pointer-events: none;
-    }
-    .empty strong {
-      color: #dce9df;
-      font-size: 21px;
-    }
-    .empty b {
-      font:
-        42px ui-monospace,
-        monospace;
-      color: #8dd7b3;
-    }
-    .fallback {
-      position: absolute;
-      inset: 46px 12px 32px;
-      overflow: auto;
-      display: grid;
-      place-content: center;
-    }
-    .fallback pre {
-      margin: 0;
-      font:
-        16px/1.2 ui-monospace,
-        monospace;
-      letter-spacing: 2px;
-      color: #ddd7b6;
-    }
-    .failure {
-      position: absolute;
-      left: 12px;
-      top: 12px;
-      max-width: 60%;
-      color: #e3b9a4;
-      font:
-        11px system-ui,
-        sans-serif;
-    }
-    .selection {
-      position: absolute;
-      left: 14px;
-      top: 12px;
-      font:
-        11px ui-monospace,
-        monospace;
-      color: #e8c78c;
-      background: #132026db;
-      border: 1px solid #705b38;
-      padding: 6px 10px;
-      border-radius: 6px;
-      pointer-events: none;
-    }
-  `;
-  constructor() {
-    super();
-    this.observation = null;
-    this.selected = null;
-    this.follow = true;
-    this.cutaway = true;
-    this.labels = true;
-    this.animateMoves = true;
-    this.fallback = false;
-    this.failure = "";
-    this._frame = 0;
-    this._key = "";
-    this._actors = new Map();
-    this._materials = new Map();
-    this._textures = new Map();
-    this._target = new THREE.Vector3();
-    this._last = 0;
-    this._onVisibility = () => {
-      if (!document.hidden) this._animate();
-    };
-  }
-  connectedCallback() {
-    super.connectedCallback();
-    document.addEventListener("visibilitychange", this._onVisibility);
-    if (this.hasUpdated) this.updateComplete.then(() => this._init());
-  }
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    document.removeEventListener("visibilitychange", this._onVisibility);
-    this._dispose();
-  }
-  firstUpdated() {
-    this._init();
-  }
-  updated(changed) {
-    if (
-      changed.has("observation") ||
-      changed.has("cutaway") ||
-      changed.has("worldKey")
-    )
-      this._sync();
-    if (changed.has("selected")) this._selection();
-    if (changed.has("labels"))
-      for (const a of this._actors.values())
-        if (a.label) a.label.visible = this.labels;
-  }
-  emit(name, detail) {
-    this.dispatchEvent(
-      new CustomEvent(name, { detail, bubbles: true, composed: true }),
-    );
-  }
-  _init() {
-    if (this.renderer || !this.isConnected) return;
-    try {
-      this.renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        alpha: true,
-        powerPreference: "high-performance",
-      });
-      this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
-      this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      this.renderer.toneMappingExposure = 1.35;
-      const canvas = this.renderer.domElement;
-      canvas.tabIndex = 0;
-      canvas.setAttribute(
-        "aria-label",
-        "3D dungeon. Drag to orbit, right-drag to pan, scroll to zoom, click to inspect.",
-      );
-      this.renderRoot.querySelector(".viewport").append(canvas);
-      this.scene = new THREE.Scene();
-      this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 250);
-      this.camera.position.set(12, 16, 17);
-      this.controls = new OrbitControls(this.camera, canvas);
-      this.controls.enableDamping = true;
-      this.controls.dampingFactor = 0.1;
-      this.controls.minPolarAngle = 0.15;
-      this.controls.maxPolarAngle = 1.2;
-      this.controls.minDistance = 5;
-      this.controls.maxDistance = 100;
-      this.controls.maxTargetRadius = 150;
-      this.scene.add(new THREE.HemisphereLight(0xcfe2dd, 0x37302b, 2.1));
-      this.sun = new THREE.DirectionalLight(0xffdbad, 3.2);
-      this.sun.position.set(10, 25, 12);
-      this.sun.castShadow = true;
-      this.sun.shadow.mapSize.set(2048, 2048);
-      this.sun.shadow.camera.left = -24;
-      this.sun.shadow.camera.right = 24;
-      this.sun.shadow.camera.top = 24;
-      this.sun.shadow.camera.bottom = -24;
-      this.sun.shadow.normalBias = 0.08;
-      this.sun.shadow.bias = -0.0003;
-      this.scene.add(this.sun, this.sun.target);
-      const fill = new THREE.DirectionalLight(0x8ab2d1, 1.1);
-      fill.position.set(-8, 7, -10);
-      this.scene.add(fill);
-      this.torch = new THREE.PointLight(0xffbf75, 14, 11, 1.7);
-      this.scene.add(this.torch);
-      this.staticGroup = new THREE.Group();
-      this.actorGroup = new THREE.Group();
-      this.scene.add(this.staticGroup, this.actorGroup);
-      this.geometries = {
-        box: new THREE.BoxGeometry(1, 1, 1),
-        cylinder: new THREE.CylinderGeometry(1, 1, 1, 10),
-        sphere: new THREE.SphereGeometry(1, 12, 8),
-        cone: new THREE.ConeGeometry(1, 1, 8),
-      };
-      this.outline = new THREE.Mesh(
-        new THREE.RingGeometry(0.46, 0.495, 32),
-        new THREE.MeshBasicMaterial({
-          color: 0xf3c877,
-          side: THREE.DoubleSide,
-          depthTest: false,
-        }),
-      );
-      this.outline.rotation.x = -Math.PI / 2;
-      this.outline.visible = false;
-      this.outline.renderOrder = 10;
-      this.scene.add(this.outline);
-      this._ray = new THREE.Raycaster();
-      this._ndc = new THREE.Vector2();
-      let down = null;
-      canvas.addEventListener("pointerdown", (e) => {
-        down = { x: e.clientX, y: e.clientY };
-        canvas.focus();
-      });
-      canvas.addEventListener("pointermove", (e) => {
-        if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) {
-          this.follow = false;
-          this.emit("view-follow", { follow: false });
-        }
-      });
-      canvas.addEventListener("pointerup", (e) => {
-        if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) {
-          const tile = this.tileAt(e.clientX, e.clientY);
-          if (tile) this.emit("tile-select", tile);
-        }
-        down = null;
-      });
-      canvas.addEventListener("pointercancel", () => (down = null));
-      canvas.addEventListener("webglcontextlost", (e) => {
-        e.preventDefault();
-        this.failure =
-          "WebGL context lost. The accessible map is still available.";
-        this.fallback = true;
-        cancelAnimationFrame(this._frame);
-        this._frame = 0;
-      });
-      this._resizeObserver = new ResizeObserver(() => this._resize());
-      this._resizeObserver.observe(this);
-      this._resize();
-      this._sync();
-      this._animate();
-    } catch (e) {
-      this.failure = `3D unavailable: ${e.message}`;
-      this.fallback = true;
-      this.emit("renderer-error", { message: e.message });
-    }
-  }
+class NhMap3DImplementation extends MapSurface {
   _mat(key, color, options = {}) {
     if (!this._materials.has(key))
       this._materials.set(
@@ -385,34 +58,49 @@ export class NhMap3D extends LitElement {
     return mesh;
   }
   _sync() {
-    if (!this.scene) return;
+    try {
+      this._syncScene();
+    } catch (error) {
+      this._fail(error);
+    }
+  }
+  _syncScene() {
+    const cells = this._prepare();
+    if (!this._ensureSurface()) return;
     const obs = this.observation;
-    const cells = (obs?.world ?? []).filter(valid);
-    this._cells = new Map(cells.map((t) => [`${t.x},${t.y}`, t]));
     const location = JSON.stringify([this.worldKey ?? "", obs?.location?.id]);
     const key = JSON.stringify([
       location,
       this.cutaway,
       cells.map((t) => [t.x, t.y, t.terrain?.type, t.objects]),
     ]);
+    const locationChanged = location !== this._location;
+    if (locationChanged) this._hasFit = false;
     if (key !== this._key) {
-      const locationChanged = location !== this._location;
       this._key = key;
       this._location = location;
       this._buildTerrain(cells);
-      if (locationChanged || !this._hasFit) {
-        const following = this.follow;
-        this.fit();
-        if (following && obs?.you) this.focusSelf();
-        this._hasFit = true;
-      }
+    }
+    if (
+      (locationChanged || !this._hasFit) &&
+      this._bounds &&
+      this.clientWidth &&
+      this.clientHeight &&
+      this._inView
+    ) {
+      const following = this.follow;
+      this.fit();
+      if (following && this._hero()) this.focusSelf();
+      this._hasFit = true;
     }
     const seen = new Set();
     for (const cell of cells) {
       if (!cell.occupant) continue;
       const o = cell.occupant;
       const key =
-        o.kind === "self" ? "self" : `${cell.x},${cell.y}:${o.kind}:${o.mark}`;
+        o.kind === "self"
+          ? "self"
+          : `${cell.x},${cell.y}:${o.kind}:${o.mark}:${o.color}`;
       seen.add(key);
       let actor = this._actors.get(key);
       if (!actor) {
@@ -422,7 +110,12 @@ export class NhMap3D extends LitElement {
         this._actors.set(key, actor);
       }
       actor.to.set(cell.x, 0, cell.y);
-      if (!this.animateMoves || actor.group.position.distanceTo(actor.to) > 1.5)
+      if (
+        !this.animateMoves ||
+        this._reducedMotion ||
+        locationChanged ||
+        actor.group.position.distanceTo(actor.to) > 1.5
+      )
         actor.group.position.copy(actor.to);
       if (actor.label) actor.label.visible = this.labels;
     }
@@ -432,13 +125,15 @@ export class NhMap3D extends LitElement {
         this._destroyActor(a);
         this._actors.delete(key);
       }
-    if (obs?.you) {
+    if (this._hero()) {
       this._target.set(obs.you.x, 0, obs.you.y);
       this.torch.position.set(obs.you.x, 2.5, obs.you.y);
       this.sun.position.set(obs.you.x + 10, 25, obs.you.y + 12);
       this.sun.target.position.set(obs.you.x, 0, obs.you.y);
     }
+    this._pruneTextures();
     this._selection();
+    this._animate();
   }
   _buildTerrain(cells) {
     for (const child of [...this.staticGroup.children]) {
@@ -452,7 +147,9 @@ export class NhMap3D extends LitElement {
       tops = [],
       walls = [],
       caps = [],
-      bricks = [];
+      bricks = [],
+      liquidWater = [],
+      liquidLava = [];
     const stone = this._mat("stone", 0xffffff),
       wallmat = this._mat("wall", 0xffffff),
       dark = this._mat("dark", 0x182025),
@@ -655,27 +352,15 @@ export class NhMap3D extends LitElement {
           0.09,
         );
       }
-      if (type === "water" || type === "lava") {
-        const material =
-          type === "water"
-            ? water
-            : this._mat("lava", 0xa44b24, {
-                emissive: 0xde481a,
-                emissiveIntensity: 0.8,
-                roughness: 0.4,
-              });
-        this._mesh(
-          this.staticGroup,
-          "box",
-          material,
+      if (type === "water" || type === "lava")
+        (type === "water" ? liquidWater : liquidLava).push({
           x,
-          0.065,
+          y: 0.065,
           z,
-          0.97,
-          0.035,
-          0.97,
-        );
-      }
+          sx: 0.97,
+          sy: 0.035,
+          sz: 0.97,
+        });
       if (type === "tree") {
         this._mesh(
           this.staticGroup,
@@ -747,6 +432,17 @@ export class NhMap3D extends LitElement {
       }
       for (const o of t.objects ?? []) this._object(x, z, o);
     }
+    this._instances(this.staticGroup, "box", water, liquidWater);
+    this._instances(
+      this.staticGroup,
+      "box",
+      this._mat("lava", 0xa44b24, {
+        emissive: 0xde481a,
+        emissiveIntensity: 0.8,
+        roughness: 0.4,
+      }),
+      liquidLava,
+    );
     this._instances(this.staticGroup, "box", stone, floors);
     this._instances(this.staticGroup, "box", stone, tops);
     this._instances(this.staticGroup, "box", wallmat, walls);
@@ -799,7 +495,7 @@ export class NhMap3D extends LitElement {
       this._mesh(
         group,
         "cylinder",
-        this._mat("potion", PALETTE[o.color & 15] || 0x9cb8a3, {
+        this._mat(`potion-${o.color & 15}`, PALETTE[o.color & 15] ?? 0x9cb8a3, {
           metalness: 0.2,
           roughness: 0.25,
         }),
@@ -865,9 +561,14 @@ export class NhMap3D extends LitElement {
       const c = document.createElement("canvas");
       c.width = c.height = 128;
       const ctx = c.getContext("2d");
+      if (!ctx)
+        throw new Error(
+          "Cannot create the glyph canvas; 2D inspection remains available",
+        );
       ctx.fillStyle = "rgba(13,22,26,.85)";
       ctx.beginPath();
-      ctx.roundRect(14, 14, 100, 100, 24);
+      if (ctx.roundRect) ctx.roundRect(14, 14, 100, 100, 24);
+      else ctx.rect(14, 14, 100, 100);
       ctx.fill();
       ctx.font = "bold 76px monospace";
       ctx.fillStyle = color;
@@ -898,10 +599,7 @@ export class NhMap3D extends LitElement {
         roughness: 0.45,
       }),
       leather = this._mat("leather", 0x4c4034),
-      creature = this._mat(
-        `creature-${o.mark}-${o.color}`,
-        PALETTE[(o.color ?? 7) & 15],
-      );
+      creature = this._mat(`creature-${o.color}`, PALETTE[(o.color ?? 7) & 15]);
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.34, 0.39, 32),
       new THREE.MeshBasicMaterial({
@@ -1052,210 +750,6 @@ export class NhMap3D extends LitElement {
     group.add(text);
     return { group, to: new THREE.Vector3(), label: text, ring };
   }
-  _selection() {
-    if (!this.outline) return;
-    this.outline.visible = !!this.selected;
-    if (this.selected)
-      this.outline.position.set(this.selected.x, 0.11, this.selected.y);
-  }
-  _resize() {
-    if (!this.renderer) return;
-    const w = Math.max(this.clientWidth, 1),
-      h = Math.max(this.clientHeight, 1);
-    this.renderer.setSize(w, h, false);
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
-  }
-  _animate() {
-    if (
-      this._frame ||
-      !this.renderer ||
-      !this.isConnected ||
-      document.hidden ||
-      this.fallback
-    )
-      return;
-    const tick = (time) => {
-      this._frame = 0;
-      if (
-        !this.renderer ||
-        !this.isConnected ||
-        document.hidden ||
-        this.fallback
-      )
-        return;
-      const dt = Math.min((time - (this._last || time)) / 1000, 0.1);
-      this._last = time;
-      for (const a of this._actors.values())
-        a.group.position.lerp(a.to, 1 - Math.exp(-dt * 15));
-      if (this.follow && this.observation?.you) {
-        const delta = this._target
-          .clone()
-          .sub(this.controls.target)
-          .multiplyScalar(1 - Math.exp(-dt * 7));
-        this.controls.target.add(delta);
-        this.camera.position.add(delta);
-      }
-      this.controls.update();
-      this.renderer.render(this.scene, this.camera);
-      this._frame = requestAnimationFrame(tick);
-    };
-    this._frame = requestAnimationFrame(tick);
-  }
-  fit() {
-    if (!this.controls || !this._cells?.size) return;
-    const cells = [...this._cells.values()],
-      xs = cells.map((t) => t.x),
-      ys = cells.map((t) => t.y);
-    const cx = (Math.min(...xs) + Math.max(...xs)) / 2,
-      cz = (Math.min(...ys) + Math.max(...ys)) / 2;
-    const span = Math.max(
-      7,
-      (Math.max(...xs) - Math.min(...xs)) / Math.max(0.6, this.camera.aspect),
-      Math.max(...ys) - Math.min(...ys),
-    );
-    this.controls.target.set(cx, 0, cz);
-    this.camera.position.set(cx + span * 0.72, span * 1.05, cz + span * 0.86);
-    this.controls.update();
-    this.follow = false;
-  }
-  focusSelf() {
-    if (!this.controls || !this.observation?.you) return;
-    this.follow = true;
-    const p = this.observation.you,
-      delta = new THREE.Vector3(p.x, 0, p.y).sub(this.controls.target);
-    this.camera.position.add(delta);
-    this.controls.target.add(delta);
-    const offset = this.camera.position.clone().sub(this.controls.target);
-    if (offset.length() > 24)
-      this.camera.position.copy(this.controls.target).add(offset.setLength(24));
-    this.controls.update();
-  }
-  rotate() {
-    if (!this.controls) return;
-    const offset = this.camera.position.clone().sub(this.controls.target);
-    offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
-    this.camera.position.copy(this.controls.target).add(offset);
-    this.controls.update();
-  }
-  tileAt(clientX, clientY) {
-    if (!this.pickMesh) return null;
-    const r = this.renderer.domElement.getBoundingClientRect();
-    this._ndc.set(
-      ((clientX - r.left) / r.width) * 2 - 1,
-      1 - ((clientY - r.top) / r.height) * 2,
-    );
-    this._ray.setFromCamera(this._ndc, this.camera);
-    const hit = this._ray.intersectObject(this.pickMesh)[0];
-    const cell =
-      hit?.instanceId !== undefined ? this.pickCells[hit.instanceId] : null;
-    return cell ? (this._cells.get(`${cell.x},${cell.y}`) ?? null) : null;
-  }
-  debug() {
-    return {
-      tiles: this._cells?.size ?? 0,
-      actors: this._actors.size,
-      renderer: !!this.renderer,
-      fallback: this.fallback,
-      drawCalls: this.renderer?.info.render.calls,
-      triangles: this.renderer?.info.render.triangles,
-      geometries: this.renderer?.info.memory.geometries,
-    };
-  }
-  _destroyActor(a) {
-    a.ring?.geometry.dispose();
-    a.ring?.material.dispose();
-    a.label?.material.dispose();
-  }
-  _dispose() {
-    cancelAnimationFrame(this._frame);
-    this._frame = 0;
-    this._resizeObserver?.disconnect();
-    this.controls?.dispose();
-    for (const a of this._actors.values()) this._destroyActor(a);
-    this.staticGroup?.traverse((o) => {
-      if (o.isInstancedMesh) o.dispose();
-      if (o.isSprite) o.material.dispose();
-    });
-    this._actors.clear();
-    for (const t of this._textures.values()) t.dispose();
-    this._textures.clear();
-    for (const m of this._materials.values()) m.dispose();
-    this._materials.clear();
-    for (const g of Object.values(this.geometries ?? {})) g.dispose();
-    this.outline?.geometry.dispose();
-    this.outline?.material.dispose();
-    this.renderer?.dispose();
-    this.renderer?.domElement.remove();
-    this.renderer = null;
-    this.scene = null;
-    this._key = "";
-    this._hasFit = false;
-  }
-  _ascii() {
-    const cells = (this.observation?.world ?? []).filter(valid);
-    if (!cells.length) return "";
-    const xs = cells.map((t) => t.x),
-      ys = cells.map((t) => t.y),
-      map = new Map(cells.map((t) => [`${t.x},${t.y}`, t]));
-    const rows = [];
-    for (let y = Math.min(...ys); y <= Math.max(...ys); y++) {
-      let row = "";
-      for (let x = Math.min(...xs); x <= Math.max(...xs); x++) {
-        const t = map.get(`${x},${y}`);
-        row +=
-          t?.occupant?.mark ??
-          t?.objects?.[0]?.mark ??
-          MARKS[t?.terrain?.type] ??
-          " ";
-      }
-      rows.push(row);
-    }
-    return rows.join("\n");
-  }
-  render() {
-    return html`<div class="viewport" ?hidden=${this.fallback}></div>
-      ${this.fallback
-        ? html`<div class="fallback">
-            <pre aria-label="Accessible dungeon map">${this._ascii()}</pre>
-          </div>`
-        : nothing}
-      <div class="tools">
-        <button @click=${() => this.fit()} title="Fit known map">Fit</button
-        ><button @click=${() => this.focusSelf()} aria-pressed=${this.follow}>
-          Follow</button
-        ><button @click=${() => this.rotate()} title="Rotate quarter turn">
-          ↻</button
-        ><button
-          @click=${() => (this.cutaway = !this.cutaway)}
-          aria-pressed=${this.cutaway}
-        >
-          Cutaway</button
-        ><button
-          @click=${() => {
-            this.fallback = !this.fallback;
-            if (!this.fallback) this._animate();
-          }}
-        >
-          ${this.fallback ? "3D" : "2D"}
-        </button>
-      </div>
-      ${this.selected
-        ? html`<div class="selection">
-            ${this.selected.x}, ${this.selected.y} ·
-            ${this.selected.terrain?.type ?? "unknown"}
-          </div>`
-        : nothing}${this.failure
-        ? html`<div class="failure" role="status">${this.failure}</div>`
-        : nothing}${!this.observation
-        ? html`<div class="empty">
-            <b>◇</b><strong>A dungeon worth exploring.</strong
-            ><span>Start a world, or open a recorded expedition.</span>
-          </div>`
-        : nothing}
-      <div class="hint">
-        Drag to orbit · right-drag to pan · scroll to zoom · click to inspect
-      </div>`;
-  }
 }
-customElements.define("nh-map3d", NhMap3D);
+export const NhMap3D = customElements.get("nh-map3d") ?? NhMap3DImplementation;
+if (!customElements.get("nh-map3d")) customElements.define("nh-map3d", NhMap3D);

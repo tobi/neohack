@@ -270,6 +270,16 @@ export class ExplorerView extends LitElement {
           .querySelector(".decision button, .decision input")
           ?.focus(),
       );
+    else if (
+      (name === "new_game" || name === "resume") &&
+      !d.ended &&
+      this.mode === "live"
+    )
+      this.updateComplete.then(() =>
+        this.renderRoot
+          .querySelector(".controls")
+          ?.focus({ preventScroll: true }),
+      );
     if (d.ended || name === "end_session" || name === "new_game")
       this.refreshRuns();
   }
@@ -366,13 +376,33 @@ export class ExplorerView extends LitElement {
     if (this.targeting) return this.act({ ...this.targeting, target });
   }
   onKey(e) {
+    // A focused dialog button/input must still honor its advertised Escape.
+    // Map inspection handles its own keys and never cancels a game decision.
     if (
+      !e.defaultPrevented &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey &&
+      e.key === "Escape" &&
+      this.mode === "live" &&
+      e.composedPath().some((t) => t?.classList?.contains("decision"))
+    ) {
+      e.preventDefault();
+      if (this.targeting) this.targeting = null;
+      else if (this.decision?.cancellable) this.answer({ cancel: true });
+      return;
+    }
+    if (
+      e.defaultPrevented ||
       e
         .composedPath()
         .some(
           (t) =>
             t?.tagName &&
-            ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(t.tagName),
+            (["INPUT", "TEXTAREA", "SELECT", "BUTTON", "NH-MAP3D"].includes(
+              t.tagName,
+            ) ||
+              t.isContentEditable),
         ) ||
       e.ctrlKey ||
       e.metaKey ||
@@ -1019,7 +1049,11 @@ export class ExplorerView extends LitElement {
           Return to live world
         </button>
       </div>`;
-    return html`<section class="controls">
+    return html`<section
+      class="controls"
+      tabindex="0"
+      aria-label="Game keyboard controls: arrows or h j k l move, period waits"
+    >
       <div class="dpad" aria-label="Movement">
         ${DIRECTIONS.map(
           ([dir, arrow]) =>
@@ -1085,7 +1119,8 @@ export class ExplorerView extends LitElement {
         </div>
         <p class="control-help">
           <span class="kbd">↑ ↓ ← →</span> or <span class="kbd">hjkl</span> move
-          · <span class="kbd">.</span> wait · Click a tile to inspect, never to
+          · <span class="kbd">.</span> wait here. In map focus, arrows inspect
+          instead; <span class="kbd">Esc</span> leaves map focus. Never
           auto-walk.
         </p>
       </div>

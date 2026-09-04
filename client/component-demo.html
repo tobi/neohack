@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Standalone map · NetHack Explorer</title>
+<style>
+:root{color-scheme:dark;font:16px/1.5 system-ui;background:#10191d;color:#dce9e3}body{max-width:1100px;margin:30px auto;padding:0 18px}h1{font-size:24px}p{color:#aec2c0}a{color:#91e3bd}nh-map3d{height:65vh;min-height:360px;border:1px solid #486160;border-radius:12px}output{display:block;padding:14px;border:1px solid #486160;margin-top:15px;border-radius:8px}code{color:#eed29b}
+</style>
+<h1>Standalone <code>&lt;nh-map3d&gt;</code></h1>
+<p>Illustrative presentation fixture, not a NetHack recording. This page imports only the standalone component bundle. It does not connect to a game.</p>
+<nh-map3d id="map"></nh-map3d>
+<output id="selection" aria-live="polite">Focus the map: arrows explore, Enter inspects, Escape leaves map focus. The 2D view provides a screen-reader grid.</output>
+<p><a href="/dist/standalone/nh-map3d.js" download>ESM bundle</a> · <a href="/dist/standalone/LICENSES.txt">Third-party licenses</a> · <a href="/api-docs">API documentation</a></p>
+<script type="module">
+import './dist/standalone/nh-map3d.js';
+const map=document.querySelector('nh-map3d');
+map.worldKey='illustration';map.animateMoves=false;
+map.addEventListener('tile-select',({detail})=>document.querySelector('output').textContent=`Selected ${detail.x}, ${detail.y}: ${detail.terrain?.type??'unknown'}. No game action was sent.`);
+if(!new URL(location.href).searchParams.has('empty')){
+ const world=[];
+ for(let y=1;y<=8;y++)for(let x=1;x<=12;x++)world.push({x,y,terrain:{type:x===1||x===12||y===1||y===8?'wall':'floor'}});
+ const at=(x,y)=>world.find(c=>c.x===x&&c.y===y);
+ at(5,4).occupant={kind:'self',mark:'@'};at(6,4).occupant={kind:'ally',mark:'d',color:3};at(9,6).occupant={kind:'creature',mark:'e',color:2};
+ at(5,4).terrain.type='stairsUp';at(8,8).terrain.type='closedDoor';at(3,3).objects=[{mark:'!',color:4,label:'A perceived blue potion'}];at(9,3).terrain.type='fountain';
+ map.observation={turn:1,location:{id:'illustration'},you:{x:5,y:4},world,inventory:[]};
+}
+</script>
+</html>
