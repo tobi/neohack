@@ -1,0 +1,32 @@
+# Runtime state and private game histories
+/sessions/
+*.log
+.env
+.env.*
+!.env.example
+
+# Downloaded dependencies and generated browser bundles
+/node_modules/
+/client/dist/
+/emsdk/
+/client/wasm/nethack.js
+/client/wasm/nethack.wasm
+/client/wasm/nethack.data
+
+# Native and WASM build products
+/mcp/bin/
+/lib/test_lib
+/lib/test_explorer
+/wasm/obj/
+/wasm/luaobj/
+/wasm/stage/
+/wasm/lua-*/
+/wasm/lua.tar.gz
+/wasm/objs.txt
+/upstream/playground/
+*.o
+*.a
+*.so
+*.dylib
+*.dSYM/
+.DS_Store

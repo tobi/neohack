@@ -1,0 +1,180 @@
+
+	   Copyright (c) NetHack PC Development Team 1990-2026.
+       NetHack may be freely redistributed.  See license for details.
+       ==============================================================
+              Instructions for compiling and installing
+		     NetHack 5.0 on a DOS system
+         ======================================================
+                   (or, How to make PC NetHack 5.0)
+        Last revision: $NHDT-Date: 1596508786 2021/06/04 08:45:00 $
+
+Credit for a runnable full PC NetHack 5.0 goes to the PC Development team
+of Paul Winner, Kevin Smolkowski, Michael Allison, Yitzhak Sapir, Bill Dyer,
+Timo Hakulinen, Yamamoto Keizo, Mike Threepoint, Mike Stephenson,
+Stephen White, Ken Washikita and Janet Walz.  The present port is based
+on the previous effort of Pierre Martineau, Stephen Spackman, Steve Creps, Mike
+Threepoint, Mike Stephenson, Norm Meluch and Don Kneller.
+
+CONTENTS:
+
+        I.   Dispelling the Myths
+        II.  Compiling on Linux or macOS via cross-compiler
+        Appendix A - Additional Notes
+        Appendix D - Contacting Us
+
+I.  Dispelling the Myths:
+
+    Compiling NetHack is not as easy as it sounds, nor as hard as it looks,
+    however it will behoove you to read this entire file through before
+    beginning the task.
+
+
+II. There once was a time when people built NetHack right on their DOS machine.
+    The arcane recipe often involved flat cylinders known as "floppy disks",
+    much gnashing of teeth, squeezing large things into small spaces, and
+    required the sacrifice of copious amounts of time and coffee.
+
+    These days, to compile your copy of NetHack on Linux or macOS machine you
+    can use Andrew Wu's djgpp cross-compiler from:
+        https://github.com/andrewwutw/build-djgpp
+    downloaded from:
+        https://github.com/andrewwutw/build-djgpp/releases/download/v3.0/ 
+    a DOS-extender (for including in msdos packaging) from:
+        http://sandmann.dotster.com/cwsdpmi/csdpmi7b.zip
+    and Lua from:
+        http://www.lua.org/ftp/lua-5.4.8.tar.gz
+
+    If you want the DOSVGA build, to support higher resolutions and Unicode
+    symbols, you also need:
+        pdcursesmod from:
+            https://github.com/Bill-Gray/PDCursesMod.git
+            (Name this lib/pdcurmod for the native build)
+        Terminus fonts from:
+            https://sourceforge.net/projects/terminus-font/files/terminus-font-4.49/terminus-font-4.49.1.tar.gz
+            (Name this lib/terminus for the native build)
+    If not, you also need:
+        pdcurses from:
+            https://github.com/wmcbrine/PDCurses.git
+
+    - A bash script to download the above-mentioned djgpp cross-compiler and
+      associated support pieces for either linux or macOS is available:
+        sys/msdos/fetch-cross-compiler.sh
+
+    That script won't install anything, it just does file fetches and stores
+    them in subfolders of lib. The linux.500 and macOS.500 hints files are
+    configured to find the cross-compiler there if you add
+        CROSS_TO_MSDOS=1
+    on your make command line.
+
+    Note: Both the fetch-cross-compiler.sh bash script and the msdos
+    cross-compile and package procedures require unzip and zip to be available
+    on your host build system.
+
+    On your linux host:
+
+        cd sys/unix ; sh setup.sh hints/linux.500 ; cd ../..
+        make fetch-lua
+
+    On your macOS host:
+
+        cd sys/unix ; sh setup.sh hints/macOS.500 ; cd ../..
+        make fetch-lua
+
+    The MSDOS cross-compile can then be carried out by specifying
+    CROSS_TO_MSDOS=1 on the make command line:
+
+        make CROSS_TO_MSDOS=1 package
+
+    You can explicitly include tty and curses support if desired. The default
+    you'll end up with if you don't specify any WANT_ command line options
+    is a tty-only cross-compile build:
+
+        make WANT_WIN_TTY=1 WANT_WIN_CURSES=1 CROSS_TO_MSDOS=1 package
+
+    Add WANT_DOSVGA for a curses build that supports higher resolutions,
+    external fonts and Unicode symbols:
+
+        make WANT_WIN_TTY=1 WANT_WIN_CURSES=1 CROSS_TO_MSDOS=1 WANT_DOSVGA=1 package
+
+    For the TTY interface, use NO_TILES=1 to drop support for tiles. The
+    resulting TTY interface can still support Unicode if that is enabled
+    in include/config.h.
+
+    For the TTY interface, use NO_GRAPHICS=1 to drop all graphics support, and
+    build a NetHack that outputs through the standard output channel.  This
+    configuration requires ANSI.SYS, or an equivalent driver such as NANSI.SYS.
+    The curses interface will still use graphics if WANT_DOSVGA=1 is set.
+
+    NO_GRAPHICS=1 takes priority of NO_TILES=1.
+
+    Result: The "make package" target will bundle all of the necessary
+            components to run NetHack on msdos into a folder:
+                targets/msdos/pkg
+            and then it zips the contents of that folder into:
+                targets/msdos/NH500DOS.ZIP
+
+    Also note that building the msdos targets using the make command
+    above, does not preclude you from building local linux or macOS
+    targets as well. Just drop the CROSS_TO_MSDOS=1 from the make
+    command line. That's because the cross-compiler hints additions are
+    enclosed inside ifdef sections and won't interfere with the
+    non-cross-compile build in that case.
+
+Appendix A - Additional Notes
+
+1. In your game directory, review the settings in defaults.nh and adjust
+    them according to your style of play.
+
+2. Play NetHack.  If it works, you're done!
+
+Appendix B - Common Difficulties Encountered
+
+  i) The cross-compile stops with an error about "No rule to make target
+     '../lib/djgpp/djgpp-patch/src/libc/go32/exceptn.S'"
+
+     For example:
+         make CROSS_TO_MSDOS=1 package
+         ( cd src ; make LUA_VERSION=5.4.8 nethack )
+         make[1]: Entering directory '/home/johndoe/NHsource/src'
+         mkdir -p ../targets/msdos ; make ../targets/msdos/exceptn.o ;
+         make[2]: Entering directory '/home/johndoe/NHsource/src'
+         make[2]: *** No rule to make target
+                  '../lib/djgpp/djgpp-patch/src/libc/go32/exceptn.S',
+                  needed by '../targets/msdos/exceptn.o'.  Stop.
+         make[2]: Leaving directory '/home/johndoe/NHsource/src'
+         make[1]: *** [Makefile:2027: pregame] Error 2
+         make[1]: Leaving directory '/home/johndoe/NHsource/src'
+         make: *** [Makefile:1531: nethack] Error 2
+
+     That result usually indicates that you haven't successfully run
+     the bash script to fetch the cross-compiler. Try again:
+         sys/msdos/fetch-cross-compiler.sh
+
+  ii) The cross-compile stops with an error "libfl.so.2: cannot open
+      shared object file: No such file or directory.
+
+      This indicates that your host system does not have the flex
+      library installed, and the cross-compiler needs it to be.
+      On Ubuntu systems, you can easily rectify this issue by
+      just installing the flex shared library as follows:
+
+          sudo apt install libfl2
+
+             Reading package lists... Done
+             Building dependency tree... Done
+             Reading state information... Done
+             The following NEW packages will be installed:
+                 libfl2
+             0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.
+
+Appendix D - Contacting the Development Team
+
+    If you discover a bug and wish to report it, or if you have comments
+    or suggestions we recommend using
+    our "Contact Us" web page at:
+        https://www.nethack.org/common/contact.html
+
+    If you don't have access to the web, or you want to send us a patch
+    to the NetHack source code feel free to drop us a line c/o:
+        DevTeam (at) nethack.org
+

@@ -1,0 +1,9 @@
+[submodule "upstream-lua"]
+	path = upstream/submodules/lua
+	url = https://github.com/lua/lua.git
+[submodule "upstream-pdcurses"]
+	path = upstream/submodules/pdcurses
+	url = https://github.com/wmcbrine/PDCurses.git
+[submodule "upstream-pdcursesmod"]
+	path = upstream/submodules/pdcursesmod
+	url = https://github.com/Bill-Gray/PDCursesMod.git
