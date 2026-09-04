@@ -113,6 +113,21 @@ pauses replay and cancels a pending seek; late imports cannot replace Live.
 Keyboard focus stays out of game shortcuts, and closing an inspector cannot
 answer a pending decision—even if Escape is held down.
 
+## Dedicated read-only bundle review
+
+`bun tools/review-bundle.ts BUNDLE_DIR --port 3313` serves only a completed
+salvage bundle's public prefix through the existing paged archive protocol.
+`<explorer-view read-only>` hides Live/setup/management controls and refuses
+client game calls. The dedicated backend separately refuses mutations and has
+no engine imports. Public checkpoint SHA-256 matching and private-evidence
+non-verification are stated in the persistent integrity notice; source IDs and
+unverified reconstruction provenance are unchanged. See the recovery runbook
+for limits and the distinction between public review and live recovery.
+
+Remote review retains a six-page cache. On a 413 page-size rejection it reduces
+the requested page size, without dropping frames or silently loading a full
+export. Other HTTP errors remain errors.
+
 ## Witnessed survival and occupations
 
 `lifeSaved {cause, turn, health}` is an engine-issued public event for an actual

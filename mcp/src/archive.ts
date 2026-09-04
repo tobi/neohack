@@ -45,8 +45,12 @@ export function checkedFrame(text: string, id: string, sequence: number) {
     throw Error("Invalid checkpoint identity, sequence or boundary");
   return frame;
 }
-export async function scanArchive(path: string, id: string) {
-  const { f, s } = await openArchive(path);
+export async function scanArchive(
+  path: string,
+  id: string,
+  openFile = () => openArchive(path),
+) {
+  const { f, s } = await openFile();
   const rows: any[] = [],
     gaps: number[] = [];
   let position = 0,

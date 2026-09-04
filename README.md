@@ -91,7 +91,15 @@ bun tools/salvage-run.ts SESSIONS_DIR RUN_ID NEW_BUNDLE_DIR --confirm
 ```
 
 The destination must be new and outside the session root. No engine runs and no
-live session is repaired. See [recovery guarantees and limits](docs/RECORDING_RECOVERY.md).
+live session is repaired. Review large bundles without the 128 MiB browser-import
+limit using the dedicated engine-free server:
+
+```sh
+bun tools/review-bundle.ts NEW_BUNDLE_DIR --port 3313
+```
+
+It verifies the public checkpoint hash, pages the validated prefix, and never
+opens private evidence or starts an engine. See [recovery guarantees and limits](docs/RECORDING_RECOVERY.md).
 
 ## Legacy runs
 

@@ -18,7 +18,15 @@ import {
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
-export function createRunStore(root: string) {
+// Optional single, immutable public source for a dedicated bundle viewer.
+// No path or source selection is accepted from HTTP clients.
+export interface ReadonlyArchiveSource {
+  id: string;
+  snapshot(): Promise<ArchiveSnapshot>;
+  open(): ReturnType<typeof openArchive>;
+  assertUnchanged(): Promise<void>;
+}
+export function createRunStore(root: string, source?: ReadonlyArchiveSource) {
   root = resolve(root);
   const cache = new Map<string, Promise<ArchiveSnapshot>>();
   let active = 0;
@@ -49,6 +57,10 @@ export function createRunStore(root: string) {
     return path;
   }
   async function snapshot(id: string) {
+    if (source) {
+      if (id !== source.id) throw Error("Unknown recording");
+      return source.snapshot();
+    }
     const path = await safeFile(id, "perceptions.jsonl"),
       opened = await openArchive(path);
     const key = `${id}:${signature(opened.s)}`;
@@ -90,6 +102,8 @@ export function createRunStore(root: string) {
   async function index(id: string, options: { strict?: boolean } = {}) {
     const snap = await snapshot(id);
     if (options.strict) {
+      if (source)
+        throw Error("A review source is not a reconstruction publication");
       if (snap.integrity.state !== "complete" || snap.integrity.gaps.length)
         throw Error("Archive is incomplete or contains gaps");
       const rows = await storedIndex(id);
@@ -107,6 +121,7 @@ export function createRunStore(root: string) {
     return snap.rows;
   }
   async function list() {
+    if (source) return [archiveSummary(await source.snapshot(), source.id)];
     const entries = await readdir(root, { withFileTypes: true }).catch(
         () => [],
       ),
@@ -201,9 +216,18 @@ export function createRunStore(root: string) {
           { error: "from must be nonnegative; limit must be 1–100" },
           400,
         );
-      const { f, s } = await openArchive(
-        await safeFile(id, "perceptions.jsonl"),
-      );
+      if (
+        source &&
+        match[2] === "export" &&
+        url.searchParams.get("raw") === "1"
+      )
+        return json(
+          { error: "Raw evidence is local-only; export the validated prefix" },
+          403,
+        );
+      const { f, s } = source
+        ? await source.open()
+        : await openArchive(await safeFile(id, "perceptions.jsonl"));
       if (
         s.ino !== snap.stat.ino ||
         s.dev !== snap.stat.dev ||
@@ -243,18 +267,25 @@ export function createRunStore(root: string) {
           end: bytes - 1,
           autoClose: true,
         });
-        const stream = manifest
-          ? Readable.from(
-              (async function* () {
-                try {
-                  yield Buffer.from(manifest);
-                  for await (const chunk of file) yield chunk;
-                } finally {
-                  file.destroy();
-                }
-              })(),
-            )
-          : file;
+        const stream =
+          manifest || source
+            ? Readable.from(
+                (async function* () {
+                  try {
+                    if (manifest) yield Buffer.from(manifest);
+                    for await (const chunk of file) {
+                      await source?.assertUnchanged();
+                      yield chunk;
+                    }
+                  } finally {
+                    file.destroy();
+                  }
+                })(),
+              )
+            : file;
+        // Cancellation before the async generator's first pull must also
+        // retire its independently opened file descriptor.
+        if (stream !== file) stream.once("close", () => file.destroy());
         return new Response(Readable.toWeb(stream) as ReadableStream, {
           headers,
         });
@@ -284,6 +315,7 @@ export function createRunStore(root: string) {
           if (!read.bytesRead) throw Error("Archive changed; reopen it");
           bytes += read.bytesRead;
         }
+        await source?.assertUnchanged();
         const text = new TextDecoder("utf-8", { fatal: true }).decode(buffer),
           lines = text.split("\n");
         if (lines.pop() !== "" || lines.length !== rows.length)

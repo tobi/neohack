@@ -142,8 +142,12 @@ engine executable before recreating its playground on resume.
 Damaged checkpoints can be preserved with the explicit operator command
 `bun tools/salvage-run.ts SESSIONS_DIR RUN_ID NEW_BUNDLE_DIR --confirm`.
 It copies all evidence without running an engine and exports a warning-labeled
-read-only prefix. Import that review file here (up to 128 MiB). It does not
-repair a live session; see [recovery limits](../docs/RECORDING_RECOVERY.md).
+read-only prefix. Import that review file here (up to 128 MiB), or run
+`bun tools/review-bundle.ts NEW_BUNDLE_DIR --port 3313` for bounded paged review
+of larger bundles. The dedicated server checks only the public checkpoint hash,
+retains integrity/provenance notices and has no engine/management API. Its
+`<explorer-view read-only>` shell hides live controls and guards action methods.
+It does not repair a live session; see [recovery limits](../docs/RECORDING_RECOVERY.md).
 
 ## Current limitations
 

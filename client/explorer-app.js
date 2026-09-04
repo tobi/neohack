@@ -1,4 +1,4 @@
-import { LitElement, html, nothing } from "lit";
+import { LitElement, html, nothing, css } from "lit";
 import { theme } from "./explorer-theme.js";
 import { World } from "./world.js";
 import {
@@ -69,38 +69,49 @@ const label = (s) =>
 const STORE = "neonethack.explorer.session.v1";
 
 export class ExplorerView extends LitElement {
-  static properties = Object.fromEntries(
-    [
-      "envelope",
-      "busy",
-      "error",
-      "uncertain",
-      "messages",
-      "selected",
-      "targeting",
-      "selectedTile",
-      "inspection",
-      "choices",
-      "filter",
-      "seed",
-      "hero",
-      "role",
-      "saved",
-      "status",
-      "mode",
-      "runs",
-      "loadingRuns",
-      "recording",
-      "playhead",
-      "playing",
-      "speed",
-      "seeking",
-      "reconstruction",
-    ].map((k) => [k, { state: true }]),
-  );
-  static styles = theme;
+  static properties = {
+    readOnly: { type: Boolean, attribute: "read-only", reflect: true },
+    ...Object.fromEntries(
+      [
+        "envelope",
+        "busy",
+        "error",
+        "uncertain",
+        "messages",
+        "selected",
+        "targeting",
+        "selectedTile",
+        "inspection",
+        "choices",
+        "filter",
+        "seed",
+        "hero",
+        "role",
+        "saved",
+        "status",
+        "mode",
+        "runs",
+        "loadingRuns",
+        "recording",
+        "playhead",
+        "playing",
+        "speed",
+        "seeking",
+        "reconstruction",
+      ].map((k) => [k, { state: true }]),
+    ),
+  };
+  static styles = [
+    theme,
+    css`
+      :host([read-only]) .live-only {
+        display: none !important;
+      }
+    `,
+  ];
   constructor() {
     super();
+    this.readOnly = false;
     this.api = new World();
     this.envelope = null;
     this.liveEnvelope = null;
@@ -149,6 +160,11 @@ export class ExplorerView extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener("keydown", this.onKey);
+    if (this.readOnly) {
+      this.mode = "replay";
+      this.saved = "";
+      this.status = "Read-only review";
+    }
     this.refreshRuns();
     const linkedRun = new URL(location.href).searchParams.get("run");
     if (linkedRun && /^[A-Za-z0-9_-]{1,64}$/.test(linkedRun))
@@ -158,7 +174,7 @@ export class ExplorerView extends LitElement {
       );
     try {
       const job = localStorage.getItem("neonethack.reconstruction");
-      if (job) this.followReconstruction(job);
+      if (job && !this.readOnly) this.followReconstruction(job);
     } catch {}
   }
   disconnectedCallback() {
@@ -176,6 +192,7 @@ export class ExplorerView extends LitElement {
   }
   get ready() {
     return (
+      !this.readOnly &&
       this.mode === "live" &&
       !!this.envelope?.sessionId &&
       !this.envelope.ended &&
@@ -186,7 +203,7 @@ export class ExplorerView extends LitElement {
     );
   }
   async invoke(name, args) {
-    if (this.busy || this.mode !== "live") return;
+    if (this.readOnly || this.busy || this.mode !== "live") return;
     this.busy = true;
     this.error = "";
     try {
@@ -327,6 +344,7 @@ export class ExplorerView extends LitElement {
       ].slice(0, 150);
   }
   async start() {
+    if (this.readOnly) return;
     if (this.mode !== "live") this.showLive();
     if (this.envelope && !this.envelope.ended && this.status !== "Saved") {
       if (!confirm("Save this world and start a new expedition?")) return;
@@ -505,6 +523,7 @@ export class ExplorerView extends LitElement {
     }
   }
   showLive() {
+    if (this.readOnly) return;
     if (this.busy) return;
     this.pause();
     this._seekToken++;
@@ -955,7 +974,7 @@ export class ExplorerView extends LitElement {
             ${info.totalBytes - info.validBytes} unavailable bytes</span
           >`
         : nothing}
-      ${this.recording?.id && info.state !== "complete"
+      ${!this.readOnly && this.recording?.id && info.state !== "complete"
         ? html`<p>
             <a href=${`/runs/${this.recording.id}/export?raw=1`}
               >Preserve raw original</a
@@ -1047,7 +1066,8 @@ export class ExplorerView extends LitElement {
     </section>`;
   }
   async reconstruct(id) {
-    if (this.busy || this.reconstruction?.state === "running") return;
+    if (this.readOnly || this.busy || this.reconstruction?.state === "running")
+      return;
     if (
       !confirm(
         "Reconstruct this legacy input log in a separate sandbox? The original is preserved. The result is unverified because original observations, calendar and options were not captured.",
@@ -1076,6 +1096,7 @@ export class ExplorerView extends LitElement {
     }
   }
   followReconstruction(id) {
+    if (this.readOnly) return;
     const token = ++this._jobToken,
       started = performance.now();
     clearTimeout(this._jobTimer);
@@ -1172,10 +1193,14 @@ export class ExplorerView extends LitElement {
                 html`<button
                   class="run-row"
                   ?disabled=${this.busy ||
-                  (!r.replayReady && this.reconstruction?.state === "running")}
+                  (!r.replayReady &&
+                    (this.readOnly ||
+                      this.reconstruction?.state === "running"))}
                   title=${r.replayReady
                     ? "Review without starting an engine"
-                    : "Explicitly reconstruct this legacy log in a sandbox"}
+                    : this.readOnly
+                      ? r.reason || "No complete public checkpoints"
+                      : "Explicitly reconstruct this legacy log in a sandbox"}
                   @click=${() =>
                     r.replayReady
                       ? this.watch(r.sessionId)
@@ -1185,7 +1210,9 @@ export class ExplorerView extends LitElement {
                   ><span
                     >${r.replayReady
                       ? `${r.provenance?.kind === "reconstruction" ? "Reconstructed · unverified · " : ""}T ${r.turn ?? "?"} · ${r.depth ?? ""} · ${r.frames} frames`
-                      : "Legacy input log · click to reconstruct"}</span
+                      : this.readOnly
+                        ? r.reason || "No complete public checkpoints"
+                        : "Legacy input log · click to reconstruct"}</span
                   >
                 </button>`,
             )}
@@ -1211,7 +1238,7 @@ export class ExplorerView extends LitElement {
         <button class="small" @click=${() => this.inspect("here")}>
           Inspect here
         </button>
-        <button class="small" @click=${() => this.showLive()}>
+        <button class="small live-only" @click=${() => this.showLive()}>
           Return to live world
         </button>
       </div>`;
@@ -1306,12 +1333,16 @@ export class ExplorerView extends LitElement {
           <div class="brand-icon">@</div>
           <div>
             <h1>NetHack <span class="muted">/ Explorer</span></h1>
-            <div class="eyebrow">Enter a world. Revisit every moment.</div>
+            <div class="eyebrow">
+              ${this.readOnly
+                ? "Read-only review · no game engine"
+                : "Enter a world. Revisit every moment."}
+            </div>
           </div>
         </div>
         <div class="mode-tabs">
           <button
-            class="quiet small"
+            class="quiet small live-only"
             aria-pressed=${this.mode === "live"}
             ?disabled=${this.busy}
             @click=${() => this.showLive()}
@@ -1336,19 +1367,19 @@ export class ExplorerView extends LitElement {
             role="status"
             >${this.busy ? "Acting…" : this.status}</span
           ><button
-            class="quiet small"
+            class="quiet small live-only"
             ?disabled=${this.mode !== "live" || this.busy || !this.saved}
             @click=${() => this.look()}
           >
             Check state</button
           ><button
-            class="quiet small"
+            class="quiet small live-only"
             ?disabled=${this.mode !== "live" || this.busy || !this.saved}
             @click=${() => this.resume()}
           >
             Resume</button
           ><button
-            class="small"
+            class="small live-only"
             ?disabled=${this.mode !== "live" ||
             this.busy ||
             !this.envelope ||
@@ -1564,7 +1595,9 @@ export class ExplorerView extends LitElement {
               </div>
             </section>
             ${this.renderRuns()}
-            <section class="panel setup-panel ${noSession ? "first" : ""}">
+            <section
+              class="panel setup-panel live-only ${noSession ? "first" : ""}"
+            >
               <div class="panel-head">
                 <h2>
                   ${noSession ? "Begin an expedition" : "Another expedition"}

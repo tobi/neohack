@@ -43,6 +43,10 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
   evidence bundle and a warning-labeled prefix export. It never executes a pin,
   repairs a live world, or drops reservations. Never install evidence as a live
   session or remove boundary flags to force continuation.
+- `tools/review-bundle.ts` / `mcp/src/bundle-review.ts` page one public-only
+  salvage recording. Keep them free of engine/core/MCP/reconstruction imports.
+  Public SHA-256 matching is not private-evidence verification or authenticity.
+  Never expose manifest paths, pins, journals or raw damaged tails over HTTP.
 - Existing input logs are not event recordings and must not be silently
   converted in place. Missing receipts stay uncertain even across marked gaps.
 - Existing sessions and unrelated upstream changes must be preserved. Engine
@@ -91,5 +95,6 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 - `test:browser:pickup` exercises real two-object menu controls, pending save/resume, single-object selection and engine-free backward/forward review.
 - `test:browser:equipment` covers ring candidates, Left/Right choice, pending resume, the Remove control and read-only equipment history.
 - `test:browser:lifesaving` / `test:browser:study` use natural seeded fixtures, explicit player consent, preserved decisions and engine-free historical review.
+- `test:browser:bundle` starts/stops its own dedicated CLI and uses explicitly illustrative >128 MiB size data; it verifies paging, cache limits, provenance and zero game/management traffic.
 
 See [GOAL.md](GOAL.md) and [client/README.md](client/README.md) for run instructions.

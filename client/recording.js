@@ -137,14 +137,18 @@ export class RemoteRecording {
       sequence >= this.index.length
     )
       throw new RangeError("Frame outside recording");
-    const page = Math.floor(sequence / this.pageSize) * this.pageSize;
+    const requestedSize = this.pageSize;
+    const page = Math.floor(sequence / requestedSize) * requestedSize;
     if (!this.pages.has(page)) {
       const request = (async () => {
         const r = await this.request(
-          `/runs/${this.id}/frames?from=${page}&limit=${this.pageSize}`,
+          `/runs/${this.id}/frames?from=${page}&limit=${requestedSize}`,
         );
         if (!r.ok)
-          throw new Error(`Cannot read recording frames (${r.status})`);
+          throw Object.assign(
+            new Error(`Cannot read recording frames (${r.status})`),
+            { status: r.status },
+          );
         const data = await r.json();
         if (data.version !== 1 || !Array.isArray(data.frames))
           throw new Error("Unsupported recording page");
@@ -157,12 +161,26 @@ export class RemoteRecording {
         return data.frames;
       })();
       this.pages.set(page, request);
-      request.catch(() => this.pages.delete(page));
+      request.catch(() => {
+        if (this.pages.get(page) === request) this.pages.delete(page);
+      });
       // Bounded cache; long-run review does not retain every full observation.
       while (this.pages.size > 6)
         this.pages.delete(this.pages.keys().next().value);
     }
-    const frames = await this.pages.get(page);
+    let frames;
+    try {
+      frames = await this.pages.get(page);
+    } catch (error) {
+      // Valid individual frames can still exceed the server's page budget
+      // when grouped. Shrink transport pages, never skip or truncate frames.
+      if (error.status !== 413 || requestedSize === 1) throw error;
+      if (this.pageSize >= requestedSize) {
+        this.pageSize = Math.max(1, Math.floor(requestedSize / 2));
+        this.pages.clear();
+      }
+      return this.frame(sequence);
+    }
     const frame = frames[sequence - page];
     if (!frame) throw new Error("Recording changed or page is incomplete");
     return frame;

@@ -132,9 +132,8 @@ The bundle contains:
   or if `FAILED.json` exists, treat the bundle as incomplete. Failed copies are
   retained for diagnosis; neither original damage nor reservations are erased.
 
-Open the review file through **Import recording**. Browser-local import remains
-limited to 128 MiB; larger prefixes still need paged review of the original
-read-only archive (a standalone paged bundle viewer is not implemented).
+Open the review file through **Import recording** (limited to 128 MiB), or use
+the dedicated paged bundle viewer below for larger recordings.
 The source stays damaged and still refuses native resume. This command does
 not install or publish a new live session, reconcile uncertain execution,
 rewrite private metadata, or make reconstruction historically verified.
@@ -149,6 +148,53 @@ A final inventory/stat comparison rejects detected source changes outside the
 cooperating lease. This is not a filesystem snapshot against a hostile owner.
 A complete healthy checkpoint stream needs no damaged-prefix salvage and is
 refused without creating a bundle.
+
+## Dedicated paged bundle viewer
+
+```sh
+bun run build:client
+bun tools/review-bundle.ts NEW_BUNDLE_DIR --port 3313
+```
+
+This Linux-only utility binds **127.0.0.1** and prints a `/play?run=SOURCE_ID`
+link after verification. It is a separate process, not the live server. It has
+no core/engine/MCP/reconstruction imports or routes. There is no engine child,
+no live-session creation, no copying into the session root, and no disk repair.
+Ctrl+C closes the server and its pinned read descriptors.
+
+Verification is deliberately scoped:
+
+- Require a complete version-1 salvage manifest and no `FAILED.json` marker.
+  Reject malformed/duplicate-key manifests, unsafe catalog paths, inconsistent
+  identities, sizes and prefix boundaries.
+- Open only the manifest, bundle/evidence directories and
+  `evidence/perceptions.jsonl`. Verify the **entire public file's SHA-256** against
+  its catalog entry, then structurally validate the bounded checkpoint prefix.
+- **Do not open or verify private evidence, pins, or the separate review export.**
+  This is not whole-bundle verification, authenticity, or historical proof. The
+  persistent on-screen/export notice says exactly what was checked.
+- Pin descriptors rather than following later path replacements. Detected
+  inode/stat/content changes fail closed; reopening requires verification again.
+  This is not a filesystem snapshot against a hostile same-user/root writer.
+
+Only trusted viewer HTML/JS and the single recording's index, bounded pages and
+warning-preserving prefix export are served. Source IDs and frame provenance
+remain unchanged. Private paths, raw damaged tails, input journals, manifests,
+pins and management endpoints are not HTTP resources. Strict Host/Origin policy
+rejects cross-origin access independently of live-server proxy settings; these
+local checks are not multi-user authentication.
+
+The Lit shell is explicitly read-only: no Live/start/save/resume/management
+controls, no recovery jobs restored from local storage, and no engine calls.
+Camera, keyboard inspection, timeline, seeking and prefix export still work.
+The backend independently refuses mutations even if someone alters the UI.
+
+Limits: 32 MiB manifest / 20,000 entries; 8 GiB public file / 100,000 frames;
+8 MiB per frame / 32 MiB per page. Verification streams bytes before listening;
+it does not load the full recording into browser memory. The client caches at
+most six pages and reduces page size on 413 rather than skipping large frames.
+Cancellation closes export file handles, including before their first pull.
+Zero valid checkpoints remain evidence-only, not a fabricated playable run.
 
 ## Read-only review
 
@@ -198,7 +244,13 @@ unparseable private state, zero-frame evidence, and non-execution of pins.
 zero engine traffic. Native and read-only scanners reject duplicate checkpoint
 keys rather than disagreeing about which value is authoritative.
 
+`mcp/tests/bundle-review.test.ts` covers public-only verification, tampering,
+unsafe paths/links, no engine child, policy/range limits, export cancellation,
+zero-frame evidence and bounded large-page fallback. The browser bundle fixture
+is explicitly illustrative size data (>128 MiB), not game-physics evidence;
+it verifies paged seeking, warning/provenance retention and zero engine calls.
+
 Automatic private-state recovery, continuation from genuinely uncertain
-boundaries, large paged bundle review, and filesystem/power-loss fault coverage
+boundaries, and filesystem/power-loss fault coverage
 beyond the injected boundaries remain open. None of this upgrades historical
 reconstruction into verified history.

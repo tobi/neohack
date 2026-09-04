@@ -22,9 +22,11 @@
     "test:browser:equipment": "bun client/tests/equipment-browser.ts",
     "test:browser:lifesaving": "bun client/tests/lifesaving-browser.ts",
     "test:browser:study": "bun client/tests/study-browser.ts",
+    "test:browser:bundle": "bun client/tests/bundle-browser.ts",
     "test:reconstruction-browser": "bun client/tests/reconstruction-browser.ts",
     "reconstruct": "bun tools/reconstruct-run.ts",
     "salvage": "bun tools/salvage-run.ts",
+    "review:bundle": "bun tools/review-bundle.ts",
     "format": "prettier --write client/explorer-app.js client/explorer-theme.js client/nh-map3d.js client/recording.js client/world.js tools/*.ts mcp/src/runs.ts mcp/src/reconstruct.ts mcp/src/origin.ts mcp/tests/*.test.ts",
     "dev": "bun bun_server/src/index.ts"
   },
