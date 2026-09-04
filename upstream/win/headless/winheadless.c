@@ -475,6 +475,23 @@ headless_action_result(const char *action, const char *status)
 }
 
 void
+headless_lifesaved(int how, long turn)
+{
+    JBuf jb;
+    /* The hero is still alive. A post-mortem killer description could reveal
+     * an unseen attacker or unidentified object; publish no such identity. */
+    const char *cause = how == CHOKING ? "choking" : "fatal harm";
+    if (windowprocs.wp_id != wp_headless) return;
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "cause"); jb_str(&jb, cause);
+    jb_key(&jb, "turn"); jb_int(&jb, turn);
+    jb_key(&jb, "health"); jb_int(&jb, Upolyd ? u.mh : u.uhp);
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("life_saved", jb.buf);
+    jb_free(&jb);
+}
+
+void
 headless_terminal(int how, const char *cause, long turn)
 {
     const char *kind;

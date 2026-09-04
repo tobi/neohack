@@ -1101,6 +1101,9 @@ done(int how)
             char killbuf[BUFSZ];
             formatkiller(killbuf, BUFSZ, how, FALSE);
             livelog_printf(LL_LIFESAVE, "averted death (%s)", killbuf);
+#ifdef HEADLESS_GRAPHICS
+            headless_lifesaved(how, svm.moves);
+#endif
             survive = TRUE;
         }
     }

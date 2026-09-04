@@ -352,6 +352,16 @@ book_cursed(struct obj *book)
 
 DISABLE_WARNING_FORMAT_NONLITERAL
 
+#ifdef HEADLESS_GRAPHICS
+/* Identity of the active engine occupation, not its displayed text. */
+void
+headless_study_stopped(void)
+{
+    if (go.occupation == learn)
+        headless_action_result("read", "interrupted");
+}
+#endif
+
 staticfn int
 learn(void)
 {
@@ -366,6 +376,9 @@ learn(void)
         && ublindf->otyp == LENSES && rn2(2))
         svc.context.spbook.delay++;
     if (Confusion) { /* became confused while learning */
+#ifdef HEADLESS_GRAPHICS
+        headless_study_stopped();
+#endif
         (void) confused_book(book);
         svc.context.spbook.book = 0; /* no longer studying */
         svc.context.spbook.o_id = 0;
@@ -384,6 +397,9 @@ learn(void)
     booktype = book->otyp;
     if (booktype == SPE_BOOK_OF_THE_DEAD) {
         deadbook(book);
+#ifdef HEADLESS_GRAPHICS
+        headless_action_result("read", "completed");
+#endif
         return 0;
     }
 
@@ -452,6 +468,9 @@ learn(void)
             useup(book);
             svc.context.spbook.book = 0;
             svc.context.spbook.o_id = 0;
+#ifdef HEADLESS_GRAPHICS
+            headless_action_result("read", "completed");
+#endif
             return 0;
         }
     }
@@ -459,6 +478,9 @@ learn(void)
         check_unpaid(book);
     svc.context.spbook.book = 0;
     svc.context.spbook.o_id = 0;
+#ifdef HEADLESS_GRAPHICS
+    headless_action_result("read", "completed");
+#endif
     return 0;
 }
 

@@ -139,6 +139,20 @@ will succeed. The adapter uses this to avoid the raw port's outermost-armor
 autoselection when the caller actually selected a covered inner garment.
 Absent legacy access information remains unknown; it is not filled from labels.
 
+`life_saved {cause,turn,health}` is emitted only after actual amulet life saving
+returns the hero to play, not from a death message, wizard refusal, or an
+unsuccessful rescue from genocide. The adapter publishes `lifeSaved` without
+setting `ended`. Cause is deliberately coarse (`choking` or `fatal harm`): a
+surviving hero is not entitled to post-mortem disclosure of an unseen attacker
+or unidentified item. The adapter also coarsens unknown descriptions from pins.
+Later damage/outcomes remain possible. Original pins without
+this event keep their original capabilities.
+
+Normal spellbook study emits `action_result {action:"read",status,turn}` from
+completion or the actual stopped study occupation. The adapter does not guess
+interruption from translated narration or finish an interrupted task on behalf
+of the player. Other occupations remain separately scoped.
+
 ## 4. Engine input requests
 
 The engine emits `input` with a numeric id and a `params.kind`. The raw reply

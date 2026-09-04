@@ -1593,6 +1593,27 @@ ingest(game_t *g, const char *line)
             mj_free(&b);
         }
         free(action); free(status);
+    } else if (!strcmp(method, "life_saved") && !g->terminal_kind[0]) {
+        mj_val v; char *cause = NULL; long long turn, hp;
+        if (mj_find(params, "cause", &v)) cause = mj_str(v);
+        if (cause && mj_find(params, "turn", &v) && mj_int(v, &turn) && turn >= 0 &&
+            mj_find(params, "health", &v) && mj_int(v, &hp) && hp > 0) {
+            mj_Buf b; char number[64];
+            snprintf(number, sizeof number, "%lld", hp);
+            free(g->status[18]); g->status[18] = strdup(number);
+            push_felt(g, VITAL_NAMES[18], number);
+            mj_init(&b); mj_obj(&b);
+            mj_key(&b, "type"); mj_strv(&b, "lifeSaved");
+            /* Rescue is not post-mortem disclosure. Unknown descriptions
+             * cannot disclose an unseen attacker or unidentified object. */
+            mj_key(&b, "cause"); mj_strv(&b, !strcmp(cause, "choking") ? "choking" : "fatal harm");
+            mj_key(&b, "turn"); mj_intv(&b, turn);
+            mj_key(&b, "health"); mj_intv(&b, hp);
+            mj_endobj(&b);
+            if (b.ok) push_event(g, b.buf);
+            mj_free(&b);
+        }
+        free(cause);
     } else if (!strcmp(method, "game_ended") && !g->terminal_kind[0]) {
         mj_val kv, cv, tv, hv;
         char *kind = NULL, *cause = NULL;

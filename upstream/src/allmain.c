@@ -691,6 +691,9 @@ void
 stop_occupation(void)
 {
     if (go.occupation) {
+#ifdef HEADLESS_GRAPHICS
+        headless_study_stopped();
+#endif
         if (!maybe_finished_meal(TRUE))
             You("stop %s.", go.occtxt);
         go.occupation = (int (*)(void)) 0;

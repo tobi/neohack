@@ -113,6 +113,24 @@ pauses replay and cancels a pending seek; late imports cannot replace Live.
 Keyboard focus stays out of game shortcuts, and closing an inspector cannot
 answer a pending decision—even if Escape is held down.
 
+## Witnessed survival and occupations
+
+`lifeSaved {cause, turn, health}` is an engine-issued public event for an actual
+averted death. Cause is coarse (`choking` or `fatal harm`), not a post-mortem
+killer description that could identify an unseen attacker or unknown object.
+It is not a terminal result and does not imply future immunity.
+The returned observation still describes the latest boundary, including the
+consumed amulet and any later effects. “You die...” narration alone cannot end
+the world. Older pins may survive without reporting this additive event; no
+rescue fact is inferred or inserted into their original recordings.
+
+Normal spellbook study now reports `actionResult` completion/interruption from
+the engine's actual occupation. An interrupted read is `outcome.status:
+"interrupted"`, not an invented completion. Inspection/resume/retry does not
+restart it. A fresh read intent may require another real confirmation, and
+actual elapsed turns come from the engine. This is specific coverage, not a
+claim that every occupation emits these facts.
+
 ## Named actions and decisions
 
 Examples:

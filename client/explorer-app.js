@@ -245,6 +245,7 @@ export class ExplorerView extends LitElement {
           for (const text of e.items ?? []) this.log(text, "system");
       }
     }
+    this.logWitnesses(d.events);
     if (d.outcome && name === "act")
       this.log(
         `${label(d.outcome.action)} · ${label(d.outcome.status)} · +${d.outcome.turnsElapsed} turn${d.outcome.turnsElapsed === 1 ? "" : "s"}${d.outcome.reason ? " · " + label(d.outcome.reason) : ""}`,
@@ -308,6 +309,15 @@ export class ExplorerView extends LitElement {
       );
     if (d.ended || name === "end_session" || name === "new_game")
       this.refreshRuns();
+  }
+  logWitnesses(events = []) {
+    for (const event of events)
+      if (
+        event.type === "lifeSaved" &&
+        typeof event.cause === "string" &&
+        Number.isSafeInteger(event.turn)
+      )
+        this.log(`Life saved · T${event.turn} · ${event.cause}`, "system");
   }
   log(text, kind = "heard") {
     if (text?.trim())
@@ -596,6 +606,7 @@ export class ExplorerView extends LitElement {
           if (event.about) this.log(event.about, "system");
           for (const text of event.items ?? []) this.log(text, "system");
         }
+      this.logWitnesses(this.envelope.events);
       this.log(
         `${label(this.envelope.outcome?.action)} · ${label(this.envelope.outcome?.status)} · frame ${index + 1}`,
         "system",

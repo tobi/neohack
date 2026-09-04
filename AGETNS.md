@@ -8,7 +8,9 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 - `lib/` is the semantic explorer core (C); `lib/request_validation.inc` rejects
   malformed intents before input/reservations. The headless engine publishes
   perceived belongings/terrain at semantic input boundaries and structured
-  terminal/meal results. CLI and MCP forward; never silently strip bad fields.
+  terminal/meal/study results and witnessed life saving. `lifeSaved` never
+  means game over; narration alone is not outcome authority. CLI and MCP
+  forward; never silently strip bad fields.
   Engine menu `selectable` and `menu_object` facts bind offered objects; never
   infer identity from labels, accelerator assignment or row order. Choice IDs
   are returned integers accepted unchanged by `choose`; item refs stay strings.
@@ -88,5 +90,6 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 - `test:browser:salvage` creates its own isolated native fixture, retires it, then verifies engine-free import/review of the copied prefix.
 - `test:browser:pickup` exercises real two-object menu controls, pending save/resume, single-object selection and engine-free backward/forward review.
 - `test:browser:equipment` covers ring candidates, Left/Right choice, pending resume, the Remove control and read-only equipment history.
+- `test:browser:lifesaving` / `test:browser:study` use natural seeded fixtures, explicit player consent, preserved decisions and engine-free historical review.
 
 See [GOAL.md](GOAL.md) and [client/README.md](client/README.md) for run instructions.
