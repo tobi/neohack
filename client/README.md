@@ -37,6 +37,9 @@ real game actions and saves screenshots under `/tmp/ascent/takeover/browser`.
   emits `tile-select`. No engine dependency.
 - `map-surface.js`: WebGL lifecycle, on-demand rendering, keyboard grid/fallback.
 - `map-presentation.js`: pure bounded display preparation; never game rules.
+- `nh-inspection.js` / `inspection.js`: pure inspection panels/projection for
+  self, here and selected squares. Unknown is not empty, and equipment flags
+  come from the engine rather than name parsing.
 - `world.js`: transport-only client for the MCP HTTP endpoint.
 - `recording.js`: versioned checkpoint validation and pure replay; remote
   recordings use only read-only `/runs` endpoints, never `/mcp`.
@@ -93,6 +96,24 @@ partial construction and draw failures, reconnect, GPU release, reduced motion,
 idle/hidden behavior, bounded 2D navigation and 20,000-cell fitting. The live
 integration separately verifies one real move and typed Escape cancellation.
 This is not a complete screen-reader/browser compatibility audit.
+
+## Inspect without guessing
+
+Inspect Self shows reported vitals, conditions, equipment assignments and
+belongings. Inspect Here shows the explorer's current square and captured floor
+items. A selected remote square shows only map sightings. These panels follow
+the current observation rather than retaining old cell objects.
+
+When live and ready, an inspection is a named zero-turn core action. At a
+standing decision or while replaying, it reads returned data without submitting
+an action/answer. Replay inspection pauses playback; stale seeks/imports cannot
+replace the inspected frame or a returned live view. Keyboard focus and mobile
+scrolling make the panel reachable; Escape closes it without cancelling a
+waiting game decision. `test:browser:inspection` covers these flows.
+
+`perception` freshness and item `usage` are new engine facts. Older engine pins
+and recordings keep their original data and are labeled last-known/unspecified
+where appropriate; labels are never upgraded into inferred equipment facts.
 
 ## Review recordings
 

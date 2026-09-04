@@ -57,6 +57,18 @@ with `storageError` until it is repaired.
 Numeric vitals are numbers when supported; strength can have an exceptional
 value such as `18/02`. Treat unknown information as unknown, not zero.
 
+`observation.perception` reports the engine snapshot version and freshness of
+`inventory`, `here`, and `equipment`: `current`, `lastKnown`, or `unknown`.
+"Current" is relative to that returned/recorded boundary, never a wall-clock
+promise. An engine input invalidates freshness until a new perception arrives;
+older rest-only pins can therefore have last-known belongings at a question.
+Existing recordings without this metadata have unspecified freshness, not an
+implicit current/empty state. Terminal gameplay perceptions remain frozen.
+
+New engines provide inventory-item `usage` arrays for physical equipment
+assignments (`worn`, `wielded`, `offhand`, `alternate`, `quivered`, `attached`).
+Do not derive them from item names, and do not infer hidden powers or charges.
+
 ### World cells
 
 Cells have x/y, remembered terrain, and optional occupant/objects. Self is
@@ -78,6 +90,24 @@ Never derive unseen terrain, object properties, or relationships from symbols.
 Do not append the complete recent-heard list after every action: it repeats old
 messages. The page uses action events during live play and the checkpoint's
 historical heard list when seeking through a recording.
+
+## Inspection panels
+
+`<nh-inspection>` is a pure Lit view of a supplied observation and `target`
+(`self`, `here`, or a tile coordinate). It makes no transport calls. The shell
+uses the named zero-turn `inspect` action when live and ready; during a decision,
+in-flight action, or replay it reads already-returned data only. Recorded
+inspection never starts an engine or answers a historical question.
+
+Self inspection shows reported vitals, conditions and engine-reported equipment
+assignments. Here follows the explorer and uses only `observation.here`; unknown
+floor contents are not an empty square. Remote tile inspection uses only map
+sightings, never underfoot contents from another square. Tile anchors retain
+coordinates, not old cell objects, and are cleared across worlds/levels.
+Backward seeks recompute everything from the selected checkpoint. Inspection
+pauses replay and cancels a pending seek; late imports cannot replace Live.
+Keyboard focus stays out of game shortcuts, and closing an inspector cannot
+answer a pending decision—even if Escape is held down.
 
 ## Named actions and decisions
 

@@ -8,6 +8,7 @@ import {
   observationAt,
 } from "./recording.js";
 import "./nh-map3d.js";
+import "./nh-inspection.js";
 
 const DIRECTIONS = [
   ["northwest", "↖"],
@@ -77,6 +78,7 @@ export class ExplorerView extends LitElement {
       "selected",
       "targeting",
       "selectedTile",
+      "inspection",
       "choices",
       "filter",
       "seed",
@@ -108,6 +110,8 @@ export class ExplorerView extends LitElement {
     this.messages = [];
     this.selected = null;
     this.selectedTile = null;
+    this.inspection = null;
+    this._inspectionFocusToken = 0;
     this.targeting = null;
     this.choices = [];
     this.filter = "";
@@ -197,6 +201,7 @@ export class ExplorerView extends LitElement {
   apply(d, name) {
     if (d.observation) {
       const old = this.decision?.id;
+      this.acceptInspectionScope(d);
       this.envelope = d;
       this.liveEnvelope = d;
       if (old !== d.decision?.id) {
@@ -222,7 +227,7 @@ export class ExplorerView extends LitElement {
     if (name === "new_game" || name === "resume") {
       this.messages = [];
       this.selected = null;
-      this.selectedTile = null;
+      if (name === "new_game") this.resetInspection();
       this.targeting = null;
       for (const text of d.observation?.heard ?? [])
         if (text.trim()) this.log(text);
@@ -272,6 +277,9 @@ export class ExplorerView extends LitElement {
       );
     else if (
       (name === "new_game" || name === "resume") &&
+      !!d.observation &&
+      !d.error &&
+      d.recording?.status !== "degraded" &&
       !d.ended &&
       this.mode === "live"
     )
@@ -380,6 +388,7 @@ export class ExplorerView extends LitElement {
     // Map inspection handles its own keys and never cancels a game decision.
     if (
       !e.defaultPrevented &&
+      !e.repeat &&
       !e.ctrlKey &&
       !e.metaKey &&
       !e.altKey &&
@@ -399,9 +408,14 @@ export class ExplorerView extends LitElement {
         .some(
           (t) =>
             t?.tagName &&
-            (["INPUT", "TEXTAREA", "SELECT", "BUTTON", "NH-MAP3D"].includes(
-              t.tagName,
-            ) ||
+            ([
+              "INPUT",
+              "TEXTAREA",
+              "SELECT",
+              "BUTTON",
+              "NH-MAP3D",
+              "NH-INSPECTION",
+            ].includes(t.tagName) ||
               t.isContentEditable),
         ) ||
       e.ctrlKey ||
@@ -475,7 +489,7 @@ export class ExplorerView extends LitElement {
     this.envelope = this.liveEnvelope;
     this.messages = this.liveMessages;
     this.selected = null;
-    this.selectedTile = null;
+    this.resetInspection();
     this.error = "";
     this.status = !this.envelope
       ? "Not connected"
@@ -492,6 +506,7 @@ export class ExplorerView extends LitElement {
     this._seekToken++;
     this.mode = "replay";
     this.status = "Opening recording…";
+    this.resetInspection();
     this.targeting = null;
     this.selected = null;
     this.error = "";
@@ -508,15 +523,23 @@ export class ExplorerView extends LitElement {
     }
   }
   async importRecording(file) {
-    if (!file) return;
+    if (!file || this.busy) return;
     this.pause();
+    const token = ++this._openToken;
+    this._seekToken++;
+    this.seeking = false;
+    this.mode = "replay";
+    this.status = "Opening recording…";
+    this.resetInspection();
     this.error = "";
     try {
       if (file.size > 128 * 1024 * 1024)
         throw Error(
           "Import is limited to 128 MB. Use the paged run library for larger recordings.",
         );
-      this.recording = new LocalRecording(parseRecording(await file.text()));
+      const frames = parseRecording(await file.text());
+      if (token !== this._openToken || this.mode !== "replay") return;
+      this.recording = new LocalRecording(frames);
       const url = new URL(location.href);
       url.searchParams.delete("run");
       url.searchParams.delete("frame");
@@ -526,7 +549,10 @@ export class ExplorerView extends LitElement {
       this.selected = null;
       await this.seek(0);
     } catch (e) {
-      this.error = e.message;
+      if (token === this._openToken) {
+        this.error = e.message;
+        this.status = "Replay unavailable";
+      }
     }
   }
   async seek(index) {
@@ -537,9 +563,10 @@ export class ExplorerView extends LitElement {
     try {
       const frame = await this.recording.frame(index);
       if (token !== this._seekToken || this.mode !== "replay") return;
-      this.envelope = observationAt(frame);
+      const next = observationAt(frame);
+      this.acceptInspectionScope(next);
+      this.envelope = next;
       this.playhead = index;
-      this.selectedTile = null;
       this.status = "Replay · read-only";
       if (this.recording.id) {
         const url = new URL(location.href);
@@ -592,13 +619,117 @@ export class ExplorerView extends LitElement {
     };
     this._playTimer = setTimeout(tick, 500 / this.speed);
   }
+  resetInspection() {
+    this._inspectionFocusToken++;
+    this.inspection = null;
+    this.selectedTile = null;
+    this._inspectionReturnFocus = null;
+  }
+  acceptInspectionScope(next) {
+    const tile = this.selectedTile;
+    if (
+      tile &&
+      (!tile.locationId ||
+        tile.sessionId !== next.sessionId ||
+        tile.locationId !== next.observation?.location?.id)
+    ) {
+      this.selectedTile = null;
+      if (this.inspection === "tile") this.inspection = null;
+    }
+  }
+  get inspectionTarget() {
+    return this.inspection === "tile" ? this.selectedTile : this.inspection;
+  }
+  get inspectionCell() {
+    const point =
+      this.inspection === "here"
+        ? this.obs.you
+        : this.inspection === "tile"
+          ? this.selectedTile
+          : null;
+    if (!point) return null;
+    return (
+      this.obs.world?.find((c) => c.x === point.x && c.y === point.y) ?? null
+    );
+  }
+  pauseForInspection() {
+    if (this.mode !== "replay") return;
+    this.pause();
+    this._seekToken++;
+    this.seeking = false;
+  }
+  selectTile(cell) {
+    if (!cell || !this.envelope) return;
+    this.pauseForInspection();
+    this.selectedTile = {
+      x: cell.x,
+      y: cell.y,
+      sessionId: this.envelope.sessionId,
+      locationId: this.obs.location?.id,
+    };
+    this.inspection = "tile";
+  }
+  async inspect(target) {
+    if (!["self", "here"].includes(target) || !this.envelope?.observation)
+      return;
+    this.pauseForInspection();
+    const active = this.renderRoot.activeElement;
+    if (active?.tagName !== "NH-INSPECTION")
+      this._inspectionReturnFocus = active;
+    const token = ++this._inspectionFocusToken;
+    this.inspection = target;
+    this.selectedTile = null;
+    // While replaying, answering a question, or waiting on a deed, inspect only
+    // the returned data. Never dismiss a prompt or start an engine to look.
+    if (this.ready) await this.act({ action: "inspect", target });
+    await this.updateComplete;
+    if (token !== this._inspectionFocusToken || this.inspection !== target)
+      return;
+    const panel = this.renderRoot.querySelector("nh-inspection");
+    if (panel) {
+      await panel.updateComplete;
+      panel.focusHeading();
+    }
+  }
+  closeInspection() {
+    const focus = this._inspectionReturnFocus;
+    this.resetInspection();
+    this.updateComplete.then(() => {
+      if (this.decision)
+        this.renderRoot
+          .querySelector(".decision button, .decision input")
+          ?.focus();
+      else if (focus?.isConnected && !focus.disabled) {
+        const rect = focus.getBoundingClientRect();
+        focus.focus({
+          preventScroll: rect.top >= 0 && rect.bottom <= innerHeight,
+        });
+      } else
+        this.renderRoot
+          .querySelector(".controls")
+          ?.focus({ preventScroll: true });
+    });
+  }
+  renderInspection() {
+    if (!this.inspectionTarget) return nothing;
+    return html`<nh-inspection
+      .observation=${this.obs}
+      .target=${this.inspectionTarget}
+      .recorded=${this.mode === "replay"}
+      .busy=${this.busy || this.seeking}
+      .decision=${!!this.decision && this.mode === "live"}
+      .uncertain=${this.uncertain && this.mode === "live"}
+      @inspect-target=${(e) => this.inspect(e.detail)}
+      @inspection-close=${() => this.closeInspection()}
+    ></nh-inspection>`;
+  }
   renderMap() {
     return html`<nh-map3d
       .observation=${this.envelope ? this.obs : null}
       .worldKey=${this.envelope?.sessionId ?? ""}
       .animateMoves=${this.mode === "live" || this.playing}
-      .selected=${this.selectedTile}
-      @tile-select=${(e) => (this.selectedTile = e.detail)}
+      .selected=${this.inspectionCell}
+      @tile-select=${(e) => this.selectTile(e.detail)}
     ></nh-map3d>`;
   }
   renderTargets(allowSelf = false) {
@@ -1045,7 +1176,13 @@ export class ExplorerView extends LitElement {
         <span class="pill replay-badge">Past perception</span
         ><span
           >Camera and inspection work normally. Game actions are disabled.</span
-        ><button class="small" @click=${() => this.showLive()}>
+        ><button class="small" @click=${() => this.inspect("self")}>
+          Inspect self
+        </button>
+        <button class="small" @click=${() => this.inspect("here")}>
+          Inspect here
+        </button>
+        <button class="small" @click=${() => this.showLive()}>
           Return to live world
         </button>
       </div>`;
@@ -1106,13 +1243,13 @@ export class ExplorerView extends LitElement {
           >
             Pray</button
           ><button
-            ?disabled=${!this.ready}
-            @click=${() => this.act({ action: "inspect", target: "self" })}
+            ?disabled=${!this.envelope?.observation}
+            @click=${() => this.inspect("self")}
           >
             Inspect self</button
           ><button
-            ?disabled=${!this.ready}
-            @click=${() => this.act({ action: "inspect", target: "here" })}
+            ?disabled=${!this.envelope?.observation}
+            @click=${() => this.inspect("here")}
           >
             Inspect here
           </button>
@@ -1278,13 +1415,7 @@ export class ExplorerView extends LitElement {
                   >3D · only what the explorer knows</span
                 >
               </div>
-              <div
-                class="map-area"
-                tabindex="0"
-                aria-label="Dungeon; arrow keys move"
-              >
-                ${this.renderMap()}
-              </div>
+              <div class="map-area">${this.renderMap()}</div>
               <div class="map-footer">
                 <div class="legend">
                   <span class="lself">You</span><span class="lally">Ally</span
@@ -1345,7 +1476,7 @@ export class ExplorerView extends LitElement {
                     </p>
                   </div>
                 </section>`
-              : nothing}${this.renderDecision()}
+              : nothing}${this.renderDecision()}${this.renderInspection()}
             <section class="panel">
               <div class="panel-head">
                 <h2>Belongings</h2>
@@ -1394,48 +1525,15 @@ export class ExplorerView extends LitElement {
                   ? "Start a world to see your belongings."
                   : o.inventoryKnown !== true
                     ? "Inventory was not captured at this point. This does not mean the pack was empty."
-                    : this.mode === "replay"
-                      ? "Belongings as known at this recorded moment."
-                      : "Choose an item, then an action. Leave unselected to ask the world for candidates."}
+                    : o.perception?.inventory === "lastKnown"
+                      ? "Last reported inventory — it may have changed before this boundary."
+                      : !o.perception
+                        ? "Belongings as reported; freshness was not captured by this engine/recording."
+                        : this.mode === "replay"
+                          ? "Belongings as known at this recorded moment."
+                          : "Choose an item, then an action. Leave unselected to ask the world for candidates."}
               </div>
             </section>
-            ${this.selectedTile
-              ? html`<section class="panel">
-                  <div class="panel-head">
-                    <h2>
-                      Square ${this.selectedTile.x}, ${this.selectedTile.y}
-                    </h2>
-                    <button
-                      class="quiet small"
-                      @click=${() => (this.selectedTile = null)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div class="card-body details">
-                    ${[
-                      ["Terrain", this.selectedTile.terrain?.type || "unknown"],
-                      [
-                        "Knowledge",
-                        this.selectedTile.terrain?.knowledge || "unknown",
-                      ],
-                      [
-                        "Occupant",
-                        this.selectedTile.occupant?.kind || "none reported",
-                      ],
-                    ].map(
-                      ([k, value]) =>
-                        html`<div class="line">
-                          <span class="muted">${k}</span
-                          ><span>${label(value)}</span>
-                        </div>`,
-                    )}
-                    <p class="muted">
-                      Perceived information only. No unseen contents inferred.
-                    </p>
-                  </div>
-                </section>`
-              : nothing}
             ${this.renderRuns()}
             <section class="panel setup-panel ${noSession ? "first" : ""}">
               <div class="panel-head">

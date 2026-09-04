@@ -80,11 +80,15 @@ serializing the address would leak ASLR and break determinism).
 `"$:"` or a tty `\GXXXXNNNN:` glyph escape and the port strips everything
 through the first `:` (per the `BL_GOLD` contract in `src/botl.c`).
 
-`perception {branch, level, x, y, inventory, floorKnown, floor, hereCmap?}` —
+`perception {perceptionVersion?, branch, level, x, y, inventory, floorKnown, floor, hereCmap?}` —
 non-mutating perceived belongings and current-square context at each semantic
 input boundary (including menus and questions, not just resting commands). This
 captures changes already made before a mid-deed warning, such as a bitten ration. Objects carry stable internal identities, perceived labels, classes,
-and quantities. Unknown floor contents are not obtained by pickup or touch.
+and quantities. Version 2 adds carried-item `usage` arrays containing only known
+physical assignments: `worn`, `wielded`, `offhand`, `alternate`, `quivered`, and
+`attached`. Empty arrays mean none of these assignments; absence means they
+were not captured. Artifact powers, charges, BUC and hidden properties are not
+exported by this field. Unknown floor contents are not obtained by pickup or touch.
 `hereCmap`, when present, is the visible terrain under the hero glyph, rendered
 by the engine's own terrain function only when the square is in sight and the
 floor is observable. It does not reveal unseen traps or secret terrain. When

@@ -13,6 +13,10 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
   `nh-map3d.js` + `map-surface.js` + `map-presentation.js`: procedural models,
   GPU/keyboard lifecycle, and pure bounded display preparation. No engine rules.
   Map-focused keys inspect, never act; game shortcuts belong outside map focus.
+- `nh-inspection.js` / `inspection.js` render self/here/tile facts from the
+  current observation, never stored cell objects. Equipment use comes from the
+  engine's `usage` fields, not label parsing. Respect `perception` freshness;
+  missing legacy metadata is not permission to claim current/empty information.
 - `client/recording.js` and `mcp/src/runs.ts` review public perception recordings
   without starting or commanding an engine. Replay must remain read-only.
 - Legacy reconstruction is a separate explicit management operation:
@@ -66,5 +70,6 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 - `test:browser:recovery` requires the candidate's isolated `/tmp` `BROWSER_SESSIONS_DIR`; it must not target production.
 - `bun run build:component` builds the self-contained ESM distribution; `bun run test:component` uses its own sandboxed Chrome/static-only fixture. Never bypass Chrome or reconstruction sandboxing to make CI pass.
 - `test:browser:renderer` also checks keyboard/game isolation on an isolated candidate.
+- `test:browser:inspection` covers zero-turn facts, pending decisions, replay/import races, legacy unknowns and mobile focus.
 
 See [GOAL.md](GOAL.md) and [client/README.md](client/README.md) for run instructions.

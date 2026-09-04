@@ -12,6 +12,7 @@
     "test": "bun test mcp/tests",
     "test:browser": "bun client/tests/browser.ts",
     "test:browser:renderer": "bun client/tests/renderer-browser.ts",
+    "test:browser:inspection": "bun client/tests/inspection-browser.ts",
     "test:browser:terminal": "bun client/tests/terminal-browser.ts",
     "test:browser:scenarios": "bun client/tests/scenarios-browser.ts",
     "test:browser:recovery": "bun client/tests/recovery-browser.ts",

@@ -24,7 +24,9 @@ export class TestBridge {
     this.proc = spawn(
       process.env.NHXCLI ?? `${ROOT}/mcp/bin/nhxcli`,
       [
-        process.env.ENGINE_CMD ?? `${ROOT}/upstream/playground/nethack`,
+        environment.ENGINE_CMD ??
+          process.env.ENGINE_CMD ??
+          `${ROOT}/upstream/playground/nethack`,
         `${ROOT}/upstream/playground`,
         sessions,
       ],

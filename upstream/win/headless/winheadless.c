@@ -1030,6 +1030,17 @@ hl_perceived_object(JBuf *jb, struct obj *o, boolean carried)
     jb_key(jb, "label"); jb_str(jb, doname(o));
     jb_key(jb, "class"); jb_str(jb, hl_object_class(o->oclass));
     jb_key(jb, "quantity"); jb_int(jb, o->quan);
+    if (carried) {
+        /* Physical use of your own possessions is known; do not expose
+           artifact powers, BUC state, charges, or other hidden properties. */
+        jb_key(jb, "usage"); jb_begin_arr(jb);
+        if (o->owornmask & (W_ARMOR | W_ACCESSORY)) { jb_sep(jb); jb_str(jb, "worn"); }
+        if (o == uwep || (o == uswapwep && u.twoweap)) { jb_sep(jb); jb_str(jb, "wielded"); }
+        if (o == uswapwep) { jb_sep(jb); jb_str(jb, u.twoweap ? "offhand" : "alternate"); }
+        if (o == uquiver) { jb_sep(jb); jb_str(jb, "quivered"); }
+        if (o->owornmask & (W_BALL | W_CHAIN)) { jb_sep(jb); jb_str(jb, "attached"); }
+        jb_end_arr(jb);
+    }
     jb_end_obj(jb);
 }
 
@@ -1046,6 +1057,7 @@ hl_perception(void)
         && !is_lava(u.ux, u.uy);
     jb_init(&jb);
     jb_begin_obj(&jb);
+    jb_key(&jb, "perceptionVersion"); jb_int(&jb, 2);
     jb_key(&jb, "branch"); jb_int(&jb, u.uz.dnum);
     jb_key(&jb, "level"); jb_int(&jb, u.uz.dlevel);
     jb_key(&jb, "x"); jb_int(&jb, u.ux);

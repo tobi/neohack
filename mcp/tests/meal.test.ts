@@ -35,6 +35,8 @@ test("a real multi-turn meal pauses with current inventory and stops at the decl
     });
     expect(warning.outcome.status).toBe("needsChoice");
     expect(warning.decision.kind).toBe("confirmation");
+    expect(warning.observation.perception.inventory).toBe("current");
+    expect(warning.observation.perception.equipment).toBe("current");
     expect(
       warning.observation.inventory.find((i: any) => i.id === ration.id)
         .quantity,

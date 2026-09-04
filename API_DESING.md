@@ -104,6 +104,14 @@ A self-directed wand must explicitly accept `target: "self"`. Inspecting self
 returns known conditions and equipment; inspecting here returns the known
 terrain and objects underfoot. Waiting is `action: "wait"`, never a target.
 
+Implemented inspection panels project the returned observation only. Carried
+item `usage` is supplied by the engine, not parsed from labels. The observation's
+`perception` metadata distinguishes current-at-boundary, last-known and unknown
+belongings/equipment/floor contents; older recordings without it remain
+unspecified. Fixed-square panels never retain cell contents across a seek or
+apply underfoot contents to a remote square. Passive inspection during replay
+or a standing decision sends no engine command or invented answer.
+
 Up/down **aiming** is distinct from climbing stairs. Invalid target kinds are
 rejected before engine input. Do not turn an invalid target into a wait or an
 arbitrary direction. Do not permit self-targeting actions merely because their

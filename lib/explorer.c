@@ -143,7 +143,11 @@ typedef struct {
     int quantity;
     int glyph;
     char category[24];      /* perceived object class, not name heuristics */
+    unsigned usage;
+    int usage_known;
 } inv_item_t;
+
+static const char *const USAGE_NAMES[] = { "worn", "wielded", "offhand", "alternate", "quivered", "attached", NULL };
 
 typedef struct {
     int waiting_answer;     /* engine prompt outstanding */
@@ -195,7 +199,8 @@ typedef struct game {
     char terminal_cause[256];
     long long terminal_turn;
     char location_id[80];
-    int structured_perception;
+    int structured_perception; /* engine perception version; zero = legacy peeks */
+    int perception_fresh;      /* snapshot received after the latest engine input */
     int replaying;          /* resume lockstep: suspend live auto-answers */
     int recording_only;
     char reconstruction_source[65];
@@ -1179,6 +1184,9 @@ ingest_belongings(game_t *g, const char *params)
         mj_find(params, "hereCmap", &v) && mj_int(v, &n))
         g->terrain[g->you_y][g->you_x] = (unsigned char) terrain_from_cmap((int) n);
     g->structured_perception = 1;
+    if (mj_find(params, "perceptionVersion", &v) && mj_int(v, &n) && n >= 1 && n <= 16)
+        g->structured_perception = (int) n;
+    g->perception_fresh = 1;
     for (i = 0; i < g->ninv; i++) free(g->inv[i].label);
     free(g->inv); g->inv = NULL; g->ninv = 0;
     for (i = 0; i < g->nfloor; i++) free(g->floor[i].label);
@@ -1225,6 +1233,18 @@ ingest_belongings(game_t *g, const char *params)
                     item->label = name; name = NULL;
                     item->letter = (char) slot;
                     item->quantity = (int) quantity;
+                    if (mj_find(obj, "usage", &v) && *v.p == '[') {
+                        mj_arr_it uses = { 0 }; mj_val use; uses.first = 1;
+                        item->usage_known = 1;
+                        while (mj_arr_next(v.p, &uses, &use)) {
+                            char *word = mj_str(use); size_t k;
+                            for (k = 0; USAGE_NAMES[k]; k++)
+                                if (word && !strcmp(word, USAGE_NAMES[k])) break;
+                            if (!USAGE_NAMES[k]) item->usage_known = 0;
+                            else item->usage |= 1U << k;
+                            free(word);
+                        }
+                    }
                 }
             }
             free(name); free(category); free(obj);
@@ -1575,6 +1595,7 @@ send_engine(game_t *g, const char *line)
 {
     if (log_append(g, line) < 0)
         return -1;
+    if (!g->terminal_kind[0]) g->perception_fresh = 0;
     return nh_session_write(g->eng, line);
 }
 
@@ -1582,6 +1603,7 @@ send_engine(game_t *g, const char *line)
 static int
 send_raw(game_t *g, const char *line)
 {
+    if (!g->terminal_kind[0]) g->perception_fresh = 0;
     return nh_session_write(g->eng, line);
 }
 
@@ -2285,6 +2307,7 @@ tracked_clear(game_t *g)
     g->terminal_turn = 0;
     g->location_id[0] = '\0';
     g->structured_perception = 0;
+    g->perception_fresh = 0;
     for (i = 0; i < MAX_MENU_WINDOWS; i++)
         if (g->menus[i].used) {
             menu_clear(&g->menus[i]);
@@ -2561,11 +2584,29 @@ emit_inventory(game_t *g, mj_Buf *b)
         mj_strv(b, g->inv[i].location ? "here" : "inventory");
         mj_key(b, "quantity"); mj_intv(b, g->inv[i].quantity);
         mj_key(b, "category"); mj_strv(b, g->inv[i].category[0] ? g->inv[i].category : "unknown");
+        if (g->inv[i].usage_known) {
+            size_t k;
+            mj_key(b, "usage"); mj_arr(b);
+            for (k = 0; USAGE_NAMES[k]; k++)
+                if (g->inv[i].usage & (1U << k)) mj_strv(b, USAGE_NAMES[k]);
+            mj_endarr(b);
+        }
         mj_endobj(b);
     }
     mj_endarr(b);
     mj_key(b, "inventoryKnown");
     mj_boolv(b, g->inventory_rev >= 0);
+    {
+        int equipment_known = g->structured_perception >= 2 && g->inventory_rev >= 0;
+        const char *freshness = g->perception_fresh ? "current" : "lastKnown";
+        for (i = 0; i < g->ninv; i++) if (!g->inv[i].usage_known) equipment_known = 0;
+        mj_key(b, "perception"); mj_obj(b);
+        mj_key(b, "version"); mj_intv(b, g->structured_perception);
+        mj_key(b, "inventory"); mj_strv(b, g->inventory_rev >= 0 ? freshness : "unknown");
+        mj_key(b, "here"); mj_strv(b, g->floor_valid ? freshness : "unknown");
+        mj_key(b, "equipment"); mj_strv(b, equipment_known ? freshness : "unknown");
+        mj_endobj(b);
+    }
 }
 
 /* Last 10, newest last (design "heard" reads oldest-first). */

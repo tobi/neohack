@@ -64,6 +64,7 @@ PORT=3311 SESSIONS_DIR=/tmp/neonethack-tests bun run dev
 # In another terminal, with Chromium listening on CDP port 9333:
 APP_URL=http://127.0.0.1:3311 bun run test:browser
 APP_URL=http://127.0.0.1:3311 bun run test:browser:renderer
+APP_URL=http://127.0.0.1:3311 bun run test:browser:inspection
 APP_URL=http://127.0.0.1:3311 bun run test:browser:terminal
 APP_URL=http://127.0.0.1:3311 bun run test:browser:scenarios
 APP_URL=http://127.0.0.1:3311 BROWSER_SESSIONS_DIR=/tmp/neonethack-tests bun run test:browser:recovery
