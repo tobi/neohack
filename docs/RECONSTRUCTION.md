@@ -67,6 +67,21 @@ Some legacy binaries embed an absolute `SYSCF_FILE` path. The worker mounts only
 the captured sysconf file at those literal aliases, not the surrounding host
 home/playground. That is a compatibility mapping, not access to current data.
 
+## Sandbox host policy
+
+Ubuntu hosts with `kernel.apparmor_restrict_unprivileged_userns=1` can allow a
+user namespace to be created but deny its setup capabilities. One symptom is
+`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`.
+
+An administrator may need an explicit AppArmor policy permitting the trusted
+`/usr/bin/bwrap` constructor to create user namespaces. CI installs the scoped
+example in `.github/ci/bwrap.profile` and then runs a real namespace probe before
+the isolation tests. The application never installs host policies itself.
+
+Do **not** work around this by sharing the host network, retaining capabilities,
+disabling AppArmor globally, or running reconstruction unsandboxed. Unsupported
+hosts return `sandboxUnavailable` and leave the source alone.
+
 ## Format and provenance
 
 The output uses `neonethack.perception`, version 1: independent observation

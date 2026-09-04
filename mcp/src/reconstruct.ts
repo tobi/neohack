@@ -359,6 +359,17 @@ export function createReconstructor(
           Error("Reconstruction exceeded its deadline; source was not changed"),
           { code: "reconstructionTimeout" },
         );
+      if (
+        exit !== 0 &&
+        stderr.includes("bwrap:") &&
+        /Operation not permitted|Permission denied|No permissions/.test(stderr)
+      )
+        throw Object.assign(
+          Error(
+            "Host policy prevents sandbox setup. See docs/RECONSTRUCTION.md; no unsandboxed fallback was attempted.",
+          ),
+          { code: "sandboxUnavailable" },
+        );
       if (exit !== 0)
         throw Object.assign(
           Error(

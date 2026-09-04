@@ -22,6 +22,22 @@ jobs:
           sudo apt-get install -y build-essential libncurses-dev uuid-dev bubblewrap
           mise install lua@5.4.9
           echo "LUA_HOME=$(mise where lua@5.4.9)" >> "$GITHUB_ENV"
+      - name: Permit the sandbox constructor on restricted Ubuntu hosts
+        run: |
+          # Scope the permission to /usr/bin/bwrap; never disable AppArmor or
+          # user-namespace restrictions globally, and never skip isolation tests.
+          if test -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            read -r restricted < /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+            if test "$restricted" = 1; then
+              sudo install -m 0644 .github/ci/bwrap.profile /etc/apparmor.d/neonethack-bwrap
+              sudo apparmor_parser -r /etc/apparmor.d/neonethack-bwrap
+            fi
+          fi
+          bwrap --version
+          bwrap --unshare-user --unshare-net --unshare-pid --die-with-parent \
+            --cap-drop ALL --clearenv --ro-bind /usr /usr --ro-bind /bin /bin \
+            --ro-bind /lib /lib --ro-bind /lib64 /lib64 --proc /proc --dev /dev \
+            /usr/bin/true
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: bun test mcp/tests
