@@ -46,10 +46,10 @@ unless actual receipt evidence is recovered; the reservation is retained.
 
 A torn or corrupt checkpoint journal is different. The native writer refuses
 to append to it or start a resume engine. It does **not** automatically discard,
-truncate, skip, or overwrite damaged bytes. Explicit operator salvage into a
-preserved/copy-based history is still future work. Keep the original and any
-backups; do not "fix" this by deleting request reservations or starting a new
-game with the same ID.
+truncate, skip, or overwrite damaged bytes. The explicit operator utility below
+can preserve a full evidence copy plus a read-only prefix export. It does not
+repair a live world. Keep the original and any backups; do not "fix" this by
+deleting request reservations or starting a new game with the same ID.
 
 ## Private metadata and input integrity
 
@@ -74,7 +74,12 @@ one initialize/new_game pair and an explicit seed. It is bounded to 128 MiB,
 partial replay histories. No append is made to changed or invalid input bytes;
 file and directory durability precede sending an answer to the engine.
 
-Resume validates every answer's id and shape against the actual waiting input,
+Resume validates every answer's id, shape and known offered values against the
+actual waiting input (command indices, nonempty yn choice sets, menu options
+and selection cardinality). Explicit cancellation remains cancellation; empty
+choice domains are not guessed. Menu replay uses the same accelerator-bearing
+options the current core offers; legacy rows without that information are not
+silently promoted to selectable items. It
 forbids shell/suspend/debug replay, and has a two-minute inner deadline. Mismatch
 or early exit aborts the owned child rather than feeding an engine default or
 publishing a partial replay. Pending game decisions are aborted rather than
@@ -93,6 +98,54 @@ deed receipts. The viewer preserves the warning when switching to review and
 back, and disables answers/deeds until recovery. A complete logged answer whose
 fsync failed may survive and be replayed after storage is fixed; its semantic
 boundary remains explicitly uncertain rather than being claimed completed.
+
+## Explicit preserved-copy salvage (Linux operator CLI)
+
+```sh
+bun tools/salvage-run.ts SESSIONS_DIR RUN_ID NEW_BUNDLE_DIR --confirm
+```
+
+Save/retire the source owner first. `NEW_BUNDLE_DIR` must not exist and must be
+outside the session root. The utility requires the existing regular `.lease`
+and takes its exclusive lock for the entire copy, including after the flock
+helper exits. Missing/busy leases are refused; no lease or other file is
+created in the original. No engine, shell command from the recording, or
+reconstruction worker is executed.
+
+The bundle contains:
+
+- `evidence/`: every source file and directory, including damaged journals,
+  private sidecars, request reservations, pins and saves. File contents are
+  byte-preserved, independently copied, fsynced, and made non-executable/read-only
+  (0400); original modes and SHA-256 hashes are recorded in the manifest.
+- `review.nh-run.jsonl`: only complete validated checkpoints up to the first
+  failure, preceded by the existing warning-preserving recording manifest.
+  Frames, identities, gap markers and reconstruction provenance are not rewritten.
+  No playable export is invented if there are zero valid frames.
+- `manifest.json`: the fsynced completion marker, published only after the
+  evidence, export and directories have been flushed. It lists source identity,
+  file hashes, integrity and the explicit `liveRecovery:false` limitation.
+- `INCOMPLETE.json`: a persistent staging notice. Without a complete manifest,
+  or if `FAILED.json` exists, treat the bundle as incomplete. Failed copies are
+  retained for diagnosis; neither original damage nor reservations are erased.
+
+Open the review file through **Import recording**. Browser-local import remains
+limited to 128 MiB; larger prefixes still need paged review of the original
+read-only archive (a standalone paged bundle viewer is not implemented).
+The source stays damaged and still refuses native resume. This command does
+not install or publish a new live session, reconcile uncertain execution,
+rewrite private metadata, or make reconstruction historically verified.
+SHA-256 identifies copied bytes, not their authenticity.
+
+Copying is bounded to 10 GiB total, 8 GiB per file, 20,000 entries and 32 directory
+levels. Files/directories are opened through pinned directory descriptors;
+symlinks and nonregular files are rejected. Journals/metadata require single
+links. The one exception is the native root `engine` pin, which intentionally
+shares a versioned cache inode; its copy is an independent non-executable file.
+A final inventory/stat comparison rejects detected source changes outside the
+cooperating lease. This is not a filesystem snapshot against a hostile owner.
+A complete healthy checkpoint stream needs no damaged-prefix salvage and is
+refused without creating a bundle.
 
 ## Read-only review
 
@@ -135,6 +188,14 @@ watermark gaps, and no replay of an evicted missing receipt. The browser test
 uses only its own newly created/saved run in an isolated `/tmp` root, retains
 the damaged evidence, and restores that test fixture afterward.
 
-Full automatic private-state recovery, explicit copy-based salvage, and
-filesystem/power-loss fault coverage beyond these injected boundaries remain
-open. None of this upgrades historical reconstruction into verified history.
+`mcp/tests/salvage.test.ts` checks real run preservation, lease exclusion and
+retention, unsafe entries, bounds, source changes, duplicate checkpoints,
+unparseable private state, zero-frame evidence, and non-execution of pins.
+`client/tests/salvage-browser.ts` imports and seeks a real salvaged prefix with
+zero engine traffic. Native and read-only scanners reject duplicate checkpoint
+keys rather than disagreeing about which value is authoritative.
+
+Automatic private-state recovery, continuation from genuinely uncertain
+boundaries, large paged bundle review, and filesystem/power-loss fault coverage
+beyond the injected boundaries remain open. None of this upgrades historical
+reconstruction into verified history.

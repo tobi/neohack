@@ -137,9 +137,40 @@ input_matches_prompt(game_t *g, const char *line)
     if (!strcmp(g->pending.kind, "ack")) return request_fields(v.p, empty);
     if (!strcmp(g->pending.kind, "msgmenu")) return request_fields(v.p, empty) || (request_fields(v.p, answer) && mj_find(v.p, "answer", &value));
     if (!strcmp(g->pending.kind, "key") || !strcmp(g->pending.kind, "poskey")) return request_fields(v.p, key) && mj_find(v.p, "key", &value);
-    if (!strcmp(g->pending.kind, "yn")) return request_fields(v.p, answer) && mj_find(v.p, "answer", &value);
+    if (!strcmp(g->pending.kind, "yn")) {
+        char *selected; int offered;
+        if (!request_fields(v.p, answer) || !mj_find(v.p, "answer", &value)) return 0;
+        selected = mj_str(value);
+        offered = selected && selected[0] && (!g->pending.choices || !g->pending.choices[0] ||
+            (unsigned char) selected[0] == 27 || strchr(g->pending.choices, selected[0]));
+        free(selected); return offered;
+    }
     if (!strcmp(g->pending.kind, "getlin")) return request_fields(v.p, text) && mj_find(v.p, "line", &value);
-    if (!strcmp(g->pending.kind, "extcmd")) return request_fields(v.p, command) && mj_find(v.p, "index", &value);
-    if (!strcmp(g->pending.kind, "menu")) return request_fields(v.p, menu) && (mj_find(v.p, "picks", &value) || mj_find(v.p, "cancelled", &value));
+    if (!strcmp(g->pending.kind, "extcmd")) {
+        long long index;
+        return request_fields(v.p, command) && mj_find(v.p, "index", &value) && mj_int(value, &index) &&
+            (index == -1 || (index >= 0 && (size_t) index < g->pending.ncommands));
+    }
+    if (!strcmp(g->pending.kind, "menu")) {
+        mj_arr_it it = { 0 }; mj_val pick; size_t n = 0, i, k; int cancelled = 0;
+        if (!request_fields(v.p, menu)) return 0;
+        if (mj_find(v.p, "cancelled", &value) && mj_bool(value, &cancelled) && cancelled) return 1;
+        if (!mj_find(v.p, "picks", &value)) return 0;
+        it.first = 1;
+        while (mj_arr_next(value.p, &it, &pick)) {
+            long long index; int offered = 0;
+            if (!mj_int(pick, &index) || g->pending.how == 0 || (g->pending.how != 2 && ++n > 1)) return 0;
+            for (i = 0; i < MAX_MENU_WINDOWS; i++) {
+                menu_t *m = &g->menus[i];
+                if (!m->used || m->window != g->pending.window) continue;
+                for (k = 0; k < m->nitems; k++)
+                    if (m->items[k].index == index && m->items[k].accel > 0) offered = 1;
+            }
+            /* Match the options this core actually offers. Legacy rows lacking
+             * a selectable accelerator are not guessed into actionable items. */
+            if (!offered) return 0;
+        }
+        return 1;
+    }
     return 0;
 }

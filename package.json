@@ -17,8 +17,10 @@
     "test:browser:scenarios": "bun client/tests/scenarios-browser.ts",
     "test:browser:recovery": "bun client/tests/recovery-browser.ts",
     "test:browser:storage": "bun client/tests/storage-browser.ts",
+    "test:browser:salvage": "bun client/tests/salvage-browser.ts",
     "test:reconstruction-browser": "bun client/tests/reconstruction-browser.ts",
     "reconstruct": "bun tools/reconstruct-run.ts",
+    "salvage": "bun tools/salvage-run.ts",
     "format": "prettier --write client/explorer-app.js client/explorer-theme.js client/nh-map3d.js client/recording.js client/world.js tools/*.ts mcp/src/runs.ts mcp/src/reconstruct.ts mcp/src/origin.ts mcp/tests/*.test.ts",
     "dev": "bun bun_server/src/index.ts"
   },

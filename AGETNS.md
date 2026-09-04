@@ -31,6 +31,10 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
   and semantic boundaries. Missing/corrupt metadata is not optional cache data.
   `recoveryRequired` blocks deeds; never clear boundary flags or reservations to
   force continuation. Replay mismatches abort our child, not an implicit answer.
+- Explicit `tools/salvage-run.ts` preserves a leased source into a new external
+  evidence bundle and a warning-labeled prefix export. It never executes a pin,
+  repairs a live world, or drops reservations. Never install evidence as a live
+  session or remove boundary flags to force continuation.
 - Existing input logs are not event recordings and must not be silently
   converted in place. Missing receipts stay uncertain even across marked gaps.
 - Existing sessions and unrelated upstream changes must be preserved. Engine
@@ -75,5 +79,6 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 - `bun run build:component` builds the self-contained ESM distribution; `bun run test:component` uses its own sandboxed Chrome/static-only fixture. Never bypass Chrome or reconstruction sandboxing to make CI pass.
 - `test:browser:renderer` also checks keyboard/game isolation on an isolated candidate.
 - `test:browser:inspection` covers zero-turn facts, pending decisions, replay/import races, legacy unknowns and mobile focus.
+- `test:browser:salvage` creates its own isolated native fixture, retires it, then verifies engine-free import/review of the copied prefix.
 
 See [GOAL.md](GOAL.md) and [client/README.md](client/README.md) for run instructions.

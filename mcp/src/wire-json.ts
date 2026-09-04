@@ -1,8 +1,11 @@
 // Transport framing only, not game semantics. JSON.parse otherwise silently
 // accepts the last duplicate key, losing ambiguity before the C core sees it.
 export const MAX_WIRE_BYTES = 64 * 1024;
-export function parseWireJson(text: string): unknown {
-  if (Buffer.byteLength(text, "utf8") > MAX_WIRE_BYTES)
+export function parseWireJson(
+  text: string,
+  maxBytes = MAX_WIRE_BYTES,
+): unknown {
+  if (Buffer.byteLength(text, "utf8") > maxBytes)
     throw Error("JSON frame too large");
   const value = JSON.parse(text); // Establish lexical validity before scanning.
   let p = 0;

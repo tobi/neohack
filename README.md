@@ -83,7 +83,15 @@ lifecycle checks with an isolated, sandboxed headless Chrome profile.
 Complete checkpoints recover missing/torn indexes without replaying a game.
 Damaged checkpoint bytes are preserved, not silently truncated; review and
 export expose the validated prefix with a persistent warning. Native writers
-fail closed on damaged journals. See [recovery guarantees and limits](docs/RECORDING_RECOVERY.md).
+fail closed on damaged journals. For an explicit preserved-copy evidence bundle
+and read-only prefix export, after saving/retiring the owner:
+
+```sh
+bun tools/salvage-run.ts SESSIONS_DIR RUN_ID NEW_BUNDLE_DIR --confirm
+```
+
+The destination must be new and outside the session root. No engine runs and no
+live session is repaired. See [recovery guarantees and limits](docs/RECORDING_RECOVERY.md).
 
 ## Legacy runs
 

@@ -83,8 +83,13 @@ record_validate(game_t *g, const char *line, long long sequence,
 {
     mj_val v, response, observation;
     long long n;
+    char *canonical;
     *through = -1; *gap = 0;
-    if (!mj_valid(line) ||
+    if (!mj_valid(line)) return 0;
+    canonical = mj_canonical((mj_val) { line });
+    if (!canonical) return 0; /* Ambiguous keys cannot be authoritative receipts. */
+    free(canonical);
+    if (
         !mj_find(line, "format", &v) || !record_is(v, "neonethack.perception") ||
         !mj_find(line, "version", &v) || !mj_int(v, &n) || n != 1 ||
         !mj_find(line, "sequence", &v) || !mj_int(v, &n) || n != sequence ||

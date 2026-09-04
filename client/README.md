@@ -139,10 +139,16 @@ Original files are preserved. See [reconstruction details](../docs/RECONSTRUCTIO
 Normal playback still never starts an engine. The core pins each live run's
 engine executable before recreating its playground on resume.
 
+Damaged checkpoints can be preserved with the explicit operator command
+`bun tools/salvage-run.ts SESSIONS_DIR RUN_ID NEW_BUNDLE_DIR --confirm`.
+It copies all evidence without running an engine and exports a warning-labeled
+read-only prefix. Import that review file here (up to 128 MiB). It does not
+repair a live session; see [recovery limits](../docs/RECORDING_RECOVERY.md).
+
 ## Current limitations
 
 This is a tested renderer milestone, not a claim of full design completion. See `PROJECT_PLAN.md` and `API_DESING.md` for remaining work:
 historical-verification limits, stronger scenario coverage, unsupported game actions,
-explicit damaged-data salvage, private-journal recovery, and richer semantic engine context. There
+live continuation after damage, private-journal recovery, and richer semantic engine context. There
 is no multi-user authentication: the default service is loopback-only and is
 intended for a trusted local environment.

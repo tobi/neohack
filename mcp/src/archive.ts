@@ -2,6 +2,7 @@
 import { open } from "node:fs/promises";
 import { constants } from "node:fs";
 import { validateFrame } from "../../client/recording.js";
+import { parseWireJson } from "./wire-json";
 export const MAX_FRAME_BYTES = 8 * 1024 * 1024;
 export const MAX_ARCHIVE_BYTES = 8 * 1024 * 1024 * 1024;
 export const MAX_FRAMES = 100000;
@@ -25,7 +26,7 @@ export async function openArchive(path: string) {
   }
 }
 export function checkedFrame(text: string, id: string, sequence: number) {
-  const frame = validateFrame(JSON.parse(text)),
+  const frame = validateFrame(parseWireJson(text, MAX_FRAME_BYTES)),
     r = frame.response;
   if (
     frame.sequence !== sequence ||
