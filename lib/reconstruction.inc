@@ -59,38 +59,8 @@ recon_empty_directory(const char *path)
 static const char *
 recon_validate(char **lines, size_t count)
 {
-    size_t i;
     if (count < 2 || count > RECON_MAX_ANSWERS + 2) return "source answer count is unsupported";
-    for (i = 0; i < count; i++) {
-        mj_val v, params;
-        long long id;
-        char *canonical, *method = NULL;
-        if (strlen(lines[i]) > 65536 || !mj_valid(lines[i])) return "source contains malformed or oversized JSON";
-        canonical = mj_canonical((mj_val) { lines[i] });
-        if (!canonical) return "source contains duplicate keys or unsupported JSON nesting";
-        free(canonical);
-        if (!mj_find(lines[i], "id", &v) || !mj_int(v, &id) || id < 0) return "source has a non-integer input id";
-        if (mj_find(lines[i], "method", &v)) method = mj_str(v);
-        if (i < 2) {
-            const char *want = i ? "new_game" : "initialize";
-            if (!method || strcmp(method, want) || id != (long long) i + 1) { free(method); return "source must begin with initialize then new_game"; }
-            if (!mj_find(lines[i], "params", &params) || *params.p != '{') { free(method); return "source initialization lacks parameters"; }
-            if (i == 1) {
-                size_t n;
-                const char *raw = mj_raw(params, &n);
-                char *object = strndup(raw, n);
-                long long seed;
-                int seeded = object && mj_find(object, "seed", &v) && mj_int(v, &seed);
-                free(object);
-                if (!seeded) { free(method); return "source has no explicit seed; historical entropy cannot be reconstructed"; }
-            }
-        } else {
-            if (method) { free(method); return "source contains a method after initialization"; }
-            if (!mj_find(lines[i], "result", &v) || *v.p != '{') return "source contains a non-response input";
-        }
-        free(method);
-    }
-    return NULL;
+    return input_validate(lines, count);
 }
 
 static int
@@ -283,6 +253,7 @@ run_reconstruct(nhx_t *x, const char *args)
                 code = "replayDiverged"; message = "stored answer id does not match the pinned engine's input boundary"; goto cleanup;
             }
         }
+        if (!input_matches_prompt(g, lines[i])) { code = "replayDiverged"; message = "stored answer shape does not match the actual input boundary"; goto cleanup; }
         if (recon_unsafe_answer(g, lines[i])) { code = "unsupportedHistoricalCommand"; message = "shell, suspend and debug commands are not reconstructed"; goto cleanup; }
         if (send_raw(g, lines[i])) { code = "engineError"; message = "could not deliver stored answer"; goto cleanup; }
         pending_clear(g);

@@ -53,6 +53,10 @@ with `storageError` until it is repaired.
 - Optional `recording`: current storage health, independent of the immutable
   deed receipt. `status:"degraded"` requires attention/resume; do not repeat the
   deed under a new request ID. See [recording recovery](../docs/RECORDING_RECOVERY.md).
+- Optional `storage`: private metadata/input-journal health. Degraded storage
+  blocks new deeds/answers; it is preserved across review/live transitions.
+  `recoveryRequired` means a semantic boundary could not be established safely,
+  not permission to drop the journal or guess the next answer.
 
 Numeric vitals are numbers when supported; strength can have an exceptional
 value such as `18/02`. Treat unknown information as unknown, not zero.

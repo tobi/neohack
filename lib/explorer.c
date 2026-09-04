@@ -156,6 +156,7 @@ typedef struct {
     char phase[32];
     char decision_id[40];
     char dec_kind[16];      /* kind of the offered decision */
+    char prompt_signature[32]; /* exact pending-input context fingerprint */
     long long dec_pending;  /* engine prompt id the offer was built on;
                              * -2 = synthetic (no engine prompt held) */
     int keypos;             /* script keys consumed so far */
@@ -232,6 +233,12 @@ typedef struct game {
     req_entry_t *requests;
     size_t nrequests;
     int request_index_corrupt;
+    int sidecar_present, sidecar_corrupt, boundary_complete, recovery_required;
+    char sidecar_error[192], input_error[192];
+    long long input_bytes, sidecar_input_bytes;
+    size_t input_count;
+    int input_ready;
+    struct stat sidecar_stat, input_stat;
     operation_t operation;
     int have_operation;
     inv_item_t *inv;
@@ -264,6 +271,11 @@ static char *run_reconstruct(nhx_t *x, const char *args);
 static int record_frame(game_t *g, const char *request, const char *response);
 static int record_prepare(game_t *g, int before_input);
 static int record_regular(const char *path, int flags);
+static int record_same(const struct stat *a, const struct stat *b);
+static int record_dir_sync(game_t *g);
+static int request_fields(const char *json, const char *const *allowed);
+static int cmdkey_of(const char *action);
+static int recon_unsafe_answer(game_t *g, const char *line);
 static int record_is(mj_val v, const char *expected);
 static int record_line(FILE *f, char **line, size_t *length);
 static int record_validate(game_t *g, const char *line, long long sequence,
@@ -447,87 +459,128 @@ rm_cb(const char *fpath, const struct stat *sb, int typeflag,
     return remove(fpath);
 }
 
-/* Append one client->engine line to the session input log. */
-static int
-log_append(game_t *g, const char *line)
-{
-    char path[PATH_MAX];
-    FILE *f;
-    if (snprintf(path, sizeof path, "%s/input.log.jsonl", g->dir)
-        >= (int) sizeof path)
-        return -1;
-    f = fopen(path, "a");
-    if (!f)
-        return -1;
-    {
-        int ok = fputs(line, f) >= 0 && fputc('\n', f) != EOF &&
-            fflush(f) == 0 && fsync(fileno(f)) == 0;
-        if (fclose(f)) ok = 0;
-        return ok ? 0 : -1;
-    }
-}
+#include "input_integrity.inc"
 
-/* Read the whole input log into malloc'd lines; caller frees each. */
+/* Complete, bounded input history or nothing: never return a partial read. */
 static char **
 log_read(game_t *g, size_t *n_out)
 {
-    char path[PATH_MAX];
-    FILE *f;
-    char *line = NULL;
-    size_t cap = 0, n = 0, alloc = 0;
-    ssize_t r;
+    char path[PATH_MAX], *line = NULL;
     char **out = NULL;
-    if (snprintf(path, sizeof path, "%s/input.log.jsonl", g->dir)
-        >= (int) sizeof path)
-        return NULL;
-    f = fopen(path, "r");
-    if (!f) {
-        *n_out = 0;
-        return NULL;
-    }
-    while ((r = getline(&line, &cap, f)) >= 0) {
-        while (r > 0 && (line[r - 1] == '\n' || line[r - 1] == '\r'))
-            line[--r] = '\0';
-        if (r == 0)
-            continue;
-        if (n == alloc) {
-            size_t na = alloc ? alloc * 2 : 64;
-            char **nb = realloc(out, na * sizeof *nb);
-            if (!nb)
-                break;
-            out = nb;
-            alloc = na;
+    struct stat before, after;
+    FILE *f = NULL;
+    size_t n = 0, length = 0, capacity = 0, i;
+    int fd = -1, r;
+    const char *error = "cannot read committed input journal";
+    *n_out = 0; g->input_ready = 0;
+    if (snprintf(path, sizeof path, "%s/input.log.jsonl", g->dir) >= (int) sizeof path) goto failed;
+    fd = record_regular(path, O_RDONLY);
+    if (fd < 0 || fstat(fd, &before) || before.st_size > INPUT_MAX_BYTES) goto failed;
+    f = fdopen(fd, "r"); if (!f) goto failed; fd = -1;
+    while ((r = record_line(f, &line, &length)) == 1) {
+        if (length > INPUT_MAX_LINE || n >= INPUT_MAX_LINES) { error = "input journal exceeds replay limits"; goto failed; }
+        if (n == capacity) {
+            size_t next = capacity ? capacity * 2 : 64;
+            char **grown = realloc(out, next * sizeof *out);
+            if (!grown) goto failed;
+            out = grown; capacity = next;
         }
-        out[n++] = strdup(line);
+        line[--length] = 0; /* LF was verified by record_line. */
+        if (length && line[length - 1] == '\r') line[--length] = 0;
+        out[n++] = line; line = NULL;
     }
-    free(line);
+    if (r < 0 || fstat(fileno(f), &after) || !record_same(&before, &after)) { error = "incomplete or changing input journal"; goto failed; }
+    error = input_validate_range(out, n, 0);
+    if (error) goto failed;
+    if (!out && !(out = calloc(1, sizeof *out))) { error = "out of memory reading input journal"; goto failed; }
     fclose(f);
-    *n_out = n;
+    g->input_count = n; g->input_bytes = before.st_size; g->input_stat = before; g->input_ready = 1;
+    g->input_error[0] = 0; *n_out = n;
     return out;
+failed:
+    snprintf(g->input_error, sizeof g->input_error, "%s", error ? error : "input journal could not be validated");
+    free(line); for (i = 0; i < n; i++) free(out[i]); free(out);
+    if (f) fclose(f); else if (fd >= 0) close(fd);
+    return NULL;
+}
+
+/* Journal before input. A failed append is not permission to send the answer. */
+static int
+log_append(game_t *g, const char *line)
+{
+    char path[PATH_MAX]; struct stat st;
+    int fd, ok; FILE *f;
+    char *one = (char *) line;
+    if (g->lease_fd < 0 || g->input_error[0]) return -1;
+    if (!g->input_ready) {
+        size_t n = 0, i; char **lines = log_read(g, &n);
+        if (!lines) return -1;
+        for (i = 0; i < n; i++) free(lines[i]);
+        free(lines);
+    }
+    if (input_validate_range(&one, 1, g->input_count) || strchr(line, '\n') ||
+        g->input_bytes + (long long) strlen(line) + 1 > INPUT_MAX_BYTES) goto failed;
+    if (snprintf(path, sizeof path, "%s/input.log.jsonl", g->dir) >= (int) sizeof path) goto failed;
+    fd = record_regular(path, O_WRONLY | O_APPEND);
+    if (fd < 0) goto failed;
+    if (fstat(fd, &st) || !record_same(&st, &g->input_stat)) { close(fd); goto failed; }
+    f = fdopen(fd, "a"); if (!f) { close(fd); goto failed; }
+    ok = fputs(line, f) >= 0 && fputc('\n', f) != EOF && fflush(f) == 0 && fsync(fileno(f)) == 0;
+    if (ok && fstat(fileno(f), &st)) ok = 0;
+    if (fclose(f)) ok = 0;
+    if (ok) {
+        fd = open(g->dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        if (fd < 0) ok = 0;
+        else { if (fsync(fd)) ok = 0; close(fd); }
+    }
+    if (!ok) goto failed;
+    g->input_count++; g->input_bytes = st.st_size; g->input_stat = st;
+    return 0;
+failed:
+    g->input_ready = 0;
+    snprintf(g->input_error, sizeof g->input_error, "input journal could not be durably appended; no answer was sent");
+    return -1;
 }
 
 /* ---------------- sidecar (revision, idempotency, operation) ---------------- */
+#include "sidecar_integrity.inc"
 
-static void
+static int
 sidecar_path(game_t *g, char *out, size_t cap)
 {
-    snprintf(out, cap, "%s/meta.json", g->dir);
+    return snprintf(out, cap, "%s/meta.json", g->dir) < (int) cap ? 0 : -1;
 }
 
-static void
+static int
 sidecar_save(game_t *g)
 {
     char path[PATH_MAX], tmp[PATH_MAX];
+    struct stat st;
     FILE *f;
+    int fd, ok;
     req_entry_t *e;
     mj_Buf b;
-    sidecar_path(g, path, sizeof path);
-    snprintf(tmp, sizeof tmp, "%s.tmp", path);
-    f = fopen(tmp, "w");
-    if (!f)
-        return;
+    if (g->sidecar_corrupt || g->sidecar_error[0] || g->lease_fd < 0) return -1;
+    if (sidecar_path(g, path, sizeof path) ||
+        snprintf(tmp, sizeof tmp, "%s/.session-meta-XXXXXX", g->dir) >= (int) sizeof tmp) goto failed;
+    if (lstat(path, &st)) {
+        if (errno != ENOENT || g->sidecar_present) goto changed;
+    } else if (!S_ISREG(st.st_mode) || st.st_nlink != 1 ||
+        (g->sidecar_present && !record_same(&st, &g->sidecar_stat))) goto changed;
+    fd = mkstemp(tmp);
+    if (fd < 0) goto failed;
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+    f = fdopen(fd, "w");
+    if (!f) { close(fd); unlink(tmp); goto failed; }
     mj_init(&b);
     mj_obj(&b);
+    if (g->sidecar_input_bytes >= 0) {
+        mj_key(&b, "format"); mj_strv(&b, "neonethack.session");
+        mj_key(&b, "version"); mj_intv(&b, 1);
+        mj_key(&b, "sessionId"); mj_strv(&b, g->id);
+        mj_key(&b, "inputBytes"); mj_intv(&b, g->sidecar_input_bytes);
+        mj_key(&b, "boundaryComplete"); mj_boolv(&b, g->boundary_complete && !g->recovery_required);
+    }
     mj_key(&b, "revision"); mj_intv(&b, g->revision);
     mj_key(&b, "frameCount"); mj_intv(&b, g->frame_count);
     mj_key(&b, "recordingGap"); mj_boolv(&b, g->recording_gap);
@@ -551,6 +604,8 @@ sidecar_save(game_t *g)
     mj_endarr(&b);
     mj_key(&b, "operation");
     if (g->have_operation) {
+        if (g->boundary_complete && g->pending.waiting && g->operation.dec_pending != -2)
+            pending_signature(g, g->operation.prompt_signature);
         mj_obj(&b);
         mj_key(&b, "action"); mj_strv(&b, g->operation.action);
         mj_key(&b, "args");
@@ -558,6 +613,7 @@ sidecar_save(game_t *g)
         mj_key(&b, "phase"); mj_strv(&b, g->operation.phase);
         mj_key(&b, "decisionId"); mj_strv(&b, g->operation.decision_id);
         mj_key(&b, "decKind"); mj_strv(&b, g->operation.dec_kind);
+        mj_key(&b, "promptSignature"); mj_strv(&b, g->operation.prompt_signature);
         mj_key(&b, "decSynthetic");
         mj_boolv(&b, g->operation.dec_pending == -2);
         mj_key(&b, "keypos"); mj_intv(&b, g->operation.keypos);
@@ -572,18 +628,20 @@ sidecar_save(game_t *g)
         mj_nullv(&b);
     }
     mj_endobj(&b);
-    {
-        int ok = b.ok && fputs(b.buf ? b.buf : "{}", f) >= 0 &&
-            fflush(f) == 0 && fsync(fileno(f)) == 0;
-        mj_free(&b);
-        if (fclose(f)) ok = 0;
-        if (ok && rename(tmp, path) == 0) {
-            int dfd = open(g->dir, O_RDONLY);
-            if (dfd >= 0) { fsync(dfd); close(dfd); }
-        } else {
-            unlink(tmp);
-        }
-    }
+    ok = b.ok && mj_valid(b.buf) && fputs(b.buf, f) >= 0 && fflush(f) == 0 && fsync(fileno(f)) == 0;
+    mj_free(&b);
+    if (fclose(f)) ok = 0;
+    if (!ok || rename(tmp, path)) { unlink(tmp); goto failed; }
+    g->sidecar_present = 1;
+    if (lstat(path, &g->sidecar_stat) || record_dir_sync(g)) goto failed;
+    return 0;
+changed:
+    g->sidecar_corrupt = 1;
+    snprintf(g->sidecar_error, sizeof g->sidecar_error, "semantic metadata changed outside its owner; no bytes were replaced");
+    return -1;
+failed:
+    snprintf(g->sidecar_error, sizeof g->sidecar_error, "semantic metadata could not be durably committed; fix storage and resume");
+    return -1;
 }
 
 static void
@@ -626,31 +684,33 @@ sidecar_load(game_t *g)
 {
     char path[PATH_MAX], *text = NULL;
     FILE *f;
-    long size;
+    struct stat before, after;
+    size_t size;
+    int fd, ok;
+    char *canonical;
+    const char *error = NULL;
     mj_val v, elt;
-    sidecar_path(g, path, sizeof path);
-    f = fopen(path, "r");
-    if (!f)
-        return;
-    fseek(f, 0, SEEK_END);
-    size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (size <= 0 || size > 64L * 1024 * 1024) {
-        fclose(f);
-        return;
-    }
-    text = malloc((size_t) size + 1);
-    if (!text) {
-        fclose(f);
-        return;
-    }
-    if (fread(text, 1, (size_t) size, f) != (size_t) size) {
-        free(text);
-        fclose(f);
-        return;
-    }
-    text[size] = '\0';
-    fclose(f);
+    if (sidecar_path(g, path, sizeof path)) goto corrupt;
+    fd = record_regular(path, O_RDONLY);
+    if (fd < 0) { if (errno == ENOENT) return; goto corrupt; }
+    g->sidecar_present = 1;
+    if (fstat(fd, &before) || before.st_size <= 0 || before.st_size > 64L * 1024 * 1024) { close(fd); goto corrupt; }
+    size = (size_t) before.st_size;
+    f = fdopen(fd, "r"); if (!f) { close(fd); goto corrupt; }
+    text = malloc(size + 1);
+    if (!text) { fclose(f); goto corrupt; }
+    ok = fread(text, 1, size, f) == size && !ferror(f) &&
+        !fstat(fileno(f), &after) && record_same(&before, &after);
+    fclose(f); text[size] = 0;
+    if (!ok || memchr(text, 0, size) || !mj_valid(text)) goto corrupt;
+    canonical = mj_canonical((mj_val) { text });
+    if (!canonical) goto corrupt;
+    free(canonical);
+    error = sidecar_validate(g, text);
+    if (error) goto corrupt;
+    g->sidecar_stat = before;
+    if (mj_find(text, "inputBytes", &v)) mj_int(v, &g->sidecar_input_bytes);
+    if (mj_find(text, "boundaryComplete", &v)) mj_bool(v, &g->boundary_complete);
     if (mj_find(text, "revision", &v)) {
         long long n;
         if (mj_int(v, &n))
@@ -684,7 +744,8 @@ sidecar_load(game_t *g)
         size_t len;
         const char *raw = mj_raw(v, &len);
         char *cpy = malloc(len + 1);
-        if (cpy) {
+        if (!cpy) { error = "cannot load semantic receipts"; goto corrupt; }
+        {
             mj_arr_it it;
             memcpy(cpy, raw, len);
             cpy[len] = '\0';
@@ -695,8 +756,7 @@ sidecar_load(game_t *g)
                 const char *eraw = mj_raw(elt, &elen);
                 char *ecpy = malloc(elen + 1);
                 mj_val rv, kv, sv;
-                if (!ecpy)
-                    break;
+                if (!ecpy) { free(cpy); error = "cannot load all semantic receipts"; goto corrupt; }
                 memcpy(ecpy, eraw, elen);
                 ecpy[elen] = '\0';
                 if (mj_find(ecpy, "rid", &rv) && mj_find(ecpy, "argsKey", &kv) &&
@@ -723,7 +783,8 @@ sidecar_load(game_t *g)
         size_t len;
         const char *raw = mj_raw(v, &len);
         char *cpy = malloc(len + 1);
-        if (cpy) {
+        if (!cpy) { error = "cannot load semantic operation"; goto corrupt; }
+        {
             mj_val av, pv, dv, gv;
             memcpy(cpy, raw, len);
             cpy[len] = '\0';
@@ -764,6 +825,10 @@ sidecar_load(game_t *g)
                     free(s);
                 }
             }
+            if (mj_find(cpy, "promptSignature", &dv)) {
+                char *s = mj_str(dv);
+                if (s) { snprintf(g->operation.prompt_signature, sizeof g->operation.prompt_signature, "%s", s); free(s); }
+            }
             if (mj_find(cpy, "decSynthetic", &dv)) {
                 int syn = 0;
                 if (mj_bool(dv, &syn) && syn)
@@ -787,6 +852,10 @@ sidecar_load(game_t *g)
         }
     }
     free(text);
+    return;
+corrupt:
+    free(text); g->sidecar_present = 1; g->sidecar_corrupt = 1;
+    snprintf(g->sidecar_error, sizeof g->sidecar_error, "%s", error ? error : "semantic metadata is unreadable, incomplete or invalid; original bytes were preserved");
 }
 
 /* req_remember without the save (sidecar_load replays many). */
@@ -795,13 +864,13 @@ req_remember_nosave(game_t *g, const char *rid, const char *args_key,
                     const char *result)
 {
     req_entry_t *e = malloc(sizeof *e);
-    if (!e)
-        return;
+    if (!e) { g->request_index_corrupt = 1; return; }
     e->rid = strdup(rid);
     e->args_key = strdup(args_key);
     e->result = result ? strdup(result) : NULL;
     e->next = g->requests;
     if (!e->rid || !e->args_key || (result && !e->result)) {
+        g->request_index_corrupt = 1;
         free(e->rid);
         free(e->args_key);
         free(e->result);
@@ -833,6 +902,9 @@ semantic_reload(game_t *g)
     g->revision = g->frame_count = 0;
     g->recording_ready = g->recording_gap = 0;
     g->recording_error[0] = 0;
+    g->sidecar_present = g->sidecar_corrupt = g->recovery_required = g->input_ready = 0;
+    g->sidecar_error[0] = g->input_error[0] = 0;
+    g->sidecar_input_bytes = -1; g->boundary_complete = 1;
     g->next_decision = g->next_ref = 1;
     g->inventory_rev = -1;
     g->recording_only = 0;
@@ -1593,6 +1665,7 @@ pending_clear(game_t *g)
 static int
 send_engine(game_t *g, const char *line)
 {
+    if (g->sidecar_corrupt || g->sidecar_error[0] || g->input_error[0] || g->recovery_required) { errno = EIO; return -1; }
     if (log_append(g, line) < 0)
         return -1;
     if (!g->terminal_kind[0]) g->perception_fresh = 0;
@@ -1865,8 +1938,7 @@ auto_answer(game_t *g, long long id, const char *kind, const char *params)
     if (!strcmp(kind, "ack") || !strcmp(kind, "msgmenu")) {
         snprintf(line, sizeof line,
                  "{\"jsonrpc\":\"2.0\",\"id\":%lld,\"result\":{}}", id);
-        send_engine(g, line);
-        return 1;
+        return send_engine(g, line) < 0 ? -1 : 1;
     }
     if (!strcmp(kind, "menu")) {
         mj_val hv, wv;
@@ -1906,8 +1978,7 @@ auto_answer(game_t *g, long long id, const char *kind, const char *params)
         snprintf(line, sizeof line,
                  "{\"jsonrpc\":\"2.0\",\"id\":%lld,\"result\":{\"picks\":[],\"counts\":[]}}",
                  id);
-        send_engine(g, line);
-        return 1;
+        return send_engine(g, line) < 0 ? -1 : 1;
     }
     return 0;
 }
@@ -2050,10 +2121,13 @@ await_prompt(game_t *g, int timeout_ms)
                     }
                 }
                 (void) kv;
-                if (auto_answer(g, id, kind, params)) {
-                    free(method);
-                    free(line);
-                    continue;
+                {
+                    int automatic = auto_answer(g, id, kind, params);
+                    if (automatic) {
+                        free(method); free(line);
+                        if (automatic < 0) return -1;
+                        continue;
+                    }
                 }
                 pending_fill(g, id, kind, params);
                 free(method);
@@ -2143,8 +2217,12 @@ game_free(game_t *g)
 {
     size_t i;
     req_entry_t *e;
-    if (g->eng)
-        nh_session_close(g->eng);
+    if (g->eng) {
+        if (!g->recording_only && (g->recovery_required || (g->pending.waiting &&
+            (g->operation.decision_id[0] || (strcmp(g->pending.kind, "key") && strcmp(g->pending.kind, "poskey"))))))
+            nh_session_abort(g->eng);
+        else nh_session_close(g->eng);
+    }
     lease_release(g);
     for (i = 0; i < NSTATUS; i++)
         free(g->status[i]);
@@ -2224,6 +2302,7 @@ game_get(nhx_t *x, const char *id, int create)
     g->inventory_rev = -1;
     g->next_decision = 1;
     g->next_ref = 1;
+    g->sidecar_input_bytes = -1; g->boundary_complete = 1;
     sidecar_load(g);
     g->next = x->games;
     x->games = g;
@@ -3285,6 +3364,7 @@ envelope(game_t *g, const char *req_id,
     mj_Buf b;
     int i;
     char dec_kind[16] = "";
+    if (g->recovery_required || g->sidecar_corrupt || g->sidecar_error[0] || g->input_error[0]) want_decision = 0;
     if (g->ended || g->terminal_kind[0]) {
         want_decision = 0;
         if (g->terminal_kind[0] && !strcmp(status, "needsChoice")) status = "completed";
@@ -3345,7 +3425,7 @@ code_is_unknown(const char *code)
 {
     return !strcmp(code, "engineTimeout") || !strcmp(code, "engineBusy") ||
         !strcmp(code, "engineError") || !strcmp(code, "outOfMemory") ||
-        !strcmp(code, "incompleteRequest");
+        !strcmp(code, "incompleteRequest") || !strcmp(code, "recoveryRequired");
 }
 
 static char *
@@ -4600,6 +4680,7 @@ envelope_synth(game_t *g, const char *req_id, const char *action,
                const char *err_code, const char *err_msg)
 {
     mj_Buf b;
+    if (g->recovery_required || g->sidecar_corrupt || g->sidecar_error[0] || g->input_error[0]) want_item = 0;
     char dec_kind[16] = "";
     mj_init(&b);
     mj_obj(&b);
@@ -4787,6 +4868,7 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
         return fail_envelope(id, req_id, "noGame", "cannot create session");
     }
     if (g->recording_only) { free(name); return fail_envelope(id, req_id, "readOnlyRecording", "a reconstructed recording cannot be used as a live world"); }
+    if (g->sidecar_present || g->sidecar_error[0]) { free(name); return fail_envelope(id, req_id, "sessionExists", "this id contains semantic metadata; it cannot be replaced with a new game"); }
     if (lease_acquire(g) < 0) { free(name); return lease_error(g, req_id); }
     /* Never truncate an existing run merely because a caller reused an id. */
     {
@@ -4814,6 +4896,7 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
     }
     tracked_clear(g);
     g->revision = 0;
+    g->boundary_complete = 0; g->recovery_required = 0; g->sidecar_input_bytes = 0; g->input_ready = 0;
     g->have_operation = 0;
     g->operation.decision_id[0] = '\0';
     g->next_decision = 1;
@@ -4834,11 +4917,17 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
         char path[PATH_MAX];
         FILE *f;
         snprintf(path, sizeof path, "%s/input.log.jsonl", g->dir);
-        f = fopen(path, "w");
-        if (f)
-            fclose(f);
+        {
+            int fd = record_regular(path, O_WRONLY | O_CREAT | O_EXCL);
+            if (fd < 0) { free(name); return fail_envelope(id, req_id, "storageError", "cannot create a new input journal without replacing existing bytes"); }
+            f = fdopen(fd, "w");
+            if (!f) { close(fd); free(name); return fail_envelope(id, req_id, "storageError", "cannot create input journal"); }
+            { int ok = fsync(fd) == 0; if (fclose(f)) ok = 0;
+              if (!ok || record_dir_sync(g)) { free(name); return fail_envelope(id, req_id, "storageError", "cannot commit new input journal"); }
+            }
+        }
     }
-    sidecar_save(g);
+    if (sidecar_save(g)) { free(name); return fail_envelope(id, req_id, "metadataUnavailable", g->sidecar_error); }
     if (spawn_game(x, g) < 0) {
         free(name);
         return fail_envelope(id, req_id, "engineError", "cannot start engine");
@@ -4935,6 +5024,8 @@ run_get_state(nhx_t *x, game_t *g, const char *req_id)
         g->ended = 1;
         snprintf(g->end_reason, sizeof g->end_reason, "engineError");
     }
+    if (g->recovery_required)
+        return envelope_error(g, req_id, "get_state", "recoveryRequired", "semantic boundary is unresolved; no answer was inferred");
     /* Read-only: return the standing offer without changing its identity. */
     if (!g->ended && g->have_operation && g->operation.dec_pending == -2)
         return envelope_synth(g, req_id, "get_state", "completed",
@@ -4946,114 +5037,71 @@ run_get_state(nhx_t *x, game_t *g, const char *req_id)
 static char *
 run_resume(nhx_t *x, game_t *g, const char *req_id)
 {
-    size_t nlog = 0, i, rpos = 0;
-    char **log;
-    char **responses = NULL;
-    size_t nresp = 0, aresp = 0;
+    size_t nlog = 0, i;
+    char **log = NULL;
     long long ev_from;
+    int recover;
+    const char *code = "replayMismatch", *message = "stored answers did not match the pinned engine";
     int acquired = lease_acquire(g);
     if (acquired < 0) return lease_error(g, req_id);
     if (acquired) semantic_reload(g);
     if (g->recording_only)
         return fail_envelope(g->id, req_id, "readOnlyRecording", "this is a derived recording, not a live world; use the read-only archive viewer");
+    if (g->sidecar_corrupt || !g->sidecar_present)
+        return fail_envelope(g->id, req_id, "metadataUnavailable", g->sidecar_error[0] ? g->sidecar_error : "semantic metadata is missing; it was not reset or invented");
     log = log_read(g, &nlog);
     if (!log || nlog < 2) {
         for (i = 0; i < nlog; i++) free(log[i]);
         free(log);
-        return fail_envelope(g->id, req_id, "noHistory", "no complete initialization to resume");
+        return fail_envelope(g->id, req_id, "inputHistoryError", g->input_error[0] ? g->input_error : "no complete initialization to resume");
     }
     if (record_prepare(g, 1)) {
         for (i = 0; i < nlog; i++) free(log[i]);
         free(log);
         return fail_envelope(g->id, req_id, "recordingUnavailable", g->recording_error);
     }
-    if (g->eng) {
-        nh_session_close(g->eng);
-        g->eng = NULL;
-    }
-    tracked_clear(g);
-    {
-        /* methods go eager; everything else queues as answers */
-        char **methods = NULL;
-        size_t nmethods = 0, amethods = 0;
-        for (i = 0; i < nlog; i++) {
-            mj_val mv;
-            char *m = NULL;
-            int is_method = 0;
-            if (mj_find(log[i], "method", &mv) && (m = mj_str(mv)) != NULL) {
-                if (!strcmp(m, "initialize") || !strcmp(m, "new_game"))
-                    is_method = 1;
-                free(m);
-            }
-            if (is_method) {
-                if (nmethods == amethods) {
-                    size_t na = amethods ? amethods * 2 : 8;
-                    char **nb = realloc(methods, na * sizeof *nb);
-                    if (!nb)
-                        break;
-                    methods = nb;
-                    amethods = na;
-                }
-                methods[nmethods++] = log[i];
-                log[i] = NULL;
-            } else {
-                if (nresp == aresp) {
-                    size_t na = aresp ? aresp * 2 : 64;
-                    char **nb = realloc(responses, na * sizeof *nb);
-                    if (!nb)
-                        break;
-                    responses = nb;
-                    aresp = na;
-                }
-                responses[nresp++] = log[i];
-                log[i] = NULL;
-            }
-        }
-        for (i = 0; i < nlog; i++)
-            free(log[i]);
+    if (g->sidecar_input_bytes > g->input_bytes) {
+        for (i = 0; i < nlog; i++) free(log[i]);
         free(log);
-        if (spawn_game(x, g) < 0) {
-            for (i = 0; i < nmethods; i++)
-                free(methods[i]);
-            free(methods);
-            free(responses);
-            return fail_envelope(g->id, req_id, "engineError", "cannot start engine");
-        }
-        ev_from = g->event_seq;
-        for (i = 0; i < nmethods; i++) {
-            send_raw(g, methods[i]);
-            free(methods[i]);
-        }
-        free(methods);
-        if (!nresp) {
-            free(responses);
-            return fail_envelope(g->id, req_id, "noHistory", "nothing to resume");
+        return fail_envelope(g->id, req_id, "inputHistoryError", "input journal is shorter than the semantic checkpoint; no engine was started");
+    }
+    recover = g->recovery_required || !g->boundary_complete ||
+        (g->sidecar_input_bytes >= 0 && g->sidecar_input_bytes != g->input_bytes);
+    if (g->sidecar_error[0]) {
+        g->sidecar_error[0] = 0; /* Explicit warm recovery may commit intact RAM state. */
+        if (sidecar_save(g)) {
+            for (i = 0; i < nlog; i++) free(log[i]);
+            free(log);
+            return fail_envelope(g->id, req_id, "metadataUnavailable", g->sidecar_error);
         }
     }
+    if (g->eng) { nh_session_abort(g->eng); g->eng = NULL; }
+    tracked_clear(g);
+    if (spawn_game(x, g) < 0) { code = "engineError"; message = "cannot start pinned engine"; goto replay_failed; }
+    ev_from = g->event_seq;
     g->replaying = 1;
-    for (;;) {
+    g->deadline_ms = monotonic_ms() + 120000;
+    if (send_raw(g, log[0]) || send_raw(g, log[1])) goto replay_failed;
+    for (i = 2; ; i++) {
         int r = await_prompt(g, ACT_TIMEOUT_MS);
-        if (r != 1)
-            break;
-        if (rpos >= nresp)
-            break;
-        send_raw(g, responses[rpos]);
-        free(responses[rpos++]);
+        if (r < 0) { code = "replayTimeout"; message = "pinned replay did not reach a bounded input point"; goto replay_failed; }
+        if (i == nlog) break;
+        if (r != 1 || !input_matches_prompt(g, log[i]) || recon_unsafe_answer(g, log[i])) goto replay_failed;
+        if (send_raw(g, log[i])) goto replay_failed;
         pending_clear(g);
     }
-    g->replaying = 0;
+    g->replaying = 0; g->deadline_ms = 0;
+    for (i = 0; i < nlog; i++) free(log[i]);
+    free(log); log = NULL;
     if (g->terminal_kind[0]) {
         g->ended = 1;
         pending_clear(g);
         g->have_operation = 0;
     }
-    while (rpos < nresp) free(responses[rpos++]);
-    free(responses);
     if (g->have_operation && g->operation.dec_pending != -2 &&
         g->pending.waiting) {
-        /* Deterministic replay ends on the same logical prompt the offer
-         * was built on, but engine ids restart every run: rebind, and
-         * drop the offer if the prompt kind no longer fits it. */
+        /* Rebind only the same logical prompt. A changed kind or captured
+         * context is uncertainty, never permission to invent a new offer. */
         const char *dk = g->operation.dec_kind;
         const char *pk = g->pending.kind;
         int fits = (!strcmp(dk, "choice") &&
@@ -5064,13 +5112,16 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
              (!strcmp(pk, "getlin") || !strcmp(pk, "yn"))) ||
             (!strcmp(dk, "target") &&
              (!strcmp(pk, "yn") || !strcmp(pk, "poskey")));
-        if (fits) {
-            g->operation.dec_pending = g->pending.id;
-        } else {
-            g->have_operation = 0;
-            g->operation.decision_id[0] = '\0';
+        if (fits && g->operation.prompt_signature[0]) {
+            char signature[32]; pending_signature(g, signature);
+            fits = !strcmp(signature, g->operation.prompt_signature);
         }
-        sidecar_save(g);
+        if (fits) g->operation.dec_pending = g->pending.id;
+        else recover = 1;
+    }
+    if (recover) {
+        g->recovery_required = 1; g->boundary_complete = 0; g->have_operation = 0;
+        return envelope_error(g, req_id, "resume", "recoveryRequired", "input history extends beyond a verified semantic boundary, or the pending context changed; no new answers were invented");
     }
     refresh_inventory(x, g);
     if (g->have_operation && g->operation.dec_pending == -2)
@@ -5089,6 +5140,14 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
     sidecar_save(g);
     return envelope(g, req_id, "resume", "needsChoice", NULL, 0, 0,
                     NULL, 0, ev_from, 1, 0, NULL, NULL);
+replay_failed:
+    g->replaying = 0; g->deadline_ms = 0;
+    for (i = 0; i < nlog; i++) free(log[i]);
+    free(log);
+    if (g->eng) { nh_session_abort(g->eng); g->eng = NULL; }
+    tracked_clear(g);
+    snprintf(g->input_error, sizeof g->input_error, "%s", message);
+    return fail_envelope(g->id, req_id, code, message);
 }
 
 static char *
@@ -5098,7 +5157,10 @@ run_end(nhx_t *x, game_t *g, const char *req_id)
     if (!g->eng)
         return fail_envelope(g->id, req_id, "noGame", "this bridge has no live world to leave");
     if (g->eng) {
-        nh_session_close(g->eng);
+        if (g->recovery_required || (g->pending.waiting &&
+            (g->operation.decision_id[0] || (strcmp(g->pending.kind, "key") && strcmp(g->pending.kind, "poskey")))))
+            nh_session_abort(g->eng);
+        else nh_session_close(g->eng);
         g->eng = NULL;
     }
     if (!g->ended)
@@ -5453,6 +5515,8 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
     char *action = NULL, *req_dup = NULL;
     long long exp_rev = -1;
     char *out = NULL;
+    if (g->sidecar_corrupt)
+        return envelope_error(g, req_id, "act", "metadataUnavailable", g->sidecar_error);
     if (!mj_find(args, "action", &v) || (action = mj_str(v)) == NULL) {
         /* Replies continue the standing operation: no fresh action needed. */
         mj_val rv;
@@ -5491,6 +5555,11 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
         }
         free(key);
     }
+    if (g->sidecar_error[0] || g->input_error[0] || g->recovery_required || !g->boundary_complete) {
+        const char *code = g->sidecar_error[0] ? "metadataUnavailable" : g->input_error[0] ? "inputHistoryError" : "recoveryRequired";
+        out = envelope_error(g, req_id, action, code, "storage or semantic boundary is unresolved; no new input was sent");
+        free(action); free(req_dup); return out;
+    }
     /* A fatal action's receipt survives engine teardown. */
     if (g->eng && !g->ended && nh_session_ended(g->eng)) {
         g->ended = 1;
@@ -5524,6 +5593,15 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
             g->recording_error[0] ? g->recording_error : "an unrecorded boundary requires resume before another deed; history will retain a gap notice");
         free(action); free(req_dup);
         return error;
+    }
+    {
+        int previous = g->boundary_complete;
+        g->boundary_complete = 0;
+        if (sidecar_save(g)) {
+            g->boundary_complete = previous;
+            out = envelope_error(g, req_id, action, "metadataUnavailable", g->sidecar_error);
+            free(action); free(req_dup); return out;
+        }
     }
     if (req_dup) {
         mj_Buf b;
@@ -5791,7 +5869,19 @@ nhx_call(nhx_t *x, const char *request_json)
     }
     if (out && mj_find(out, "error", &v)) {
         mj_val code;
-        storage_blocked = mj_find(v.p, "code", &code) && record_is(code, "recordingUnavailable");
+        storage_blocked = (tool && !strcmp(tool, "resume")) || (mj_find(v.p, "code", &code) &&
+            (record_is(code, "recordingUnavailable") || record_is(code, "metadataUnavailable") ||
+             record_is(code, "inputHistoryError") || record_is(code, "recoveryRequired")));
+    }
+    if (g && out && tool && !retry && !storage_blocked && g->lease_fd >= 0 &&
+        (!strcmp(tool, "act") || !strcmp(tool, "new_game") || !strcmp(tool, "resume")) &&
+        !g->sidecar_error[0] && !g->input_error[0] && !g->recovery_required) {
+        mj_val outcome, status;
+        if (mj_find(out, "observation", &v) && mj_find(out, "outcome", &outcome) && mj_find(outcome.p, "status", &status)) {
+            if (record_is(status, "unknown")) { g->boundary_complete = 0; g->recovery_required = 1; }
+            else { g->boundary_complete = 1; g->sidecar_input_bytes = g->input_bytes; }
+            sidecar_save(g);
+        }
     }
     if (out && tool && !retry && !storage_blocked &&
         (!strcmp(tool, "new_game") || !strcmp(tool, "act") ||
@@ -5816,6 +5906,7 @@ nhx_call(nhx_t *x, const char *request_json)
     }
     if (g && !g->eng) lease_release(g);
     out = record_health(g, out);
+    out = sidecar_health(g, out);
     free(tool); free(sid); free(rid);
     return out;
 }

@@ -104,6 +104,9 @@ export class ExplorerView extends LitElement {
     this.envelope = null;
     this.liveEnvelope = null;
     this.liveMessages = [];
+    this.liveStatus = "Not connected";
+    this.liveError = "";
+    this.liveUncertain = false;
     this.busy = false;
     this.error = "";
     this.uncertain = false;
@@ -194,6 +197,9 @@ export class ExplorerView extends LitElement {
       this.uncertain = true;
       this.status = "Connection issue";
       this.log(this.error, "error");
+      this.liveStatus = this.status;
+      this.liveError = this.error;
+      this.liveUncertain = this.uncertain;
     } finally {
       this.busy = false;
     }
@@ -247,7 +253,12 @@ export class ExplorerView extends LitElement {
       this.error = `Recording needs attention: ${d.recording.message}`;
       this.log(this.error, "error");
     }
+    if (d.storage?.status === "degraded") {
+      this.error = `Storage needs recovery: ${d.storage.message}`;
+      this.log(this.error, "error");
+    }
     this.uncertain =
+      d.storage?.status === "degraded" ||
       d.recording?.status === "degraded" ||
       d.error?.code === "recordingUnavailable" ||
       d.outcome?.status === "unknown" ||
@@ -257,19 +268,24 @@ export class ExplorerView extends LitElement {
       this.error =
         "The core needs a choice but returned no decision. No action was guessed.";
     this.status =
-      d.recording?.status === "degraded"
-        ? "Recording issue"
-        : !d.observation && d.error
-          ? "Resume required"
-          : name === "end_session"
-            ? "Saved"
-            : d.ended
-              ? "Ended"
-              : d.decision
-                ? "Decision needed"
-                : "Connected";
+      d.storage?.status === "degraded"
+        ? "Storage needs recovery"
+        : d.recording?.status === "degraded"
+          ? "Recording issue"
+          : !d.observation && d.error
+            ? "Resume required"
+            : name === "end_session"
+              ? "Saved"
+              : d.ended
+                ? "Ended"
+                : d.decision
+                  ? "Decision needed"
+                  : "Connected";
     this.liveMessages = this.messages;
-    if (d.decision)
+    this.liveStatus = this.status;
+    this.liveError = this.error;
+    this.liveUncertain = this.uncertain;
+    if (d.decision && !this.uncertain)
       this.updateComplete.then(() =>
         this.renderRoot
           .querySelector(".decision button, .decision input")
@@ -280,6 +296,7 @@ export class ExplorerView extends LitElement {
       !!d.observation &&
       !d.error &&
       d.recording?.status !== "degraded" &&
+      d.storage?.status !== "degraded" &&
       !d.ended &&
       this.mode === "live"
     )
@@ -490,14 +507,9 @@ export class ExplorerView extends LitElement {
     this.messages = this.liveMessages;
     this.selected = null;
     this.resetInspection();
-    this.error = "";
-    this.status = !this.envelope
-      ? "Not connected"
-      : this.envelope.ended
-        ? "Saved"
-        : this.envelope.decision
-          ? "Decision needed"
-          : "Connected";
+    this.error = this.liveError;
+    this.uncertain = this.liveUncertain;
+    this.status = this.liveStatus;
   }
   async watch(id, frame = 0) {
     if (this.busy) return;
@@ -761,16 +773,21 @@ export class ExplorerView extends LitElement {
   renderDecision() {
     const d = this.decision;
     if (!d && !this.targeting) return nothing;
-    if (this.mode === "replay")
+    if (this.mode === "replay" || this.uncertain)
       return html`<section class="panel decision">
         <div class="panel-head">
-          <span class="eyebrow">Recorded decision · read-only</span>
+          <span class="eyebrow"
+            >${this.mode === "replay"
+              ? "Recorded decision · read-only"
+              : "Decision blocked pending recovery"}</span
+          >
         </div>
         <div class="card-body">
           <h2>${d?.about ?? label(d?.kind)}</h2>
           <p class="control-help">
-            This is what the explorer was asked at this point. Playback never
-            submits an answer.
+            ${this.mode === "replay"
+              ? "This is what the explorer was asked at this point. Playback never submits an answer."
+              : "Fix storage and inspect the recovered state before answering. No answer will be inferred or submitted."}
           </p>
         </div>
       </section>`;

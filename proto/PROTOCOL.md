@@ -1,10 +1,10 @@
 # neonethack Protocol v0.1
 
-Status: implemented and verified. This document describes what the headless
-engine (`upstream/win/headless/`) actually does. Golden byte-vectors live in
-`vectors/` (regenerate with `vectors/generate.py`, check with
-`test/test_vectors.py`). When this file and the engine disagree, the engine
-wins and this file is a bug.
+Status: implemented, with current semantic regressions and documented limits.
+This describes the raw headless engine boundary, not the public named-action
+API. Historical byte-vectors in `vectors/` require a separate conformance audit;
+do not blindly regenerate them to match a changed implementation. Prefer
+`API_DESING.md` for client-facing tools.
 
 ## 1. Framing
 
@@ -120,5 +120,63 @@ groupacc, attr, color, text, itemflags, glyph?}` / `menu_end {window,
 prompt}` — items precede the pick request; picks are **ordinal indices**,
 never pointers (the port keeps the `ANY_P`s).
 
-`snap
-...[truncated 3881 chars]
+`snapshot {full:true,cells}` / `map_delta {full:false,cells}` publish the
+window port's shadow map. Cells carry x/y, glyph, ttychar, framecolor, cmap,
+backgroundCmap, tileidx and color256idx. They are perceived display data, not
+permission to query unseen level state. Window clears and level changes reset
+the semantic map; full public checkpoints remain the review authority.
+
+## 4. Engine input requests
+
+The engine emits `input` with a numeric id and a `params.kind`. The raw reply
+uses that exact id and a `result` object. Current port shapes are:
+
+| kind | Result |
+|---|---|
+| key / poskey | `key` integer; poskey may also carry x/y/mod |
+| yn | `answer`, one character |
+| getlin | `line`, a bounded string |
+| extcmd | `index`, an offered command index (`-1` cancels) |
+| menu | `picks` integer indices, optional corresponding `counts`; or cancellation |
+| ack | empty object |
+| msgmenu | empty object or one-character `answer` |
+
+These are engine internals, not public explorer controls. The public C adapter
+supplies named actions, item identities and typed decisions. In particular,
+malformed/missing raw answers can trigger port defaults; the adapter validates
+stored shapes against the actual pending kind before replaying them.
+
+## 5. Persistence requests
+
+`persist_put`, `persist_get`, and `persist_list` are served by the adapter's
+isolated per-run blob store. These deterministic persistence replies are not
+new game intents and are not appended as input answers. Recorded histories are
+not executable uploads; untrusted historical conversion requires the separate
+OS sandbox documented in `docs/RECONSTRUCTION.md`.
+
+## 6. Resume is a supervisor operation
+
+Interactive resume validates complete LF-terminated UTF-8 input records,
+initialization order, explicit seed, response shapes, and semantic metadata
+before starting the pinned engine. It checks every stored answer against the
+engine's actual input id/kind, rejects shell/suspend/debug replay commands,
+and requires full consumption within a bounded deadline. A mismatch aborts
+our child without offering EOF as a default answer. A partial replay is never
+published as completed.
+
+New private checkpoints include the committed input-byte boundary and a
+completion flag; pending contexts also have a consistency fingerprint. Lost or
+changed semantic boundaries require explicit recovery instead of a guessed
+answer. See `docs/RECORDING_RECOVERY.md`. The raw engine alone does not provide
+these supervisor guarantees.
+
+## 7. Closure is not a game outcome
+
+The raw port emits `session_ended` on EOF or protocol mismatch. Individual
+window-port functions may otherwise return defaults when a result is missing.
+Neither a closed pipe nor such a default proves death or victory. Use the
+engine-issued `game_ended` facts, and keep failures/uncertainty distinct.
+
+The native session supervisor has bounded shutdown and can abort an owned child
+before closing its input. Passive archive review uses none of this protocol:
+it reads public checkpoints without launching or commanding an engine.

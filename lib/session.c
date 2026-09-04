@@ -274,6 +274,23 @@ nh_session_ended(nh_session_t *s)
     return 0;
 }
 
+int
+nh_session_abort(nh_session_t *s)
+{
+    if (!s) { errno = EINVAL; return -1; }
+    if (!s->reaped) {
+        pid_t result;
+        int status = -1;
+        do { result = waitpid(s->pid, &status, WNOHANG); } while (result < 0 && errno == EINTR);
+        if (!result) {
+            kill(s->pid, SIGKILL);
+            do { result = waitpid(s->pid, &status, 0); } while (result < 0 && errno == EINTR);
+        }
+        if (result == s->pid || (result < 0 && errno == ECHILD)) { s->reaped = 1; s->status = status; }
+    }
+    return nh_session_close(s);
+}
+
 static long long
 close_clock_ms(void)
 {

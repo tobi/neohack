@@ -231,7 +231,7 @@ record_frame(game_t *g, const char *request, const char *response)
     g->frame_count++; g->recording_bytes += length;
     g->recording_gaps += g->recording_gap; g->recording_gap = 0;
     g->recording_ready = 0;
-    sidecar_save(g);
+    if (sidecar_save(g)) goto cache_failed;
     fd = record_regular(index, O_WRONLY | O_APPEND);
     if (fd < 0) goto cache_failed;
     f = fdopen(fd, "a"); if (!f) { close(fd); goto cache_failed; }

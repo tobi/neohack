@@ -41,6 +41,8 @@ char *nh_session_read_line(nh_session_t *s, int timeout_ms);
  * Kill and reap our child if it stalls; free everything. Callers must persist
  * their input journal before closing. Returns waitpid status, or -1 on error. */
 int nh_session_close(nh_session_t *s);
+/* Abort our child without offering EOF as an answer to a pending prompt. */
+int nh_session_abort(nh_session_t *s);
 
 /* True once the engine has exited / the pipe hit EOF. */
 int nh_session_ended(nh_session_t *s);

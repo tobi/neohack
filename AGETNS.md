@@ -27,6 +27,10 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
   Corrupt/torn data blocks new input and is never silently truncated. Read-only
   review (`mcp/src/archive.ts`) can expose a validated prefix with a persistent
   integrity notice. Read `docs/RECORDING_RECOVERY.md` before changing recovery.
+- `lib/input_integrity.inc` / `lib/sidecar_integrity.inc` validate private history
+  and semantic boundaries. Missing/corrupt metadata is not optional cache data.
+  `recoveryRequired` blocks deeds; never clear boundary flags or reservations to
+  force continuation. Replay mismatches abort our child, not an implicit answer.
 - Existing input logs are not event recordings and must not be silently
   converted in place. Missing receipts stay uncertain even across marked gaps.
 - Existing sessions and unrelated upstream changes must be preserved. Engine
@@ -67,7 +71,7 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 - `bun mcp/smoke.ts` — live MCP wander, decisions, deterministic resume.
 - `APP_URL=http://127.0.0.1:3311 bun run test:browser` — actual Chromium flows.
 - `bun run test:browser:scenarios` / `test:browser:terminal` — real level/meal/death review (set `APP_URL` for the candidate).
-- `test:browser:recovery` requires the candidate's isolated `/tmp` `BROWSER_SESSIONS_DIR`; it must not target production.
+- `test:browser:recovery` / `test:browser:storage` require the candidate's isolated `/tmp` `BROWSER_SESSIONS_DIR`; they must not target production.
 - `bun run build:component` builds the self-contained ESM distribution; `bun run test:component` uses its own sandboxed Chrome/static-only fixture. Never bypass Chrome or reconstruction sandboxing to make CI pass.
 - `test:browser:renderer` also checks keyboard/game isolation on an isolated candidate.
 - `test:browser:inspection` covers zero-turn facts, pending decisions, replay/import races, legacy unknowns and mobile focus.

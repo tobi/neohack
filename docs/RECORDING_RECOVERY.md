@@ -51,6 +51,49 @@ preserved/copy-based history is still future work. Keep the original and any
 backups; do not "fix" this by deleting request reservations or starting a new
 game with the same ID.
 
+## Private metadata and input integrity
+
+`meta.json` carries semantic operation state and recent receipts; it is not an
+optional cache that can be replaced with defaults. New sidecars identify their
+format/version/session, `inputBytes` boundary and `boundaryComplete` state.
+Pending input context is fingerprinted for consistency (not authentication).
+Legacy well-formed sidecars remain supported, without pretending they captured
+new boundary metadata.
+
+The owner writes sidecars through unique temporary files, file fsync, atomic
+rename and directory fsync. Failures latch until explicit recovery; later
+answers are not sent while durability is unresolved. A missing, malformed,
+duplicate-key, out-of-range, inconsistent or unsafe sidecar fails closed before
+engine startup. Invalid bytes are not replaced. Recent receipts are accepted
+only with matching run/request identities. Metadata changed outside its owner
+is also rejected instead of overwritten.
+
+Input history must be complete LF-terminated UTF-8 JSON, beginning with exactly
+one initialize/new_game pair and an explicit seed. It is bounded to 128 MiB,
+1,000,000 records and 64 KiB per record. Partial reads/allocations never become
+partial replay histories. No append is made to changed or invalid input bytes;
+file and directory durability precede sending an answer to the engine.
+
+Resume validates every answer's id and shape against the actual waiting input,
+forbids shell/suspend/debug replay, and has a two-minute inner deadline. Mismatch
+or early exit aborts the owned child rather than feeding an engine default or
+publishing a partial replay. Pending game decisions are aborted rather than
+implicitly answered when an interactive handle is retired.
+
+If the input history outlasts its private semantic checkpoint, its completion
+flag is unfinished, or the captured pending context no longer matches, resume
+returns `recoveryRequired`/unknown with the resulting observation but no invented
+decision. New deeds are blocked. End the handle or inspect archives; do not clear
+flags/reservations to force continuation. This is conservative uncertainty, not
+a complete automatic repair strategy. A journal shorter than its committed
+private boundary is rejected before an engine starts.
+
+Storage health appears as a live `storage` diagnostic, separate from immutable
+deed receipts. The viewer preserves the warning when switching to review and
+back, and disables answers/deeds until recovery. A complete logged answer whose
+fsync failed may survive and be replayed after storage is fixed; its semantic
+boundary remains explicitly uncertain rather than being claimed completed.
+
 ## Read-only review
 
 `/runs/:id/index` derives a bounded index from complete checkpoint bytes rather
@@ -92,6 +135,6 @@ watermark gaps, and no replay of an evicted missing receipt. The browser test
 uses only its own newly created/saved run in an isolated `/tmp` root, retains
 the damaged evidence, and restores that test fixture afterward.
 
-Full private-sidecar/input-journal recovery, explicit copy-based salvage, and
+Full automatic private-state recovery, explicit copy-based salvage, and
 filesystem/power-loss fault coverage beyond these injected boundaries remain
 open. None of this upgrades historical reconstruction into verified history.
