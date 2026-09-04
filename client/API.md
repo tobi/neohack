@@ -50,6 +50,9 @@ with `storageError` until it is repaired.
 - `events`: ordered public events for this boundary, using `type` (not `t`).
 - `decision`: a typed decision or null.
 - `ended` and optional `end`: terminal/disconnection information.
+- Optional `recording`: current storage health, independent of the immutable
+  deed receipt. `status:"degraded"` requires attention/resume; do not repeat the
+  deed under a new request ID. See [recording recovery](../docs/RECORDING_RECOVERY.md).
 
 Numeric vitals are numbers when supported; strength can have an exceptional
 value such as `18/02`. Treat unknown information as unknown, not zero.
@@ -69,6 +72,8 @@ Never derive unseen terrain, object properties, or relationships from symbols.
 | felt | sense, value | A vital changed; use final observation for typed current values. |
 | heard | text | Add narration to the journal. |
 | shown | about, items | Display a non-blocking list. |
+| ended | kind, cause, turn | Engine-issued terminal facts. |
+| actionResult | action, status, turn | Engine-issued activity result (currently normal meals). |
 
 Do not append the complete recent-heard list after every action: it repeats old
 messages. The page uses action events during live play and the checkpoint's
@@ -157,6 +162,13 @@ The response above is abbreviated; recordings contain the full actual response.
 Sequences are contiguous and start at zero. Every frame is an independent full
 checkpoint plus events; a consumer can seek directly without replaying engine
 commands or accumulating future-map artifacts.
+
+Damaged remote archives expose only a validated prefix and an `integrity`
+notice. Export includes a `neonethack.recordingManifest` v1 header when needed;
+`parseRecording` preserves it as the returned array's non-enumerable `integrity`
+property, which `LocalRecording` retains. `gapBefore` frame markers survive
+export/import too. Raw originals can be downloaded explicitly with `?raw=1`;
+GET never repairs or truncates source files.
 
 `recording.js` exports `parseRecording`, `validateFrame`, `observationAt`,
 `LocalRecording`, and `RemoteRecording`. Imported input logs and unsupported

@@ -426,6 +426,19 @@ remain unknown; an unexpected process loss is `engineError`, never death.
 Shutdown allows two seconds for graceful exit, then kills/reaps a stuck child;
 the durable input journal remains the recovery source.
 
+### Recording failures are not repeated deeds
+
+The checkpoint journal is authoritative for recording boundaries; indexes and
+frame counters are recoverable caches. Storage failures add a live `recording`
+diagnostic without changing the immutable deed result. A missing receipt is
+still `incompleteRequest`, not permission to execute again. Unrecorded request
+boundaries are explicitly marked on the next captured resume boundary.
+
+Torn or corrupt checkpoint bytes are never silently removed. Native input is
+blocked until explicit recovery; read-only review/export offers the validated
+prefix with persistent integrity notices. See
+[RECORDING_RECOVERY.md](docs/RECORDING_RECOVERY.md) for guarantees and open limits.
+
 ## 10. Adapter architecture
 
 Build a semantic adapter, not a growing collection of English-prompt regexes.

@@ -238,7 +238,13 @@ export class ExplorerView extends LitElement {
         `${label(d.outcome.action)} · ${label(d.outcome.status)} · +${d.outcome.turnsElapsed} turn${d.outcome.turnsElapsed === 1 ? "" : "s"}${d.outcome.reason ? " · " + label(d.outcome.reason) : ""}`,
         "system",
       );
+    if (d.recording?.status === "degraded") {
+      this.error = `Recording needs attention: ${d.recording.message}`;
+      this.log(this.error, "error");
+    }
     this.uncertain =
+      d.recording?.status === "degraded" ||
+      d.error?.code === "recordingUnavailable" ||
       d.outcome?.status === "unknown" ||
       (d.outcome?.status === "needsChoice" && !d.decision) ||
       (!d.observation && !!d.error);
@@ -246,15 +252,17 @@ export class ExplorerView extends LitElement {
       this.error =
         "The core needs a choice but returned no decision. No action was guessed.";
     this.status =
-      !d.observation && d.error
-        ? "Resume required"
-        : name === "end_session"
-          ? "Saved"
-          : d.ended
-            ? "Ended"
-            : d.decision
-              ? "Decision needed"
-              : "Connected";
+      d.recording?.status === "degraded"
+        ? "Recording issue"
+        : !d.observation && d.error
+          ? "Resume required"
+          : name === "end_session"
+            ? "Saved"
+            : d.ended
+              ? "Ended"
+              : d.decision
+                ? "Decision needed"
+                : "Connected";
     this.liveMessages = this.messages;
     if (d.decision)
       this.updateComplete.then(() =>
@@ -737,6 +745,35 @@ export class ExplorerView extends LitElement {
       </div>
     </section>`;
   }
+  renderRecordingNotice() {
+    const info = this.mode === "replay" ? this.recording?.integrity : null;
+    if (!info || (info.state === "complete" && !info.gaps?.length))
+      return nothing;
+    return html`<section class="provenance-banner recording-notice" role="note">
+      <strong
+        >${info.state === "complete"
+          ? "Recording has history gaps"
+          : "Incomplete recording · validated prefix only"}</strong
+      >
+      <p>
+        ${info.notice ??
+        "Some checkpoints are unavailable. No missing observations were invented."}
+      </p>
+      ${info.state !== "complete"
+        ? html`<span
+            >${info.completeFrames} complete checkpoints ·
+            ${info.totalBytes - info.validBytes} unavailable bytes</span
+          >`
+        : nothing}
+      ${this.recording?.id && info.state !== "complete"
+        ? html`<p>
+            <a href=${`/runs/${this.recording.id}/export?raw=1`}
+              >Preserve raw original</a
+            >
+          </p>`
+        : nothing}
+    </section>`;
+  }
   renderTimeline() {
     if (this.mode !== "replay" || !this.recording) return nothing;
     const end = this.recording.index.length - 1;
@@ -1122,6 +1159,7 @@ export class ExplorerView extends LitElement {
         </div>
       </header>
       <main>
+        ${this.renderRecordingNotice()}
         ${this.envelope?.provenance?.kind === "reconstruction"
           ? html`<section class="provenance-banner" role="note">
               <strong>Reconstructed history · unverified</strong>

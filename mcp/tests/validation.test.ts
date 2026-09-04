@@ -28,7 +28,8 @@ async function fixture(
         ? await b.callRaw(args)
         : await b.call("act", { sessionId: g.sessionId, ...args });
       expect(r.error).toBeDefined();
-      expect(r.outcome.status).toBe("blocked");
+      if (r.error.code === "invalidJson") expect(r.outcome).toBeUndefined();
+      else expect(r.outcome.status).toBe("blocked");
       const after = await b.call("get_state", { sessionId: g.sessionId });
       expect(after.observation).toEqual(before.observation);
       expect(after.revision).toBe(before.revision);
@@ -130,6 +131,25 @@ test("native duplicate/escaped fields and unrepresentable strings cannot select 
         requestId: "unicode-🚀",
       }),
     ).toEqual(escaped);
+  }));
+
+test("native malformed UTF-8 is rejected without lossy coercion or a deed", () =>
+  fixture(async (b, g, reject) => {
+    const prefix = Buffer.from(
+      `{"tool":"act","sessionId":${JSON.stringify(g.sessionId)},"action":"wait","requestId":"`,
+    );
+    for (const bytes of [
+      [0x80],
+      [0xc0, 0xaf],
+      [0xed, 0xa0, 0x80],
+      [0xf4, 0x90, 0x80, 0x80],
+      [0xe2, 0x82],
+      [0xe2, 0x28, 0xa1],
+    ])
+      await reject(
+        Buffer.concat([prefix, Buffer.from(bytes), Buffer.from('"}')]),
+        true,
+      );
   }));
 
 test("invalid creation arguments do not create a directory or choose a random identity", () =>

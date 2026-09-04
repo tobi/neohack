@@ -65,7 +65,15 @@ PORT=3311 SESSIONS_DIR=/tmp/neonethack-tests bun run dev
 APP_URL=http://127.0.0.1:3311 bun run test:browser
 APP_URL=http://127.0.0.1:3311 bun run test:browser:terminal
 APP_URL=http://127.0.0.1:3311 bun run test:browser:scenarios
+APP_URL=http://127.0.0.1:3311 BROWSER_SESSIONS_DIR=/tmp/neonethack-tests bun run test:browser:recovery
 ```
+
+## Recording recovery
+
+Complete checkpoints recover missing/torn indexes without replaying a game.
+Damaged checkpoint bytes are preserved, not silently truncated; review and
+export expose the validated prefix with a persistent warning. Native writers
+fail closed on damaged journals. See [recovery guarantees and limits](docs/RECORDING_RECOVERY.md).
 
 ## Legacy runs
 

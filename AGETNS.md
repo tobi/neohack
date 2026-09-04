@@ -17,8 +17,12 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
   `lib/reconstruction.inc` + `mcp/src/reconstruct.ts`. It runs in a dedicated
   sandbox, preserves source data, and publishes only validated, unverified,
   read-only archives. Never add an unsandboxed fallback.
-- Core action boundaries record checkpointed public events. Existing input logs
-  are not event recordings and must not be silently converted in place.
+- `lib/recording.inc` commits public checkpoints; their indexes are caches.
+  Corrupt/torn data blocks new input and is never silently truncated. Read-only
+  review (`mcp/src/archive.ts`) can expose a validated prefix with a persistent
+  integrity notice. Read `docs/RECORDING_RECOVERY.md` before changing recovery.
+- Existing input logs are not event recordings and must not be silently
+  converted in place. Missing receipts stay uncertain even across marked gaps.
 - Existing sessions and unrelated upstream changes must be preserved. Engine
   executables are pinned per run to keep resume from silently switching versions.
 - One bridge owns a live run via `.lease`. Never bypass the lease or delete it
@@ -57,5 +61,6 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 - `bun mcp/smoke.ts` — live MCP wander, decisions, deterministic resume.
 - `APP_URL=http://127.0.0.1:3311 bun run test:browser` — actual Chromium flows.
 - `bun run test:browser:scenarios` / `test:browser:terminal` — real level/meal/death review (set `APP_URL` for the candidate).
+- `test:browser:recovery` requires the candidate's isolated `/tmp` `BROWSER_SESSIONS_DIR`; it must not target production.
 
 See [GOAL.md](GOAL.md) and [client/README.md](client/README.md) for run instructions.

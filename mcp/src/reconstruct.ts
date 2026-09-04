@@ -434,6 +434,7 @@ export function createReconstructor(
       // an archive file with a host-resolved symlink during its shutdown.
       const index = await createRunStore(join(workspace, "output")).index(
         job.archiveId,
+        { strict: true },
       );
       if (index.length !== result.frames)
         throw Error("Archive frame count mismatch");

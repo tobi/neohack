@@ -220,6 +220,10 @@ typedef struct game {
     /* semantic state */
     long long revision;
     long long frame_count;
+    long long recording_bytes, recording_gaps;
+    int recording_ready, recording_gap;
+    char recording_error[192];
+    struct stat recording_data_stat, recording_index_stat;
     req_entry_t *requests;
     size_t nrequests;
     int request_index_corrupt;
@@ -253,6 +257,12 @@ static void req_restore_seen(game_t *g);
 static char *req_saved_result(game_t *g, req_entry_t *e);
 static char *run_reconstruct(nhx_t *x, const char *args);
 static int record_frame(game_t *g, const char *request, const char *response);
+static int record_prepare(game_t *g, int before_input);
+static int record_regular(const char *path, int flags);
+static int record_is(mj_val v, const char *expected);
+static int record_line(FILE *f, char **line, size_t *length);
+static int record_validate(game_t *g, const char *line, long long sequence,
+                           long long *turn, long long *revision, long long *through, int *gap);
 
 static char *
 fail_envelope(const char *session_id, const char *req_id,
@@ -283,13 +293,16 @@ lease_acquire(game_t *g)
 {
     char path[PATH_MAX];
     int fd, saved;
+    struct stat st;
     if (g->lease_fd >= 0) return 0;
+    if (lstat(g->dir, &st) || !S_ISDIR(st.st_mode)) { errno = EINVAL; return -1; }
     if (snprintf(path, sizeof path, "%s/.lease", g->dir) >= (int) sizeof path) {
         errno = ENAMETOOLONG;
         return -1;
     }
-    fd = open(path, O_RDWR | O_CREAT, 0600);
+    fd = open(path, O_RDWR | O_CREAT | O_NOFOLLOW, 0600);
     if (fd < 0) return -1;
+    if (fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_nlink != 1) { close(fd); errno = EINVAL; return -1; }
     if (fcntl(fd, F_SETFD, FD_CLOEXEC) < 0 || flock(fd, LOCK_EX | LOCK_NB) < 0) {
         saved = errno; close(fd); errno = saved;
         return -1;
@@ -512,6 +525,7 @@ sidecar_save(game_t *g)
     mj_obj(&b);
     mj_key(&b, "revision"); mj_intv(&b, g->revision);
     mj_key(&b, "frameCount"); mj_intv(&b, g->frame_count);
+    mj_key(&b, "recordingGap"); mj_boolv(&b, g->recording_gap);
     mj_key(&b, "recordingOnly"); mj_boolv(&b, g->recording_only);
     mj_key(&b, "inventoryRev"); mj_intv(&b, g->inventory_rev);
     mj_key(&b, "nextDecision"); mj_intv(&b, g->next_decision);
@@ -641,6 +655,7 @@ sidecar_load(game_t *g)
         long long n;
         if (mj_int(v, &n)) g->frame_count = n;
     }
+    if (mj_find(text, "recordingGap", &v)) mj_bool(v, &g->recording_gap);
     if (mj_find(text, "recordingOnly", &v)) {
         int flag = 0;
         if (mj_bool(v, &flag)) g->recording_only = flag;
@@ -811,6 +826,8 @@ semantic_reload(game_t *g)
     g->nrequests = 0;
     g->request_index_corrupt = 0;
     g->revision = g->frame_count = 0;
+    g->recording_ready = g->recording_gap = 0;
+    g->recording_error[0] = 0;
     g->next_decision = g->next_ref = 1;
     g->inventory_rev = -1;
     g->recording_only = 0;
@@ -844,16 +861,20 @@ static void
 req_restore_seen(game_t *g)
 {
     char path[PATH_MAX], *line = NULL;
-    size_t cap = 0;
-    ssize_t len;
+    size_t len = 0;
+    int read_result;
     FILE *f;
     if (snprintf(path, sizeof path, "%s/requests.seen.jsonl", g->dir) >= (int) sizeof path) { g->request_index_corrupt = 1; return; }
-    f = fopen(path, "r");
+    {
+        int fd = record_regular(path, O_RDONLY);
+        f = fd >= 0 ? fdopen(fd, "r") : NULL;
+        if (fd >= 0 && !f) close(fd);
+    }
     if (f) {
-        while ((len = getline(&line, &cap, f)) > 0) {
+        while ((read_result = record_line(f, &line, &len)) == 1) {
             mj_val rv, kv;
             char *rid = NULL, *key = NULL;
-            if (line[len - 1] != '\n' || !mj_find(line, "rid", &rv) ||
+            if (len > 8192 || !mj_valid(line) || line[len - 1] != '\n' || !mj_find(line, "rid", &rv) ||
                 !mj_find(line, "argsKey", &kv) ||
                 !(rid = mj_str(rv)) || !(key = mj_str(kv))) {
                 g->request_index_corrupt = 1;
@@ -863,8 +884,9 @@ req_restore_seen(game_t *g)
                 if (!e) req_remember_nosave(g, rid, key, NULL);
             }
             free(rid); free(key);
+            free(line); line = NULL;
         }
-        if (ferror(f)) g->request_index_corrupt = 1;
+        if (read_result < 0 || ferror(f)) g->request_index_corrupt = 1;
         free(line); fclose(f);
         return;
     }
@@ -872,18 +894,30 @@ req_restore_seen(game_t *g)
     /* Upgrade pre-index runs by learning ids from their existing public
      * receipts. No engine is executed and the archive is never rewritten. */
     if (snprintf(path, sizeof path, "%s/perceptions.jsonl", g->dir) >= (int) sizeof path) return;
-    f = fopen(path, "r");
+    {
+        int fd = record_regular(path, O_RDONLY);
+        f = fd >= 0 ? fdopen(fd, "r") : NULL;
+        if (fd >= 0 && !f) close(fd);
+    }
     if (!f) return;
-    while ((len = getline(&line, &cap, f)) > 0) {
+    {
+    long long sequence = 0, turn, revision, through;
+    int gap;
+    while ((read_result = record_line(f, &line, &len)) == 1) {
         mj_val rv, idv;
+        if (len > 8 * 1024 * 1024 || line[len - 1] != '\n' ||
+            !record_validate(g, line, sequence++, &turn, &revision, &through, &gap)) {
+            g->request_index_corrupt = 1; break;
+        }
         char *request = NULL, *rid = NULL, *key = NULL;
         size_t n;
-        if (line[len - 1] != '\n' || !mj_find(line, "request", &rv)) continue;
+        mj_find(line, "request", &rv);
         {
             const char *raw = mj_raw(rv, &n);
             request = strndup(raw, n);
         }
-        if (request && mj_find(request, "requestId", &idv)) rid = mj_str(idv);
+        if (request && mj_find(request, "tool", &idv) && record_is(idv, "act") &&
+            mj_find(request, "requestId", &idv)) rid = mj_str(idv);
         if (rid && !req_lookup(g, rid)) {
             mj_Buf b;
             mj_init(&b); args_key_of(request, &b);
@@ -892,6 +926,9 @@ req_restore_seen(game_t *g)
             if (key) req_remember_nosave(g, rid, key, NULL);
         }
         free(request); free(rid); free(key);
+        free(line); line = NULL;
+    }
+    if (read_result < 0) g->request_index_corrupt = 1;
     }
     free(line); fclose(f);
 }
@@ -911,7 +948,11 @@ req_reserve(game_t *g, const char *rid, const char *key)
     if (!e) return -1;
     e->rid = strdup(rid); e->args_key = strdup(key);
     if (!e->rid || !e->args_key) { free(e->rid); free(e->args_key); free(e); return -1; }
-    f = fopen(path, "a");
+    {
+        int fd = record_regular(path, O_WRONLY | O_APPEND | O_CREAT);
+        f = fd >= 0 ? fdopen(fd, "a") : NULL;
+        if (fd >= 0 && !f) close(fd);
+    }
     if (!f) { free(e->rid); free(e->args_key); free(e); return -1; }
     if (!exists)
         for (old = g->requests; old; old = old->next)
@@ -937,19 +978,32 @@ static char *
 req_saved_result(game_t *g, req_entry_t *e)
 {
     char path[PATH_MAX], *line = NULL, *answer = NULL;
-    size_t cap = 0;
-    ssize_t len;
+    size_t len = 0;
+    long long sequence = 0, turn, revision, through;
+    int gap, fd;
     FILE *f;
     if (e->result) return strdup(e->result);
     if (snprintf(path, sizeof path, "%s/perceptions.jsonl", g->dir) >= (int) sizeof path) return NULL;
-    f = fopen(path, "r");
-    if (!f) return NULL;
-    while ((len = getline(&line, &cap, f)) > 0) {
-        mj_val rv, idv;
+    fd = record_regular(path, O_RDONLY);
+    if (fd < 0) return NULL;
+    f = fdopen(fd, "r");
+    if (!f) { close(fd); return NULL; }
+    while (record_line(f, &line, &len) == 1) {
+        mj_val rv, idv, request;
+        char *key = NULL;
+        mj_Buf b;
+        if (!record_validate(g, line, sequence++, &turn, &revision, &through, &gap)) break;
+        if (!mj_find(line, "request", &request)) break;
+        mj_init(&b); args_key_of(request.p, &b);
+        if (b.ok) key = mj_take(&b);
+        mj_free(&b);
+        if (!key || strcmp(key, e->args_key)) { free(key); free(line); line = NULL; continue; }
+        free(key);
         char *response, *rid = NULL;
         const char *raw;
         size_t n;
-        if (line[len - 1] != '\n' || !mj_find(line, "response", &rv)) continue;
+        if (!mj_find(request.p, "requestId", &idv) || !record_is(idv, e->rid) ||
+            !mj_find(line, "response", &rv)) { free(line); line = NULL; continue; }
         raw = mj_raw(rv, &n); response = strndup(raw, n);
         if (response && mj_find(response, "requestId", &idv)) rid = mj_str(idv);
         if (rid && !strcmp(rid, e->rid)) {
@@ -957,6 +1011,7 @@ req_saved_result(game_t *g, req_entry_t *e)
         }
         free(response); free(rid);
         if (answer) break;
+        free(line); line = NULL;
     }
     free(line); fclose(f);
     return answer;
@@ -2137,6 +2192,10 @@ game_get(nhx_t *x, const char *id, int create)
     if (mkdir_p(g->dir) < 0) {
         free(g);
         return NULL;
+    }
+    {
+        struct stat st;
+        if (lstat(g->dir, &st) || !S_ISDIR(st.st_mode)) { free(g); return NULL; }
     }
     g->map_win = -1;
     g->lease_fd = -1;
@@ -4698,6 +4757,15 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
             return fail_envelope(id, req_id, "sessionExists", "this world already exists; resume it instead");
         }
     }
+    {
+        char archive[PATH_MAX]; struct stat st;
+        snprintf(archive, sizeof archive, "%s/perceptions.jsonl", g->dir);
+        if (!lstat(archive, &st)) {
+            free(name);
+            return fail_envelope(id, req_id, "sessionExists", "a checkpoint journal already exists; never replace it with a new game");
+        }
+    }
+    if (record_prepare(g, 1)) { free(name); return fail_envelope(id, req_id, "recordingUnavailable", g->recording_error); }
     /* fresh world: reset semantic state and history */
     if (g->eng) {
         nh_session_close(g->eng);
@@ -4852,6 +4920,11 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
         for (i = 0; i < nlog; i++) free(log[i]);
         free(log);
         return fail_envelope(g->id, req_id, "noHistory", "no complete initialization to resume");
+    }
+    if (record_prepare(g, 1)) {
+        for (i = 0; i < nlog; i++) free(log[i]);
+        free(log);
+        return fail_envelope(g->id, req_id, "recordingUnavailable", g->recording_error);
     }
     if (g->eng) {
         nh_session_close(g->eng);
@@ -5405,6 +5478,12 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
         free(req_dup);
         return out;
     }
+    if (record_prepare(g, 1) || g->recording_gap) {
+        char *error = envelope_error(g, req_id, action, "recordingUnavailable",
+            g->recording_error[0] ? g->recording_error : "an unrecorded boundary requires resume before another deed; history will retain a gap notice");
+        free(action); free(req_dup);
+        return error;
+    }
     if (req_dup) {
         mj_Buf b;
         char *key;
@@ -5630,73 +5709,7 @@ emit_end(game_t *g, mj_Buf *b)
     mj_endobj(b);
 }
 
-/* Public-perception recordings are independent of engine input logs. Each
- * boundary is a checkpoint plus its ordered public events. Viewing/seeking
- * these files never starts an engine or re-executes a deed. */
-static int
-record_frame(game_t *g, const char *request, const char *response)
-{
-    char path[PATH_MAX], meta[PATH_MAX], temp[PATH_MAX];
-    FILE *f;
-    mj_Buf b;
-    struct timespec now;
-    long long ms, offset, length;
-    int ok;
-    clock_gettime(CLOCK_REALTIME, &now);
-    ms = (long long) now.tv_sec * 1000 + now.tv_nsec / 1000000;
-    if (snprintf(path, sizeof path, "%s/perceptions.jsonl", g->dir) >= (int) sizeof path) return -1;
-    f = fopen(path, "a");
-    if (!f) return -1;
-    if (fseek(f, 0, SEEK_END)) { fclose(f); return -1; }
-    offset = (long long) ftell(f);
-    mj_init(&b); mj_obj(&b);
-    mj_key(&b, "format"); mj_strv(&b, "neonethack.perception");
-    mj_key(&b, "version"); mj_intv(&b, 1);
-    mj_key(&b, "sequence"); mj_intv(&b, g->frame_count);
-    mj_key(&b, "recordedAt"); mj_intv(&b, ms);
-    mj_key(&b, "request"); mj_rawv(&b, request);
-    mj_key(&b, "response"); mj_rawv(&b, response);
-    mj_endobj(&b);
-    length = (long long) b.len + 1;
-    ok = b.ok && fputs(b.buf, f) >= 0 && fputc('\n', f) != EOF &&
-        fflush(f) == 0 && fsync(fileno(f)) == 0;
-    if (fclose(f)) ok = 0;
-    mj_free(&b);
-    if (!ok) return -1;
-    if (snprintf(path, sizeof path, "%s/perceptions.index.jsonl", g->dir) >= (int) sizeof path) return -1;
-    f = fopen(path, "a");
-    if (!f) return -1;
-    ok = fprintf(f, "{\"sequence\":%lld,\"offset\":%lld,\"length\":%lld,\"turn\":%d,\"revision\":%lld}\n",
-                 g->frame_count, offset, length, turn_of(g), g->revision) > 0;
-    if (fflush(f) || fsync(fileno(f))) ok = 0;
-    if (fclose(f)) ok = 0;
-    if (!ok) return -1;
-    g->frame_count++;
-    sidecar_save(g);
-    if (snprintf(meta, sizeof meta, "%s/run.json", g->dir) >= (int) sizeof meta ||
-        snprintf(temp, sizeof temp, "%s.tmp", meta) >= (int) sizeof temp) return -1;
-    f = fopen(temp, "w");
-    if (!f) return -1;
-    mj_init(&b); mj_obj(&b);
-    mj_key(&b, "format"); mj_strv(&b, "neonethack.perception");
-    mj_key(&b, "version"); mj_intv(&b, 1);
-    mj_key(&b, "sessionId"); mj_strv(&b, g->id);
-    mj_key(&b, "title"); mj_strv(&b, g->status[0] ? g->status[0] : "Explorer");
-    mj_key(&b, "turn"); mj_intv(&b, turn_of(g));
-    mj_key(&b, "revision"); mj_intv(&b, g->revision);
-    mj_key(&b, "frames"); mj_intv(&b, g->frame_count);
-    mj_key(&b, "updatedAt"); mj_intv(&b, ms);
-    mj_key(&b, "depth"); mj_strv(&b, g->status[20] ? g->status[20] : "unknown");
-    mj_key(&b, "ended"); mj_boolv(&b, g->ended || g->terminal_kind[0]);
-    emit_end(g, &b);
-    emit_provenance(g, &b);
-    mj_endobj(&b);
-    ok = b.ok && fputs(b.buf, f) >= 0 && fflush(f) == 0 && fsync(fileno(f)) == 0;
-    if (fclose(f)) ok = 0;
-    mj_free(&b);
-    if (!ok || rename(temp, meta)) return -1;
-    return 0;
-}
+#include "recording.inc"
 
 #include "reconstruction.inc"
 #include "request_validation.inc"
@@ -5706,7 +5719,7 @@ nhx_call(nhx_t *x, const char *request_json)
 {
     mj_val v;
     char *tool = NULL, *sid = NULL, *rid = NULL, *out;
-    int retry = 0, was_ended;
+    int retry = 0, was_ended, storage_blocked = 0;
     game_t *g;
     if (!x || !request_json) return NULL;
     if (!mj_valid(request_json)) return fail_envelope("", NULL, "invalidJson", "request must be a complete JSON object");
@@ -5735,7 +5748,11 @@ nhx_call(nhx_t *x, const char *request_json)
         g = id ? game_get(x, id, 0) : NULL;
         free(id);
     }
-    if (out && tool && !retry &&
+    if (out && mj_find(out, "error", &v)) {
+        mj_val code;
+        storage_blocked = mj_find(v.p, "code", &code) && record_is(code, "recordingUnavailable");
+    }
+    if (out && tool && !retry && !storage_blocked &&
         (!strcmp(tool, "new_game") || !strcmp(tool, "act") ||
          !strcmp(tool, "resume") || !strcmp(tool, "end_session") ||
          (!strcmp(tool, "get_state") && g && g->ended && !was_ended)) &&
@@ -5757,6 +5774,7 @@ nhx_call(nhx_t *x, const char *request_json)
         pending_clear(g);
     }
     if (g && !g->eng) lease_release(g);
+    out = record_health(g, out);
     free(tool); free(sid); free(rid);
     return out;
 }

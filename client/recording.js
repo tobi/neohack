@@ -11,6 +11,8 @@ export function validateFrame(frame) {
     );
   if (!Number.isSafeInteger(frame.sequence) || frame.sequence < 0)
     throw new Error("Invalid frame sequence");
+  if (frame.gapBefore !== undefined && typeof frame.gapBefore !== "boolean")
+    throw new Error("Invalid gap marker");
   const r = frame.response,
     o = r?.observation;
   if (
@@ -34,11 +36,29 @@ export function observationAt(frame) {
 
 export function parseRecording(text) {
   const frames = [];
+  let manifest = null;
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     let frame;
     try {
-      frame = validateFrame(JSON.parse(line));
+      const parsed = JSON.parse(line);
+      if (parsed?.format === "neonethack.recordingManifest") {
+        const info = parsed.integrity;
+        if (
+          manifest ||
+          frames.length ||
+          parsed.version !== 1 ||
+          !["partial", "corrupt", "limited"].includes(info?.state) ||
+          ![info.completeFrames, info.validBytes, info.totalBytes].every(
+            (v) => Number.isSafeInteger(v) && v >= 0,
+          ) ||
+          info.validBytes > info.totalBytes
+        )
+          throw new Error("Invalid recording manifest");
+        manifest = info;
+        continue;
+      }
+      frame = validateFrame(parsed);
     } catch (e) {
       throw new Error(`Recording line ${frames.length + 1}: ${e.message}`);
     }
@@ -47,12 +67,32 @@ export function parseRecording(text) {
     frames.push(frame);
   }
   if (!frames.length) throw new Error("Recording is empty");
+  if (manifest) {
+    if (manifest.completeFrames !== frames.length)
+      throw new Error("Recording manifest frame count mismatch");
+    Object.defineProperty(frames, "integrity", { value: manifest });
+  }
   return frames;
 }
 
 export class LocalRecording {
   constructor(frames) {
-    this.frames = frames.map(validateFrame);
+    this.frames = frames.map((frame, i) => {
+      validateFrame(frame);
+      if (frame.sequence !== i)
+        throw new Error("Recording contains a sequence gap or duplicate");
+      return frame;
+    });
+    const gaps = frames.filter((f) => f.gapBefore).map((f) => f.sequence);
+    this.integrity = {
+      ...(frames.integrity ?? { state: "complete" }),
+      gaps,
+      notice:
+        frames.integrity?.notice ??
+        (gaps.length
+          ? "Unrecorded request boundaries exist before marked checkpoints; missing observations were not invented."
+          : null),
+    };
     this.index = frames.map((f) => ({
       sequence: f.sequence,
       turn: f.response.observation.turn,
@@ -87,6 +127,7 @@ export class RemoteRecording {
     if (d.version !== 1 || !Array.isArray(d.frames))
       throw new Error("Unsupported recording index");
     this.index = d.frames;
+    this.integrity = d.integrity ?? null;
     return this;
   }
   async frame(sequence) {
@@ -107,6 +148,7 @@ export class RemoteRecording {
         const data = await r.json();
         if (data.version !== 1 || !Array.isArray(data.frames))
           throw new Error("Unsupported recording page");
+        this.integrity = data.integrity ?? this.integrity;
         data.frames.forEach((f, i) => {
           validateFrame(f);
           if (f.sequence !== page + i)

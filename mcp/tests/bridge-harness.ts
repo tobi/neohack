@@ -17,7 +17,10 @@ export class TestBridge {
   }[] = [];
   private diagnostics = "";
   private dead = false;
-  constructor(readonly sessions: string) {
+  constructor(
+    readonly sessions: string,
+    environment: Record<string, string> = {},
+  ) {
     this.proc = spawn(
       process.env.NHXCLI ?? `${ROOT}/mcp/bin/nhxcli`,
       [
@@ -25,7 +28,10 @@ export class TestBridge {
         `${ROOT}/upstream/playground`,
         sessions,
       ],
-      { stdio: ["pipe", "pipe", "pipe"] },
+      {
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env, ...environment },
+      },
     );
     this.proc.stderr.on(
       "data",
@@ -55,15 +61,21 @@ export class TestBridge {
   call(tool: string, args: any = {}): Promise<any> {
     return this.callRaw(JSON.stringify({ tool, ...args }));
   }
-  callRaw(request: string): Promise<any> {
+  callRaw(request: string | Buffer): Promise<any> {
     if (this.dead) return Promise.reject(Error("Bridge is closed"));
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.proc.kill("SIGKILL");
-        reject(Error(`Timed out: ${request.slice(0, 100)}; ${this.diagnostics}`));
+        reject(
+          Error(`Timed out: ${request.slice(0, 100)}; ${this.diagnostics}`),
+        );
       }, 12000);
       this.waiters.push({ resolve, reject, timer });
-      this.proc.stdin.write(request + "\n");
+      this.proc.stdin.write(
+        typeof request === "string"
+          ? request + "\n"
+          : Buffer.concat([request, Buffer.from("\n")]),
+      );
     });
   }
   newGame(seed = 42) {
