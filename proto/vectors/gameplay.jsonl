@@ -1,0 +1,86 @@
+{"dir": "c2e", "line": {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "0.1"}}}
+{"dir": "c2e", "line": {"jsonrpc": "2.0", "id": 2, "method": "new_game", "params": {"seed": 4242, "name": "vector", "role": 1, "race": 0, "gender": 0, "align": 1}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "0.1", "engineVersion": "5.0.0-0", "capabilities": ["snapshot", "delta", "persist", "resume-log", "seed"]}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "id": 2, "result": {"sessionId": 1, "seedUsed": 4242}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_create", "params": {"window": 1, "type": 1}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_init"}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_create", "params": {"window": 2, "type": 3}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_create", "params": {"window": 3, "type": 4}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "menu_start", "params": {"window": 3, "behavior": 0}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "menu_end", "params": {"window": 3, "prompt": ""}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_display", "params": {"window": 1, "blocking": false}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "snapshot", "params": {"full": true, "cells": [{"x": 0, "y": 0, "glyph": 0, "ttychar": 0, "framecolor": 0, "tileidx": 0, "color256idx": 0}, {"x": 1, "y": 0, "glyph": 0, "ttychar": 0, "framecolor": 0, "tileidx": 0, "color256idx": 0}, {"x": 2, "y": 0, "glyph": 0, "ttychar": 0, "framecolor": 0, "tileidx": 0, "color256idx": 0}], "_cells_elided": 1677}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_display", "params": {"window": 2, "blocking": false}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "cliparound", "params": {"x": 24, "y": 5}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_display", "params": {"window": 1, "blocking": false}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_clear", "params": {"window": 2}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 0, "value": "Vector the Plunderer          ", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 1, "value": "17", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 2, "value": "18", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 3, "value": "18", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 4, "value": "7", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 5, "value": "8", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 6, "value": "7", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 7, "value": "Neutral", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 9, "value": "", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 10, "value": "0", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 11, "value": "2", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 12, "value": "2", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 13, "value": "1", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 14, "value": "0", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 17, "value": "", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 18, "value": "16", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 19, "value": "16", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 20, "value": "Dlvl:1  ", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 22, "condition": 0, "change": 0, "percent": 0, "color": 8, "colormask": 0}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": -2, "value": "", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "cursor", "params": {"window": 2, "x": 24, "y": 5}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "map_delta", "params": {"full": false, "cells": [{"x": 22, "y": 4, "glyph": 3932, "ttychar": 45, "framecolor": 8, "tileidx": 0, "color256idx": 0}, {"x": 23, "y": 4, "glyph": 3931, "ttychar": 45, "framecolor": 8, "tileidx": 0, "color256idx": 0}, {"x": 24, "y": 4, "glyph": 3931, "ttychar": 45, "framecolor": 8, "tileidx": 0, "color256idx": 0}], "_cells_elided": 75}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_display", "params": {"window": 2, "blocking": false}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_create", "params": {"window": 4, "type": 4}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "It is written in the Book of Crom:"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": ""}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "    After the Creation, the cruel god Moloch rebelled"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "    against the authority of Marduk the Creator."}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "    Moloch stole from Marduk the most powerful of all"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "    the artifacts of the gods, the Amulet of Yendor,"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "    and he hid it in the dark cavities of Gehennom, the"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "    Under World, where he now lurks, and bides his time."}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": ""}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "Your god Crom seeks to possess the Amulet, and with it"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "to gain deserved ascendance over the other gods."}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": ""}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "You, a newly trained Plunderer, have been heralded"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "from birth as the instrument of Crom.  You are destined"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "to recover the Amulet for your deity, or die in the"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "attempt.  Your hour of destiny has come.  For the sake"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "text", "window": 4, "attr": 0, "text": "of us all:  Go bravely with Crom!"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_display", "params": {"window": 4, "blocking": true}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "id": 1, "method": "input", "params": {"kind": "ack", "window": 4}}}
+{"dir": "c2e", "line": {"jsonrpc": "2.0", "id": 1, "result": {}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_destroy", "params": {"window": 4}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "message", "window": 1, "attr": 0, "text": "[Crom has chosen you to recover the Amulet of Yendor for Him.]"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "message", "params": {"channel": "message", "window": 1, "attr": 0, "text": "Hello vector, welcome to NetHack!  You are a neutral male human Barbarian."}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 10, "value": "0", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 11, "value": "2", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 12, "value": "2", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 13, "value": "1", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 14, "value": "7", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 17, "value": "", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 18, "value": "16", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 19, "value": "16", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 20, "value": "Dlvl:1  ", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": 22, "condition": 0, "change": 0, "percent": 0, "color": 8, "colormask": 0}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "status_update", "params": {"field": -2, "value": "", "change": 0, "percent": 0, "color": 8}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "cursor", "params": {"window": 2, "x": 24, "y": 5}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_display", "params": {"window": 2, "blocking": false}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "cursor", "params": {"window": 2, "x": 24, "y": 5}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_display", "params": {"window": 2, "blocking": false}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "id": 2, "method": "input", "params": {"kind": "poskey"}}}
+{"dir": "c2e", "line": {"jsonrpc": "2.0", "id": 2, "result": {"x": 0, "y": 0, "mod": 0, "key": 106}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_clear", "params": {"window": 1}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "cliparound", "params": {"x": 24, "y": 6}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "cliparound", "params": {"x": 24, "y": 6}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "cursor", "params": {"window": 2, "x": 24, "y": 6}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "map_delta", "params": {"full": false, "cells": [{"x": 24, "y": 5, "glyph": 4002, "ttychar": 60, "framecolor": 8, "tileidx": 0, "color256idx": 0}, {"x": 24, "y": 6, "glyph": 332, "ttychar": 64, "framecolor": 8, "tileidx": 0, "color256idx": 0}], "_cells_elided": -1}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_display", "params": {"window": 2, "blocking": false}}}

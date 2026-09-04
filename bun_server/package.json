@@ -1,0 +1,9 @@
+{
+  "name": "neonethack-bun-front",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "start": "bun run src/index.ts"
+  }
+}

@@ -1,0 +1,6 @@
+{"dir": "c2e", "line": {"jsonrpc": "2.0", "id": 11, "method": "initialize", "params": {"protocolVersion": "9.9"}}}
+{"dir": "c2e", "line": {"jsonrpc": "2.0", "id": 12, "method": "initialize", "params": {"protocolVersion": "0.1"}}}
+{"dir": "c2e", "line": {"jsonrpc": "2.0", "id": 13, "method": "new_game", "params": {"seed": 1}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "id": 11, "error": {"code": -32001, "message": "E_UNSUPPORTED_VERSION: want 0.x"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "id": 12, "result": {"protocolVersion": "0.1", "engineVersion": "5.0.0-0", "capabilities": ["snapshot", "delta", "persist", "resume-log", "seed"]}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "id": 13, "result": {"sessionId": 1, "seedUsed": 1}}}

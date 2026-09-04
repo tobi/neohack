@@ -1,0 +1,22 @@
+{
+  "name": "neonethack-explorer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:client": "bun tools/build-client.ts",
+    "build:core": "bun tools/build-core.ts",
+    "build:engine": "bun tools/build-engine.ts",
+    "build": "bun run build:engine && bun run build:core && bun run build:client",
+    "test": "bun test mcp/tests",
+    "test:browser": "bun client/tests/browser.ts",
+    "format": "prettier --write client/explorer-app.js client/explorer-theme.js client/nh-map3d.js client/recording.js client/world.js tools/*.ts mcp/src/runs.ts mcp/tests/*.test.ts",
+    "dev": "bun bun_server/src/index.ts"
+  },
+  "dependencies": {
+    "lit": "3.3.1",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "prettier": "3.6.2"
+  }
+}

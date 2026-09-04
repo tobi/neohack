@@ -1,0 +1,12 @@
+{"dir": "c2e", "line": {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "0.1"}}}
+{"dir": "c2e", "line": {"jsonrpc": "2.0", "id": 2, "method": "bogus", "params": {}}}
+{"dir": "c2e-raw", "line": {"_raw": "not json at all"}}
+{"dir": "c2e", "line": {"jsonrpc": "2.0", "id": 3, "method": "initialize", "params": {"protocolVersion": "9.9"}}}
+{"dir": "c2e", "line": {"jsonrpc": "2.0", "id": 4, "method": "initialize", "params": {"protocolVersion": "0.1"}}}
+{"dir": "c2e", "line": {"jsonrpc": "2.0", "id": 5, "method": "new_game", "params": {"seed": 4242, "name": "vector", "role": 1, "race": 0, "gender": 0, "align": 1}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "0.1", "engineVersion": "5.0.0-0", "capabilities": ["snapshot", "delta", "persist", "resume-log", "seed"]}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "id": 2, "error": {"code": -32601, "message": "expect initialize then new_game"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "id": 3, "error": {"code": -32001, "message": "E_UNSUPPORTED_VERSION: want 0.x"}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "id": 4, "result": {"protocolVersion": "0.1", "engineVersion": "5.0.0-0", "capabilities": ["snapshot", "delta", "persist", "resume-log", "seed"]}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "id": 5, "result": {"sessionId": 1, "seedUsed": 4242}}}
+{"dir": "e2c", "line": {"jsonrpc": "2.0", "method": "window_create", "params": {"window": 1, "type": 1}}}

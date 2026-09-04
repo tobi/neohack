@@ -129,6 +129,16 @@ main(int argc, char *argv[])
     if (!dir)
         dir = nh_getenv("HACKDIR");
 #endif /* CHDIR */
+#ifdef HEADLESS_GRAPHICS
+    /* The headless port owns its --long flags: consume them first so the
+     * unix parsers (early_options' lopt, process_options) never see them.
+     * Must run before early_options: its "-s" branch rejects any --s*=*
+     * token with "Value not allowed" on first-letter match alone. */
+    {
+        extern void hl_cli_parse(int *, char **);
+        hl_cli_parse(&argc, argv);
+    }
+#endif
     program_state.early_options = 1;
     /* handle -dalthackdir, -s <score stuff>, --version, --showpaths */
     early_options(&argc, &argv, &dir);
@@ -801,6 +811,16 @@ sys_random_seed(void)
     unsigned long seed = 0L;
     unsigned long pid = (unsigned long) getpid();
     boolean no_seed = TRUE;
+#ifdef HEADLESS_GRAPHICS
+    {
+        /* the headless port may pin the seed (new_game.seed) so a session
+         * log re-executes deterministically for durable resume */
+        extern unsigned long headless_seed_override(void);
+        unsigned long pinned = headless_seed_override();
+        if (pinned != (unsigned long) -1L)
+            return pinned;
+    }
+#endif
 #ifdef DEV_RANDOM
     FILE *fptr;
 

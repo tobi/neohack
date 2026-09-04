@@ -307,6 +307,14 @@ WINQTOBJ ?= $(TARGETPFX)qt_bind.o $(TARGETPFX)qt_click.o \
 WINSHIMSRC ?= ../win/shim/winshim.c
 WINSHIMOBJ ?= winshim.o
 
+# Files for the headless windowing interface (neonethack) -- speaks
+# NDJSON JSON-RPC 2.0 on stdio, no display or disk IO of its own
+#
+WINHEADLESSSRC ?= ../win/headless/winheadless.c ../win/headless/rpc.c \
+	../win/headless/json_min.c
+WINHEADLESSOBJ ?= $(TARGETPFX)winheadless.o $(TARGETPFX)rpc.o \
+	$(TARGETPFX)json_min.o
+
 #
 # Files for a BeOS InterfaceKit port -- not ready for prime time
 WINBESRC ?=
@@ -542,7 +550,8 @@ SYSCSRC ?= ../sys/share/pcmain.c ../sys/share/pcsys.c \
 SYSCXXSRC ?= ../sys/share/cppregex.cpp
 
 # all windowing-system-dependent .c (for dependencies and such)
-WINCSRC ?= $(WINTTYSRC) $(WINCURSESSRC) $(WINX11SRC) $(WINSHIMSRC)
+WINCSRC ?= $(WINTTYSRC) $(WINCURSESSRC) $(WINX11SRC) $(WINSHIMSRC) \
+	$(WINHEADLESSSRC)
 # all windowing-system-dependent .cpp (for dependencies and such)
 WINCXXSRC ?= $(WINQTSRC) $(WINQT3SRC) $(WINBESRC)
 
@@ -1137,6 +1146,15 @@ $(TARGETPFX)curswins.o: ../win/curses/curswins.c $(HACK_H) \
 	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/curses/curswins.c
 $(TARGETPFX)winshim.o: ../win/shim/winshim.c $(HACK_H)
 	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/shim/winshim.c
+$(TARGETPFX)winheadless.o: ../win/headless/winheadless.c $(HACK_H) \
+		../win/headless/rpc.h ../win/headless/json_min.h
+	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/headless/winheadless.c
+$(TARGETPFX)rpc.o: ../win/headless/rpc.c $(HACK_H) \
+		../win/headless/rpc.h ../win/headless/json_min.h
+	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/headless/rpc.c
+$(TARGETPFX)json_min.o: ../win/headless/json_min.c \
+		../win/headless/json_min.h
+	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/headless/json_min.c
 $(TARGETPFX)getline.o: ../win/tty/getline.c $(HACK_H) ../include/func_tab.h \
 		../include/wintty.h
 	$(TARGET_CC) $(TARGET_CFLAGS) -c -o $@ ../win/tty/getline.c

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>neonethack gallery</title>
+<style>
+  body { background: #0b0e14; color: #d7dce6; font: 16px/1.6 system-ui, sans-serif;
+    max-width: 720px; margin: 0 auto; padding: 32px 20px 64px; }
+  a { color: #7fb3ff; } nav a { margin-right: 16px; }
+  nav { border-bottom: 1px solid #232b40; padding-bottom: 12px; margin-bottom: 24px; }
+  .entry { border: 1px solid #2b3550; border-radius: 10px; padding: 16px; margin: 20px 0; }
+  .entry h2 { margin-top: 0; }
+  .tag { display: inline-block; background: #1c2740; border: 1px solid #31406a;
+    border-radius: 6px; padding: 2px 10px; font-size: 13px; margin-right: 8px; }
+  .shot { max-width: 100%; border: 1px solid #31406a; border-radius: 8px; }
+  .cta { display: inline-block; background: #1c2740; border: 1px solid #31406a;
+    border-radius: 8px; padding: 10px 20px; color: #e8ecf4; text-decoration: none; }
+</style>
+</head>
+<body>
+<nav><a href="/">about</a><a href="/site/what-is-neonethack.html">what is neonethack</a><a href="/site/protocol.html">protocol</a><a href="/site/gallery.html">gallery</a><a href="/play">play</a></nav>
+<h1>Example gallery</h1>
+<p>Every client here speaks the same protocol and plays the same game. Ours is
+first because someone had to go first — not because it is good.</p>
+
+<div class="entry">
+<h2>#1 — Reference client <span class="tag">existence proof</span></h2>
+<p><span class="tag">stack: three.js + bun</span>
+<span class="tag">api: world (MCP)</span>
+<span class="tag">by: the neonethack team</span></p>
+<img class="shot" src="/site/gallery-proof.png" alt="isometric NetHack dungeon in the reference client" />
+<p>Isometric tiles, procedural atlas, click-to-move, dialogs for decisions,
+session resume. Rough on purpose — it exists to prove the world API is
+sufficient, not to be the last word.</p>
+<p><a href="/play">Play it →</a></p>
+</div>
+
+<div class="entry">
+<h2>#2 — Yours?</h2>
+<p>A terminal client with better fonts. A phone client with swipe-to-move. A
+roguelike-ASCII purist client that renders the protocol back into
+<code>@</code>s out of spite. A spectator mode. A speedrun harness. All of
+these are weekend projects against <a href="/site/protocol.html">the
+protocol</a> — no C required.</p>
+<p><a class="cta" href="/site/protocol.html">Make a better one →</a></p>
+</div>
+</body>
+</html>

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>neonethack protocol</title>
+<style>
+  body { background: #0b0e14; color: #d7dce6; font: 16px/1.6 system-ui, sans-serif;
+    max-width: 720px; margin: 0 auto; padding: 32px 20px 64px; }
+  a { color: #7fb3ff; } nav a { margin-right: 16px; }
+  nav { border-bottom: 1px solid #232b40; padding-bottom: 12px; margin-bottom: 24px; }
+  code { background: #141a28; padding: 1px 6px; border-radius: 4px; }
+  pre { background: #141a28; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  td, th { border: 1px solid #2b3550; padding: 6px 10px; text-align: left; }
+</style>
+</head>
+<body>
+<nav><a href="/">about</a><a href="/site/what-is-neonethack.html">what is neonethack</a><a href="/site/protocol.html">protocol</a><a href="/site/gallery.html">gallery</a><a href="/play">play</a></nav>
+<h1>The world API, in five minutes</h1>
+<p>You never touch the terminal. You send <strong>deeds</strong> — named
+intents like <code>move</code>, <code>eat</code>, <code>kick</code>,
+<code>pray</code> — and the world answers with what happened and what the
+explorer now perceives. Nothing you couldn't see is ever revealed: no
+glyphs, no map cells, no menus, no keystrokes on the wire.</p>
+<h2>Lifecycle</h2>
+<pre>client  ──► new_game {name, seed?, role?, race?, gender?, align?}
+         ◄── {sessionId, observation}
+client  ──► act {sessionId, action: "move", direction: "south"}
+         ◄── {outcome, events[], observation, decision?}
+client  ──► act {sessionId, replyTo: "decision-3", item: {id: "item-a"}}
+         ◄── {outcome, events[], observation}
+client  ──► get_state {sessionId}     (a look costs no turn, consumes nothing)
+client  ──► resume {sessionId}        (re-enter a persisted world)
+client  ──► end_session {sessionId}   (leave it behind)</pre>
+<h2>Every reply carries</h2>
+<table>
+<tr><th>field</th><th>what it is</th></tr>
+<tr><td><code>outcome</code></td><td>what the deed did: <code>completed</code>, <code>needsChoice</code>, <code>cancelled</code>, <code>invalidTarget</code>, <code>interrupted</code> — plus turn cost, and the durable result when the world ends</td></tr>
+<tr><td><code>events</code></td><td>individual world changes, in order: <code>saw</code> / <code>felt</code> / <code>heard</code> / <code>shown</code></td></tr>
+<tr><td><code>observation</code></td><td>the full visible world: <code>turn</code>, <code>you</code>, named <code>vitals</code>, <code>world [{x, y, kind, mark, color}]</code> (terrain / creature / ally / object / remains / effect / you), <code>heard</code></td></tr>
+<tr><td><code>decision</code></td><td>at most one pending genuine choice: item, selection, confirmation, or text — answered with <code>replyTo</code>, cancellable, idempotent on retry</td></tr>
+</table>
+<h2>Persistence &amp; resume</h2>
+<p>The session input log plus the starting seed <em>is</em> the save:
+replay it into a fresh world for an identical resume, then play continues
+live. Retries are safe: revision checks and idempotent answers mean a
+timed-out prayer never prays twice.</p>
+<p>Normative contract: <code>API_DESING.md</code> in the repo. Full JS
+reference and every world→UI event, with shapes:
+<a href="/api-docs">/api-docs</a>. Raw engine protocol (the layer below
+the world): <code>proto/PROTOCOL.md</code>. If the docs and the world
+disagree, the world wins and the docs are a bug — file it.</p>
+</body>
+</html>
