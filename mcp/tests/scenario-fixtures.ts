@@ -1,0 +1,27 @@
+// Seed 7, lawful dwarven Valkyrie. Discovered through public observations and
+// named movement only; no debug mode, hidden map access, or injected game state.
+export const STAIRS_ROUTE = [
+  "north",
+  "north",
+  "east",
+  "east",
+  "north",
+  "north",
+  "north",
+  "north",
+  "north",
+  "east",
+  "north",
+  "east",
+  "north",
+  "north",
+  "east",
+  "east",
+  "east",
+  "north",
+  "north",
+  "north",
+  "north",
+  "west",
+  "west",
+] as const;

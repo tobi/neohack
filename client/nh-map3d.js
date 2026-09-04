@@ -41,6 +41,7 @@ const valid = (t) =>
 export class NhMap3D extends LitElement {
   static properties = {
     observation: { attribute: false },
+    worldKey: { type: String, attribute: "world-key" },
     selected: { attribute: false },
     follow: { type: Boolean, reflect: true },
     cutaway: { type: Boolean, reflect: true },
@@ -211,7 +212,12 @@ export class NhMap3D extends LitElement {
     this._init();
   }
   updated(changed) {
-    if (changed.has("observation") || changed.has("cutaway")) this._sync();
+    if (
+      changed.has("observation") ||
+      changed.has("cutaway") ||
+      changed.has("worldKey")
+    )
+      this._sync();
     if (changed.has("selected")) this._selection();
     if (changed.has("labels"))
       for (const a of this._actors.values())
@@ -383,15 +389,16 @@ export class NhMap3D extends LitElement {
     const obs = this.observation;
     const cells = (obs?.world ?? []).filter(valid);
     this._cells = new Map(cells.map((t) => [`${t.x},${t.y}`, t]));
+    const location = JSON.stringify([this.worldKey ?? "", obs?.location?.id]);
     const key = JSON.stringify([
-      obs?.location?.id,
+      location,
       this.cutaway,
       cells.map((t) => [t.x, t.y, t.terrain?.type, t.objects]),
     ]);
     if (key !== this._key) {
-      const locationChanged = obs?.location?.id !== this._location;
+      const locationChanged = location !== this._location;
       this._key = key;
-      this._location = obs?.location?.id;
+      this._location = location;
       this._buildTerrain(cells);
       if (locationChanged || !this._hasFit) {
         const following = this.follow;

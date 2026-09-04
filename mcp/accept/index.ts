@@ -3,6 +3,7 @@
 // clauses without a staged scenario are explicit SKIPs, never vacuous passes.
 // Additional real-engine regressions live in mcp/tests/core-contract.test.ts.
 import { test, type TestCtx } from "../accept";
+import { STAIRS_ROUTE } from "../tests/scenario-fixtures";
 
 async function newWorld(t: TestCtx, identity = {}) {
   const f: any = await t.call("new_game", {
@@ -87,16 +88,58 @@ test("walk and exchange places with a real pet", async (t) => {
   t.assert(r.outcome.turnsElapsed === 1, "wrong swap cost");
 });
 
-test.skip("stairs: inspect here, descend, map replaced, stairs remembered", async (t) => {
-  const sid = await newWorld(t);
+test("stairs: inspect here, descend, map replaced, stairs remembered", async (t) => {
+  const sid = await newWorld(t, {
+    seed: 7,
+    role: "valkyrie",
+    race: "dwarf",
+    align: "lawful",
+  });
+  let r: any;
+  for (const direction of STAIRS_ROUTE)
+    r = await t.call("act", { sessionId: sid, action: "move", direction });
+  t.assert(
+    r.observation.you.x === 64 && r.observation.you.y === 3,
+    "did not reach the actual stairs",
+  );
   const s: any = await t.call("act", {
     sessionId: sid,
     action: "inspect",
     target: "here",
   });
   t.assert(
-    s.outcome.status === "completed",
-    `inspect here: ${s.outcome.status}`,
+    s.outcome.effects.includes("inspectedHere") && s.outcome.turnsElapsed === 0,
+    "inspection was not read-only",
+  );
+  const down: any = await t.call("act", {
+    sessionId: sid,
+    action: "climb",
+    direction: "down",
+  });
+  t.assert(
+    down.outcome.effects.includes("descendedStairs") &&
+      down.outcome.turnsElapsed === 1,
+    "did not descend",
+  );
+  t.assert(
+    down.observation.location.id !== r.observation.location.id &&
+      !down.observation.world.some((c: any) => c.x >= 55),
+    "old map leaked across level change",
+  );
+  const up: any = await t.call("act", {
+    sessionId: sid,
+    action: "climb",
+    direction: "up",
+  });
+  t.assert(
+    up.observation.location.id === r.observation.location.id,
+    "wrong return level",
+  );
+  t.assert(
+    up.observation.world.some(
+      (c: any) => c.x === 64 && c.y === 3 && c.terrain.type === "stairsDown",
+    ),
+    "stairs not remembered",
   );
 });
 
@@ -362,7 +405,57 @@ test("a real death cause and final perception survive cold replay", async (t) =>
   );
 });
 
-test.skip("multi-step actions terminate at bounded boundaries", async (t) => {
-  const sid = await newWorld(t);
-  void sid;
+test("a multi-turn meal stops at a declined warning and does not restart on resume", async (t) => {
+  const sid = await newWorld(t, {
+    seed: 42,
+    role: "tourist",
+    race: "human",
+    align: "neutral",
+  });
+  const start: any = await t.call("get_state", { sessionId: sid });
+  const ration = start.observation.inventory.find((i: any) =>
+    i.label.includes("food ration"),
+  );
+  t.assert(ration?.quantity > 2, "missing meal fixture");
+  const first: any = await t.call("act", {
+    sessionId: sid,
+    action: "eat",
+    item: { id: ration.id },
+  });
+  t.assert(
+    first.outcome.status === "completed" && first.outcome.turnsElapsed === 6,
+    "meal did not complete at its bounded boundary",
+  );
+  const warning: any = await t.call("act", {
+    sessionId: sid,
+    action: "eat",
+    item: { id: ration.id },
+  });
+  t.assert(
+    warning.decision?.kind === "confirmation",
+    "no typed continue-eating warning",
+  );
+  t.assert(
+    warning.observation.inventory.some((i: any) =>
+      i.label.includes("partly eaten food ration"),
+    ),
+    "decision observation is stale",
+  );
+  const stop: any = await t.call("act", {
+    sessionId: sid,
+    replyTo: warning.decision.id,
+    confirm: false,
+  });
+  t.assert(
+    stop.outcome.status === "interrupted" &&
+      stop.outcome.turnsElapsed === 2 &&
+      stop.decision === null,
+    "meal did not stop coherently",
+  );
+  const back: any = await t.call("resume", { sessionId: sid });
+  t.assert(
+    back.decision === null &&
+      JSON.stringify(back.observation) === JSON.stringify(stop.observation),
+    "resume restarted or changed the interrupted meal",
+  );
 });

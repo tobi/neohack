@@ -1009,6 +1009,7 @@ ATTRNORETURN extern void panic(const char *, ...) PRINTF_F(1, 2) NORETURN;
 extern void done(int);
 #ifdef HEADLESS_GRAPHICS
 extern void headless_terminal(int, const char *, long);
+extern void headless_action_result(const char *, const char *);
 #endif
 extern void container_contents(struct obj *, boolean, boolean, boolean);
 ATTRNORETURN extern void nh_terminate(int) NORETURN;

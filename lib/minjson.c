@@ -189,6 +189,18 @@ hexval(char c)
     return -1;
 }
 
+static int
+hex4(const char *p, unsigned *value)
+{
+    int i, digit;
+    *value = 0;
+    for (i = 0; i < 4; i++) {
+        if (!p[i] || (digit = hexval(p[i])) < 0) return 0;
+        *value = (*value << 4) | (unsigned) digit;
+    }
+    return 1;
+}
+
 char *
 mj_str(mj_val v)
 {
@@ -211,7 +223,7 @@ mj_str(mj_val v)
         if (c == '"')
             break;
         if (c == '\\') {
-            int h1, h2, h3, h4;
+            unsigned cp;
             c = *p++;
             switch (c) {
             case '"': c = '"'; break;
@@ -223,24 +235,25 @@ mj_str(mj_val v)
             case 'r': c = '\r'; break;
             case 't': c = '\t'; break;
             case 'u':
-                /* BMP only, enough for engine text; others become '?'. */
-                h1 = hexval(p[0]);
-                h2 = hexval(p[1]);
-                h3 = hexval(p[2]);
-                h4 = hexval(p[3]);
-                if (h1 < 0 || h2 < 0 || h3 < 0 || h4 < 0) {
-                    free(out);
-                    return NULL;
-                }
+                if (!hex4(p, &cp)) { free(out); return NULL; }
+                p += 4;
                 {
-                    unsigned cp = (unsigned) ((h1 << 12) | (h2 << 8) | (h3 << 4) | h4);
-                    p += 4;
+                    if (cp >= 0xd800 && cp <= 0xdbff) {
+                        unsigned low;
+                        if (p[0] != '\\' || p[1] != 'u' || !hex4(p + 2, &low) || low < 0xdc00 || low > 0xdfff) {
+                            free(out); return NULL;
+                        }
+                        cp = 0x10000 + ((cp - 0xd800) << 10) + (low - 0xdc00);
+                        p += 6;
+                    }
+                    /* Owned C strings cannot represent an embedded NUL. */
+                    if (!cp || (cp >= 0xdc00 && cp <= 0xdfff)) { free(out); return NULL; }
                     if (cp < 0x80) {
                         c = (char) cp;
                         break;
                     }
                     /* encode UTF-8 inline */
-                    if (n + 3 >= cap) {
+                    if (n + 4 >= cap) {
                         cap *= 2;
                         out = realloc(out, cap);
                         if (!out)
@@ -252,13 +265,19 @@ mj_str(mj_val v)
                         n++;
                         *w++ = (char) (0x80 | (cp & 0x3f));
                         n++;
-                    } else {
+                    } else if (cp < 0x10000) {
                         *w++ = (char) (0xe0 | (cp >> 12));
                         n++;
                         *w++ = (char) (0x80 | ((cp >> 6) & 0x3f));
                         n++;
                         *w++ = (char) (0x80 | (cp & 0x3f));
                         n++;
+                    } else {
+                        *w++ = (char) (0xf0 | (cp >> 18));
+                        *w++ = (char) (0x80 | ((cp >> 12) & 0x3f));
+                        *w++ = (char) (0x80 | ((cp >> 6) & 0x3f));
+                        *w++ = (char) (0x80 | (cp & 0x3f));
+                        n += 4;
                     }
                     continue;
                 }

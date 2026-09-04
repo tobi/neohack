@@ -557,6 +557,7 @@ export class ExplorerView extends LitElement {
   renderMap() {
     return html`<nh-map3d
       .observation=${this.envelope ? this.obs : null}
+      .worldKey=${this.envelope?.sessionId ?? ""}
       .animateMoves=${this.mode === "live" || this.playing}
       .selected=${this.selectedTile}
       @tile-select=${(e) => (this.selectedTile = e.detail)}

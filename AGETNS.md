@@ -5,8 +5,10 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 
 ## Architecture
 
-- `lib/` is the semantic explorer core (C); the headless engine publishes
-  non-mutating perceived belongings/terrain context. CLI and MCP bindings forward.
+- `lib/` is the semantic explorer core (C); `lib/request_validation.inc` rejects
+  malformed intents before input/reservations. The headless engine publishes
+  perceived belongings/terrain at semantic input boundaries and structured
+  terminal/meal results. CLI and MCP forward; never silently strip bad fields.
 - `client/explorer-app.js` is the Lit application. `client/nh-map3d.js` is the
   reusable Three.js/Lit map component. They render observations, not engine rules.
 - `client/recording.js` and `mcp/src/runs.ts` review public perception recordings
@@ -51,8 +53,9 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 
 - `bun run build` — engine, C bridge, local browser bundle.
 - `bun test mcp/tests` — real-engine regressions plus pure recording tests.
-- `bun mcp/accept.ts` — broader smoke suite; currently some scenarios are skipped.
+- `bun mcp/accept.ts` — 15 real broad checks, currently no skips; not exhaustive engine coverage.
 - `bun mcp/smoke.ts` — live MCP wander, decisions, deterministic resume.
 - `APP_URL=http://127.0.0.1:3311 bun run test:browser` — actual Chromium flows.
+- `bun run test:browser:scenarios` / `test:browser:terminal` — real level/meal/death review (set `APP_URL` for the candidate).
 
 See [GOAL.md](GOAL.md) and [client/README.md](client/README.md) for run instructions.

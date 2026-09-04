@@ -2,6 +2,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync, existsSync } from "node:fs";
 import { TestBridge, testDirectory } from "./bridge-harness";
+import { STAIRS_ROUTE } from "./scenario-fixtures";
 
 async function scenario(
   fn: (b: TestBridge, g: any) => Promise<void>,
@@ -82,6 +83,61 @@ test("a genuinely locked door reports its actual zero-turn failed opening", () =
       (await b.call("get_state", { sessionId: g.sessionId })).observation,
     ).toEqual(opened.observation);
   }, 24));
+
+test("real stairs replace the active map and restore remembered terrain on return", () =>
+  scenario(async (b, g) => {
+    let r = g;
+    for (const direction of STAIRS_ROUTE)
+      r = await b.call("act", {
+        sessionId: g.sessionId,
+        action: "move",
+        direction,
+      });
+    expect(r.observation.you).toEqual({ x: 64, y: 3 });
+    const stair = r.observation.world.find((c: any) => c.x === 64 && c.y === 3);
+    expect(stair.terrain.type).toBe("stairsDown");
+    const remembered = r.observation.world.find(
+      (c: any) => c.terrain.type === "stairsUp",
+    );
+    expect(remembered).toBeDefined();
+    const inspected = await b.call("act", {
+      sessionId: g.sessionId,
+      action: "inspect",
+      target: "here",
+    });
+    expect(inspected.outcome.effects).toContain("inspectedHere");
+    expect(inspected.outcome.turnsElapsed).toBe(0);
+    const down = await b.call("act", {
+      sessionId: g.sessionId,
+      action: "climb",
+      direction: "down",
+    });
+    expect(down.outcome.effects).toContain("descendedStairs");
+    expect(down.outcome.turnsElapsed).toBe(1);
+    expect(down.observation.location.id).not.toBe(r.observation.location.id);
+    expect(down.observation.you).toEqual({ x: 13, y: 4 });
+    expect(down.observation.world.some((c: any) => c.x >= 55)).toBe(false);
+    const up = await b.call("act", {
+      sessionId: g.sessionId,
+      action: "climb",
+      direction: "up",
+    });
+    expect(up.outcome.effects).toContain("climbedStairs");
+    expect(up.observation.location.id).toBe(r.observation.location.id);
+    expect(up.observation.you).toEqual(r.observation.you);
+    expect(
+      up.observation.world.find((c: any) => c.x === 64 && c.y === 3).terrain
+        .type,
+    ).toBe("stairsDown");
+    expect(
+      up.observation.world.find(
+        (c: any) => c.x === remembered.x && c.y === remembered.y,
+      ).terrain.type,
+    ).toBe("stairsUp");
+    expect(
+      (await b.call("get_state", { sessionId: g.sessionId })).observation,
+    ).toEqual(up.observation);
+  }, 7));
 
 test(
   "fatal prayer has an engine cause, final health, durable receipt and cold terminal observation",

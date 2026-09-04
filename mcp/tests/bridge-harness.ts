@@ -53,14 +53,17 @@ export class TestBridge {
     });
   }
   call(tool: string, args: any = {}): Promise<any> {
+    return this.callRaw(JSON.stringify({ tool, ...args }));
+  }
+  callRaw(request: string): Promise<any> {
     if (this.dead) return Promise.reject(Error("Bridge is closed"));
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.proc.kill("SIGKILL");
-        reject(Error(`Timed out: ${tool}; ${this.diagnostics}`));
+        reject(Error(`Timed out: ${request.slice(0, 100)}; ${this.diagnostics}`));
       }, 12000);
       this.waiters.push({ resolve, reject, timer });
-      this.proc.stdin.write(JSON.stringify({ tool, ...args }) + "\n");
+      this.proc.stdin.write(request + "\n");
     });
   }
   newGame(seed = 42) {

@@ -361,6 +361,42 @@ Every mutating request carries:
 - A timeout is not permission to resend an action as a new operation. Return an
   explicit pending/unknown execution status that the caller can recover.
 
+### Implemented request-shape checks
+
+The C boundary rejects malformed requests **before** engine input, request-id
+reservation, or a new perception checkpoint. If the session is identifiable,
+the rejection includes its unchanged observation and standing decision.
+
+- Supply exactly one of `action` or `replyTo`; a reply has exactly one answer
+  field. `cancel` must be `true`; a decline is `confirm:false`.
+- Unknown, duplicate, and action-inapplicable fields are errors, not ignored
+  hints. `wait {direction:...}`, `move {direction:"up"}`, and unsupported
+  `count`/`quantity` fields do not become different or partial actions. Use
+  `climb` for up/down. Initial `apply` targets are not bound: apply the item,
+  then answer a target decision if offered.
+- Omit absent optional values; explicit nulls are not defaults. Revision guards
+  are nonnegative safe integers; seeds are safe integers. IDs and named identity
+  fields are strings, not coerced numbers.
+- Native requests are limited to 1022 UTF-8 bytes; names/actions to 31 bytes,
+  request IDs to 128, session/item/decision IDs to 64, item-name queries to 127,
+  text replies to 128, and choice arrays to 64 distinct integer option IDs.
+  Control characters and embedded NULs are rejected. A single-character engine
+  prompt rejects longer text instead of truncating it.
+- Native field names use their literal spelling. MCP forwards all argument
+  fields to C rather than dropping typos, rejects duplicate JSON keys before
+  parsing loses them, and bounds UTF-8 JSON frames to 64 KiB. Transport framing
+  cannot override the selected tool. Unicode surrogate pairs decode correctly;
+  unpaired surrogate escapes are not treated as different valid text.
+
+Normal meals now have engine-issued completion/interruption facts. A near-full
+warning exposes the already-changed inventory, remains a typed confirmation,
+and a declined continuation reports `interrupted` with its actual turn cost and
+partly eaten item. Pending warnings and stopped meals survive cold resume;
+other occupations do not yet have this structured coverage.
+
+Semantic rejections (such as a stale reference or the wrong standing decision)
+remain distinguishable from malformed requests and may retain a normal receipt.
+
 ## 9. Terminal results are durable
 
 Keep the end result separate from recent narration and post-game lists:
@@ -430,7 +466,8 @@ re-run live auto-answering or resolve names differently midway through a replay.
 Status (2026-09-04): this remains the target contract, not a blanket completion
 claim. Core regressions now cover read-only food discovery, perceived item
 classes, stable object refs, missing targets, conflicting retry payloads, open
-doors, real pet exchange, locked doors, fatal prayer, escape consent, process
+doors, real pet exchange, locked doors, actual stairs and level replacement,
+strict request shapes, fatal prayer, escape consent, process
 failure, bounded teardown, and pending-decision resume. A Lit/Three.js live/replay viewer and
 checkpointed public-perception recordings are implemented. See PROJECT_PLAN.md
 for the verified current milestone and remaining work.

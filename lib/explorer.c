@@ -1120,6 +1120,9 @@ ingest_belongings(game_t *g, const char *params)
     if (mj_find(params, "x", &v) && mj_int(v, &n)) g->you_x = (int) n;
     if (mj_find(params, "y", &v) && mj_int(v, &n)) g->you_y = (int) n;
     g->have_you = 1;
+    if (g->you_x >= 0 && g->you_x < MAP_W && g->you_y >= 0 && g->you_y < MAP_H &&
+        mj_find(params, "hereCmap", &v) && mj_int(v, &n))
+        g->terrain[g->you_y][g->you_x] = (unsigned char) terrain_from_cmap((int) n);
     g->structured_perception = 1;
     for (i = 0; i < g->ninv; i++) free(g->inv[i].label);
     free(g->inv); g->inv = NULL; g->ninv = 0;
@@ -1395,6 +1398,25 @@ ingest(game_t *g, const char *line)
             prompt = mj_str(pv);
         free(m->prompt);
         m->prompt = prompt ? prompt : strdup("");
+    } else if (!strcmp(method, "action_result")) {
+        mj_val av, sv, tv;
+        char *action = NULL, *status = NULL;
+        long long turn;
+        if (mj_find(params, "action", &av)) action = mj_str(av);
+        if (mj_find(params, "status", &sv)) status = mj_str(sv);
+        if (action && status && mj_find(params, "turn", &tv) && mj_int(tv, &turn) &&
+            (!strcmp(status, "completed") || !strcmp(status, "interrupted"))) {
+            mj_Buf b;
+            mj_init(&b); mj_obj(&b);
+            mj_key(&b, "type"); mj_strv(&b, "actionResult");
+            mj_key(&b, "action"); mj_strv(&b, action);
+            mj_key(&b, "status"); mj_strv(&b, status);
+            mj_key(&b, "turn"); mj_intv(&b, turn);
+            mj_endobj(&b);
+            if (b.ok) push_event(g, b.buf);
+            mj_free(&b);
+        }
+        free(action); free(status);
     } else if (!strcmp(method, "game_ended") && !g->terminal_kind[0]) {
         mj_val kv, cv, tv, hv;
         char *kind = NULL, *cause = NULL;
@@ -2859,6 +2881,21 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
 
 /* Translate one replyTo answer into an engine result line.
  * Returns malloc'd line, or NULL with *err set (no engine touch). */
+static int
+reply_character(char *line, size_t cap, char character)
+{
+    char text[2] = { character, 0 };
+    mj_Buf b;
+    int ok;
+    mj_init(&b); mj_obj(&b);
+    mj_key(&b, "answer"); mj_strv(&b, text);
+    mj_endobj(&b);
+    ok = b.ok && b.buf && strlen(b.buf) < cap;
+    if (ok) snprintf(line, cap, "%s", b.buf);
+    mj_free(&b);
+    return ok;
+}
+
 static char *
 translate_reply(game_t *g, const char *dec_kind, const char *args,
                 const char **err)
@@ -2908,7 +2945,9 @@ translate_reply(game_t *g, const char *dec_kind, const char *args,
                 *err = "text decision needs a character";
                 return NULL;
             }
-            snprintf(line, sizeof line, "{\"answer\":\"%c\"}", s[0]);
+            if (!reply_character(line, sizeof line, s[0])) {
+                free(s); *err = "unencodable character"; return NULL;
+            }
             free(s);
             goto wrap;
         }
@@ -3014,7 +3053,9 @@ translate_reply(game_t *g, const char *dec_kind, const char *args,
                 *err = "choice out of range";
                 return NULL;
             }
-            snprintf(line, sizeof line, "{\"answer\":\"%c\"}", ch[idx[0]]);
+            if (!reply_character(line, sizeof line, ch[idx[0]])) {
+                *err = "unencodable character"; return NULL;
+            }
             goto wrap;
         }
         if (!strcmp(g->pending.kind, "extcmd")) {
@@ -3895,6 +3936,28 @@ bump_once(game_t *g, int *flag)
     sidecar_save(g);
 }
 
+/* A structured engine result takes priority over narration heuristics. */
+static int
+activity_result_since(game_t *g, long long from, const char *action)
+{
+    size_t i;
+    int result = 0;
+    for (i = 0; i < g->nevents; i++) {
+        mj_val v;
+        char *type = NULL, *name = NULL, *status = NULL;
+        if (g->events[i].seq <= from) continue;
+        if (mj_find(g->events[i].json, "type", &v)) type = mj_str(v);
+        if (type && !strcmp(type, "actionResult")) {
+            if (mj_find(g->events[i].json, "action", &v)) name = mj_str(v);
+            if (mj_find(g->events[i].json, "status", &v)) status = mj_str(v);
+            if (name && status && !strcmp(name, action))
+                result = !strcmp(status, "interrupted") ? 2 : 1;
+        }
+        free(type); free(name); free(status);
+    }
+    return result;
+}
+
 /* Settle a driven action at a resting key prompt (or the end). Reads the
  * new narration for honest effects, refreshes item knowledge after item
  * flows, and reports blocked when the attempt observably failed. */
@@ -3911,6 +3974,7 @@ drive_settle(nhx_t *x, game_t *g, const char *req_id,
     int turn1 = turn_of(g);
     int pos_changed = 0;
     int blocked = 0;
+    int activity = activity_result_since(g, ev_from, action);
     const char *reason = NULL;
     if (g->have_you && had_you &&
         (g->you_x != you0_x || g->you_y != you0_y))
@@ -3931,8 +3995,10 @@ drive_settle(nhx_t *x, game_t *g, const char *req_id,
         fx[nfx++] = "descendedStairs";
     if (heard_has(g, msg_start0, msg_count0, FX_UP) && nfx < 14)
         fx[nfx++] = "climbedStairs";
-    if (heard_has(g, msg_start0, msg_count0, FX_EAT) && nfx < 14)
+    if (((activity == 1 && !strcmp(action, "eat")) ||
+         heard_has(g, msg_start0, msg_count0, FX_EAT)) && nfx < 14)
         fx[nfx++] = "consumedItem";
+    if (activity == 2 && nfx < 14) fx[nfx++] = "activityInterrupted";
     if (heard_has(g, msg_start0, msg_count0, FX_DRINK) && nfx < 14)
         fx[nfx++] = "drank";
     if (heard_has(g, msg_start0, msg_count0, FX_WEAR) && nfx < 14)
@@ -3972,6 +4038,10 @@ drive_settle(nhx_t *x, game_t *g, const char *req_id,
         blocked = 1;
         reason = heard_has(g, msg_start0, msg_count0, locked) ? "lockedDoor" : "notPossible";
     }
+    if (activity) {
+        blocked = 0;
+        reason = activity == 2 ? "activityStopped" : NULL;
+    }
     if (!cancelled && !blocked && !strcmp(action, "move") &&
         !pos_changed && turn1 == turn0 && !nfx) {
         blocked = 1;
@@ -3994,7 +4064,7 @@ drive_settle(nhx_t *x, game_t *g, const char *req_id,
                         turn1 - turn0, pos_changed, fx, nfx, ev_from,
                         0, 0, g->operation.fail_code, g->operation.fail_msg);
     return envelope(g, req_id, action,
-                    cancelled ? "cancelled" : (blocked ? "blocked" : "completed"),
+                    activity == 2 ? "interrupted" : cancelled ? "cancelled" : (blocked ? "blocked" : "completed"),
                     reason, turn1 - turn0, pos_changed, fx, nfx, ev_from,
                     0, 0, NULL, NULL);
 }
@@ -5182,6 +5252,24 @@ run_reply(nhx_t *x, game_t *g, const char *args, const char *req_id,
                               "that offer expired; answer the current decision");
     }
     free(reply_to);
+    /* A well-shaped answer must still address the actual standing kind.
+     * This check is after receipt lookup, so completed replies remain retryable. */
+    if (!mj_find(args, "cancel", &v)) {
+        const char *field = !strcmp(g->operation.dec_kind, "confirmation") ? "confirm" :
+            !strcmp(g->operation.dec_kind, "target") ? "target" :
+            !strcmp(g->operation.dec_kind, "text") ? "text" :
+            !strcmp(g->operation.dec_kind, "item") && g->operation.dec_pending == -2 ? "item" : "choose";
+        if (!mj_find(args, field, &v))
+            return g->operation.dec_pending == -2 ?
+                envelope_synth(g, req_id, "act", "blocked", ev_from, 1, "invalidAnswer", "answer does not match the standing decision kind") :
+                envelope_error(g, req_id, "act", "invalidAnswer", "answer does not match the standing decision kind");
+        if (!strcmp(field, "text") && !strcmp(g->pending.kind, "yn")) {
+            char *text = mj_str(v);
+            int one = text && strlen(text) == 1;
+            free(text);
+            if (!one) return envelope_error(g, req_id, "act", "invalidAnswer", "this prompt takes exactly one character, not truncated text");
+        }
+    }
     if (mj_find(args, "cancel", &v)) {
         int c = 0;
         if (mj_bool(v, &c) && c)
@@ -5611,6 +5699,7 @@ record_frame(game_t *g, const char *request, const char *response)
 }
 
 #include "reconstruction.inc"
+#include "request_validation.inc"
 
 char *
 nhx_call(nhx_t *x, const char *request_json)
@@ -5625,6 +5714,19 @@ nhx_call(nhx_t *x, const char *request_json)
     if (mj_find(request_json, "sessionId", &v)) sid = mj_str(v);
     if (mj_find(request_json, "requestId", &v)) rid = mj_str(v);
     g = sid ? game_get(x, sid, 0) : NULL;
+    {
+        const char *why = NULL;
+        const char *code = validate_request(request_json, tool, &why);
+        if (code) {
+            if (g && tool && !strcmp(tool, "act")) {
+                if (!g->ended && g->have_operation && g->operation.dec_pending == -2)
+                    out = envelope_synth(g, rid, "act", "blocked", g->event_seq, 1, code, why);
+                else out = envelope_error(g, rid, "act", code, why);
+            } else out = fail_envelope(sid ? sid : "", rid, code, why);
+            free(tool); free(sid); free(rid);
+            return out;
+        }
+    }
     was_ended = g && g->ended;
     if (g && rid && tool && !strcmp(tool, "act") && req_lookup(g, rid)) retry = 1;
     out = nhx_dispatch(x, request_json);

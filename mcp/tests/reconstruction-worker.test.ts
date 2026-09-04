@@ -95,6 +95,21 @@ test("management requires confirmation and a permitted origin; missing sandbox n
       )
     ).status,
   ).toBe(400);
+  for (const body of [
+    '{"confirm":false,"confirm":true}',
+    '{"confirm":true,"unexpected":1}',
+  ])
+    expect(
+      (
+        await manager.handle(
+          new Request("http://localhost/runs/legacy/reconstruct", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body,
+          }),
+        )
+      ).status,
+    ).toBe(400);
   const start = await manager.start("legacy"),
     job = await manager.wait((start.body as any).job.id);
   expect(job.state).toBe("failed");

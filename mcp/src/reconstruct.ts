@@ -18,6 +18,7 @@ import { constants, createReadStream } from "node:fs";
 import { validateFrame } from "../../client/recording.js";
 import { createRunStore } from "./runs";
 import { originAllowed, hostAllowed } from "./origin";
+import { parseWireJson } from "./wire-json";
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 export interface ReconstructionJob {
   id: string;
@@ -628,11 +629,19 @@ export function createReconstructor(
         return json({ error: "Origin is not permitted" }, 403);
       let body: any;
       try {
-        body = await req.json();
+        body = parseWireJson(
+          new TextDecoder("utf-8", { fatal: true }).decode(
+            await req.arrayBuffer(),
+          ),
+        );
       } catch {
         return json({ error: "Invalid JSON" }, 400);
       }
-      if (body?.confirm !== true)
+      if (
+        body?.confirm !== true ||
+        Object.keys(body).length !== 1 ||
+        !Object.hasOwn(body, "confirm")
+      )
         return json(
           { error: "Confirm unverified reconstruction explicitly" },
           400,

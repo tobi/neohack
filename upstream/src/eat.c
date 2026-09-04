@@ -426,6 +426,9 @@ food_substitution(struct obj *old_obj, struct obj *new_obj)
 staticfn void
 do_reset_eat(void)
 {
+#ifdef HEADLESS_GRAPHICS
+    boolean was_eating = svc.context.victual.eating;
+#endif
     debugpline0("do_reset_eat...");
     if (svc.context.victual.piece) {
         struct obj *otmp;
@@ -449,6 +452,10 @@ do_reset_eat(void)
      */
     stop_occupation();
     newuhs(FALSE);
+#ifdef HEADLESS_GRAPHICS
+    if (was_eating)
+        headless_action_result("eat", "interrupted");
+#endif
 }
 
 /* if 'prop' is only set because of a timed value (so not an intrinsic
@@ -575,6 +582,9 @@ done_eating(boolean message)
         useupf(piece, 1L);
 
     svc.context.victual = zero_victual; /* victual.piece = 0, .o_id = 0 */
+#ifdef HEADLESS_GRAPHICS
+    headless_action_result("eat", "completed");
+#endif
 }
 
 void

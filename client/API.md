@@ -104,11 +104,12 @@ import './nh-map3d.js';
 const map = document.createElement('nh-map3d');
 map.style.height = '500px';
 map.observation = response.observation;
+map.worldKey = response.sessionId; // scope level IDs and reset framing between worlds
 map.addEventListener('tile-select', ({ detail: cell }) => inspectCell(cell));
 document.body.append(map);
 ```
 
-Properties: `observation`, `selected`, `follow`, `cutaway`, `labels`,
+Properties: `observation`, `worldKey` (optional world identity), `selected`, `follow`, `cutaway`, `labels`,
 `animateMoves`. Methods: `fit()`, `focusSelf()`, `rotate()`, `tileAt(x,y)`,
 `debug()`. Events: `tile-select`, `view-follow`, `renderer-error`.
 The renderer makes no game requests. Set `animateMoves=false` for arbitrary

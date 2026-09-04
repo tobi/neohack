@@ -42,6 +42,7 @@ static winid hl_map_win = WIN_ERR;
 
 /* new_game handshake state */
 static int hl_have_game = 0;
+static char *hl_input(const char *, const char *);
 static long hl_seed = 0;
 static int hl_have_seed = 0;
 static int hl_role = -1, hl_race = -1, hl_gend = -1, hl_align = -1;
@@ -437,7 +438,7 @@ headless_askname(void)
         return;
     }
     {
-        char *r = rpc_input("getlin", ",\"prompt\":\"What is your name?\"");
+        char *r = hl_input("getlin", ",\"prompt\":\"What is your name?\"");
         if (r) {
             const char *p = j_find_key(r, "line");
             int ok = 0;
@@ -457,6 +458,20 @@ headless_askname(void)
 static void
 headless_get_nh_event(void)
 {
+}
+
+void
+headless_action_result(const char *action, const char *status)
+{
+    JBuf jb;
+    if (windowprocs.wp_id != wp_headless) return;
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "action"); jb_str(&jb, action);
+    jb_key(&jb, "status"); jb_str(&jb, status);
+    jb_key(&jb, "turn"); jb_int(&jb, svm.moves);
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("action_result", jb.buf);
+    jb_free(&jb);
 }
 
 void
@@ -790,7 +805,7 @@ headless_select_menu(winid window, int how, MENU_ITEM_P **menu_list)
     jb_key(&jb, "how");
     jb_int(&jb, how);
     jb_end_obj(&jb);
-    r = rpc_input("menu", hl_frag(&jb));
+    r = hl_input("menu", hl_frag(&jb));
     jb_free(&jb);
     if (!r)
         return -1;
@@ -965,7 +980,7 @@ headless_nhgetch(void)
     char *r;
     int key = '\033';
     headless_flush();
-    r = rpc_input("key", NULL);
+    r = hl_input("key", NULL);
     if (!r) {
         hangup(0);
         return '\033';
@@ -1039,6 +1054,15 @@ hl_perception(void)
     for (o = gi.invent; o; o = o->nobj)
         hl_perceived_object(&jb, o, TRUE);
     jb_end_arr(&jb);
+    /* The hero glyph can obscure the feature after a full level redraw.
+     * back_to_glyph is a read-only terrain renderer and requires sight; it
+     * masks secret doors/corridors and does not inspect hidden traps. */
+    if (floor_known && cansee(u.ux, u.uy)) {
+        int here_glyph = back_to_glyph(u.ux, u.uy);
+        if (glyph_is_cmap(here_glyph)) {
+            jb_key(&jb, "hereCmap"); jb_int(&jb, glyph_to_cmap(here_glyph));
+        }
+    }
     jb_key(&jb, "floorKnown"); jb_bool(&jb, floor_known);
     jb_key(&jb, "floor"); jb_begin_arr(&jb);
     if (floor_known)
@@ -1051,14 +1075,23 @@ hl_perception(void)
     jb_free(&jb);
 }
 
+/* Decisions can interrupt a deed after inventory has already changed (for
+ * example, one bite before a near-full warning). Publish at each semantic
+ * input boundary, not only at the next resting command prompt. */
+static char *
+hl_input(const char *kind, const char *params)
+{
+    headless_flush();
+    hl_perception();
+    return rpc_input(kind, params);
+}
+
 static int
 headless_nh_poskey(coordxy *x, coordxy *y, int *mod)
 {
     char *r;
     int key = '\033', ok = 0;
-    headless_flush();
-    hl_perception();
-    r = rpc_input("poskey", NULL);
+    r = hl_input("poskey", NULL);
     if (!r) {
         hangup(0);
         return '\033';
@@ -1105,7 +1138,7 @@ headless_yn_function(const char *query, const char *resp, char def)
     jb_key(&jb, "default");
     jb_int(&jb, def);
     jb_end_obj(&jb);
-    r = rpc_input("yn", hl_frag(&jb));
+    r = hl_input("yn", hl_frag(&jb));
     jb_free(&jb);
     if (r) {
         const char *p = j_find_key(r, "answer");
@@ -1129,7 +1162,7 @@ headless_getlin(const char *query, char *bufp)
     jb_key(&jb, "prompt");
     jb_str(&jb, query ? query : "");
     jb_end_obj(&jb);
-    r = rpc_input("getlin", hl_frag(&jb));
+    r = hl_input("getlin", hl_frag(&jb));
     jb_free(&jb);
     bufp[0] = '\0';
     if (r) {
@@ -1166,7 +1199,7 @@ headless_get_ext_cmd(void)
     }
     jb_end_arr(&jb);
     jb_end_obj(&jb);
-    r = rpc_input("extcmd", hl_frag(&jb));
+    r = hl_input("extcmd", hl_frag(&jb));
     jb_free(&jb);
     if (r) {
         idx = (int) hl_param_int(r, "index", -1);

@@ -52,8 +52,10 @@ bun mcp/accept.ts
 bun mcp/smoke.ts
 ```
 
-The regression suite includes real engine, lifecycle, recording, and sandbox tests. The broader acceptance runner
-reports unfinished scenarios as **skipped**, not as passing placeholders.
+The regression suite includes real engine, lifecycle, strict input, recording,
+and sandbox tests. All 15 current broad acceptance checks use real scenarios,
+including level changes and an interrupted meal. This is not exhaustive engine
+coverage; new unstaged cases must be skipped rather than passed vacuously.
 
 For browser checks, start an isolated front and Chromium with CDP enabled:
 
@@ -62,6 +64,7 @@ PORT=3311 SESSIONS_DIR=/tmp/neonethack-tests bun run dev
 # In another terminal, with Chromium listening on CDP port 9333:
 APP_URL=http://127.0.0.1:3311 bun run test:browser
 APP_URL=http://127.0.0.1:3311 bun run test:browser:terminal
+APP_URL=http://127.0.0.1:3311 bun run test:browser:scenarios
 ```
 
 ## Legacy runs

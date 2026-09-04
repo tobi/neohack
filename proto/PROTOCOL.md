@@ -80,6 +80,25 @@ serializing the address would leak ASLR and break determinism).
 `"$:"` or a tty `\GXXXXNNNN:` glyph escape and the port strips everything
 through the first `:` (per the `BL_GOLD` contract in `src/botl.c`).
 
+`perception {branch, level, x, y, inventory, floorKnown, floor, hereCmap?}` —
+non-mutating perceived belongings and current-square context at each semantic
+input boundary (including menus and questions, not just resting commands). This
+captures changes already made before a mid-deed warning, such as a bitten ration. Objects carry stable internal identities, perceived labels, classes,
+and quantities. Unknown floor contents are not obtained by pickup or touch.
+`hereCmap`, when present, is the visible terrain under the hero glyph, rendered
+by the engine's own terrain function only when the square is in sight and the
+floor is observable. It does not reveal unseen traps or secret terrain. When
+blind, no fresh underfoot terrain is supplied; previously remembered terrain
+may remain in the semantic observation. This preserves known stairs when a
+level is redrawn on return.
+
+`action_result {action, status, turn}` — engine-issued activity completion or
+interruption. Currently normal meals emit `eat` with `completed` after consumption
+or `interrupted` when an active meal is reset. This carries no hidden nutrition
+or hunger counters. The core uses these facts in preference to narration for
+`consumedItem`/`interrupted` outcomes. Other occupations still use the existing
+bounded adapter and are not claimed to have equivalent structured coverage.
+
 `game_ended {kind, cause, turn, health}` — an irrevocable engine outcome,
 issued from `really_done()` **after** life saving/wizard refusal and before
 post-game disclosure. `kind` is `death`, `quit`, `escaped`, `ascended`, or

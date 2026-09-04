@@ -15,17 +15,23 @@
 // Then any client on the tailnet enters at the served address + /mcp.
 import { dispatch, TOOLS } from "./server";
 import { originAllowed } from "./origin";
+import { parseWireJson } from "./wire-json";
 
 const PORT = Number(process.env.MCP_PORT ?? 3100);
 const sessions = new Set<string>();
 
 const cors = {
-  "access-control-allow-headers": "content-type, mcp-session-id, mcp-protocol-version",
+  "access-control-allow-headers":
+    "content-type, mcp-session-id, mcp-protocol-version",
   "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
   "access-control-expose-headers": "mcp-session-id",
 };
 
-const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =>
+const json = (
+  body: unknown,
+  status = 200,
+  extra: Record<string, string> = {},
+) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json", ...cors, ...extra },
@@ -34,18 +40,41 @@ const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =
 export async function handlePost(req: Request): Promise<Response> {
   let raw: unknown;
   try {
-    raw = await req.json();
+    const bytes = await req.arrayBuffer();
+    raw = parseWireJson(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+    );
   } catch {
-    return json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } }, 400);
+    return json(
+      {
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32700, message: "parse error" },
+      },
+      400,
+    );
   }
   const sid = req.headers.get("mcp-session-id");
   const batch = Array.isArray(raw) ? raw : [raw];
   // initialize without a session mints one; everything else needs it.
   const isInit = batch.some(
-    (m) => m && typeof m === "object" && (m as { method?: string }).method === "initialize",
+    (m) =>
+      m &&
+      typeof m === "object" &&
+      (m as { method?: string }).method === "initialize",
   );
   if (!isInit && (!sid || !sessions.has(sid))) {
-    return json({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "unknown web session: initialize first" } }, 404);
+    return json(
+      {
+        jsonrpc: "2.0",
+        id: null,
+        error: {
+          code: -32001,
+          message: "unknown web session: initialize first",
+        },
+      },
+      404,
+    );
   }
   const out: Record<string, unknown>[] = [];
   for (const m of batch) {
@@ -58,14 +87,28 @@ export async function handlePost(req: Request): Promise<Response> {
     sessions.add(id);
     headers["mcp-session-id"] = id;
   }
-  if (out.length === 0) return new Response(null, { status: 202, headers: { ...cors, ...headers } });
+  if (out.length === 0)
+    return new Response(null, {
+      status: 202,
+      headers: { ...cors, ...headers },
+    });
   return json(Array.isArray(raw) ? out : out[0], 200, headers);
 }
 
 export function handleGet(req: Request): Response {
   const sid = req.headers.get("mcp-session-id");
   if (!sid || !sessions.has(sid)) {
-    return json({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "unknown web session: initialize first" } }, 404);
+    return json(
+      {
+        jsonrpc: "2.0",
+        id: null,
+        error: {
+          code: -32001,
+          message: "unknown web session: initialize first",
+        },
+      },
+      404,
+    );
   }
   // The world never speaks first: every perception answers a deed, so
   // this stream idles until the client leaves. Still here for spec shape.
@@ -76,7 +119,11 @@ export function handleGet(req: Request): Response {
     cancel() {},
   });
   return new Response(stream, {
-    headers: { "content-type": "text/event-stream", "cache-control": "no-cache", ...cors },
+    headers: {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      ...cors,
+    },
   });
 }
 
@@ -93,7 +140,8 @@ const MANIFEST = {
 
 export async function handleDelete(req: Request): Promise<Response> {
   const sid = req.headers.get("mcp-session-id");
-  if (!sid || !sessions.has(sid)) return json({ error: "unknown web session" }, 404);
+  if (!sid || !sessions.has(sid))
+    return json({ error: "unknown web session" }, 404);
   sessions.delete(sid);
   return json({});
 }
@@ -105,7 +153,8 @@ export async function handleMcp(req: Request): Promise<Response> {
   if (!originAllowed(req))
     return json({ error: "Origin is not permitted" }, 403);
   let response: Response;
-  if (req.method === "OPTIONS") response = new Response(null, { status: 204, headers: cors });
+  if (req.method === "OPTIONS")
+    response = new Response(null, { status: 204, headers: cors });
   else if (req.method === "POST") response = await handlePost(req);
   else if (req.method === "GET") response = handleGet(req);
   else if (req.method === "DELETE") response = await handleDelete(req);
@@ -119,11 +168,13 @@ export async function handleMcp(req: Request): Promise<Response> {
 
 if (import.meta.main) {
   Bun.serve({
+    maxRequestBodySize: 1024 * 1024,
     port: PORT,
     hostname: "127.0.0.1",
     async fetch(req) {
       const url = new URL(req.url);
-      if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+      if (req.method === "OPTIONS")
+        return new Response(null, { status: 204, headers: cors });
       if (url.pathname === "/" && req.method === "GET") return json(MANIFEST);
       if (url.pathname !== "/mcp") return json({ error: "not found" }, 404);
       return handleMcp(req);
