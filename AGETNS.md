@@ -9,6 +9,10 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
   malformed intents before input/reservations. The headless engine publishes
   perceived belongings/terrain at semantic input boundaries and structured
   terminal/meal results. CLI and MCP forward; never silently strip bad fields.
+  Engine menu `selectable` and `menu_object` facts bind offered objects; never
+  infer identity from labels, accelerator assignment or row order. Choice IDs
+  are returned integers accepted unchanged by `choose`; item refs stay strings.
+  Older pins lacking object bindings fail explicitly instead of being upgraded.
 - `client/explorer-app.js` is the Lit application. The reusable map is
   `nh-map3d.js` + `map-surface.js` + `map-presentation.js`: procedural models,
   GPU/keyboard lifecycle, and pure bounded display preparation. No engine rules.
@@ -80,5 +84,6 @@ issues, then [API_DESING.md](API_DESING.md) for the target contract.
 - `test:browser:renderer` also checks keyboard/game isolation on an isolated candidate.
 - `test:browser:inspection` covers zero-turn facts, pending decisions, replay/import races, legacy unknowns and mobile focus.
 - `test:browser:salvage` creates its own isolated native fixture, retires it, then verifies engine-free import/review of the copied prefix.
+- `test:browser:pickup` exercises real two-object menu controls, pending save/resume, single-object selection and engine-free backward/forward review.
 
 See [GOAL.md](GOAL.md) and [client/README.md](client/README.md) for run instructions.

@@ -164,10 +164,10 @@ input_matches_prompt(game_t *g, const char *line)
                 menu_t *m = &g->menus[i];
                 if (!m->used || m->window != g->pending.window) continue;
                 for (k = 0; k < m->nitems; k++)
-                    if (m->items[k].index == index && m->items[k].accel > 0) offered = 1;
+                    if (m->items[k].index == index && menu_selectable(&m->items[k])) offered = 1;
             }
-            /* Match the options this core actually offers. Legacy rows lacking
-             * a selectable accelerator are not guessed into actionable items. */
+            /* Use engine selectability; legacy pins retain only their
+             * previously supported accelerator-bearing choices. */
             if (!offered) return 0;
         }
         return 1;

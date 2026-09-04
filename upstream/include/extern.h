@@ -1010,6 +1010,7 @@ extern void done(int);
 #ifdef HEADLESS_GRAPHICS
 extern void headless_terminal(int, const char *, long);
 extern void headless_action_result(const char *, const char *);
+extern void headless_menu_object(winid, const struct obj *);
 #endif
 extern void container_contents(struct obj *, boolean, boolean, boolean);
 ATTRNORETURN extern void nh_terminate(int) NORETURN;

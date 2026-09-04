@@ -70,9 +70,17 @@ typedef struct {
 typedef struct {
     int index;
     int accel;      /* 0 = none */
-    int glyph;      /* NO_GLYPH_NUM = header row */
+    int glyph;
+    int selectable; /* -1 = legacy/unspecified; otherwise engine fact */
+    long long object_id; /* private binding for an offered object row */
     char *text;
 } menu_item_t;
+
+static int
+menu_selectable(const menu_item_t *item)
+{
+    return item->selectable >= 0 ? item->selectable : item->accel > 0;
+}
 
 typedef struct {
     int used;
@@ -162,7 +170,8 @@ typedef struct {
     int keypos;             /* script keys consumed so far */
     int cmdkey;             /* command key to send (-2 = use action table) */
     char item_letter;       /* resolved inventory letter (0 = none) */
-    int floor_index;        /* resolved floor slot (-1 = none) */
+    int floor_index;        /* legacy floor-flow hint (-1 = none) */
+    long long floor_object_id; /* resolved identity, never a menu ordinal */
     int dir_code;           /* resolved direction key (-1 = none) */
     int self_ok;            /* target self allowed for this action */
     int letter_answers;     /* letter-prompt answers given this run */
@@ -175,7 +184,7 @@ typedef struct {
     char ref[24];
     char category[24];
     int quantity;
-    int menu_index;         /* engine menu index at peek time */
+    long long object_id;   /* engine-issued identity from perception */
 } floor_item_t;
 
 typedef struct req_entry {
@@ -621,6 +630,7 @@ sidecar_save(game_t *g)
         mj_key(&b, "dirCode"); mj_intv(&b, g->operation.dir_code);
         mj_key(&b, "itemLetter"); mj_intv(&b, g->operation.item_letter);
         mj_key(&b, "floorIndex"); mj_intv(&b, g->operation.floor_index);
+        mj_key(&b, "floorObjectId"); mj_intv(&b, g->operation.floor_object_id);
         mj_key(&b, "selfAllowed"); mj_intv(&b, g->operation.self_ok);
         mj_key(&b, "letterAnswers"); mj_intv(&b, g->operation.letter_answers);
         mj_endobj(&b);
@@ -844,6 +854,7 @@ sidecar_load(game_t *g)
                 if (mj_find(cpy, "dirCode", &dv) && mj_int(dv, &n)) g->operation.dir_code = (int) n;
                 if (mj_find(cpy, "itemLetter", &dv) && mj_int(dv, &n)) g->operation.item_letter = (char) n;
                 if (mj_find(cpy, "floorIndex", &dv) && mj_int(dv, &n)) g->operation.floor_index = (int) n;
+                if (mj_find(cpy, "floorObjectId", &dv) && mj_int(dv, &n)) g->operation.floor_object_id = n;
                 if (mj_find(cpy, "selfAllowed", &dv) && mj_int(dv, &n)) g->operation.self_ok = (int) n;
                 if (mj_find(cpy, "letterAnswers", &dv) && mj_int(dv, &n)) g->operation.letter_answers = (int) n;
             }
@@ -1292,7 +1303,7 @@ ingest_belongings(game_t *g, const char *params)
                     snprintf(item->category, sizeof item->category, "%s", category ? category : "object");
                     item->label = name; name = NULL;
                     item->quantity = (int) quantity;
-                    item->menu_index = -1;
+                    item->object_id = id;
                 }
             } else {
                 inv_item_t *items = realloc(g->inv, (g->ninv + 1) * sizeof *items);
@@ -1529,8 +1540,23 @@ ingest(game_t *g, const char *line)
         m->items[m->nitems].index = (int) idx;
         m->items[m->nitems].accel = (int) accel;
         m->items[m->nitems].glyph = (int) glyph;
+        m->items[m->nitems].selectable = -1;
+        m->items[m->nitems].object_id = 0;
+        if (mj_find(params, "selectable", &av))
+            mj_bool(av, &m->items[m->nitems].selectable);
         m->items[m->nitems].text = text ? text : strdup("");
         m->nitems++;
+    } else if (!strcmp(method, "menu_object")) {
+        mj_val v; long long w, idx, object; size_t k;
+        menu_t *m;
+        if (!mj_find(params, "window", &v) || !mj_int(v, &w) ||
+            !mj_find(params, "index", &v) || !mj_int(v, &idx) ||
+            !mj_find(params, "objectId", &v) || !mj_int(v, &object) || object <= 0 || object > 4294967295LL)
+            goto done;
+        m = menu_for(g, (int) w, 0);
+        if (m) for (k = 0; k < m->nitems; k++)
+            if (m->items[k].index == idx && menu_selectable(&m->items[k]))
+                m->items[k].object_id = object;
     } else if (!strcmp(method, "menu_end")) {
         mj_val wv, pv;
         long long w;
@@ -2820,7 +2846,7 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
         if (!m)
             return 0;
         for (i = 0; i < m->nitems; i++)
-            if (m->items[i].accel > 0)
+            if (menu_selectable(&m->items[i]))
                 nsel++;
         mj_key(b, "decision");
         mj_obj(b);
@@ -2841,19 +2867,17 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
         if (g->pending.how == 2) {
             mj_key(b, "selection");
             mj_obj(b);
-            mj_key(b, "min"); mj_intv(b, 0);
+            mj_key(b, "min"); mj_intv(b, nsel ? 1 : 0); /* no selection uses explicit cancel */
             mj_key(b, "max"); mj_intv(b, (long long) nsel);
             mj_endobj(b);
         }
         mj_key(b, "options");
         mj_arr(b);
         for (i = 0; i < m->nitems; i++) {
-            char idbuf[32];
-            if (m->items[i].accel <= 0)
+            if (!menu_selectable(&m->items[i]))
                 continue;               /* header row: shown, not offered */
-            snprintf(idbuf, sizeof idbuf, "%d", m->items[i].index);
             mj_obj(b);
-            mj_key(b, "id"); mj_strv(b, idbuf);
+            mj_key(b, "id"); mj_intv(b, m->items[i].index);
             mj_key(b, "label"); mj_strv(b, m->items[i].text ? m->items[i].text : "");
             mj_endobj(b);
         }
@@ -2923,11 +2947,10 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
             mj_key(b, "options");
             mj_arr(b);
             for (i = 0; ch[i]; i++) {
-                char idbuf[32], label[8];
-                snprintf(idbuf, sizeof idbuf, "%zu", i);
+                char label[8];
                 snprintf(label, sizeof label, "%c", ch[i]);
                 mj_obj(b);
-                mj_key(b, "id"); mj_strv(b, idbuf);
+                mj_key(b, "id"); mj_intv(b, (long long) i);
                 mj_key(b, "label"); mj_strv(b, label);
                 mj_endobj(b);
             }
@@ -2982,10 +3005,8 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
         mj_key(b, "options");
         mj_arr(b);
         for (i = 0; i < g->pending.ncommands; i++) {
-            char idbuf[32];
-            snprintf(idbuf, sizeof idbuf, "%zu", i);
             mj_obj(b);
-            mj_key(b, "id"); mj_strv(b, idbuf);
+            mj_key(b, "id"); mj_intv(b, (long long) i);
             mj_key(b, "label"); mj_strv(b, g->pending.commands[i]);
             mj_endobj(b);
         }
@@ -3195,7 +3216,7 @@ translate_reply(game_t *g, const char *dec_kind, const char *args,
                 int ok = 0;
                 for (k = 0; k < menu_n; k++)
                     if (m->items[k].index == idx[i] &&
-                        m->items[k].accel > 0)
+                        menu_selectable(&m->items[k]))
                         ok = 1;
                 if (!ok) {
                     *err = "choice out of range or not offered";
@@ -3736,7 +3757,7 @@ static size_t
 collect_candidates(game_t *g, const char *action, cand_t *out, size_t cap)
 {
     size_t n = 0, i;
-    for (i = 0; i < g->ninv && n < cap; i++) {
+    for (i = 0; strcmp(action, "pickup") && i < g->ninv && n < cap; i++) {
         const char *label = g->inv[i].label ? g->inv[i].label : "";
         if (!eligible_item(action, label, g->inv[i].category))
             continue;
@@ -3811,10 +3832,11 @@ resolve_item_arg(nhx_t *x, game_t *g, const char *action, const char *args,
                 *emsg = "item needs {id:...} or a name";
                 return -1;
             }
-            for (i = 0; i < g->ninv; i++) {
+            for (i = 0; strcmp(action, "pickup") && i < g->ninv; i++) {
                 if (!strcmp(id, g->inv[i].ref) && eligible_item(action, g->inv[i].label, g->inv[i].category)) {
                     g->operation.item_letter = g->inv[i].letter;
                     g->operation.floor_index = -1;
+                    g->operation.floor_object_id = 0;
                     rc = 0;
                     break;
                 }
@@ -3824,6 +3846,7 @@ resolve_item_arg(nhx_t *x, game_t *g, const char *action, const char *args,
                     if (!strcmp(id, g->floor[i].ref) && eligible_item(action, g->floor[i].label, g->floor[i].category)) {
                         g->operation.item_letter = 0;
                         g->operation.floor_index = (int) i;
+                        g->operation.floor_object_id = g->floor[i].object_id;
                         rc = 0;
                         break;
                     }
@@ -3881,6 +3904,7 @@ resolve_item_arg(nhx_t *x, game_t *g, const char *action, const char *args,
                 if (!strcmp(g->inv[i].ref, pool[hits[0]].ref)) {
                     g->operation.item_letter = g->inv[i].letter;
                     g->operation.floor_index = -1;
+                    g->operation.floor_object_id = 0;
                     return 0;
                 }
             *ecode = "staleReference";
@@ -3898,6 +3922,7 @@ resolve_item_arg(nhx_t *x, game_t *g, const char *action, const char *args,
             }
             g->operation.item_letter = 0;
             g->operation.floor_index = (int) fi;
+            g->operation.floor_object_id = g->floor[fi].object_id;
             return 0;
         }
     }
@@ -4305,35 +4330,27 @@ drive_abort(game_t *g, const char *code, const char *msg)
     return 1;
 }
 
-/* Answer a pickup menu for a resolved floor slot: match the peeked label,
- * never an adjacent row. Returns 1 when answered (keep driving). */
+/* Bind only the chosen perceived object's engine identity. Sorting, naming,
+ * prices and accelerators cannot select another object. Older pins without a
+ * binding fail explicitly; no label/ordinal fallback. */
 static int
 drive_pickup_menu(game_t *g)
 {
     menu_t *m = menu_for(g, g->pending.window, 0);
     size_t k;
-    const char *want;
+    long long want = g->operation.floor_object_id;
     char line[1024];
     mj_Buf b;
-    int idx = -1;
-    if (g->operation.floor_index < 0 ||
-        (size_t) g->operation.floor_index >= g->nfloor)
-        return 0;
-    want = g->floor[g->operation.floor_index].label;
-    if (m && want) {
-        for (k = 0; k < m->nitems; k++) {
-            if (m->items[k].accel <= 0)
-                continue;
-            if (m->items[k].text && !strcmp(m->items[k].text, want)) {
-                idx = m->items[k].index;
-                break;
-            }
-        }
-        menu_clear(m);
-        m->used = 0;
+    int idx = -1, bindings = 0, matches = 0;
+    if (want <= 0) return -1;
+    if (m) for (k = 0; k < m->nitems; k++) {
+        if (!menu_selectable(&m->items[k])) continue;
+        bindings += m->items[k].object_id > 0;
+        if (m->items[k].object_id == want) { idx = m->items[k].index; matches++; }
     }
-    if (idx < 0)
-        return 0;
+    if (!bindings) return -1;
+    if (idx < 0 || matches != 1) return 0;
+    menu_clear(m); m->used = 0;
     mj_init(&b);
     mj_obj(&b);
     mj_key(&b, "picks");
@@ -4353,7 +4370,7 @@ drive_pickup_menu(game_t *g)
              g->pending.id, b.buf);
     mj_free(&b);
     if (send_engine(g, line) < 0)
-        return 0;
+        return -2;
     pending_clear(g);
     return 1;
 }
@@ -4415,10 +4432,11 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
         if (!strcmp(g->pending.kind, "menu")) {
             if (!strcmp(action, "pickup") &&
                 g->operation.floor_index >= 0) {
-                if (drive_pickup_menu(g))
-                    continue;
-                if (!drive_abort(g, "staleReference",
-                                 "that ground item is no longer here"))
+                int picked = drive_pickup_menu(g);
+                if (picked == 1) continue;
+                if (picked == -2) return envelope_error(g, req_id, action, "engineError", "write failed");
+                if (!drive_abort(g, picked < 0 ? "itemMappingUnavailable" : "staleReference",
+                                 picked < 0 ? "this pinned engine did not bind the offered objects; no item was guessed" : "the chosen object is not uniquely offered here"))
                     return envelope_error(g, req_id, action, "engineError",
                                           "write failed");
                 continue;

@@ -746,6 +746,8 @@ headless_add_menu(winid window, const glyph_info *glyphinfo,
     jb_int(&jb, w->nitems - 1);
     jb_key(&jb, "accel");
     jb_int(&jb, ch);
+    jb_key(&jb, "selectable");
+    jb_bool(&jb, identifier && identifier->a_void);
     jb_key(&jb, "groupacc");
     jb_int(&jb, gch);
     jb_key(&jb, "attr");
@@ -763,6 +765,27 @@ headless_add_menu(winid window, const glyph_info *glyphinfo,
     jb_end_obj(&jb);
     if (jb.ok)
         rpc_notify("menu_item", jb.buf);
+    jb_free(&jb);
+}
+
+/* The object-menu builder calls this immediately after adding an object row.
+ * Only already-offered object identity is reported; no pointer, hidden object
+ * type, BUC, charge count or container contents are exposed. */
+void
+headless_menu_object(winid window, const struct obj *obj)
+{
+    JBuf jb;
+    if (strcmp(windowprocs.name, "headless") || !obj || !obj->o_id
+        || window <= 0 || window >= HL_MAXWIN || !hl_wins[window].used
+        || !hl_wins[window].nitems
+        || hl_wins[window].items[hl_wins[window].nitems - 1].id.a_obj != obj)
+        return; /* A failed add_menu must not bind the previous row. */
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "window"); jb_int(&jb, window);
+    jb_key(&jb, "index"); jb_int(&jb, hl_wins[window].nitems - 1);
+    jb_key(&jb, "objectId"); jb_int(&jb, obj->o_id);
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("menu_object", jb.buf);
     jb_free(&jb);
 }
 
@@ -825,6 +848,16 @@ headless_select_menu(winid window, int how, MENU_ITEM_P **menu_list)
     ncounts = j_parse_int_array(p, counts, 1024);
     if (ncounts < 0)
         ncounts = 0;
+    /* Invalid raw selections are never reinterpreted as another menu row. */
+    if ((how == PICK_NONE && npicks) || (how == PICK_ONE && npicks > 1)) {
+        free(r); return -1;
+    }
+    for (i = 0; i < npicks; i++) {
+        if (picks[i] < 0 || picks[i] >= w->nitems
+            || !w->items[(int) picks[i]].id.a_void) {
+            free(r); return -1;
+        }
+    }
     if (npicks > 0)
         mi = *menu_list = (menu_item *) alloc((unsigned) npicks
                                               * sizeof(menu_item));

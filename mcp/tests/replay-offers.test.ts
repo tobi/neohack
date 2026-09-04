@@ -24,13 +24,14 @@ for (const kind of ["confirmation", "command", "menu"])
           });
           expect(g.error).toBeUndefined();
         }
-        // Actual two-object engine menu. Current pickup's label binding can decline
-        // this menu (separately tracked conformance gap); no menu physics is mocked.
-        await a.call("act", {
+        // Actual two-object engine menu with an identity-bound successful pick.
+        const pickup = await a.call("act", {
           sessionId: id,
           action: "pickup",
           item: "food ration",
         });
+        expect(pickup.error).toBeUndefined();
+        expect(pickup.outcome.status).toBe("completed");
       } else {
         const p = await a.call("act", { sessionId: id, action: "pray" });
         expect(p.decision.kind).toBe("confirmation");

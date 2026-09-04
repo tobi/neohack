@@ -127,10 +127,22 @@ Examples:
 { replyTo: decision.id, item: { id: selected.id } }
 { replyTo: decision.id, target: 'self' }
 { replyTo: decision.id, confirm: false }
-{ replyTo: decision.id, choose: ['option-id'] }
+{ replyTo: decision.id, choose: [selected.id] } // returned integer choice IDs
 { replyTo: decision.id, text: 'An actual name' }
 { replyTo: decision.id, cancel: true }
 ```
+
+Choice option IDs are integers; send the returned IDs unchanged, without deriving
+IDs from list positions or labels. Multi-selection requires at least one choice;
+use explicit `cancel:true` for none. Item-reference IDs remain opaque strings.
+Older recorded/cached receipts keep their original representation; a zero-input
+`get_state` returns the current standing offer without rewriting the receipt.
+
+Pickup selects only perceived floor objects. New engine pins bind menu rows to
+object identities even when rows have no accelerators, are sorted, or have
+identical display labels. An older pin without bindings returns
+`itemMappingUnavailable` for targeted menu pickup rather than guessing another
+object. Saved pins are not automatically upgraded.
 
 Use the offered decision kind and limits. Inventory letters and raw command
 indices are not public controls. A target is not speech. Eligibility does not

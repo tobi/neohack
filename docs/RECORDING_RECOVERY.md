@@ -77,10 +77,13 @@ file and directory durability precede sending an answer to the engine.
 Resume validates every answer's id, shape and known offered values against the
 actual waiting input (command indices, nonempty yn choice sets, menu options
 and selection cardinality). Explicit cancellation remains cancellation; empty
-choice domains are not guessed. Menu replay uses the same accelerator-bearing
-options the current core offers; legacy rows without that information are not
-silently promoted to selectable items. It
-forbids shell/suspend/debug replay, and has a two-minute inner deadline. Mismatch
+choice domains are not guessed. Menu replay uses engine-issued `selectable`
+facts when available; older pins retain only their supported accelerator-bearing
+options. Explicit false selectability overrides an accelerator. Pending-context
+fingerprints include new row/object bindings when present, without changing the
+fingerprint format of older pins. Targeted floor bindings are persisted in the
+optional private `floorObjectId` field; missing bindings are not guessed.
+Resume forbids shell/suspend/debug replay and has a two-minute inner deadline. Mismatch
 or early exit aborts the owned child rather than feeding an engine default or
 publishing a partial replay. Pending game decisions are aborted rather than
 implicitly answered when an interactive handle is retired.

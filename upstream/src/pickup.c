@@ -1140,6 +1140,11 @@ query_objlist(const char *qstr,        /* query string */
                          (puzzling_count) ? doname_with_price_and_cgender(curr)
                                           : doname_with_price(curr),
                          MENU_ITEMFLAGS_NONE);
+#ifdef HEADLESS_GRAPHICS
+                /* Bind this exact offered row while its identifier is known
+                 * to be an object, never by casting arbitrary menu ANY_Ps. */
+                headless_menu_object(win, curr);
+#endif
                 first = FALSE;
             }
         }

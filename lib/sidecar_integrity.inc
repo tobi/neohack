@@ -12,6 +12,9 @@ pending_signature(game_t *g, char out[32])
     mj_strv(&b, g->pending.choices ? g->pending.choices : "");
     mj_intv(&b, g->pending.def); mj_intv(&b, g->pending.window); mj_intv(&b, g->pending.how);
     for (i = 0; i < g->pending.ncommands; i++) mj_strv(&b, g->pending.commands[i]);
+    if (g->operation.floor_object_id > 0) {
+        mj_strv(&b, "floorBindingV1"); mj_intv(&b, g->operation.floor_object_id);
+    }
     if (!strcmp(g->pending.kind, "menu")) for (i = 0; i < MAX_MENU_WINDOWS; i++) {
         menu_t *m = &g->menus[i];
         if (!m->used || m->window != g->pending.window) continue;
@@ -19,6 +22,10 @@ pending_signature(game_t *g, char out[32])
         for (k = 0; k < m->nitems; k++) {
             mj_intv(&b, m->items[k].index); mj_intv(&b, m->items[k].accel); mj_intv(&b, m->items[k].glyph);
             mj_strv(&b, m->items[k].text ? m->items[k].text : "");
+            if (m->items[k].selectable >= 0 || m->items[k].object_id > 0) {
+                mj_strv(&b, "menuBindingV1");
+                mj_intv(&b, m->items[k].selectable); mj_intv(&b, m->items[k].object_id);
+            }
         }
     }
     mj_endarr(&b);
@@ -89,7 +96,7 @@ sidecar_validate(game_t *g, const char *text)
     if (error) return error;
     if (!mj_find(text, "operation", &v)) return "missing operation state";
     if (!mj_is_null(v)) {
-        static const char *const fields[] = { "action", "args", "phase", "decisionId", "decKind", "promptSignature", "decSynthetic", "keypos", "cmdkey", "dirCode", "itemLetter", "floorIndex", "selfAllowed", "letterAnswers", NULL };
+        static const char *const fields[] = { "action", "args", "phase", "decisionId", "decKind", "promptSignature", "decSynthetic", "keypos", "cmdkey", "dirCode", "itemLetter", "floorIndex", "floorObjectId", "selfAllowed", "letterAnswers", NULL };
         static const char *const words[] = { "action", "phase", "decisionId", "decKind", NULL };
         static const size_t max[] = { 31, 31, 39, 15 };
         static const char *const numbers[] = { "keypos", "cmdkey", "dirCode", "itemLetter", "floorIndex", "selfAllowed", "letterAnswers", NULL };
@@ -105,6 +112,7 @@ sidecar_validate(game_t *g, const char *text)
             if ((modern && !present) || (present && !stored_integer(field, lo[i], hi[i]))) return "missing or invalid operation counter";
         }
         if (modern && (!mj_find(v.p, "decSynthetic", &field) || !mj_find(v.p, "promptSignature", &field))) return "missing operation boundary fields";
+        if (mj_find(v.p, "floorObjectId", &field) && !stored_integer(field, 0, 4294967295LL)) return "invalid floor object binding";
         if (mj_find(v.p, "promptSignature", &field) && !stored_string(field, 0, 31)) return "invalid prompt fingerprint";
         if (mj_find(v.p, "decSynthetic", &field) && !mj_bool(field, &flag)) return "invalid synthetic decision flag";
         if (!mj_find(v.p, "args", &field) || *field.p != '{') return "invalid operation arguments";

@@ -116,9 +116,16 @@ not proof of death or victory. `session_ended {reason}` is a transport/window
 closure notification and is not equivalent to `game_ended`.
 
 `menu_start {window, behavior}` / `menu_item {window, index, accel,
-groupacc, attr, color, text, itemflags, glyph?}` / `menu_end {window,
+groupacc, attr, color, text, itemflags, glyph?, selectable?}` / `menu_end {window,
 prompt}` — items precede the pick request; picks are **ordinal indices**,
-never pointers (the port keeps the `ANY_P`s).
+never pointers (the port keeps the `ANY_P`s). New pins report `selectable` from
+the engine identifier, independently of accelerator assignment. Object-list
+builders additionally emit `menu_object {window,index,objectId}` immediately
+after the corresponding offered row. That ID is the same private identity as
+in perception, not a pointer or a hidden item property. The adapter binds a
+chosen floor object by identity, never by label or row order. Older pins without
+these additive fields retain only supported legacy choices; missing object
+bindings are an explicit limitation, not an inferred match.
 
 `snapshot {full:true,cells}` / `map_delta {full:false,cells}` publish the
 window port's shadow map. Cells carry x/y, glyph, ttychar, framecolor, cmap,
