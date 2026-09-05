@@ -1,7 +1,8 @@
 /* Core-only WASM filesystem hooks. One semantic context owns this module.
  * Browser durable storage is guarded by an origin Web Lock before this module
  * is entered. MEMFS-only mode explicitly advertises volatile persistence.
- * All native pre-input fsync boundaries await IDBFS, not just end-of-action.
+ * All native pre-input fsync boundaries await a storage transaction, not just
+ * end-of-action. The host persists opaque compressed filesystem blocks.
  */
 #include <emscripten.h>
 #include <errno.h>

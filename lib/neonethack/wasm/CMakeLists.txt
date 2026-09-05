@@ -16,9 +16,9 @@ add_executable(neonethack-core ${CORE_SOURCES})
 target_include_directories(neonethack-core PRIVATE include src)
 target_compile_definitions(neonethack-core PRIVATE fsync=nnh_wasm_fsync flock=nnh_wasm_flock)
 target_compile_options(neonethack-core PRIVATE -Wall -Wextra)
-target_link_options(neonethack-core PRIVATE --no-entry -lidbfs.js
+target_link_options(neonethack-core PRIVATE --no-entry
   "-sEXPORTED_FUNCTIONS=['_nnh_wasm_open','_nnh_wasm_request','_nnh_wasm_close','_malloc','_free']"
-  "-sEXPORTED_RUNTIME_METHODS=['ccall','FS','IDBFS']")
+  "-sEXPORTED_RUNTIME_METHODS=['ccall','FS','MEMFS']")
 
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/wasm/engine-sources.txt" ENGINE_SOURCES)
 list(TRANSFORM ENGINE_SOURCES PREPEND "engine/")

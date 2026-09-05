@@ -64,18 +64,34 @@ to disk. Discovery reports `durability:"none"`.
 
 ### `indexeddb`
 
-Requires IndexedDB and Web Locks in a secure browser context (HTTPS or localhost).
+Requires IndexedDB, Web Locks and gzip Compression/Decompression Streams in a
+secure browser context (HTTPS or localhost).
 The store name is 1–64 ASCII letters, digits, hyphens or underscores. Each name
 has a distinct origin-local database and an exclusive Web Lock held for the
 runtime's lifetime. A competing worker/tab is refused; it does not take over or
 silently fall back to memory. Explicitly close the transport to release ownership.
 
-Each native C `fsync` boundary awaits an IndexedDB transaction, including the
+Each native C `fsync` boundary awaits committed IndexedDB storage, including the
 **pre-input** journal/reservation boundaries. Persistence is not deferred to an
-unload handler or to the end of the action. Millisecond filesystem timestamps
-are made monotonic per write so IDBFS cannot mistake two updates in the same
-millisecond for the same file. The unchanged C integrity checks still reject
-corrupt history and uncertain boundaries.
+unload handler or to the end of the action. Files use content-addressed 64 KiB
+blocks, gzip-compressed when smaller. Appends process only changed blocks;
+unchanged history is neither rewritten nor recompressed. A strict-durability
+transaction atomically commits file manifests, new blocks and removal of blocks
+that no file references. An unchanged boundary needs no additional transaction.
+Compression completes before the transaction opens, and acknowledgement waits
+for transaction completion. A failed transaction poisons the owner until reload.
+
+Block hashes, sizes, gzip trailers, manifest structure and references are checked
+on load; damaged stores are rejected without repair or truncation. Millisecond
+timestamps remain monotonic for the C integrity checks. Receipt compaction removes
+only duplicate sidecar responses whose exact bytes have reached the authoritative
+perception journal. Reservations and complete historical receipts remain intact,
+including receipts older than the in-memory cache.
+
+The block format uses the database `/neonethack/<name>` (schema version 22)
+and exclusive `neonethack:v1:<name>` Web Lock. A schema upgrade deletes old
+stores and creates empty current-format stores. Development saves are disposable;
+there is no migration, legacy decoder or parallel legacy database.
 
 Discovery reports `durability:"indexeddb-transaction"`, not native fsync or a
 guarantee against browser eviction, storage clearing, device failure or every
