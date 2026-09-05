@@ -2,6 +2,9 @@
 /* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985. */
 /*-Copyright (c) Robert Patrick Rankin, 2011. */
 /* NetHack may be freely redistributed.  See license for details. */
+/* Modified for neonethack 2026-09-05: report witnessed door lock state after
+ * successful locking/unlocking or explicit trap-disarming feedback.
+ * See CHANGES.neonethack.md; original NGPL notices retained. */
 
 #include "hack.h"
 

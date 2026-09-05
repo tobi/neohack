@@ -29,6 +29,13 @@
 #define mj_rawv nnh_private_mj_rawv
 #define nnh_object_next nnh_private_object_next
 #define nnh_schema_valid nnh_private_schema_valid
+#define nnh_terrain_names nnh_private_terrain_names
+#define nnh_compass_names nnh_private_compass_names
+#define nnh_resolve_cell nnh_private_resolve_cell
+#define nnh_emit_basis nnh_private_emit_basis
+#define nnh_emit_gate nnh_private_emit_gate
+#define nnh_emit_cell_actions nnh_private_emit_cell_actions
+#define nnh_emit_neighborhood nnh_private_emit_neighborhood
 #define nhx_open nnh_private_open
 #define nhx_call nnh_private_call
 #define nhx_free nnh_private_free

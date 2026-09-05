@@ -21,6 +21,9 @@ owned project code. The repository's publication/license review remains open.
   interruption events from that deferred reset; game state/rules are unchanged.
 - `src/end.c`: terminal and lifesaving events, distinguished from one another.
 - `src/pickup.c`: identity metadata for currently offered object menu entries.
+- `src/lock.c` (2026-09-05): report witnessed door lock state after successful
+  locking/unlocking or explicit trap-disarming feedback. No hidden lock-state
+  query is exposed; the headless event follows actual player-visible evidence.
 - `src/mdlib.c`, `sys/unix/unixmain.c`: deterministic seeded headless startup and
   private port startup arguments. Entropy fallback remains when no seed is set.
 - `sys/unix/Makefile.src`, `sys/unix/hints/include/multiw-2.500`: headless objects

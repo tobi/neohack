@@ -29,8 +29,11 @@ It runs C, native Node, WASM and sandboxed browser integration tests and an
 installed public C client. It then independently extracts the finished archives,
 checks every source/runtime hash and artifact inventory against the actual SDK,
 compares shipped notices with their included source, installs the npm tar
-into a fresh consumer, runs native/WASM/MCP gameplay and an installed CMake/C
-client, and rebuilds/retests the extracted source without the builder's outputs.
+into a fresh consumer, typechecks every public TypeScript entrypoint, runs
+native/WASM gameplay, WebMCP export registration and the installed MCP executable
+link, runs an installed CMake/C client, and rebuilds/retests the extracted source
+without the builder's outputs. Browser integration runs from the source rebuild;
+this does not claim a separate browser-bundler test of the installed npm tar.
 npm dependencies are installed from the lock file
 with dependency lifecycle scripts disabled. Compilation remains native/WASM C;
 there is no JS rules implementation.
@@ -99,6 +102,34 @@ new engine files with `npm run sources:update`, then review the diff. Ordinary
 builds and source-archive consumers do not require Git. It is not an engine pin
 or a game-history migration mechanism.
 
+## Public repository is a separate artifact
+
+The library previews deliberately omit `example/pixel-bun/`. A public Git
+repository would **not** omit those tracked files automatically. In particular,
+the pixel client's LimeZu character sprites have supplied terms prohibiting asset
+redistribution; its original creature-template exports also await an owner license
+decision. Review `example/pixel-bun/art/ATTRIBUTION.md` in the checkout. Obtain
+explicit source-redistribution permission, replace the art with independently
+licensed assets, or approve a library-only public source tree. Do not infer that
+finished-game use permits publishing extractable source assets.
+
+The intended public destination is `tobi/neonethack`. Package metadata naming that
+repository is not evidence that the checkout's remote points there or that it is
+approved for publication. Inspect the actual remote before any authorized push.
+Review the full tracked tree, including examples and CI, independently of the
+archive allowlists. Ignore rules do not exclude already tracked files.
+
+Review every commit/ref intended for publication, not just the tip. Old commits
+can retain retired applications, local checkpoints, workstation paths and assets
+removed from today's tree. Prefer an explicitly approved, reviewed fresh source
+import if the existing history is unsuitable; preserve the private repository
+rather than rewriting or deleting it as a cleanup shortcut. This document does
+not authorize creating that public import.
+
+Before launch, enable and verify private vulnerability reporting, review the
+root `SECURITY.md` and `CONTRIBUTING.md`, and run the pinned, read-only CI workflow
+on the approved remote. Local success is not a remote CI result.
+
 ## Publication remains a separate owner decision
 
 NetHack's NGPL requires preserving notices, marking changes, applying its terms
@@ -114,10 +145,12 @@ choice. Complete the remaining release audit and owner review before changing
 
 ### Owner release checklist
 
-1. Choose an explicit license and scope for independently owned code. Retain
-   NetHack's terms for its derivatives and every third-party notice; seek legal
-   review if the combined/standalone boundary is unclear. This document makes
-   no choice or grant for the owner.
+1. Choose an explicit license and scope for independently owned code, including
+   original example art/template exports. Resolve restricted third-party sprite
+   redistribution or exclude/replace those assets in the approved source tree.
+   Retain NetHack's terms for its derivatives and every third-party notice; seek
+   legal review if the combined/standalone boundary is unclear. This document
+   makes no choice or grant for the owner.
 2. Approve the exact repository, visibility and **source tree/history** to make
    public. A clean candidate tree does not prove an existing repository's old
    commits are publishable. Never publish preserved local history, aliases,
