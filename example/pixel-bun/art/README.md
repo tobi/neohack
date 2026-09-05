@@ -39,7 +39,8 @@ with their exact line and column.
 | --- | --- | --- | --- |
 | `.` | Room floor | `#` | Corridor |
 | `-`, `\|` | Wall | space | Unknown |
-| `+` | Closed door | `/` | Open door |
+| `+` | Horizontal closed door | `/` | Horizontal open door |
+| `D` | Vertical closed door | `d` | Vertical open door |
 | `<` | Stairs up | `>` | Stairs down |
 | `~` | Water | `}` | Lava |
 | `{` | Fountain | `_` | Altar |

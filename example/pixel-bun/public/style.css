@@ -1076,6 +1076,24 @@ progress::-moz-progress-bar {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+.portal-entering .intro-title {
+  opacity: 0.22;
+  transform: translate(-50%, -8px);
+  transition:
+    opacity 180ms steps(3),
+    transform 360ms steps(6);
+}
+.portal-entering .intro-controls {
+  opacity: 0.45;
+  transition: opacity 180ms steps(3);
+}
+.portal-entering #intro-instruction {
+  color: #f0ce82;
+  letter-spacing: 2px;
+  text-shadow:
+    2px 2px #101a1e,
+    0 0 8px #8c7444;
+}
 .role-card > span > span {
   font-size: 13px;
 }
@@ -1386,3 +1404,34 @@ dialog p {
     animation: none;
   }
 }
+
+/* Quiet field notes remain part of the world while the drawer is closed. */
+#journal-preview { display: flex; flex-direction: column; position: absolute; right: 22px; bottom: 155px; width: min(320px, calc(100vw - 32px)); z-index: 6; color: #c5c9b6; text-align: right; pointer-events: none; font-size: 14px; text-shadow: 1px 1px #101819; }
+#recent-messages p { margin: 5px 0; opacity: .65; }
+#recent-messages p:first-child { opacity: .4; }
+#recent-messages p:last-child { opacity: .85; }
+.journal-preview-tools { order: -1; display: flex; justify-content: flex-end; height: 36px; }
+#journal-preview button { pointer-events: auto; width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 10px; border: 0; background: transparent; box-shadow: none; }
+#journal-preview button span { display: grid; place-items: center; width: 24px; height: 24px; background: #172123; border: 1px solid #66735f; font-size: 16px; line-height: 1; }
+#journal-preview button:hover span { border-color: #d1d4b2; }
+pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([hidden])) #journal-preview { display: none; }
+#direction-target { position: absolute; z-index: 18; transform: translate(-50%, -84px); width: 168px; }
+.target-arrows { display: grid; grid-template: repeat(3, 48px) / repeat(3, 48px); gap: 12px; }
+.target-arrows button { padding: 0; min-width: 44px; font-size: 26px; color: #eee4b8; background: #263431ed; border: 2px solid #a6ad7c; box-shadow: 3px 3px #101819; }
+.target-arrows button:hover, .target-arrows button:focus-visible { background: #53614b; outline: 2px solid #eee4b8; }
+.target-caption { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); width: 250px; text-align: center; color: #eee4b8; background: #172123; padding: 6px; }
+.target-extra { display: flex; justify-content: center; gap: 4px; margin-top: 10px; }
+.target-extra button { min-height: 44px; padding: 6px; background: #172123; }
+@media (max-width: 600px) {
+  #journal-preview { right: 12px; top: max(138px, calc(env(safe-area-inset-top) + 128px)); bottom: auto; width: min(260px, calc(100vw - 24px)); font-size: 12px; line-height: 18px; }
+  #recent-messages p { margin: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (max-height: 500px) and (min-width: 601px) {
+  #journal-preview { top: 80px; bottom: auto; right: 12px; width: 260px; font-size: 12px; line-height: 18px; }
+  #recent-messages p { margin: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+
+.journal-repeat { white-space: nowrap; color: #e3c88c; font-size: .85em; }
+#contextual-stairs { position: fixed; top: 70%; left: 50%; transform: translate(-50%, -50%); z-index: 7; display: flex; gap: 12px; }
+#contextual-stairs[hidden], pixel-nethack:has(.rightbar:not([hidden])) #contextual-stairs, pixel-nethack:has(#menu[open]) #contextual-stairs { display: none; }
+#contextual-stairs button { min-height: 56px; min-width: 200px; padding: 14px 24px; font-size: 18px; color: #f0e4bd; background: #283a30; border: 2px solid #96a77c; box-shadow: 3px 3px #101819; }

@@ -28,6 +28,12 @@ test("workshop layout preserves coordinates and explicitly distinguishes corrido
     ],
   );
   assert.deepEqual(result.actors, [{ x: 3, y: 1, mark: "@" }]);
+  assert.deepEqual(parseLayout("+/Dd").cells.map(c => c.terrain), [
+    { type: "closedDoor", orientation: "horizontal" },
+    { type: "openDoor", orientation: "horizontal" },
+    { type: "closedDoor", orientation: "vertical" },
+    { type: "openDoor", orientation: "vertical" },
+  ]);
   assert.throws(
     () => parseLayout("...\n.!."),
     /Unsupported layout symbol "!" at line 2, column 2/,
@@ -140,7 +146,8 @@ test("observed raised doors share live/workshop anchors and bounded sprite footp
     let cases = 0;
     for (const [row, [label, neighbors]] of axes.entries()) {
       for (const [col, type] of states.entries()) {
-        const cell = { x: 1, y: 1, terrain: { type } };
+        const orientation = [0, 2, 3].includes(row) ? "vertical" : "horizontal";
+        const cell = { x: 1, y: 1, terrain: { type, orientation } };
         const cells = [
           cell,
           ...neighbors.map(([dx, dy]) => ({
@@ -221,12 +228,12 @@ test("observed raised doors share live/workshop anchors and bounded sprite footp
       for (const row of [2, 3])
         assert(
           profiles[row * 3 + state] === profiles[state],
-          "one side jamb retains the side profile",
+          "disclosed vertical axis retains the side profile with one jamb",
         );
       for (const row of [4, 5, 6])
         assert(
           profiles[row * 3 + state] === profiles[3 + state],
-          "front/unknown jamb uses front profile",
+          "disclosed horizontal axis retains the front profile with missing jambs",
         );
     }
     for (const offset of [0, 3])

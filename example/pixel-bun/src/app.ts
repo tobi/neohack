@@ -117,7 +117,7 @@ class PixelNethack extends HTMLElement {
   private tilePanel: HTMLElement | null = null;
   private panel = "inventory";
   private selectedItem: ItemRef | null = null;
-  private journal: { turn: number; text: string }[] = [];
+  private journal: { turn: number; lastTurn: number; text: string; count: number }[] = [];
   private lastFrame = "";
   private decisionIdentity = "";
   private menuReturn: HTMLElement | null = null;
@@ -130,6 +130,7 @@ class PixelNethack extends HTMLElement {
     );
   };
   private introAuto: ReturnType<typeof setInterval> | undefined;
+  private portalEntering = false;
   private stopMovement = () => {
     this.movement.stop();
     this.introMovement.stop();
@@ -143,6 +144,7 @@ class PixelNethack extends HTMLElement {
       !this.game &&
       this.titleReady &&
       !this.busy &&
+      !this.portalEntering &&
       this.metadataHealthy &&
       !document.hidden &&
       !this.querySelector("dialog[open], .hud-menu[open]")
@@ -158,7 +160,18 @@ class PixelNethack extends HTMLElement {
     const result = this.map.moveIntro(direction);
     if (result === "entered") {
       this.stopMovement();
-      this.newAdventure();
+      this.portalEntering = true;
+      this.classList.add("portal-entering");
+      this.text("#intro-instruction", "The threshold answers…");
+      this.controls();
+      this.map.enterIntroPortal(() => {
+        if (!this.portalEntering) return;
+        this.portalEntering = false;
+        this.classList.remove("portal-entering");
+        this.text("#intro-instruction", "Walk into the light");
+        this.controls();
+        if (this.isConnected && !this.game) this.newAdventure();
+      });
       return false;
     }
     return result === "moved";
@@ -186,7 +199,16 @@ class PixelNethack extends HTMLElement {
     this.show(".rightbar", false);
   }
   private visibilityChanged = () => {
-    if (document.hidden) this.stopMovement();
+    if (document.hidden) {
+      this.stopMovement();
+      if (this.portalEntering) {
+        this.portalEntering = false;
+        this.classList.remove("portal-entering");
+        this.text("#intro-instruction", "Walk into the light");
+        this.map.resetIntro();
+        this.controls();
+      }
+    }
   };
   private focusChanged = (e: FocusEvent) => {
     if (
@@ -266,6 +288,8 @@ class PixelNethack extends HTMLElement {
           <nav class="side-nav" aria-label="Adventure views"><button data-view="inventory">Backpack <span id="inventory-count"></span><kbd>i</kbd></button><button data-view="surroundings">Surroundings</button><button data-view="journal">Journal</button></nav></div>
         </section>
         <aside class="ground-loot" id="ground-loot" aria-label="On the ground" hidden><h2>On the ground</h2><p>At your feet · choose what to take</p><div id="ground-items"></div></aside>
+        <aside id="journal-preview" aria-label="Recent journal messages"><div id="recent-messages"></div><div class="journal-preview-tools"><button id="toggle-journal-preview" aria-label="Collapse recent messages" aria-expanded="true" aria-controls="recent-messages" title="Collapse recent messages"><span aria-hidden="true">⌃</span></button><button data-view="journal" aria-label="Expand journal" title="Open full journal"><span aria-hidden="true">↗</span></button></div></aside>
+        <div id="contextual-stairs" hidden></div>
         <aside class="rightbar" aria-label="Field notes" hidden><button id="close-panel" aria-label="Close field notes">×</button><div class="section-title"><h2 id="panel-heading" tabindex="-1">Your backpack</h2><span id="panel-count"></span></div><div id="panel-body"></div><details id="accessible-map" hidden><summary>Read the perceived map as text</summary><pre id="map-text"></pre><p>Remembered terrain and currently perceived occupants.</p></details></aside>
         <div class="sr-only"><span id="inspect-text" role="status"></span><span id="latest-message" role="status"></span></div>
       </main>
@@ -648,6 +672,15 @@ class PixelNethack extends HTMLElement {
     this.querySelectorAll<HTMLElement>("[data-guide]").forEach(
       (b) => (b.onclick = () => this.guide()),
     );
+    this.$("#toggle-journal-preview").onclick = () => {
+      const button = this.$("#toggle-journal-preview");
+      const expanded = button.getAttribute("aria-expanded") !== "true";
+      button.setAttribute("aria-expanded", String(expanded));
+      button.setAttribute("aria-label", expanded ? "Collapse recent messages" : "Expand recent messages");
+      button.title = expanded ? "Collapse recent messages" : "Expand recent messages";
+      button.innerHTML = '<span aria-hidden="true">' + (expanded ? "⌃" : "⌄") + "</span>";
+      this.show("#recent-messages", expanded);
+    };
     this.querySelectorAll<HTMLElement>("[data-view]").forEach(
       (b) =>
         (b.onclick = () => {
@@ -753,6 +786,7 @@ class PixelNethack extends HTMLElement {
       "close",
       () => {
         if (!this.game) this.map.resetIntro();
+        this.controls();
         this.menuReturn?.focus();
       },
     );
@@ -852,12 +886,16 @@ class PixelNethack extends HTMLElement {
       "adventures-button",
     ])
       (this.$(`#${id}`) as HTMLButtonElement).disabled =
-        this.busy || !this.titleReady || !this.metadataHealthy;
+        this.busy ||
+        this.portalEntering ||
+        !this.titleReady ||
+        !this.metadataHealthy;
     (this.$("#retry") as HTMLButtonElement).disabled = this.busy;
     this.querySelectorAll<HTMLButtonElement>("#menu [data-operation]").forEach(
       (b) => (b.disabled = this.busy),
     );
     this.setAttribute("aria-busy", String(this.busy));
+    this.renderStairs();
   }
   private render() {
     const state = this.game?.state;
@@ -926,7 +964,13 @@ class PixelNethack extends HTMLElement {
       ]);
       if (frameKey !== this.lastFrame) {
         for (const text of this.lastFrame ? actionMessages(state) : o.heard)
-          if (text.trim()) this.journal.push({ turn: o.turn, text });
+          if (text.trim()) {
+            const previous = this.journal.at(-1);
+            if (previous?.text === text) {
+              previous.count++;
+              previous.lastTurn = o.turn;
+            } else this.journal.push({ turn: o.turn, lastTurn: o.turn, text, count: 1 });
+          }
         this.lastFrame = frameKey;
       }
       this.text(
@@ -935,6 +979,7 @@ class PixelNethack extends HTMLElement {
           o.heard.at(-1) ??
           "Take a moment. Your next step is yours to choose.",
       );
+      this.$("#recent-messages").innerHTML = this.journal.slice(-3).map(entry => `<p>${this.journalText(entry)}</p>`).join("");
       const status = state.outcome.status;
       this.text(
         "#inspect-text",
@@ -1118,11 +1163,11 @@ class PixelNethack extends HTMLElement {
       }
       body.append(list);
     } else {
-      this.text("#panel-count", `${this.journal.length} NOTES`);
+      this.text("#panel-count", `${this.journal.reduce((sum, entry) => sum + entry.count, 0)} NOTES`);
       for (const entry of [...this.journal].reverse()) {
         const p = document.createElement("p");
         p.className = "journal-entry";
-        p.innerHTML = `<small>TURN ${entry.turn}</small>${escape(entry.text)}`;
+        p.innerHTML = `<small>TURN ${entry.turn}${entry.lastTurn !== entry.turn ? `–${entry.lastTurn}` : ""}</small>${this.journalText(entry)}`;
         body.append(p);
       }
       if (!this.journal.length)
@@ -1133,6 +1178,30 @@ class PixelNethack extends HTMLElement {
         "Notes shown since opening this adventure. The saved game retains its own history.";
       body.append(note);
     }
+  }
+  private journalText(entry: { text: string; count: number }) {
+    return escape(entry.text) + (entry.count > 1
+      ? ` <span class="journal-repeat" aria-label="Repeated ${entry.count} times">×${entry.count}</span>` : "");
+  }
+  private renderStairs() {
+    const host = this.$("#contextual-stairs");
+    host.replaceChildren();
+    this.show("#contextual-stairs", false);
+    const game = this.game, n = game?.observation.neighborhood;
+    if (!game || !this.playable() || n?.status !== "available" || n.inputGate.state !== "ready") return;
+    const here = n.cells.find(cell => cell.movement.relation === "here");
+    for (const offer of here?.actions ?? []) {
+      if (offer.method !== "game.climb" || offer.availability !== "attemptable") continue;
+      const revision = n.basis.revision;
+      const button = this.button(offer.arguments.direction === "down" ? "Go downstairs" : "Go upstairs", () => {
+        if (this.game !== game || !this.playable() || game.state.revision !== revision) return;
+        this.stopMovement();
+        void this.run(() => this.executeOffer(game, offer, revision));
+      });
+      button.dataset.direction = offer.arguments.direction;
+      host.append(button);
+    }
+    this.show("#contextual-stairs", !!host.childElementCount);
   }
   private renderGround() {
     const game = this.game,
@@ -1556,10 +1625,43 @@ class PixelNethack extends HTMLElement {
     const d = this.game?.decision,
       dialog = this.querySelector<HTMLDialogElement>("#decision")!;
     if (!d || this.uncertain()) {
+      this.querySelector("#direction-target")?.remove();
       if (dialog.open) dialog.close();
       this.decisionIdentity = "";
       return;
     }
+    if (d.kind === "target" && d.allowedTargets.includes("direction")) {
+      if (dialog.open) dialog.close();
+      if (this.decisionIdentity === d.id && this.querySelector("#direction-target")) return;
+      this.closeMenu();
+      this.closeTile();
+      this.closePanel();
+      this.querySelector("#direction-target")?.remove();
+      this.decisionIdentity = d.id;
+      const target = document.createElement("section");
+      target.id = "direction-target";
+      target.setAttribute("aria-label", d.about ?? "Choose a direction");
+      target.innerHTML = '<p class="target-caption"></p><div class="target-arrows"></div><div class="target-extra"></div>';
+      target.querySelector("p")!.textContent = `${d.action.charAt(0).toUpperCase() + d.action.slice(1)} · ${d.about ?? "Choose a direction"}`;
+      const answer = (direction: string) => void this.run(() => this.game!.answer(d.id, { kind: "target", target: { direction: direction as Compass } }));
+      directions.forEach(([direction, glyph], index) => {
+        const button = this.button(glyph, () => answer(direction));
+        button.setAttribute("aria-label", direction);
+        button.dataset.targetDirection = direction;
+        button.style.gridArea = String(Math.floor((index < 4 ? index : index + 1) / 3) + 1) + " / " + String((index < 4 ? index : index + 1) % 3 + 1);
+        target.querySelector(".target-arrows")!.append(button);
+      });
+      const extra = target.querySelector(".target-extra")!;
+      for (const direction of ["up", "down"]) extra.append(this.button(direction === "up" ? "Above" : "Below", () => answer(direction)));
+      if (d.allowedTargets.includes("self")) extra.append(this.button("Myself", () => void this.run(() => this.game!.answer(d.id, { kind: "target", target: "self" }))));
+      if (d.cancellable) extra.append(this.button("Cancel", () => void this.run(() => this.game!.cancel(d.id))));
+      target.querySelectorAll<HTMLButtonElement>("button").forEach(button => { button.dataset.choice = ""; });
+      this.$("#dungeon").parentElement!.append(target);
+      this.map.draw();
+      target.querySelector<HTMLElement>("button")?.focus();
+      return;
+    }
+    this.querySelector("#direction-target")?.remove();
     this.show("#decision-error", !this.$("#error").hidden);
     this.text("#decision-error", this.$("#error").textContent ?? "");
     if (this.decisionIdentity === d.id && dialog.open) return;
@@ -1707,6 +1809,20 @@ class PixelNethack extends HTMLElement {
     body.querySelector<HTMLElement>("button,input")?.focus();
   }
   private key(e: KeyboardEvent) {
+    const target = this.querySelector<HTMLElement>("#direction-target");
+    if (target && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const keys: Record<string, string> = { ArrowUp: "north", ArrowDown: "south", ArrowLeft: "west", ArrowRight: "east", h: "west", j: "south", k: "north", l: "east", y: "northwest", u: "northeast", b: "southwest", n: "southeast", "<": "up", ">": "down" };
+      if (keys[e.key] || e.key === "Escape") {
+        e.preventDefault();
+        const d = this.game?.decision;
+        if (!e.repeat && d && !this.busy) {
+          if (e.key === "Escape") { if (d.cancellable) void this.run(() => this.game!.cancel(d.id)); }
+          else void this.run(() => this.game!.answer(d.id, { kind: "target", target: { direction: keys[e.key] as Compass } }));
+        }
+        return;
+      }
+      return; // Let focused controls handle Enter/Space/Tab; no gameplay shortcuts.
+    }
     if (e.key === "Escape" && !this.querySelector("dialog[open]")) {
       this.stopMovement();
       this.closePanel();

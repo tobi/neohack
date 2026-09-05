@@ -128,7 +128,9 @@ observation only and may update as exploration reveals terrain.
 Door frames match the wall thickness and rotate as one mesh into the side-wall
 orientation. Closed leaves sit at the visible wall face; open leaves fold against
 the jamb. Bare doorways retain the frame. Apertures do not invent a floor or an
-unseen destination. One observed jamb can select orientation; ties face south.
+unseen destination. Door frame axes come from the shared library's public terrain
+orientation (horizontal/vertical), including remembered doors. They describe the
+frame, not the leaf or travel direction; neighboring cells do not choose the axis.
 
 Draw ground, then wall sprites, then door fixtures, then actors. Known raised
 silhouettes can overlap the dark backdrop; unknown ground stays unpainted. Fog,
@@ -310,6 +312,13 @@ approach, facing the entrance. Overlay four accessible arrow buttons and a brief
 traveler with verified four-direction idle/walk art. Decorative collision belongs
 only to this intro. Crossing the hall threshold opens character creation exactly
 once; no engine session or turn is created until the player submits that form.
+Crossing it first plays a 960 ms authored portal sequence: hard pixel bands wake
+inside the arch, threshold runes answer from the center, the traveler is pulled
+forward on their fixed sprite pivot and dissolves into deterministic two-pixel
+light fragments before a stepped flare closes the scene. Input is locked for the
+sequence, and character creation waits for its completion. This is presentation
+only and reveals no game terrain. Reduced motion uses a short 120 ms two-frame
+transition; hiding the page cancels entry and returns the traveler to the approach.
 An accessible Begin button walks the approach automatically. Cancel returns the
 traveler outside the threshold. Stop movement on blur, menus, visibility loss and
 release. Reduced motion removes interpolation without changing input or entry.
@@ -356,6 +365,11 @@ inspection or focus. All attempts use the API's action offer and observed revisi
 Within the sprite pass, draw ground loot and fixtures first, then all mobile actors
 in foot order. Never suppress a ground object because its cell has an occupant.
 Raised silhouettes extend above their anchor tile instead of resembling floor decals.
+When a unique public creature description shifts to an adjacent cell between frames,
+move its destination sprite across the native pixel grid over 140 ms with a one-pixel
+hop and sort it by its interpolated feet. Duplicate-looking creatures, arrivals,
+departures and longer displacements settle at the newly observed position because the
+protocol exposes no stable monster ID. Page hiding and reduced motion settle at once.
 The current early-creature set has original editable pixel grids for newts, jackals,
 lichen, goblins, kobolds, sewer rats and giant rats. Cat/dog/bat companions retain the
 selected original template assets. Artwork is decorative and cannot identify a
@@ -367,3 +381,28 @@ narration stays in the journal. Confirmed door opening says “kreeek…” abov
 Confirmed strike narration gets a brief local impact; actual player health loss can
 add a 160 ms, two-pixel shake. Never invent hit targets or damage amounts. Reduced
 motion disables both effects. Search feedback and warnings remain visible.
+
+### Direction targeting and quiet journal
+
+Direction decisions use accessible arrows surrounding the player's map anchor,
+with the center left clear. Arrow/vi keys answer once; Escape cancels only when
+supported by the actual decision. Above, below and permitted self targets remain
+explicit. Other decisions, especially confirmations, retain their modal controls.
+A confirmed kick that consumes time gets the short impact/shake, including a miss;
+it does not claim damage. Reduced motion suppresses this feedback.
+When field notes are closed, the last three journal messages sit faintly at bottom
+right on desktop. On mobile, place the preview beneath the top HUD, clear of the
+player, stairs and bottom actions. Show it expanded by default; three single-line
+entries truncate visually, while the full journal retains the original text. A
+small chevron collapses/expands the preview, and a separate small arrow opens the
+full journal. Both have 44px touch targets around compact 24px visible controls.
+Keep the user’s collapsed choice through subsequent actions.
+
+Consecutive identical journal messages share one entry with an accessible ×N repeat
+count and their first/last turns. The preview shows the latest three groups with the
+same counts as the full journal. New occurrences count; rerendering a receipt does not.
+
+When the current public neighborhood offers an attemptable climb at the player's
+cell, show a large Go upstairs/Go downstairs button centered at 70% viewport height.
+It uses that offer and revision and disappears while input is busy, uncertain, ended
+or awaiting a decision. Drawers and menus hide it to keep their controls clear.

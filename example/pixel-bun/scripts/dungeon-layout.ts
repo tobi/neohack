@@ -8,7 +8,9 @@ export const LEGEND: Readonly<Record<string, string>> = {
   ".": "floor",
   "#": "corridor",
   "+": "closedDoor",
+  D: "closedDoor",
   "/": "openDoor",
+  d: "openDoor",
   "<": "stairsUp",
   ">": "stairsDown",
   "~": "water",
@@ -45,7 +47,10 @@ export function parseLayout(source: string) {
         throw new Error(
           `Unsupported layout symbol ${JSON.stringify(mark)} at line ${y + 1}, column ${x + 1}. See art/README.md for the explicit legend.`,
         );
-      if (type !== "unknown") cells.push({ x, y, terrain: { type } });
+      if (type !== "unknown") cells.push({ x, y, terrain: { type,
+        ...(["closedDoor", "openDoor"].includes(type)
+          ? { orientation: mark === "D" || mark === "d" ? "vertical" as const : "horizontal" as const } : {}),
+      } });
       if (mark === "@") actors.push({ x, y, mark });
     }
   return { columns, rows, cells, actors };

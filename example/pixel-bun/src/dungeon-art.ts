@@ -10,7 +10,7 @@ export const RENDERER_VERSION = "masonry-3d-2";
 export interface TerrainCell {
   x: number;
   y: number;
-  terrain: { type: string };
+  terrain: { type: string; orientation?: "horizontal" | "vertical" };
 }
 export interface TerrainOptions {
   seed: string | number;
@@ -27,19 +27,6 @@ export interface TerrainOptions {
 
 const UNKNOWN = new Set(["unknown", "dark", "stone", "unexplored"]);
 const DOORS = new Set(["closedDoor", "openDoor", "doorway"]);
-// Orientation is cosmetic and uses only supplied wall neighbors. A single
-// known jamb is enough at the edge of exploration; ambiguous doors face south.
-function sideDoor(
-  typeAt: (x: number, y: number) => string | undefined,
-  x: number,
-  y: number,
-) {
-  const ns =
-    Number(typeAt(x, y - 1) === "wall") + Number(typeAt(x, y + 1) === "wall");
-  const ew =
-    Number(typeAt(x - 1, y) === "wall") + Number(typeAt(x + 1, y) === "wall");
-  return ns > ew;
-}
 const SURFACES = new Set([
   "wall",
   "floor",
@@ -201,9 +188,10 @@ export function renderTerrain(
     cells.map((cell) => [`${cell.x},${cell.y}`, cell.terrain.type]),
   );
   const typeAt = (x: number, y: number) => known.get(`${x},${y}`);
+  const cellsByPosition = new Map(cells.map(cell => [`${cell.x},${cell.y}`, cell]));
   const joinsWall = (x: number, y: number, vertical: boolean) =>
     typeAt(x, y) === "wall" ||
-    (DOORS.has(typeAt(x, y) ?? "") && sideDoor(typeAt, x, y) === vertical);
+    (DOORS.has(typeAt(x, y) ?? "") && (cellsByPosition.get(`${x},${y}`)?.terrain.orientation === "vertical") === vertical);
   const district = (x: number, y: number) => districtAt(seed, x, y);
   const surface = (x: number, y: number) => {
     const t = typeAt(x, y);
@@ -435,7 +423,7 @@ export function renderTerrain(
         x,
         y,
         cell.terrain.type,
-        sideDoor(typeAt, cell.x, cell.y),
+        cell.terrain.orientation === "vertical",
         palettes[material % palettes.length]!,
         hash(seed, cell.x, cell.y, 10),
       );
@@ -568,14 +556,12 @@ export function renderDoor(
   if (!DOORS.has(cell.terrain.type)) return;
   const seed = seedHash(seedValue),
     p = palettes[hash(seed, 0, 0, 4) % palettes.length]!;
-  const typeAt = (wx: number, wy: number) =>
-    cells.find((other) => other.x === wx && other.y === wy)?.terrain.type;
   drawDoorSprite(
     c,
     x,
     y,
     cell.terrain.type,
-    sideDoor(typeAt, cell.x, cell.y),
+    cell.terrain.orientation === "vertical",
     p,
     hash(seed, cell.x, cell.y, 10),
   );

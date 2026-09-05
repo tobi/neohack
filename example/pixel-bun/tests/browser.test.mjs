@@ -1053,12 +1053,9 @@ test(
       }, direction);
     }
     await page.getByRole("button", { name: "Open door", exact: true }).click();
-    await page.locator("#decision[open]").waitFor();
+    await page.locator("#direction-target").waitFor();
     assert.equal(await page.locator(".action-bubble").count(), 0);
-    await page
-      .locator("#decision-body button")
-      .filter({ hasText: /^↓ south$/ })
-      .click();
+    await page.locator('[data-target-direction="south"]').click();
     await ready(page);
     const door = page.locator(".action-bubble").filter({ hasText: "kreeek…" });
     await door.waitFor();
@@ -1326,6 +1323,7 @@ test("held locked-door bump opens a targeted panel once; touch inspection and lo
 
 test("walk-in welcome teaches directions, stops on release and opens creation only at the hall", async (t) => {
   const { page, errors } = await fixture(t, { touch: true });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   const intro = () =>
     page.evaluate(() => ({
       ...document.querySelector("pixel-nethack").map.intro,
@@ -1354,15 +1352,49 @@ test("walk-in welcome teaches directions, stops on release and opens creation on
     null,
   );
   await page.keyboard.down("ArrowUp");
+  await page.waitForFunction(
+    () => document.querySelector("#dungeon").dataset.portal === "entering",
+  );
+  assert.equal(
+    await page.locator("#menu").getAttribute("open"),
+    null,
+    "character creation waits for the portal sequence",
+  );
+  assert.equal(
+    await page.locator("pixel-nethack").getAttribute("class"),
+    "portal-entering",
+  );
+  const atThreshold = await intro();
+  await page.keyboard.press("ArrowLeft");
+  assert.deepEqual(await intro(), atThreshold, "portal entry locks movement");
+  await page.waitForTimeout(320);
+  const portalProgress = Number(
+    await page.locator("#dungeon").getAttribute("data-portal-progress"),
+  );
+  assert.ok(
+    portalProgress > 0.2 && portalProgress < 0.9,
+    `portal progress should be mid-sequence, received ${portalProgress}`,
+  );
+  await page.screenshot({ path: `${root}/test-results/portal-entry.png` });
   await page.locator("#create-form").waitFor();
   await page.keyboard.up("ArrowUp");
+  assert.equal(
+    await page.locator("#dungeon").getAttribute("data-portal"),
+    "idle",
+  );
+  assert.equal(await page.locator("pixel-nethack").getAttribute("class"), "");
   assert.equal(
     await snapshot(page),
     null,
     "walking is decorative, not engine input",
   );
   await page.keyboard.press("Escape");
+  await page.waitForFunction(
+    (y) => document.querySelector("pixel-nethack").map.intro.y === y,
+    initial.y,
+  );
   assert.equal((await intro()).y, initial.y, "cancel restores the approach");
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 844 });
   const north = page.getByRole("button", {
     name: "Walk north toward the entrance",
@@ -1854,6 +1886,146 @@ test("early creature art stands above terrain and known appearances clear questi
 });
 
 test(
+  "uniquely observed creature steps glide while uncertain changes settle directly",
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await fixture(t);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    const motion = await page.evaluate(() => {
+      const app = document.querySelector("pixel-nethack");
+      const canvas = document.createElement("canvas");
+      const host = document.createElement("div");
+      host.id = "motion-study";
+      host.style.cssText =
+        "position:fixed;inset:0;width:480px;height:320px;background:#171f23";
+      host.append(canvas);
+      document.body.append(host);
+      let inspections = 0;
+      const map = new app.map.constructor(canvas, () => inspections++);
+      map.zoom = 2;
+      const makeWorld = () => {
+        const world = [];
+        for (let y = 1; y <= 8; y++)
+          for (let x = 1; x <= 12; x++)
+            world.push({
+              x,
+              y,
+              terrain: { type: "floor", knowledge: "remembered" },
+            });
+        return world;
+      };
+      const at = (world, x, y) =>
+        world.find((cell) => cell.x === x && cell.y === y);
+      const beforeWorld = makeWorld();
+      at(beforeWorld, 4, 4).occupant = {
+        kind: "ally",
+        mark: "d",
+        color: 3,
+        appearance: "little dog",
+      };
+      // Two indistinguishable public descriptions cannot be paired safely.
+      for (const x of [7, 9])
+        at(beforeWorld, x, 4).occupant = {
+          kind: "creature",
+          mark: "r",
+          color: 3,
+          appearance: "sewer rat",
+        };
+      at(beforeWorld, 3, 7).occupant = {
+        kind: "creature",
+        mark: "B",
+        color: 1,
+        appearance: "bat",
+      };
+      at(beforeWorld, 10, 7).occupant = {
+        kind: "creature",
+        mark: "o",
+        color: 2,
+        appearance: "goblin",
+      };
+      const observation = (world) => ({
+        location: { id: "motion-study", depthLabel: "Study" },
+        you: { x: 6, y: 6 },
+        world,
+      });
+      map.update(observation(beforeWorld), "explorer", "motion:42");
+
+      const afterWorld = makeWorld();
+      at(afterWorld, 5, 4).occupant = structuredClone(
+        at(beforeWorld, 4, 4).occupant,
+      );
+      for (const x of [8, 10])
+        at(afterWorld, x, 4).occupant = {
+          kind: "creature",
+          mark: "r",
+          color: 3,
+          appearance: "sewer rat",
+        };
+      // The bat disappears, this newt appears, and the goblin is too far away.
+      at(afterWorld, 2, 2).occupant = {
+        kind: "creature",
+        mark: ":",
+        color: 2,
+        appearance: "newt",
+      };
+      at(afterWorld, 7, 7).occupant = structuredClone(
+        at(beforeWorld, 10, 7).occupant,
+      );
+      map.update(observation(afterWorld), "explorer", "motion:42");
+      const keys = [...map.actorMotions.keys()];
+      const started = map.actorMotions.get("5,4").started;
+      const petCell = at(afterWorld, 5, 4);
+      const halfway = map.actorPosition(petCell, started + 70);
+      map.draw(started + 70);
+      const settled = map.actorPosition(petCell, started + 140);
+      const remaining = map.actorMotions.size;
+      map.destroy();
+      return { keys, halfway, settled, remaining, inspections };
+    });
+    assert.deepEqual(motion.keys, ["5,4"]);
+    assert.deepEqual(motion.halfway, { x: 4.75, y: 4, hop: 1 });
+    assert.deepEqual(motion.settled, { x: 5, y: 4, hop: 0 });
+    assert.equal(motion.remaining, 0);
+    assert.equal(motion.inspections, 0, "rendering cannot issue game input");
+    await page
+      .locator("#motion-study")
+      .screenshot({ path: `${root}/test-results/creature-motion-2x.png` });
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const reduced = await page.evaluate(() => {
+      const app = document.querySelector("pixel-nethack");
+      const canvas = document.createElement("canvas");
+      const host = document.createElement("div");
+      host.style.cssText = "width:320px;height:240px";
+      host.append(canvas);
+      document.body.append(host);
+      const map = new app.map.constructor(canvas, () => {});
+      const firstWorld = [4, 5].map((x) => ({
+        x,
+        y: 4,
+        terrain: { type: "floor", knowledge: "remembered" },
+      }));
+      const frame = (world) => ({
+        location: { id: "reduced-study", depthLabel: "Study" },
+        you: { x: 4, y: 4 },
+        world,
+      });
+      firstWorld[0].occupant = { kind: "ally", mark: "d", color: 3 };
+      map.update(frame(firstWorld), "explorer", "reduced:42");
+      const secondWorld = structuredClone(firstWorld);
+      delete secondWorld[0].occupant;
+      secondWorld[1].occupant = { kind: "ally", mark: "d", color: 3 };
+      map.update(frame(secondWorld), "explorer", "reduced:42");
+      const count = map.actorMotions.size;
+      map.destroy();
+      host.remove();
+      return count;
+    });
+    assert.equal(reduced, 0);
+  },
+);
+
+test(
   "confirmed injury gets a brief impact and small shake; reduced motion disables both",
   { timeout: 30000 },
   async (t) => {
@@ -1926,3 +2098,133 @@ test(
     assert.deepEqual(quiet, { impacts: 0, animations: 0 });
   },
 );
+
+
+test("on-map targeting cancels and answers actual kicks; recent notes expand", { timeout: 30000 }, async t => {
+  const { page } = await fixture(t);
+  await create(page);
+  await page.getByRole("button", { name: "Search", exact: false }).first().click();
+  await ready(page);
+  assert.ok(await page.locator("#recent-messages p").count() > 0);
+  await page.getByRole("button", { name: "Expand journal" }).click();
+  assert.equal(await page.locator("#journal-preview").isVisible(), false);
+  await page.locator("#close-panel").click();
+  assert.equal(await page.locator("#journal-preview").isVisible(), true);
+  await page.evaluate(() => document.querySelector("pixel-nethack").action("kick"));
+  await page.locator("#direction-target").waitFor();
+  assert.equal(await page.locator("#decision[open]").count(), 0);
+  assert.equal(await page.locator("[data-target-direction]").count(), 8);
+  const before = await snapshot(page);
+  await page.screenshot({ path: root + "/test-results/kick-target-desktop.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: root + "/test-results/kick-target-mobile.png" });
+  const bounds = await page.locator("#direction-target").boundingBox();
+  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
+  await page.keyboard.press("Escape");
+  await ready(page);
+  assert.equal((await snapshot(page)).observation.turn, before.observation.turn);
+  await page.evaluate(() => document.querySelector("pixel-nethack").action("kick"));
+  await page.locator("#direction-target").waitFor();
+  await page.locator('[data-target-direction="north"]').focus();
+  await page.keyboard.press("Enter");
+  await ready(page);
+  assert.equal(await page.locator("#direction-target").count(), 0);
+});
+
+test("consecutive journal repeats share counts across preview, drawer and receipt rerenders", async (t) => {
+  const { page } = await fixture(t);
+  await create(page);
+  await page.evaluate(async () => {
+    const app = document.querySelector("pixel-nethack");
+    for (let i = 0; i < 4; i++) await app.run(() => app.game.search());
+  });
+  const preview = page.locator("#recent-messages p").filter({ hasText: "You search nearby." });
+  assert.equal(await preview.count(), 1);
+  assert.equal(await preview.locator(".journal-repeat").textContent(), "×4");
+  await page.evaluate(async () => {
+    const app = document.querySelector("pixel-nethack");
+    app.render(); app.render();
+    await app.run(() => app.game.refresh());
+  });
+  assert.equal(await preview.locator(".journal-repeat").textContent(), "×4");
+  await page.getByRole("button", { name: "Expand journal" }).click();
+  const entry = page.locator(".journal-entry").filter({ hasText: "You search nearby." });
+  assert.equal(await entry.count(), 1);
+  assert.equal(await entry.locator(".journal-repeat").getAttribute("aria-label"), "Repeated 4 times");
+  await page.locator("#close-panel").click();
+  await page.evaluate(async () => {
+    const app = document.querySelector("pixel-nethack");
+    await app.run(() => app.game.climb("down"));
+    for (let i = 0; i < 2; i++) await app.run(() => app.game.search());
+  });
+  assert.equal(await preview.count(), 2, "intervening engine narration splits groups");
+  assert.deepEqual(await preview.locator(".journal-repeat").allTextContents(), ["×4", "×2"]);
+});
+
+test("contextual stairs use the current engine offer at 70 percent on desktop and mobile", async (t) => {
+  const { page } = await fixture(t, { touch: true });
+  await create(page);
+  const stairs = page.locator("#contextual-stairs button");
+  await stairs.waitFor();
+  assert.equal(await stairs.textContent(), "Go upstairs");
+  for (const size of [{ width: 1440, height: 1050 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(size);
+    const bounds = await stairs.boundingBox();
+    assert.ok(Math.abs(bounds.x + bounds.width / 2 - size.width / 2) < 2);
+    assert.ok(Math.abs(bounds.y + bounds.height / 2 - size.height * .7) < 2);
+    assert.ok(bounds.height >= 56);
+    await page.screenshot({ path: `${root}/test-results/stairs-${size.width}.png` });
+  }
+  await page.evaluate(async () => {
+    const app = document.querySelector("pixel-nethack");
+    const stale = document.querySelector("#contextual-stairs button");
+    await app.run(() => app.game.move("east"));
+    const revision = app.game.state.revision;
+    stale.click();
+    if (app.game.state.revision !== revision || app.busy) throw Error("Stale stairs offer executed");
+  });
+  assert.equal(await stairs.count(), 0, "walking off stairs removes the offer");
+  await page.evaluate(async () => {
+    const app = document.querySelector("pixel-nethack");
+    await app.run(() => app.game.move("west"));
+  });
+  await stairs.waitFor();
+  await stairs.tap();
+  await page.waitForFunction(() => document.querySelector("pixel-nethack").game.decision);
+  assert.equal(await stairs.count(), 0, "standing decision removes the contextual action");
+  assert.equal(await page.evaluate(() => document.querySelector("pixel-nethack").game.state.outcome.action), "climb");
+});
+
+test("fresh engine perception supplies floor beneath initially seen loot and companion", async (t) => {
+  const { page } = await fixture(t);
+  await create(page);
+  const state = await snapshot(page);
+  const loot = state.observation.world.find(cell => cell.x === 17 && cell.y === 7);
+  const pet = state.observation.world.find(cell => cell.x === 19 && cell.y === 6);
+  assert.ok(loot.objects.length > 0, "seeded object actually present");
+  assert.equal(pet.occupant.kind, "ally");
+  assert.equal(loot.terrain.type, "floor");
+  assert.equal(pet.terrain.type, "floor");
+});
+
+test("mobile journal preview is on by default and collapses without consuming a turn", async t => {
+  const { page } = await fixture(t, { touch: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await create(page);
+  const toggle = page.locator("#toggle-journal-preview");
+  assert.equal(await toggle.getAttribute("aria-expanded"), "true");
+  const preview = await page.locator("#journal-preview").boundingBox();
+  assert.ok(preview.y >= 128 && preview.y + preview.height < 300);
+  const turn = (await snapshot(page)).observation.turn;
+  await toggle.tap();
+  assert.equal(await page.locator("#recent-messages").isVisible(), false);
+  assert.equal(await toggle.getAttribute("aria-expanded"), "false");
+  assert.equal((await snapshot(page)).observation.turn, turn);
+  await page.evaluate(async () => { const app = document.querySelector("pixel-nethack"); await app.run(() => app.game.search()); });
+  assert.equal(await page.locator("#recent-messages").isVisible(), false);
+  await toggle.tap();
+  assert.equal(await page.locator("#recent-messages").isVisible(), true);
+  await page.screenshot({ path: `${root}/test-results/journal-mobile-compact.png` });
+  await page.getByRole("button", { name: "Expand journal", exact: true }).tap();
+  assert.equal(await page.locator(".rightbar").isVisible(), true);
+});

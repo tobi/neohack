@@ -194,7 +194,11 @@ export class DungeonMap {
     moved: -Infinity,
     facing: 1,
   };
+  private portalStarted = -Infinity;
+  private portalDuration = 960;
+  private portalComplete: (() => void) | null = null;
   resetIntro() {
+    this.cancelIntroPortal();
     this.intro = {
       x: 160,
       y: 208,
@@ -204,6 +208,22 @@ export class DungeonMap {
       facing: 1,
     };
     this.draw();
+  }
+  enterIntroPortal(complete: () => void) {
+    if (this.observation || this.portalComplete) return false;
+    this.portalStarted = performance.now();
+    this.portalDuration = this.reducedMotion.matches ? 120 : 960;
+    this.portalComplete = complete;
+    this.draw(this.portalStarted);
+    if (this.reducedMotion.matches && !document.hidden)
+      this.animation = requestAnimationFrame(this.animate);
+    return true;
+  }
+  cancelIntroPortal() {
+    this.portalComplete = null;
+    this.portalStarted = -Infinity;
+    this.canvas.dataset.portal = "idle";
+    delete this.canvas.dataset.portalProgress;
   }
   introDirection(): Compass {
     return this.intro.x < 160 ? "east" : this.intro.x > 160 ? "west" : "north";
@@ -258,6 +278,10 @@ export class DungeonMap {
   private lastDraw = 0;
   private travelStarted = -Infinity;
   private travelFrom = { x: 0, y: 0 };
+  private actorMotions = new Map<
+    string,
+    { fromX: number; fromY: number; started: number }
+  >();
   private fog = new Map<
     string,
     { from: number; to: number; started: number }
@@ -271,20 +295,41 @@ export class DungeonMap {
   private reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   private motionChanged = () => {
     cancelAnimationFrame(this.animation);
-    if (document.hidden) this.clearMessages();
+    if (document.hidden) {
+      this.clearMessages();
+      this.actorMotions.clear();
+    }
+    if (this.reducedMotion.matches) this.actorMotions.clear();
     this.draw();
-    if (!this.reducedMotion.matches && !document.hidden)
+    if (!document.hidden && (!this.reducedMotion.matches || this.portalComplete))
       this.animation = requestAnimationFrame(this.animate);
   };
   private animate = (now: number) => {
     if (
       now - this.lastDraw >=
-      (now < this.travelStarted + 110 || this.fog.size ? 16 : 80)
+      (now < this.travelStarted + 110 ||
+      this.actorMotions.size ||
+      this.fog.size ||
+      this.portalComplete
+        ? 16
+        : 80)
     ) {
       this.draw(now);
       this.lastDraw = now;
     }
-    this.animation = requestAnimationFrame(this.animate);
+    if (
+      this.portalComplete &&
+      now >= this.portalStarted + this.portalDuration
+    ) {
+      const complete = this.portalComplete;
+      this.portalComplete = null;
+      this.portalStarted = -Infinity;
+      this.canvas.dataset.portal = "idle";
+      delete this.canvas.dataset.portalProgress;
+      complete();
+    }
+    if (!document.hidden && (!this.reducedMotion.matches || this.portalComplete))
+      this.animation = requestAnimationFrame(this.animate);
   };
   constructor(
     private canvas: HTMLCanvasElement,
@@ -324,6 +369,7 @@ export class DungeonMap {
     ) {
       this.clearMessages();
       this.travelStarted = -Infinity;
+      this.actorMotions.clear();
       this.fog.clear();
     } else if (
       !this.reducedMotion.matches &&
@@ -347,6 +393,7 @@ export class DungeonMap {
             started: now,
           });
       }
+      this.captureActorMotions(this.observation, observation, now);
     }
     const before = this.observation?.you,
       after = observation?.you;
@@ -379,6 +426,67 @@ export class DungeonMap {
     this.seed = seed;
     this.draw();
   }
+  private captureActorMotions(
+    before: Observation,
+    after: Observation,
+    now: number,
+  ) {
+    this.actorMotions.clear();
+    type ActorCell = Cell & { occupant: NonNullable<Cell["occupant"]> };
+    const actors = (observation: Observation) => {
+      const found = new Map<string, ActorCell[]>();
+      for (const cell of observation.world) {
+        const occupant = cell.occupant;
+        if (!occupant || occupant.kind === "self") continue;
+        // This is a rendering correspondence between two public frames, not a
+        // claim about hidden monster identity. Repeated descriptions are left
+        // stationary because there is no safe way to pair them.
+        const signature = JSON.stringify([
+          occupant.kind,
+          occupant.mark,
+          occupant.color ?? null,
+          occupant.appearance ?? null,
+        ]);
+        const cells = found.get(signature) ?? [];
+        cells.push(cell as ActorCell);
+        found.set(signature, cells);
+      }
+      return found;
+    };
+    const previous = actors(before);
+    for (const [signature, destinations] of actors(after)) {
+      const sources = previous.get(signature);
+      if (sources?.length !== 1 || destinations.length !== 1) continue;
+      const source = sources[0]!,
+        destination = destinations[0]!,
+        dx = destination.x - source.x,
+        dy = destination.y - source.y;
+      if (!(dx || dy) || Math.abs(dx) > 1 || Math.abs(dy) > 1) continue;
+      this.actorMotions.set(`${destination.x},${destination.y}`, {
+        fromX: source.x,
+        fromY: source.y,
+        started: now,
+      });
+    }
+  }
+  private actorPosition(cell: Cell, now: number) {
+    const key = `${cell.x},${cell.y}`,
+      motion = this.actorMotions.get(key);
+    if (!motion || this.reducedMotion.matches)
+      return { x: cell.x, y: cell.y, hop: 0 };
+    const t = Math.min(1, (now - motion.started) / 140);
+    if (t >= 1) {
+      this.actorMotions.delete(key);
+      return { x: cell.x, y: cell.y, hop: 0 };
+    }
+    // Keep the original pixel grid crisp while adding one small mid-step hop.
+    const eased = 1 - (1 - t) * (1 - t);
+    return {
+      x: motion.fromX + (cell.x - motion.fromX) * eased,
+      y: motion.fromY + (cell.y - motion.fromY) * eased,
+      hop: Math.round(Math.sin(Math.PI * t)),
+    };
+  }
   private travel(now: number) {
     const remaining = this.reducedMotion.matches
       ? 0
@@ -409,6 +517,7 @@ export class DungeonMap {
     this.draw();
   }
   destroy() {
+    this.cancelIntroPortal();
     this.clearMessages();
     this.observer.disconnect();
     cancelAnimationFrame(this.animation);
@@ -527,7 +636,8 @@ export class DungeonMap {
     const struck = messages.some((text) =>
       /^You (?:hit|smite|bite|claw|strike|punch) /.test(text),
     );
-    if (!hurt && !struck) return;
+    const kicked = after.outcome.action === "kick" && after.outcome.turnsElapsed > 0;
+    if (!hurt && !struck && !kicked) return;
     const effect = document.createElement("div");
     effect.className = "combat-impact" + (hurt ? " hurt" : "");
     effect.setAttribute("aria-hidden", "true");
@@ -544,7 +654,7 @@ export class DungeonMap {
       once: true,
     });
     setTimeout(() => effect.remove(), 500);
-    if (hurt)
+    if (hurt || kicked)
       this.canvas.animate(
         [
           { transform: "translate(0,0)" },
@@ -625,6 +735,11 @@ export class DungeonMap {
       y: (you?.y ?? 10) - Math.floor(rows / 2) + this.offset.y,
     };
     this.positionMessages(now);
+    const target = canvas.parentElement!.querySelector<HTMLElement>("#direction-target");
+    if (target && you) {
+      target.style.left = canvas.offsetLeft + Math.max(100, Math.min(canvas.clientWidth - 100, (you.x - this.origin.x + 0.5) * 16 * this.zoom)) + "px";
+      target.style.top = canvas.offsetTop + Math.max(120, Math.min(canvas.clientHeight - 160, (you.y - this.origin.y + 0.5) * 16 * this.zoom)) + "px";
+    }
     const panel =
       canvas.parentElement!.querySelector<HTMLElement>(".tile-actions");
     if (panel) {
@@ -713,11 +828,17 @@ export class DungeonMap {
         y,
         draw: () => drawContents(c, contents, x, y, this.symbols, "loot"),
       });
-      foreground.push({
-        x,
-        y,
-        draw: () => drawContents(c, cell, x, y, this.symbols, "actor"),
-      });
+      if (cell.occupant && cell.occupant.kind !== "self") {
+        const actor = this.actorPosition(cell, now),
+          actorX = Math.round((actor.x - this.origin.x) * 16),
+          actorY = Math.round((actor.y - this.origin.y) * 16) - actor.hop;
+        foreground.push({
+          x: actorX,
+          y: actorY,
+          draw: () =>
+            drawContents(c, cell, actorX, actorY, this.symbols, "actor"),
+        });
+      }
     }
     // Position comes from observation.you, never from a remembered cell.
     if (you) {
@@ -774,8 +895,9 @@ export class DungeonMap {
     // Modifiers are a separate pass above all world sprites.
     if (!this.symbols)
       for (const cell of this.observation.world) {
-        const x = (cell.x - this.origin.x) * 16,
-          y = (cell.y - this.origin.y) * 16;
+        const actor = this.actorPosition(cell, now),
+          x = Math.round((actor.x - this.origin.x) * 16),
+          y = Math.round((actor.y - this.origin.y) * 16) - actor.hop;
         if (
           cell.occupant &&
           cell.occupant.kind !== "self" &&
@@ -860,6 +982,23 @@ export class DungeonMap {
   ) {
     const ox = Math.floor(cols * 8 - 160),
       oy = Math.floor(rows * 8 - 128);
+    const portalProgress = this.portalComplete
+      ? Math.max(
+          0,
+          Math.min(1, (now - this.portalStarted) / this.portalDuration),
+        )
+      : null;
+    const portal =
+      portalProgress === null
+        ? null
+        : this.reducedMotion.matches
+          ? portalProgress < 0.5
+            ? 0
+            : 1
+          : portalProgress;
+    this.canvas.dataset.portal = portal === null ? "idle" : "entering";
+    if (portal === null) delete this.canvas.dataset.portalProgress;
+    else this.canvas.dataset.portalProgress = portalProgress!.toFixed(3);
     // Quiet, coordinate-stable stone dust around the courtyard.
     for (let y = 0; y < rows * 16; y += 8)
       for (let x = 0; x < cols * 16; x += 8) {
@@ -901,6 +1040,36 @@ export class DungeonMap {
     }
     // Recessed entry and three stepped voussoirs give the hall real depth.
     rect(c, "#0f191f", 136, 43, 48, 60);
+    if (portal !== null) {
+      const charge = Math.min(1, portal / 0.28),
+        pull = Math.max(0, Math.min(1, (portal - 0.12) / 0.64)),
+        pulse = Math.floor(portal * 18),
+        portalColors = ["#526b63", "#80906e", "#c0ae73", "#f0ce82"];
+      // The doorway wakes in stepped, hard-edged bands. This remains an
+      // authored title-screen effect and cannot reveal engine terrain.
+      rect(c, "#182b31", 137, 44, 46, 58);
+      for (let ring = 0; ring < 5; ring++) {
+        const inset = 2 + ring * 3,
+          color = portalColors[(ring + pulse) % portalColors.length]!;
+        if (ring / 5 > charge) continue;
+        rect(c, color, 136 + inset, 43 + inset, 48 - inset * 2, 2);
+        rect(c, color, 136 + inset, 101 - inset, 48 - inset * 2, 2);
+        rect(c, color, 136 + inset, 45 + inset, 2, 56 - inset * 2);
+        rect(c, color, 182 - inset, 45 + inset, 2, 56 - inset * 2);
+      }
+      rect(c, "#243d3d", 152, 50, 16, 47);
+      rect(c, "#61725b", 156, 47, 8, 50);
+      rect(c, "#e6c77c", 159, 45, 2, 52);
+      // Threshold runes light from the center outward as the pull begins.
+      for (let i = 0; i < 9; i++) {
+        const side = i % 2 ? -1 : 1,
+          x = 160 + side * (8 + ((i * 11) % 35)),
+          y = 105 + ((i * 7) % 35);
+        if (i / 9 > pull) continue;
+        rect(c, i % 3 ? "#9d925f" : "#e7c879", x, y, 2, 2);
+        rect(c, "#35463e", x + side * 2, y + 2, 2, 1);
+      }
+    }
     for (let i = 0; i < 4; i++) {
       rect(
         c,
@@ -965,14 +1134,25 @@ export class DungeonMap {
     const x = Math.round(
       this.intro.fromX + (this.intro.x - this.intro.fromX) * t,
     );
-    const y = Math.round(
+    let y = Math.round(
       this.intro.fromY + (this.intro.y - this.intro.fromY) * t,
     );
-    rect(c, "#202b29", x - 6, y - 2, 12, 3);
+    const pull =
+      portal === null
+        ? 0
+        : Math.max(0, Math.min(1, (portal - 0.12) / 0.64));
+    const easedPull = pull * pull * (3 - 2 * pull);
+    y -= Math.round(easedPull * 34);
+    const shadowWidth = Math.max(2, 12 - Math.round(easedPull * 10));
+    rect(c, "#202b29", x - Math.floor(shadowWidth / 2), y - 2, shadowWidth, 3);
     if (hero) {
       const frame = this.reducedMotion.matches
         ? 0
         : Math.floor(now / (moving ? 100 : 167)) % 6;
+      const dissolve =
+        portal === null ? 0 : Math.max(0, Math.min(1, (portal - 0.5) / 0.32));
+      c.save();
+      c.globalAlpha = Math.max(0.25, Math.ceil((1 - dissolve) * 4) / 4);
       c.drawImage(
         hero,
         this.intro.facing * 96 + frame * 16,
@@ -984,6 +1164,47 @@ export class DungeonMap {
         16,
         32,
       );
+      c.restore();
+      if (dissolve) {
+        // Deterministic two-pixel fragments replace the traveler from the feet
+        // upward, retaining the sprite's fixed pivot throughout the effect.
+        for (let py = 0; py < 16; py += 2)
+          for (let px = 0; px < 16; px += 2) {
+            const order = ((px * 13 + py * 7) % 31) / 31;
+            if (order > dissolve) continue;
+            const lift = Math.floor(dissolve * (8 + ((px + py) % 9)));
+            rect(
+              c,
+              (px + py) % 4 ? "#d8bb75" : "#8fa078",
+              x - 8 + px,
+              y - 16 + py - lift,
+              2,
+              2,
+            );
+          }
+      }
+    }
+    if (portal !== null) {
+      const flare = Math.max(0, Math.min(1, (portal - 0.68) / 0.32)),
+        reach = Math.floor(flare * 86);
+      // A final pixel flare closes over the threshold in discrete rays and a
+      // checker veil instead of a smooth gradient or blur.
+      for (let i = 0; i < 7; i++) {
+        const width = Math.max(2, reach - i * 10);
+        rect(
+          c,
+          i % 2 ? "#c6ae6d" : "#6f8269",
+          160 - Math.floor(width / 2),
+          55 + i * 7,
+          width,
+          2,
+        );
+      }
+      if (flare > 0.55)
+        for (let py = 0; py < 256; py += 4)
+          for (let px = 0; px < 320; px += 4)
+            if (((px / 4 + py / 4) | 0) % 5 < Math.floor(flare * 4) - 1)
+              rect(c, "#d9c585", px, py, 2, 2);
     }
     c.restore();
   }
