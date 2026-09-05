@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Modern affordances for neonethack</title>
+  <style>
+    :root { color-scheme: light; font: 17px/1.65 system-ui, sans-serif; color: #26392f; background: #f5f2e9; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1040px; padding: 64px 28px 90px; margin: auto; }
+    h1,h2,h3 { line-height: 1.15; text-wrap: balance; }
+    h1 { font: 600 clamp(2.7rem,6vw,4.4rem)/1.06 Georgia,serif; max-width: 850px; margin: 20px 0; }
+    h2 { font: 600 2rem/1.2 Georgia,serif; margin-top: 48px; }
+    h3 { font-size: 1.25rem; margin: 10px 0; }
+    p { max-width: 78ch; }
+    .eyebrow,.tag { font: 700 .72rem/1.5 system-ui,sans-serif; text-transform: uppercase; letter-spacing: .09em; }
+    .lead { font-size: 1.22rem; max-width: 66ch; }
+    .callout { background: #e1e8db; border-left: 4px solid #476643; padding: 18px 24px; margin: 28px 0; }
+    .callout p:first-child { margin-top: 0; } .callout p:last-child { margin-bottom: 0; }
+    a { color: #325c46; text-underline-offset: 3px; }
+    code { font-size: .88em; overflow-wrap: anywhere; }
+    nav { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 0; }
+    button { font: inherit; font-size: .85rem; border: 1px solid #aab6a0; border-radius: 22px; padding: 8px 16px; background: transparent; color: inherit; cursor: pointer; }
+    button[aria-pressed=true] { background: #294d3a; color: white; }
+    button:focus-visible { outline: 3px solid #98691c; outline-offset: 3px; }
+    article { padding: 26px 0; border-bottom: 1px solid #cbd0c0; }
+    article p { margin: 10px 0; }
+    .tag { color: #63734e; }
+    .check { font-size: .88rem; color: #4f5f50; }
+    .muted { color: #5b655b; font-size: .9rem; }
+    li { margin: 10px 0; }
+    details { border: 1px solid #cbd0c0; border-radius: 8px; padding: 20px; margin: 20px 0; }
+    summary { cursor: pointer; font-weight: 650; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #e8eade; padding: 18px; border-radius: 8px; }
+    @media print { nav { display: none; } main { padding: 0; } article, .callout { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">neonethack · game design proposal · 5 September 2026</div>
+  <h1>Let players discover what they can do.</h1>
+  <p class="lead">NetHack’s depth should come from decisions in the dungeon. The interface should make the available verbs, known consequences, and next steps easy to discover.</p>
+  <p><strong>Recommendation:</strong> build a shared, perception-based directional action query and a 9×9 neighborhood in the C library. Use them for movement, object menus, target selection, and explanations in every client. Walking into a door should attempt to open it automatically; a discovered lock should surface alternatives.</p>
+  <p><a href="AFFORDANCE-CONTRACT.html"><strong>Deep implementation design →</strong></a> Exact query and neighborhood contracts, a selectable 9×9 illustration, spoiler-equivalence cases, movement edge cases, fresh native/WASM probes, and the implementation sequence.</p>
+  <div class="callout">
+    <p><strong>First slice: directional actions + neighborhood → locked-door recovery → object actions.</strong> These address the clearest friction in the current client and establish reusable library support.</p>
+    <p>This is a proposal, not a statement of implemented capabilities. “Low downside” means reducing command discovery and input mistakes; it does not mean making risky game actions safe.</p>
+  </div>
+
+  <h2>Walk into a door. Offer help when it is locked.</h2>
+  <p>Ordinary movement into a perceived closed door should keep the engine’s automatic opening attempt. Do not interrupt it with a menu. If the attempt reveals a lock, return the witnessed reason and sensible alternatives for that square: <strong>Use a tool… · Kick · Back</strong>. A resisting but unlocked door can instead offer <strong>Try opening again</strong>. Those are different outcomes.</p>
+  <p><strong>Use a tool</strong> offers eligible perceived items by their real IDs. Call it <em>Try unlocking</em> only when the player has learned that the door is locked; using a key on an unlocked door can instead lock it. <strong>Kick</strong> explains that the attempt may injure you, make noise, or damage property. The player chooses every attempt beyond ordinary auto-opening; no automatic kick, tool selection or repeated opening loop follows a failure.</p>
+  <p>Show these alternatives in a compact tile panel, allow Escape/back, and require a fresh press so a held movement key cannot select one. A panel of read-only suggestions is not itself a standing engine decision. Selecting a suggestion issues the corresponding named operation with its target bound. Any genuine engine decision still takes priority and must be answered through its existing lifecycle.</p>
+  <p>Preserve the engine’s movement and turn semantics: auto-opening does not promise that the same input also enters the doorway. A secret door still looks like a wall. A perceived door that is actually a mimic must receive the same preview as an indistinguishable ordinary door. Existing <code>game.move</code> remains the movement operation; this proposal does not require a replacement movement command.</p>
+
+  <h2>A directional query and a neighborhood snapshot</h2>
+  <p>A proposed read-only <code>session.actions</code> takes <code>target: { direction: "north" }</code> or <code>target: "here"</code>. It returns the sensible actions for that perceived square, their explicit targets, known prerequisites and explanations. This is discovery, not a generic action executor. Invoking an action continues to use <code>game.move</code>, <code>game.open</code>, <code>game.kick</code>, <code>game.apply</code> and the other named operations.</p>
+  <p>Return the same cell information as <code>observation.neighborhood</code>, centered on the character with radius four: <strong>9×9, up to 81 cells</strong>. Include it in every full current observation, not just successful moves; an opening, attack, item use, answer or interruption can change nearby possibilities without moving the character. Mark map edges explicitly and make the neighborhood unavailable if the player’s position is unknown. Replace it with each observation rather than merging stale offers.</p>
+  <pre><code>// Illustrative future response; not today's protocol.
+neighborhood: {
+  revision: 12,
+  levelId: "level-…",
+  center: { x: 16, y: 7 },
+  radius: 4,
+  cells: [{
+    dx: 0, dy: 1, x: 16, y: 8,
+    knowledge: "current", // or remembered / unknown
+    terrain: "closedDoor",
+    walkable: null,        // lock state has not been learned
+    movementIntent: "attemptOpen",
+    actions: [
+      { method: "game.move", params: { direction: "south" },
+        availability: "attemptable" },
+      { method: "game.open", params: { target: { direction: "south" } },
+        availability: "attemptable" }
+    ]
+  }]
+}</code></pre>
+  <p><strong><code>walkable</code> means traversable according to the player’s knowledge and known movement abilities, including ordinary door opening.</strong> It does not mean that moving there is safe, succeeds, or enters the tile in one turn. Use <code>true</code> for known traversable terrain, including a known unlocked door; <code>false</code> for a known obstacle under those abilities; <code>null</code> when the necessary facts are unknown. Cell freshness qualifies every value. Visible occupants and the resulting interaction belong in separate fields: a creature on a floor does not make that terrain a wall.</p>
+  <p><strong>An untested locked door and an untested unlocked door must return identical data.</strong> Both can return <code>walkable: null</code> and an attemptable movement/opening action. Movement is still allowed to try. After a witnessed locked result, the relevant door can become non-walkable for an ordinary walker and offer alternatives. Unknown or stale information must never become a hidden-state pathfinding oracle.</p>
+  <p>The outer cells describe nearby terrain and contextual possibilities, not eight extra steps the player can execute immediately. Separate <em>relevant here</em> from <em>attemptable from the current position</em>; an ordinary Open for a door four squares away can say <code>outOfReach</code>, without inventing a path to it. Do not filter legitimate directional attempts solely because the remembered map lacks a target. Unknown cells should not acquire feature-specific hints.</p>
+
+  <h2>The implementation list</h2>
+  <p>Each item separates the library contract from its presentation. The first group is the recommended starting scope; the second extends the same foundation.</p>
+  <affordance-list></affordance-list>
+  <noscript><p>Enable JavaScript to view the detailed list. Priorities: contextual doors; object actions; blocked-action explanations; target assistance; knowledge-aware descriptions; action costs; interruption recovery; status help; location actions; equipment comparisons; event history; decision context; quantities; command discovery.</p></noscript>
+
+  <h2>What the evidence actually says</h2>
+  <p>I reviewed 20 archived perception logs containing 4,396 frames after deduplicating non-null request IDs together with their revisions within each file. Seventeen files repeat essentially the same short scenario. Two have longer semantic action sequences; one contains 4,002 legacy <code>recordedStep</code> frames reaching turn 3,640. These are development traces, not a representative player study.</p>
+  <p>The logs contain a failed boulder push reported as <code>noProgress</code>, a discovered locked door, repeated door resistance, and hunger notifications. The semantic subset has 18 blocked frames, 16 with <code>noProgress</code>. These are concrete examples of weak explanations, not a measured prevalence among players. Historical <code>observation.heard</code> repeats recent narration across frames; I used operation-local heard events to locate examples rather than counting every repeated line as a new incident.</p>
+  <p>A fresh temporary game through today’s native public API, using seed 42 and a dwarven Valkyrie, confirmed the desired automatic-opening foundation: movement into a known closed door returned <code>openedDoor</code>, no positional change, and no decision. The next move entered the doorway. Preserve that behavior and improve recovery from discovered locks. This probe does not establish a universal turn cost for opening doors.</p>
+  <p>Current engine scenarios provide stronger evidence for item and activity behavior: ambiguous healing potions require identity-safe selection; armor removal/equipping can spend five turns; interrupted eating/studying retains progress; a wait near danger can return zero-turn <code>noProgress</code>; escape and prayer already require explicit consent. Current client inspection also shows that every carried item receives the same ten action buttons, including irrelevant ones.</p>
+  <p class="muted">Archived stores were read only. No archived game was resumed, modified, copied into this report, or used as a test fixture. The fresh study used a temporary store that was removed afterward. Broader recommendations below also use NetHack mechanics visible in the bundled engine source; they are not claims that these logs cover every mechanic.</p>
+
+  <details>
+    <summary>Proposed library contract and boundaries</summary>
+    <p><strong>One shared implementation.</strong> C produces the facts and offers. Native, WASM, TypeScript, and MCP consume the same generated contract. Clients choose layout, shortcuts, sorting and tutorial presentation; they do not derive eligibility from names, glyphs, inventory letters, or private engine state.</p>
+    <p><strong>Read-only discovery.</strong> The proposed <code>session.actions</code> query begins with a direction or “here”; the same resolver can later accept a perceived item ID or cell coordinate with level identity. It returns the observation revision, knowledge freshness, and supported named actions with explicit targets. The neighborhood calls this same resolver rather than maintaining a second set of rules. Querying must spend no turn, consume no events, reserve no gameplay input, advance no RNG, and reveal no additional world knowledge. Repeated queries cannot probe curses, traps, mimic identity, undiscovered locks or other concealed facts.</p>
+    <pre><code>// Illustrative shape, not today's protocol.
+{
+  revision: 12,
+  subject: { levelId: "level-…", x: 16, y: 8 },
+  knowledge: "remembered",
+  actions: [{
+    method: "game.open",
+    params: { target: { direction: "south" } },
+    availability: "attemptable",
+    cost: { kind: "variable" }
+  }]
+}</code></pre>
+    <p><strong>Attemptable is not guaranteed.</strong> Distinguish known prerequisites, unknown state, unsupported operations and known inability. Preserve an advanced route to supported unusual actions. Do not call an action impossible merely because it is not in a conventional menu. Some polymorph forms can eat unusual materials or pass through doors: the library needs perceived, form-aware semantics, not a universal food-category rule.</p>
+    <p><strong>Standing choices remain real protocol decisions.</strong> Bind suggestions to direction, level, position, perceived subject and revision. A suggestion invokes a specific named operation only when selected and no decision is pending. A client must never cancel a pending choice and restart an action to continue it. Read-only suggestions do not themselves become standing decisions; any genuine prompt still uses the existing answer/cancel lifecycle.</p>
+    <p><strong>Validate again at execution.</strong> Reading an offer is not a reservation or authorization. Submit normal guarded requests. Changed context requires a refreshed choice, and uncertain results require receipt recovery. Never fall back to an arbitrary item, another tile, another action or an automatic retry.</p>
+    <p><strong>Compatibility and ownership.</strong> Add public schemas, C dispatch metadata, TS types and MCP descriptions through the catalog generator. Advertise new capabilities accurately. New engine perception facts or runtime behavior need matching package/profile handling; old pinned worlds retain their old guarantees. Keep raw developer journals separate from the public player-history feature.</p>
+  </details>
+
+  <details>
+    <summary>Acceptance scenarios before shipping</summary>
+    <ul>
+      <li>A fresh public-API game reaches a perceived door. Movement performs the normal automatic opening attempt. A discovered lock offers alternatives without an automatic kick or tool use. Closing the suggestion panel spends no additional turn.</li>
+      <li>The neighborhood and directional query agree at the same revision. Read-only queries do not modify journals; repeated queries cannot learn lock state. An uncertain movement result is recovered by its exact receipt before alternatives can execute.</li>
+      <li>A 9×9 snapshot centers correctly after movement and level changes, handles map boundaries and unknown position, and refreshes after non-movement actions. Distant cells never advertise adjacent-only actions as executable now.</li>
+      <li>Worlds indistinguishable to the player yield indistinguishable offers: trapped versus untrapped doors, unknown lock states, unknown curses and mimic disguises do not alter discovery output. Use controlled engine scenarios for this equivalence check, not private-state access in production.</li>
+      <li>Confusion, blindness, impaired movement, changed form, and stale terrain do not yield false exact targets or guarantees. Known unlocked doors are traversable, untested locks remain unknown, and known form-specific passage is respected.</li>
+      <li>Item menus preserve exact identity after inventory reordering, stack changes and multiple visually identical objects. Known inability is explained; unknown safety is not invented.</li>
+      <li>Target previews and repeated inspection consume no turns or events. A known ally is identified only from actual perception; no guessed beam range, ricochet, hidden creature or hit probability appears.</li>
+      <li>Interrupted food/study offers an explicit valid continuation, spends only the engine’s actual remaining work, and is never resumed by observe, receipt recovery or ordinary wait.</li>
+      <li>Keyboard, pointer and touch clients show the same library offers. Held keys cannot accept a newly opened choice; screen readers announce the target, cost uncertainty and cancellation option.</li>
+    </ul>
+    <p>Exercise native and sandboxed browser paths with new temporary stores, plus the repository checks and generated-schema drift check. The fresh door probe above verifies current behavior only; these proposed-feature scenarios have not been implemented or passed.</p>
+  </details>
+
+  <h2>Good ideas that need separate design</h2>
+  <p><strong>Autoexplore, click-to-travel, rest-until-healed and bulk search</strong> need explicit stop rules, cancellation and per-step durability. <strong>Autoeat, autokick, autoequip and auto-answer</strong> can spend resources, change tactics, violate conducts or create irreversible harm. <strong>Corpse safety scores and “best item” recommendations</strong> can leak hidden information or impose a strategy. They do not belong in the first low-downside scope.</p>
+  <p>Opening a choice on every ordinary move or closed door would be a regression. Keep movement and automatic opening fast; surface alternatives after a discovered obstacle or on deliberate inspection. An unknown walkability value permits an attempt rather than disabling movement.</p>
+  <p><strong>Command completeness is a separate release requirement.</strong> The current catalog lacks named spellcasting, throwing/firing, container looting, paying/chatting, targeted untrapping, engraving and naming/calling. In particular, a Wizard needs discoverable spellcasting. Context menus should expose each as its public operation is implemented and tested; they cannot compensate for missing game verbs by sending raw keys or using a generic action escape hatch.</p>
+
+  <h2>Code and scenario references</h2>
+  <ul>
+    <li><a href="PROTOCOL.md">Public protocol</a> and <a href="../protocol/response.ts">response schema definitions</a>: current methods, perception, decisions, events and recovery guarantees.</li>
+    <li><a href="../tests/gameplay-contracts.mjs">Gameplay contracts</a> and <a href="../tests/interruption-contracts.mjs">interruption contracts</a>: real item, warning, equipment, pickup and occupation scenarios.</li>
+    <li><a href="../tests/decision-contracts.mjs">Decision contracts</a>: identity, cancellation, stale answers, restart and exact receipts.</li>
+    <li><a href="../../../example/pixel-bun/src/app.ts">Pixel client</a>: direct movement, broad item menus, direction prompts, status presentation and narration history.</li>
+    <li><a href="../src/explorer.c">Shared semantic driver</a>: perceived item eligibility, terrain memory and outcome classification.</li>
+    <li><a href="../engine/src/hack.c">Engine movement</a> and <a href="../engine/src/lock.c">door/lock behavior</a>: autoopen, doorway diagonals, form-specific passage, tool semantics and door resistance.</li>
+  </ul>
+  <p class="muted">Design research only. No gameplay behavior, public API, engine profile or existing save was changed for this proposal.</p>
+</main>
+<script type="module">
+import { LitElement, html } from 'https://esm.sh/lit@3.3.1';
+const items = [
+  {
+    title: 'Directional actions, walkability and door recovery', group: 'First', owner: 'Library + clients',
+    player: 'Walking into a door attempts to open it. A discovered lock brings up Use a tool, Kick and Back. A 9×9 neighborhood helps the client show where meaningful actions are available.',
+    library: 'Add one perception-only action resolver, a read-only directional query, and a neighborhood on full observations. Include tri-state walkability, movement intent, freshness and attemptability from the current position.',
+    limit: 'Keep normal auto-opening. An untested locked door and an untested unlocked door must have identical preview data. No automatic kick, tool choice, retry loop or extra movement follows.',
+    check: 'Query and grid agree; known unlocked doors are traversable, untested doors remain unknown, distant actions respect reach, and receipt recovery never repeats an attempt.'
+  },
+  {
+    title: 'Useful menus for every perceived object', group: 'First', owner: 'Library + clients',
+    player: 'A potion prominently offers Drink and Drop; a worn ring offers Remove. Relevant actions appear where the player is already looking.',
+    library: 'Publish supported affordances per item/subject, reusing and improving shared eligibility rules. Include known prerequisites and attemptability; keep unusual supported actions discoverable under More.',
+    limit: 'The current client puts all ten inventory verbs on every carried item. Replace that duplication with C-provided offers, never a label parser in the browser. Unknown safety remains unknown.',
+    check: 'Two identically labeled items remain distinct; unknown curses do not change the menu. Polymorph and worn-state cases are covered.'
+  },
+  {
+    title: 'Explain why an action stopped', group: 'First', owner: 'Library',
+    player: '“You cannot step diagonally through this doorway” is useful. “No progress” is not. A discovered locked door offers the relevant next actions.',
+    library: 'Return structured, witnessed reason codes and references to the perceived subject, alongside original narration and actual turns elapsed. Prefer engine events over expanding message substring heuristics.',
+    limit: 'A boulder failing to move does not reveal an unseen monster behind it. Report an unknown obstruction when that is all the player learned. A failed attempt can still cost time.',
+    check: 'Doorway diagonals, a wall, a known lock, a resisted opening, an obstructed push and a refused wait have honest, distinguishable explanations where evidence permits.'
+  },
+  {
+    title: 'Carry the target through the interaction', group: 'First', owner: 'Library + clients',
+    player: 'Choosing Open on a door does not ask “which direction?” again. Aiming highlights your chosen direction and perceived allies in it.',
+    library: 'Bind affordances to level, location and explicit target; provide valid input forms and known directional constraints. Clients render a direction guide and preserve the existing decision ID.',
+    limit: 'A direction guide is not a prediction of a beam’s range, bounces, damage or hidden occupants. Stale or impaired targeting stays uncertain.',
+    check: 'Bound targets survive the choice workflow and reject changed context; no extra input or answer is silently supplied.'
+  },
+  {
+    title: 'Describe what the player actually knows', group: 'Next', owner: 'Library',
+    player: 'Inspecting an item or tile gives a readable description, known properties and a clear distinction between visible now and remembered.',
+    library: 'Expose engine-issued descriptions, known item properties, equipment slots, and per-cell perception freshness. Extend the existing perception surface rather than decoding glyph/color combinations in clients.',
+    limit: 'Never identify an unknown potion, expose a hidden enchantment, assert that a corpse is safe, or label remembered terrain as currently visible. Hallucination and blindness matter.',
+    check: 'Inspection sends no gameplay input and yields the same information in indistinguishable hidden-state scenarios.'
+  },
+  {
+    title: 'Show time commitment before acting', group: 'Next', owner: 'Library + clients',
+    player: 'Item selection says “No turn spent.” Equipping armor or studying says it may occupy several turns and can expose you to danger.',
+    library: 'Add cost classes such as free, variable and multi-turn, with exact values only when publicly knowable. Keep actual turnsElapsed as the authoritative result.',
+    limit: 'Do not promise “one press, one turn”: the current armor scenarios take five turns. Do not derive duration from unknown properties or pretend all cancellations refund time.',
+    check: 'Menus, equipment, interruptions and rejected attempts display cost honestly before and after input.'
+  },
+  {
+    title: 'Make interrupted activities recoverable', group: 'Next', owner: 'Library + clients',
+    player: '“Your meal was interrupted” offers “Continue eating this ration” when that exact remaining food is still perceived and usable.',
+    library: 'Extend structured interruption events with the activity and an authoritative continuation reference when available. Use the existing explicit eat/read operations to continue.',
+    limit: 'A partially eaten object can change identity. Bind the new reference from engine perception; never recover it by matching “partly eaten” in a label. Do not automatically continue after danger, reload or receipt recovery.',
+    check: 'Only deliberate continuation advances the remaining work. Missing or stale references offer a new selection instead of guessing.'
+  },
+  {
+    title: 'Turn status labels into understandable help', group: 'Next', owner: 'Library + clients',
+    player: 'Hungry, Burdened, Confused and other conditions have plain-language explanations and links to relevant actions, without stopping play for every notification.',
+    library: 'Provide a shared glossary keyed by normalized perceived condition IDs, plus structured condition changes. Clients choose alert prominence and let the player open actions such as Eat or manage inventory.',
+    limit: 'Explain known mechanics, not a secret countdown or an optimal strategy. Hunger does not justify selecting food automatically; relief is not guaranteed.',
+    check: 'One witnessed transition produces one alert; re-observing or retrieving an old receipt does not repeat it.'
+  },
+  {
+    title: 'Put location actions at the player’s feet', group: 'Next', owner: 'Library + clients',
+    player: 'Standing on stairs offers Ascend or Descend. Objects at your feet offer Pick up. A perceived altar or fountain has inspectable interactions as support is added.',
+    library: 'Return “here” affordances from known terrain and current floor-item references. Associate each with its actual named operation and any existing confirmation.',
+    limit: 'Walking onto stairs does not descend automatically. Fountain use must not masquerade as drinking an inventory potion; unsupported feature interactions need their own public contract first.',
+    check: 'Top-level escape still asks for consent; uncertain floor knowledge never means an empty floor.'
+  },
+  {
+    title: 'Explain equipment and comparisons', group: 'Next', owner: 'Library + clients',
+    player: 'Show worn slots and explain “lower armor class is better.” Comparing known equipment distinguishes known improvements from unknown properties.',
+    library: 'Expose structured known equipment attributes, access prerequisites and comparable public stats. Existing usage flags provide the first step; engine-issued slot/layer data must fill the gaps.',
+    limit: 'Do not infer unidentified bonuses or announce hidden curses. Removing layers and equipping a replacement are separate explicit actions until a real multi-step contract exists.',
+    check: 'The client explains a known inaccessible layer without removing a different item; no automatic loadout changes occur.'
+  },
+  {
+    title: 'A readable, durable history of what happened', group: 'Next', owner: 'Library + clients',
+    player: 'A failed action, injury, item use or interruption appears once, associated with its turn and action. Reload keeps the story available.',
+    library: 'Provide a paginated read-only history of public observations/events with stable event identities and witnessed turn boundaries. Retain request/revision ordering when several messages happen in one operation.',
+    limit: 'The current client appends the rolling heard buffer on each new frame, which can duplicate old narration. Do not deduplicate by text alone: genuinely repeated messages matter. Private input journals and pins are never the player-facing feed.',
+    check: 'Resume and historical receipts neither duplicate nor erase events; multiple identical real incidents remain separate.'
+  },
+  {
+    title: 'Make every decision explain itself', group: 'Next', owner: 'Library + clients',
+    player: 'A hand choice says which ring you are wearing. A warning says which initiated action it belongs to. Cancel makes clear whether time has already passed.',
+    library: 'Extend existing decisions with structured source-item/target context, selection bounds, help references and elapsed action context. Preserve the engine’s exact question.',
+    limit: 'This builds on working item, target, confirmation, choice and text decisions. It must not flatten them into one generic action menu or preselect dangerous confirmation.',
+    check: 'Nested choices survive restart, show the same intended item, and reject stale answers without losing context.'
+  },
+  {
+    title: 'Quantity controls for stacks', group: 'Later', owner: 'Library first',
+    player: '“Drop 3 of these 12 arrows” is a slider or number field with an explicit confirmation, not a hidden terminal convention.',
+    library: 'Add positive quantity semantics only to the named operations that support them; validate against the selected stack and return authoritative identities after splitting or merging.',
+    limit: 'The current protocol deliberately does not accept quantities. This is a clear usability improvement, but its identity and receipt work makes it larger than the first slice. Never implement it as a browser loop of repeated actions.',
+    check: 'Stale counts, split/merge identities, loss of the response and exact retries cannot remove extra items.'
+  },
+  {
+    title: 'Searchable commands with a complete capability story', group: 'Next', owner: 'Library metadata + clients',
+    player: 'A searchable palette understands familiar terms such as Wear, Use, Cast and Talk, and shows target/item requirements and a short explanation.',
+    library: 'Extend the generated catalog with display names, aliases, categories, help and required argument kinds. Keep discovery tied to what the selected backend actually supports.',
+    limit: 'A label must never promise an unimplemented command. Spellcasting, throwing/firing, looting, paying/chatting and other missing verbs need named engine integrations, not raw-key fallbacks.',
+    check: 'All advertised actions can be invoked through the public contract; the UI clearly distinguishes unknown context from unsupported capability.'
+  }
+];
+class AffordanceList extends LitElement {
+  static properties = { group: { state: true } };
+  constructor() { super(); this.group = 'All'; }
+  createRenderRoot() { return this; }
+  render() {
+    const visible = items.filter(item => this.group === 'All' || item.group === this.group);
+    return html`
+      <nav aria-label="Filter recommendations">${['All', 'First', 'Next', 'Later'].map(group => html`
+        <button aria-pressed=${this.group === group} @click=${() => { this.group = group; }}>${group === 'All' ? 'All 14 recommendations' : group}</button>
+      `)}</nav>
+      <p class="muted" role="status">${visible.length} recommendations shown</p>
+      ${visible.map(item => html`<article>
+        <div class="tag">${item.group} · ${item.owner}</div>
+        <h3>${items.indexOf(item) + 1}. ${item.title}</h3>
+        <p>${item.player}</p>
+        <p><strong>Library work.</strong> ${item.library}</p>
+        <p><strong>Design boundary.</strong> ${item.limit}</p>
+        <p class="check"><strong>Acceptance.</strong> ${item.check}</p>
+      </article>`)}
+    `;
+  }
+}
+customElements.define('affordance-list', AffordanceList);
+</script>
+</body>
+</html>

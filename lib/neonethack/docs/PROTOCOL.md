@@ -95,6 +95,12 @@ on an unknown decision kind or outcome.
 ### Perception, not omniscience
 
 World cells layer remembered terrain and currently rendered occupants/objects.
+Optional `cell.visible` reports the engine's current sight of that square.
+`false` retains remembered terrain; it does not imply an empty square or
+absence of a creature perceived through another sense. Older engine packages
+omit this field: clients must not guess visibility from distance or map updates.
+Darkness does not erase previously perceived terrain. Undiscovered terrain
+remains unknown, including on invisible squares.
 The map is not a query of undiscovered level state. Replace the full observation
 on each response; never carry future terrain backward through a replay. Labels,
 marks and colors are presentation data, not object identity or game rules.
@@ -171,3 +177,73 @@ rejects larger combinations explicitly. Individual limits are in the schemas:
 This release does not claim every original NetHack action, arbitrary legacy
 historical equivalence, automatic crash recovery, or general power-loss proof.
 The protocol stabilizes supported operations without inventing missing behavior.
+
+### Perceived actions and neighborhood (resolver version 1)
+
+`protocol.describe.capabilities.affordanceVersion: 1` describes the library
+resolver. Engine support is separate: every newly emitted full observation carries
+`neighborhood`, either `available` or `unavailable` with `unsupportedPerception`,
+`unknownPosition`, or `recoveryRequired`. Old receipts are returned unchanged and
+may omit it. A resumed game uses its original pinned engine/package.
+
+`session.actions({sessionId, expectedRevision, target})` accepts `"here"` or
+`{direction: Compass}`. It returns an `ActionsResponse` (`kind: "actions"`), never
+an observation. It rejects a stale revision before resolving and never resumes an
+unloaded engine. It sends no engine input, consumes no events or random numbers,
+reserves no receipt and writes no storage. The SDK's `game.actions()` does not
+accept this result as a snapshot or clear an uncertain operation.
+
+Available neighborhoods have a shared `basis: {revision, levelId, origin}`,
+`inputGate`, radius 4 and exactly 81 row-major cells, dy/dx -4 through 4. The nine
+query targets equal the corresponding neighborhood cells. Playable bounds are
+x=1..79, y=0..20; out-of-map entries have no terrain assertion or actions and false
+walkability. Swallowing does not invent a surrounding normal map.
+
+`walkable` describes last-known terrain traversal for ordinary locomotion,
+including auto-opening a known unlocked door. It is independent of occupants,
+hazards, source-dependent movement restrictions, and permission to issue input.
+Unknown doors, water/lava and unusual forms return null conservatively. Manual
+movement remains available even toward false/null terrain. `movement` describes
+an adjacent attempt (including creature/ally bumps or possible pushes), and known
+intact-door diagonal restrictions. No success, safety or hidden squeeze test runs.
+
+Door locks come only from player-facing disclosures at the actual engine target.
+They are `unknown`, `locked` or `unlocked`, with independent `unknown`, `witnessed`
+or `remembered` freshness and an observation turn. Seeing a closed door again
+cannot refresh or invalidate remembered lock evidence. An observed replacement or
+opening clears obsolete closed-door advice. Tool Lock/Unlock confirmations disclose
+knowledge even on decline, but are never answered automatically. Bounded per-level
+records are reconstructed by integrity-checked pinned input replay, not hidden save
+state. Public `doorWitness` events carry level, coordinates, fact and turn.
+
+Offers use named methods only, with a closed availability union: `attemptable`,
+`uncertain`, `needsSelection`, `outOfReach` or `knownBlocked`. The last two carry no
+runnable arguments; `knownBlocked` requires a reason. Tool selection uses current
+perceived classes, never hidden powers or guessed identity. `context` is explanatory
+and must not be passed to `game.apply`; item, direction and confirmation remain
+separate genuine decisions. Cost is variable, not a promised turn count.
+
+SDK named methods accept optional `{expectedRevision}` as their final argument.
+Copy the offer's basis revision when opening a control; queued operations preserve
+that revision and copied arguments. Omitting it retains ordinary sequential input.
+The session-wide input gate takes precedence over all offers: a standing decision
+allows only its answers/cancellation, and uncertainty requires receipt recovery.
+
+Storage diagnostics always override a historical input gate. A failure while
+publishing/checkpointing a completed input can be discovered after its exact
+receipt was formed. Preserve that receipt's neighborhood unchanged; do not rewrite
+it on the original reply or later retries. A degraded `storage`/`recording` result
+blocks new operations regardless of the receipt's old gate. A fresh observe/query
+reports the current recovery requirement, and the SDK refuses discovery while it
+has an unresolved request.
+
+### Perceived creature appearance
+
+`observation.world[].occupant.appearance`, when present, names the monster type
+represented by the engine's displayed glyph (for example `kitten` or `newt`). This
+is available without spending a turn or attacking. It is an apparent description,
+not proof of a shapeshifter's true form, an unseen monster lookup, or an entity ID.
+It is omitted during hallucination and by older engine packages. Clients must not
+infer it from message prose, symbol/color pairs or remembered occupants. Refresh
+it from each observation; absence must clear an earlier description. Saved games
+continue to use their pinned package and may lack this optional field.

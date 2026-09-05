@@ -2,24 +2,12 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import catalog from "../protocol/catalog.json" with { type: "json" };
-import responseSchema from "../protocol/response.schema.json" with { type: "json" };
 import { NativeTransport, type NativeOptions } from "../typescript/native.js";
 import type { Transport } from "../typescript/client.js";
 import type { Request } from "../typescript/types.js";
 
-/** Tool definitions and C validation are generated from the same catalog. */
-export const tools = catalog.methods.map(method => ({
-  name: `neonethack_${method.name.replaceAll(".", "_")}`,
-  description: method.description,
-  inputSchema: method.schema,
-  outputSchema: responseSchema,
-  annotations: {
-    readOnlyHint: method.readOnly === true,
-    destructiveHint: method.readOnly !== true,
-    idempotentHint: method.idempotent === true,
-    openWorldHint: false,
-  },
-}));
+import { tools } from "./tools.js";
+export { tools } from "./tools.js";
 
 export function createMcpServer(transport: Transport): Server {
   const server = new Server({ name: "neonethack", version: "1.0.0-alpha.1" }, {

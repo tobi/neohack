@@ -108,6 +108,7 @@ request_choices(mj_val v)
 static const char *
 validate_request(const char *args, const char *tool, const char **why)
 {
+    static const char *const actions[] = { "tool", "sessionId", "expectedRevision", "target", NULL };
     static const char *const common[] = { "tool", "sessionId", "requestId", NULL };
     static const char *const create[] = { "tool", "sessionId", "requestId", "seed", "name", "role", "race", "gender", "align", NULL };
     static const char *const act[] = { "tool", "sessionId", "requestId", "expectedRevision", "action", "direction", "target", "item", "replyTo", "confirm", "choose", "text", "cancel", NULL };
@@ -119,10 +120,10 @@ validate_request(const char *args, const char *tool, const char **why)
     size_t i;
     if (!tool || !*tool) REQUEST_BAD("badTool", "request needs a named tool");
     is_act = !strcmp(tool, "act"); is_create = !strcmp(tool, "new_game");
-    if (!is_act && !is_create && strcmp(tool, "get_state") && strcmp(tool, "resume") && strcmp(tool, "end_session"))
+    if (!is_act && !is_create && strcmp(tool, "get_state") && strcmp(tool, "resume") && strcmp(tool, "end_session") && strcmp(tool, "actions"))
         REQUEST_BAD("badTool", "unknown tool");
     if (strlen(args) >= 1023) REQUEST_BAD("invalidArgument", "request exceeds the 1022-byte public request limit");
-    fields = is_act ? act : is_create ? create : common;
+    fields = is_act ? act : is_create ? create : !strcmp(tool, "actions") ? actions : common;
     if (!request_fields(args, fields)) REQUEST_BAD("invalidArgument", "unknown, duplicate or escaped field name");
     if (mj_find(args, "sessionId", &v) && !request_string(v, 1, 64, NULL))
         REQUEST_BAD("badSessionId", "sessionId must be a nonempty string of at most 64 bytes");
@@ -135,6 +136,13 @@ validate_request(const char *args, const char *tool, const char **why)
                 REQUEST_BAD("badIdentity", "identity fields must be named strings of 1..31 bytes without control characters");
         if (mj_find(args, "seed", &v) && !request_integer(v, -9007199254740991LL, 9007199254740991LL))
             REQUEST_BAD("badIdentity", "seed must be a safe integer, not null or a coerced string");
+        return NULL;
+    }
+    if (!strcmp(tool, "actions")) {
+        if (!mj_find(args, "sessionId", &v) || !request_string(v, 1, 64, NULL) ||
+            !mj_find(args, "expectedRevision", &v) || !request_integer(v, 0, 9007199254740991LL) ||
+            !mj_find(args, "target", &v) || (target = request_target(v)) < 0 || target == 46 || target == 60 || target == 62)
+            REQUEST_BAD("invalidArgument", "actions requires sessionId, expectedRevision and here or a compass target");
         return NULL;
     }
     if (!is_act) return NULL;

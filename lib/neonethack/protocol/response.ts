@@ -1,4 +1,4 @@
-import type { Schema } from "./catalog.ts";
+import { catalog, compass, type Schema } from "./catalog.ts";
 const string = { type: "string" };
 const integer = { type: "integer" };
 const boolean = { type: "boolean" };
@@ -12,7 +12,37 @@ const end = object({ kind: enumeration("death", "ascended", "escaped", "quit", "
 const base = { id: string, action: string, about: string, cancellable: boolean };
 const decision = (kind: string, properties: Record<string, Schema> = {}, optional: string[] = []) => object({ ...base, kind: { const: kind }, ...properties }, ["id", "action", "kind", "cancellable", ...Object.keys(properties).filter(k => !optional.includes(k))]);
 const event = (type: string, properties: Record<string, Schema>) => object({ type: { const: type }, ...properties });
+const closed = (properties: Record<string, Schema>, required = Object.keys(properties)): Schema => ({ ...object(properties, required), additionalProperties: false });
+const basis = closed({ revision: integer, levelId: string, origin: closed({ x: integer, y: integer }) });
+const inputGate = { oneOf: [closed({ state: enumeration("ready", "recoveryRequired", "ended", "unavailable") }), closed({ state: { const: "decision" }, decisionId: string })] };
+const offerMethods = ["move", "open", "close", "kick", "apply", "search", "wait", "pickup", "climb"];
+const actionOffer = { oneOf: offerMethods.flatMap(action => {
+  const method = catalog.methods.find(m => m.name === 'game.' + action)!;
+  const properties = Object.fromEntries(Object.entries(method.schema.properties).filter(([k]) => !["sessionId", "requestId", "expectedRevision"].includes(k))) as Record<string, Schema>;
+  const args = closed(properties, method.schema.required.filter((k: string) => k in properties));
+  const common = { key: string, method: { const: method.name }, cost: { const: "variable" }, cautions: array(enumeration("mayInjure", "mayMakeNoise", "mayDamageProperty")), context: closed({ kind: { const: "door" }, x: integer, y: integer }) };
+  const required = ["key", "method", "cost", "availability"];
+  return [
+    closed({ ...common, availability: enumeration("attemptable", "uncertain"), arguments: args, nextInput: enumeration("item") }, [...required, "arguments"]),
+    closed({ ...common, availability: { const: "needsSelection" }, arguments: args, nextInput: enumeration("item") }, [...required, "arguments", "nextInput"]),
+    closed({ ...common, availability: { const: "outOfReach" } }, required),
+    closed({ ...common, availability: { const: "knownBlocked" }, reason: string }, [...required, "reason"]),
+  ];
+}) };
+const cellActions = closed({
+  x: integer, y: integer, dx: integer, dy: integer, inBounds: boolean, visible: nullable(boolean),
+  terrain: closed({ type: string, freshness: enumeration("current", "remembered", "unknown") }),
+  door: closed({ lock: enumeration("locked", "unlocked", "unknown"), freshness: enumeration("witnessed", "remembered", "unknown"), observedTurn: integer }, ["lock", "freshness"]),
+  occupant: closed({ kind: enumeration("self", "creature", "ally") }), hazards: array(enumeration("trap", "water", "lava")),
+  walkable: nullable(boolean), movement: closed({ relation: enumeration("here", "adjacent", "distant"), intent: enumeration("step", "attemptOpen", "attemptObstacle", "creatureBump", "allyBump", "possiblePush", "unknown"), knownRestriction: enumeration("intactDoorDiagonal", "lockedDoor", "knownTerrainObstacle") }, ["relation"]),
+  actions: { ...array(actionOffer), maxItems: 6 },
+}, ["x", "y", "dx", "dy", "inBounds", "walkable", "movement", "actions"]);
+const neighborhood = { oneOf: [
+  closed({ version: { const: 1 }, status: { const: "available" }, basis, inputGate, radius: { const: 4 }, cells: { ...array(cellActions), minItems: 81, maxItems: 81 } }),
+  closed({ version: { const: 1 }, status: { const: "unavailable" }, reason: enumeration("unknownPosition", "unsupportedPerception", "recoveryRequired") }),
+] };
 const observation = object({
+  neighborhood,
   turn: integer, location: object({ id: string, depthLabel: string }),
   you: nullable(object({ x: integer, y: integer })),
   vitals: { type: "object", additionalProperties: { anyOf: [string, { type: "number" }, array(string)] } },
@@ -20,18 +50,19 @@ const observation = object({
   here: object({ known: boolean, items: array(item) }),
   perception: object({ version: integer, inventory: enumeration("current", "lastKnown", "unknown"), here: enumeration("current", "lastKnown", "unknown"), equipment: enumeration("current", "lastKnown", "unknown") }),
   world: array(object({
-    x: integer, y: integer,
+    x: integer, y: integer, visible: boolean,
     terrain: object({ type: string, knowledge: { const: "remembered" } }),
-    occupant: object({ kind: enumeration("self", "creature", "ally"), mark: string, color: integer }, ["kind", "mark"]),
+    occupant: object({ kind: enumeration("self", "creature", "ally"), mark: string, color: integer, appearance: string }, ["kind", "mark"]),
     objects: array(object({ mark: string, color: integer })),
   }, ["x", "y", "terrain"])), heard: array(string),
-});
+}, ["turn", "location", "you", "vitals", "inventory", "inventoryKnown", "here", "perception", "world", "heard"]);
 /** Responses are additive within v1. Clients replace observations, ignore
  * unknown properties, and fail closed on unknown decision kinds/outcomes. */
 export const responseSchema: Schema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   title: "libneonethack response v1",
   ...object({
+    kind: { const: "actions" }, basis, inputGate, cell: cellActions,
     version: { const: 1 }, sessionId: string, requestId: nullable(string), revision: integer,
     outcome: object({ action: string, status: enumeration("completed", "needsChoice", "blocked", "cancelled", "interrupted", "unknown"), reason: string, turnsElapsed: integer, positionChanged: boolean, effects: array(string) }, ["action", "status", "turnsElapsed", "positionChanged", "effects"]),
     observation,
@@ -43,6 +74,7 @@ export const responseSchema: Schema = {
       decision("text"),
     ] }),
     events: array({ oneOf: [
+      event("doorWitness", { levelId: string, x: integer, y: integer, fact: enumeration("locked", "unlocked", "opened", "closed", "resisted", "notClosed"), turn: integer }),
       event("saw", { x: integer, y: integer, kind: string, mark: string, color: integer }),
       event("felt", { sense: string, value: string }), event("heard", { text: string }),
       event("shown", { about: string, items: array(string) }),
@@ -54,10 +86,11 @@ export const responseSchema: Schema = {
     error: object({ code: string, message: string }),
     recording: object({ status: string }, ["status"]), storage: object({ status: string }, ["status"]),
     libraryVersion: string, backend: enumeration("native", "wasm"),
-    capabilities: object({ persistence: enumeration("filesystem", "memory", "indexeddb"), durability: enumeration("fsync", "none", "indexeddb-transaction"), ownership: enumeration("process-lease", "isolated-worker", "origin-web-lock"), resume: enumeration("pinned-executable", "same-package"), runtimeProfile: { const: 1 } }, ["persistence", "durability", "ownership", "resume"]),
+    capabilities: object({ affordanceVersion: { const: 1 }, persistence: enumeration("filesystem", "memory", "indexeddb"), durability: enumeration("fsync", "none", "indexeddb-transaction"), ownership: enumeration("process-lease", "isolated-worker", "origin-web-lock"), resume: enumeration("pinned-executable", "same-package"), runtimeProfile: { const: 1 } }, ["persistence", "durability", "ownership", "resume"]),
     catalog: object({ version: { const: 1 }, methods: array(object({ name: string, description: string, schema: { type: "object" } })) }),
   }, ["version"]),
   anyOf: [
+    { required: ["kind", "sessionId", "basis", "inputGate", "cell"] },
     { required: ["sessionId", "requestId", "revision", "outcome", "observation", "events", "decision", "ended", "end"] },
     { required: ["error"] },
     { required: ["libraryVersion", "backend", "catalog", "capabilities"] },

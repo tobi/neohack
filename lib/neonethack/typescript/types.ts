@@ -6,6 +6,36 @@ export type Direction = Compass | "up" | "down";
 export type Item = NonNullable<MethodParams["game.eat"]["item"]>;
 export type Target = NonNullable<MethodParams["game.zap"]["target"]>;
 export type Answer = MethodParams["decision.answer"]["answer"];
+export type ActionTarget = MethodParams["session.actions"]["target"];
+export interface ActionBasis { revision: number; levelId: string; origin: { x: number; y: number } }
+export type InputGate = { state: "ready" | "recoveryRequired" | "ended" | "unavailable" } | { state: "decision"; decisionId: string };
+type OfferMethod = "game.move" | "game.open" | "game.close" | "game.kick" | "game.apply" | "game.search" | "game.wait" | "game.pickup" | "game.climb";
+type OfferArguments<M extends OfferMethod> = Omit<MethodParams[M], "sessionId" | "requestId" | "expectedRevision">;
+export type ActionOffer = { [M in OfferMethod]: {
+  key: string; method: M; cost: "variable";
+  cautions?: ("mayInjure" | "mayMakeNoise" | "mayDamageProperty")[];
+  context?: { kind: "door"; x: number; y: number };
+} & (
+  | { availability: "attemptable" | "uncertain"; arguments: OfferArguments<M>; nextInput?: "item" }
+  | { availability: "needsSelection"; arguments: OfferArguments<M>; nextInput: "item" }
+  | { availability: "outOfReach"; arguments?: never }
+  | { availability: "knownBlocked"; reason: string; arguments?: never }
+) }[OfferMethod];
+export interface CellActions {
+  x: number; y: number; dx: number; dy: number; inBounds: boolean;
+  visible?: boolean | null;
+  terrain?: { type: string; freshness: "current" | "remembered" | "unknown" };
+  door?: { lock: "locked" | "unlocked" | "unknown"; freshness: "witnessed" | "remembered" | "unknown"; observedTurn?: number };
+  occupant?: { kind: "self" | "creature" | "ally" };
+  hazards?: ("trap" | "water" | "lava")[];
+  walkable: boolean | null;
+  movement: { relation: "here" | "adjacent" | "distant"; intent?: "step" | "attemptOpen" | "attemptObstacle" | "creatureBump" | "allyBump" | "possiblePush" | "unknown"; knownRestriction?: "intactDoorDiagonal" | "lockedDoor" | "knownTerrainObstacle" };
+  actions: ActionOffer[];
+}
+export type Neighborhood =
+  | { version: 1; status: "available"; basis: ActionBasis; radius: 4; inputGate: InputGate; cells: CellActions[] }
+  | { version: 1; status: "unavailable"; reason: "unknownPosition" | "unsupportedPerception" | "recoveryRequired" };
+export interface ActionsResponse { version: 1; kind: "actions"; sessionId: string; basis: ActionBasis; inputGate: InputGate; cell: CellActions }
 export type Freshness = "current" | "lastKnown" | "unknown";
 export interface ItemRef {
   id: string; label: string; location: "inventory" | "here";
@@ -14,8 +44,10 @@ export interface ItemRef {
 }
 export interface Cell {
   x: number; y: number;
+  /** Engine sight at this boundary. Omitted by older engine packages. */
+  visible?: boolean;
   terrain: { type: string; knowledge: "remembered" };
-  occupant?: { kind: "self" | "creature" | "ally"; mark: string; color?: number };
+  occupant?: { kind: "self" | "creature" | "ally"; mark: string; color?: number; appearance?: string };
   objects?: { mark: string; color: number }[];
 }
 /** Omitted facts are unknown; empty known lists really are empty. */
@@ -33,6 +65,8 @@ export interface Observation {
   inventory: ItemRef[]; inventoryKnown: boolean;
   here: { known: boolean; items: ItemRef[] };
   perception: { version: number; inventory: Freshness; here: Freshness; equipment: Freshness };
+  /** Absent on historical receipts and older packages. */
+  neighborhood?: Neighborhood;
   world: Cell[]; heard: string[];
 }
 interface DecisionBase { id: string; action: string; about?: string; cancellable: boolean }
@@ -50,6 +84,7 @@ export interface Outcome {
 }
 export interface End { kind: "death" | "ascended" | "escaped" | "quit" | "disconnected" | "engineError" | "unknown"; cause?: string; turn: number }
 export type WorldEvent =
+  | { type: "doorWitness"; levelId: string; x: number; y: number; fact: "locked" | "unlocked" | "opened" | "closed" | "resisted" | "notClosed"; turn: number }
   | { type: "saw"; x: number; y: number; kind: string; mark: string; color: number }
   | { type: "felt"; sense: string; value: string }
   | { type: "heard"; text: string }
@@ -75,7 +110,8 @@ export interface Description {
     resume: "pinned-executable" | "same-package";
     /** Absent on older libraries: do not infer runtime isolation. */
     runtimeProfile?: 1;
+    affordanceVersion?: 1;
   };
   catalog: { version: 1; methods: { name: string; description: string; schema: Record<string, unknown>; readOnly?: boolean; idempotent?: boolean }[] };
 }
-export type Response = Snapshot | Rejection | Description;
+export type Response = Snapshot | Rejection | Description | ActionsResponse;

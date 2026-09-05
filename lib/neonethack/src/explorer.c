@@ -48,23 +48,14 @@
 #define STRANGE_LO 4051
 #define EFFECT_LO 7226
 
-typedef enum {
-    T_UNKNOWN = 0, T_WALL, T_FLOOR, T_CORRIDOR, T_DOOR_CLOSED,
-    T_STAIRS_UP, T_STAIRS_DOWN, T_ALTAR, T_FOUNTAIN, T_THRONE,
-    T_TRAP, T_DARK, T_WATER, T_LAVA, T_SINK, T_GRASS,
-    T_DOOR_OPEN, T_BARS, T_TREE, T_ICE, T_GRAVE, T_BRIDGE
-} terrain_t;
-
-static const char *const TERRAIN_NAMES[] = {
-    "unknown", "wall", "floor", "corridor", "closedDoor",
-    "stairsUp", "stairsDown", "altar", "fountain", "throne",
-    "trap", "dark", "water", "lava", "sink", "grass",
-    "openDoor", "bars", "tree", "ice", "grave", "bridge"
-};
+#include "affordance.h"
+#define TERRAIN_NAMES nnh_terrain_names
 
 typedef struct {
     int present;
     int glyph, ch, color;
+    int visibility_known, visible, boulder, trap_base;
+    char appearance[128];
 } cell_t;
 
 typedef struct {
@@ -195,6 +186,12 @@ typedef struct req_entry {
     struct req_entry *next;
 } req_entry_t;
 
+typedef struct {
+    char level[80];
+    int x, y, lock;
+    long long epoch, turn;
+} door_fact_t;
+
 typedef struct game {
     char id[65];
     long long runtime_epoch;     /* validated profile-1 UTC creation time */
@@ -212,6 +209,11 @@ typedef struct game {
     long long terminal_turn;
     char location_id[80];
     int structured_perception; /* engine perception version; zero = legacy peeks */
+    int affordance_version, ordinary_locomotion, normal_map, door_diagonals, direction_reliable;
+    long long knowledge_epoch;
+    door_fact_t *door_facts;
+    size_t ndoor_facts, door_capacity;
+    int door_index[MAP_H][MAP_W];
     int perception_fresh;      /* snapshot received after the latest engine input */
     int replaying;          /* resume lockstep: suspend live auto-answers */
     int recording_only;
@@ -1167,8 +1169,8 @@ terrain_from_cmap(int c)
     if (c >= 1 && c <= 11) return T_WALL;
     if (c >= 49 && c <= 73) return T_TRAP;
     switch (c) {
-    case 0: case 20: return T_DARK;
-    case 12: case 19: case 21: return T_FLOOR;
+    case 0: return T_DARK;
+    case 12: case 19: case 20: case 21: return T_FLOOR;
     case 13: case 14: return T_DOOR_OPEN;
     case 15: case 16: return T_DOOR_CLOSED;
     case 17: return T_BARS;
@@ -1189,6 +1191,60 @@ terrain_from_cmap(int c)
     }
 }
 
+/* Replayed from pinned disclosures; never from hidden save-state door bits. */
+static void index_door_facts(game_t *g)
+{
+    size_t i;
+    memset(g->door_index, -1, sizeof g->door_index);
+    for (i = 0; i < g->ndoor_facts; i++)
+        if (!strcmp(g->door_facts[i].level, g->location_id))
+            g->door_index[g->door_facts[i].y][g->door_facts[i].x] = (int) i;
+}
+static void ingest_door_witness(game_t *g, const char *params)
+{
+    mj_val v; long long branch, level, x, y, turn, epoch;
+    char *fact = NULL, id[80]; size_t i; int lock;
+#define WITNESS_INT(key, dest) if (!mj_find(params, key, &v) || !mj_int(v, &dest)) goto invalid
+    WITNESS_INT("branch", branch); WITNESS_INT("level", level);
+    WITNESS_INT("x", x); WITNESS_INT("y", y); WITNESS_INT("turn", turn); WITNESS_INT("epoch", epoch);
+#undef WITNESS_INT
+    if (x < 1 || x >= MAP_W || y < 0 || y >= MAP_H || branch < 0 || level < 1 || turn < 0 || epoch < 1) goto invalid;
+    if (!mj_find(params, "fact", &v) || !(fact = mj_str(v))) goto invalid;
+    if (!strcmp(fact, "locked")) lock = 1;
+    else if (!strcmp(fact, "unlocked") || !strcmp(fact, "closed") || !strcmp(fact, "resisted")) lock = 2;
+    else if (!strcmp(fact, "opened") || !strcmp(fact, "notClosed")) lock = 0;
+    else goto invalid;
+    snprintf(id, sizeof id, "level-%lld-%lld", branch, level);
+    for (i = 0; i < g->ndoor_facts; i++)
+        if (g->door_facts[i].x == x && g->door_facts[i].y == y && !strcmp(g->door_facts[i].level, id)) break;
+    if (i == g->ndoor_facts) {
+        if (i >= NNH_DOOR_FACT_LIMIT) goto invalid;
+        if (i == g->door_capacity) {
+            size_t capacity = g->door_capacity ? g->door_capacity * 2 : 16;
+            door_fact_t *facts = realloc(g->door_facts, capacity * sizeof *facts);
+            if (!facts) goto invalid;
+            g->door_facts = facts; g->door_capacity = capacity;
+        }
+        g->ndoor_facts++;
+    }
+    snprintf(g->door_facts[i].level, sizeof g->door_facts[i].level, "%s", id);
+    g->door_facts[i].x = (int) x; g->door_facts[i].y = (int) y;
+    g->door_facts[i].lock = lock; g->door_facts[i].turn = turn; g->door_facts[i].epoch = epoch;
+    if (!strcmp(g->location_id, id)) g->door_index[y][x] = (int) i;
+    {
+        mj_Buf b; mj_init(&b); mj_obj(&b);
+        mj_key(&b, "type"); mj_strv(&b, "doorWitness");
+        mj_key(&b, "levelId"); mj_strv(&b, id);
+        mj_key(&b, "x"); mj_intv(&b, x); mj_key(&b, "y"); mj_intv(&b, y);
+        mj_key(&b, "fact"); mj_strv(&b, fact); mj_key(&b, "turn"); mj_intv(&b, turn);
+        mj_endobj(&b); if (b.ok) push_event(g, b.buf); mj_free(&b);
+    }
+    free(fact); return;
+invalid:
+    free(fact);
+    snprintf(g->input_error, sizeof g->input_error, "Door knowledge evidence is invalid or exceeds its bounded capacity; no hidden state was used to repair it");
+}
+
 /* Read non-mutating object perceptions emitted by the engine itself. */
 static void
 ingest_belongings(game_t *g, const char *params)
@@ -1199,7 +1255,28 @@ ingest_belongings(game_t *g, const char *params)
     size_t i;
     if (mj_find(params, "branch", &v)) mj_int(v, &branch);
     if (mj_find(params, "level", &v)) mj_int(v, &level);
-    snprintf(g->location_id, sizeof g->location_id, "level-%lld-%lld", branch, level);
+    {
+        char next_level[80];
+        snprintf(next_level, sizeof next_level, "level-%lld-%lld", branch, level);
+        if (strcmp(g->location_id, next_level)) {
+            snprintf(g->location_id, sizeof g->location_id, "%s", next_level);
+            index_door_facts(g);
+        }
+    }
+    if (mj_find(params, "affordanceVersion", &v) && mj_int(v, &n) && n == 1) {
+        g->affordance_version = 1;
+        if (mj_find(params, "knowledgeEpoch", &v) && mj_int(v, &n)) g->knowledge_epoch = n;
+        if (mj_find(params, "ordinaryLocomotion", &v)) mj_bool(v, &g->ordinary_locomotion);
+        if (mj_find(params, "normalMap", &v)) mj_bool(v, &g->normal_map);
+        if (mj_find(params, "doorDiagonals", &v)) mj_bool(v, &g->door_diagonals);
+        if (mj_find(params, "directionReliable", &v)) mj_bool(v, &g->direction_reliable);
+        for (i = 0; i < g->ndoor_facts; i++) {
+            door_fact_t *d = &g->door_facts[i];
+            if (!strcmp(d->level, g->location_id) && g->cells[d->y][d->x].visible &&
+                g->terrain[d->y][d->x] != T_DOOR_CLOSED && g->terrain[d->y][d->x] != T_DARK && g->terrain[d->y][d->x] != T_UNKNOWN)
+                d->lock = 0; /* Only an observed feature change invalidates advice. */
+        }
+    }
     if (mj_find(params, "floorKnown", &v)) mj_bool(v, &known);
     if (mj_find(params, "x", &v) && mj_int(v, &n)) g->you_x = (int) n;
     if (mj_find(params, "y", &v) && mj_int(v, &n)) g->you_y = (int) n;
@@ -1307,8 +1384,10 @@ ingest(game_t *g, const char *line)
     if (g->terminal_kind[0] && (!strcmp(method, "perception") ||
         !strcmp(method, "snapshot") || !strcmp(method, "map_delta") ||
         !strcmp(method, "status_update") || !strcmp(method, "window_clear") ||
-        !strcmp(method, "cursor"))) goto done;
-    if (!strcmp(method, "perception")) {
+        !strcmp(method, "cursor") || !strcmp(method, "door_witness"))) goto done;
+    if (!strcmp(method, "door_witness")) {
+        ingest_door_witness(g, params);
+    } else if (!strcmp(method, "perception")) {
         ingest_belongings(g, params);
     } else if (!strcmp(method, "snapshot") || !strcmp(method, "map_delta")) {
         mj_val cells_v, full_v;
@@ -1354,12 +1433,29 @@ ingest(game_t *g, const char *line)
                             mj_int(cv2, &cc);
                         if (mj_find(ecpy, "framecolor", &fv2))
                             mj_int(fv2, &fc);
+                        g->cells[y][x].appearance[0] = '\0';
+                        { mj_val av;
+                          if (mj_find(ecpy, "appearance", &av)) {
+                              char *name = mj_str(av);
+                              if (name) { snprintf(g->cells[y][x].appearance, sizeof g->cells[y][x].appearance, "%s", name); free(name); }
+                          }
+                        }
                         g->cells[y][x].present = 1;
                         g->cells[y][x].glyph = (int) gg;
                         g->cells[y][x].ch = (int) cc;
                         g->cells[y][x].color = (int) fc;
+                        { mj_val bv; if (mj_find(ecpy, "boulder", &bv)) mj_bool(bv, &g->cells[y][x].boulder); }
+                        {
+                            mj_val vv;
+                            int visible;
+                            if (mj_find(ecpy, "visible", &vv) && mj_bool(vv, &visible)) {
+                                g->cells[y][x].visibility_known = 1;
+                                g->cells[y][x].visible = visible;
+                            }
+                        }
                         {
                             mj_val tv;
+                            unsigned char remembered = g->terrain[y][x];
                             long long symbol = -1, background = -1;
                             if (mj_find(ecpy, "cmap", &tv)) mj_int(tv, &symbol);
                             if (mj_find(ecpy, "backgroundCmap", &tv)) mj_int(tv, &background);
@@ -1377,10 +1473,18 @@ ingest(game_t *g, const char *line)
                                     gg < CMAP_LO + 82 ? 33 : 34 + ((int) gg - CMAP_LO - 82);
                                 g->terrain[y][x] = (unsigned char) terrain_from_cmap(legacy);
                             }
+                            if (g->terrain[y][x] == T_TRAP && remembered != T_TRAP && remembered != T_UNKNOWN && remembered != T_DARK)
+                                g->cells[y][x].trap_base = remembered;
+                            else if (g->terrain[y][x] != T_TRAP && g->terrain[y][x] != T_DARK && g->terrain[y][x] != T_UNKNOWN)
+                                g->cells[y][x].trap_base = T_UNKNOWN;
+                            /* Darkness is loss of sight, not loss of terrain
+                             * knowledge. Never substitute live hidden terrain. */
+                            if ((g->terrain[y][x] == T_DARK || g->terrain[y][x] == T_UNKNOWN)
+                                && remembered != T_UNKNOWN && remembered != T_DARK)
+                                g->terrain[y][x] = remembered;
                         }
                         if (gg >= NO_GLYPH_NUM - 2) {
                             g->cells[y][x].present = 0;
-                            g->terrain[y][x] = T_UNKNOWN;
                         }
                         push_saw(g, (int) x, (int) y, (int) gg, (int) cc, (int) fc);
                     }
@@ -2239,6 +2343,7 @@ game_free(game_t *g)
     for (i = 0; i < g->nfloor; i++)
         free(g->floor[i].label);
     free(g->floor);
+    free(g->door_facts);
     free(g);
 }
 
@@ -2431,6 +2536,9 @@ tracked_clear(game_t *g)
     g->terminal_kind[0] = g->terminal_cause[0] = '\0';
     g->terminal_turn = 0;
     g->location_id[0] = '\0';
+    free(g->door_facts); g->door_facts = NULL; g->ndoor_facts = g->door_capacity = 0;
+    memset(g->door_index, -1, sizeof g->door_index);
+    g->affordance_version = 0; g->knowledge_epoch = 0;
     g->structured_perception = 0;
     g->perception_fresh = 0;
     for (i = 0; i < MAX_MENU_WINDOWS; i++)
@@ -2635,7 +2743,8 @@ emit_world(game_t *g, mj_Buf *b)
             int glyph, band;
             char mark[8];
             int is_you;
-            if (!c->present || (!c->glyph && !c->ch))
+            if ((!c->present || (!c->glyph && !c->ch)) &&
+                (g->terrain[y][x] == T_UNKNOWN || g->terrain[y][x] == T_DARK))
                 continue;
             glyph = c->glyph;
             if (glyph < ALLY_LO)
@@ -2666,6 +2775,9 @@ emit_world(game_t *g, mj_Buf *b)
             mj_obj(b);
             mj_key(b, "x"); mj_intv(b, x);
             mj_key(b, "y"); mj_intv(b, y);
+            if (c->visibility_known) {
+                mj_key(b, "visible"); mj_boolv(b, c->visible);
+            }
             mj_key(b, "terrain"); mj_obj(b);
             mj_key(b, "type");
             mj_strv(b, TERRAIN_NAMES[g->terrain[y][x] <= T_BRIDGE ? g->terrain[y][x] : T_UNKNOWN]);
@@ -2676,13 +2788,14 @@ emit_world(game_t *g, mj_Buf *b)
                 mj_key(b, "kind"); mj_strv(b, "self");
                 mj_key(b, "mark"); mj_strv(b, mark);
                 mj_endobj(b);
-            } else if (band == 0 || band == 1) {
+            } else if (c->present && (band == 0 || band == 1)) {
                 mj_key(b, "occupant"); mj_obj(b);
                 mj_key(b, "kind"); mj_strv(b, band ? "ally" : "creature");
+                if (c->appearance[0]) { mj_key(b, "appearance"); mj_strv(b, c->appearance); }
                 mj_key(b, "mark"); mj_strv(b, mark);
                 mj_key(b, "color"); mj_intv(b, c->color);
                 mj_endobj(b);
-            } else if (band == 2 || band == 3) {
+            } else if (c->present && (band == 2 || band == 3)) {
                 mj_key(b, "objects"); mj_arr(b);
                 mj_obj(b);
                 mj_key(b, "mark"); mj_strv(b, mark);
@@ -2769,7 +2882,55 @@ emit_provenance(game_t *g, mj_Buf *b)
 }
 
 static void
-emit_observation(game_t *g, mj_Buf *b)
+build_knowledge(game_t *g, nnh_knowledge *k, int recovery)
+{
+    int i; size_t j;
+    memset(k, 0, sizeof *k);
+    k->revision = g->revision;
+    k->supported = g->affordance_version == 1;
+    k->have_origin = g->have_you && g->you_x >= 1 && g->you_x < MAP_W && g->you_y >= 0 && g->you_y < MAP_H;
+    k->origin_x = g->you_x; k->origin_y = g->you_y;
+    snprintf(k->level, sizeof k->level, "%s", g->location_id);
+    recovery = recovery || g->recovery_required || g->sidecar_corrupt || g->sidecar_error[0] || g->input_error[0] || g->request_index_corrupt || g->recording_gap || g->recording_error[0];
+    k->gate = recovery ? "recoveryRequired" : g->ended || g->terminal_kind[0] ? "ended" :
+        !g->eng ? "unavailable" : g->have_operation && g->operation.decision_id[0] ? "decision" : "ready";
+    if (!strcmp(k->gate, "decision")) k->decision_id = g->operation.decision_id;
+    k->unavailable_reason = recovery ? "recoveryRequired" : !k->supported ? "unsupportedPerception" : !k->have_origin || !g->normal_map ? "unknownPosition" : NULL;
+    k->ordinary_locomotion = g->ordinary_locomotion;
+    k->door_diagonals = g->door_diagonals;
+    k->direction_reliable = g->direction_reliable;
+    k->inventory_current = g->structured_perception && g->perception_fresh;
+    for (j = 0; j < g->ninv; j++) if (!strcmp(g->inv[j].category, "tool")) k->tools++;
+    k->floor_current = g->floor_valid && g->perception_fresh;
+    k->floor_items = g->nfloor > 0;
+    for (i = 0; i < NNH_NEIGHBORHOOD_CELLS; i++) {
+        int x = k->origin_x + i % 9 - 4, y = k->origin_y + i / 9 - 4, d;
+        nnh_known_cell *c = &k->cells[i]; cell_t *source;
+        c->in_bounds = x >= 1 && x < MAP_W && y >= 0 && y < MAP_H;
+        c->visible = -1;
+        if (!c->in_bounds) continue;
+        source = &g->cells[y][x];
+        c->terrain = g->terrain[y][x];
+        c->visible = source->visibility_known ? source->visible : -1;
+        c->trap = c->terrain == T_TRAP;
+        /* Preserve a previously perceived base beneath a known trap. */
+        if (c->trap && source->trap_base) c->terrain = source->trap_base;
+        c->boulder = source->present && source->boulder;
+        if (i == 40) c->occupant = 1;
+        else if (source->present && source->glyph >= 0 && source->glyph < BODY_LO)
+            c->occupant = source->glyph >= ALLY_LO && source->glyph < INVIS_LO ? 3 : 2;
+        else if (source->present && source->glyph >= RIDDEN_LO && source->glyph < OBJ_LO) c->occupant = 2;
+        d = g->door_index[y][x];
+        if (d >= 0 && (size_t) d < g->ndoor_facts) {
+            c->lock = g->door_facts[d].lock;
+            c->witnessed = g->door_facts[d].epoch == g->knowledge_epoch;
+            c->observed_turn = g->door_facts[d].turn;
+        }
+    }
+}
+
+static void
+emit_observation(game_t *g, mj_Buf *b, int recovery)
 {
     mj_key(b, "observation");
     mj_obj(b);
@@ -2804,6 +2965,7 @@ emit_observation(game_t *g, mj_Buf *b)
     mj_endarr(b); mj_endobj(b);
     emit_world(g, b);
     emit_heard_chrono(g, b);
+    { nnh_knowledge k; build_knowledge(g, &k, recovery); mj_key(b, "neighborhood"); nnh_emit_neighborhood(&k, b); }
     mj_endobj(b);
 }
 
@@ -3467,7 +3629,6 @@ envelope(game_t *g, const char *req_id,
         mj_strv(&b, effects[i]);
     mj_endarr(&b);
     mj_endobj(&b);
-    emit_observation(g, &b);
     emit_provenance(g, &b);
     emit_events_window(g, &b, ev_from);
     if (want_decision && g->pending.waiting &&
@@ -3476,6 +3637,7 @@ envelope(game_t *g, const char *req_id,
     } else {
         mj_key(&b, "decision"); mj_nullv(&b);
     }
+    emit_observation(g, &b, !strcmp(status, "unknown") || (err_code && code_is_unknown(err_code)));
     mj_key(&b, "ended"); mj_boolv(&b, g->ended || g->terminal_kind[0]);
     emit_end(g, &b);
     if (err_code) {
@@ -4833,7 +4995,6 @@ envelope_synth(game_t *g, const char *req_id, const char *action,
     mj_key(&b, "effects"); mj_arr(&b);
     mj_endarr(&b);
     mj_endobj(&b);
-    emit_observation(g, &b);
     emit_events_window(g, &b, ev_from);
     if (want_item && emit_item_decision(g, &b, g->operation.action[0] ? g->operation.action : action)) {
         snprintf(dec_kind, sizeof dec_kind, "%s", "item");
@@ -4841,6 +5002,7 @@ envelope_synth(game_t *g, const char *req_id, const char *action,
     } else {
         mj_key(&b, "decision"); mj_nullv(&b);
     }
+    emit_observation(g, &b, !strcmp(status, "unknown") || (err_code && code_is_unknown(err_code)));
     mj_key(&b, "ended"); mj_boolv(&b, g->ended || g->terminal_kind[0]);
     emit_end(g, &b);
     if (err_code) {
@@ -5175,6 +5337,32 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
     sidecar_save(g);
     return envelope(g, req_id, "new_game", "needsChoice", NULL, 0, 0,
                     NULL, 0, ev_from, 1, 0, NULL, NULL);
+}
+
+static char *
+run_actions(game_t *g, const char *args)
+{
+    mj_val v, target; long long revision; nnh_knowledge k; nnh_cell_actions cell;
+    mj_Buf b; int index = 40, i;
+    static const int offsets[] = {-9,-8,1,10,9,8,-1,-10};
+    if (!g) return fail_envelope("", NULL, "unknownSession", "unknown loaded session; resume explicitly");
+    mj_find(args, "expectedRevision", &v); mj_int(v, &revision);
+    if (revision != g->revision) return fail_envelope(g->id, NULL, "staleRevision", "query is based on a different revision");
+    if (!g->eng && !g->ended) return fail_envelope(g->id, NULL, "noGame", "no live engine; resume explicitly");
+    build_knowledge(g, &k, 0);
+    if (k.unavailable_reason) return fail_envelope(g->id, NULL, k.unavailable_reason, "current neighborhood is unavailable");
+    mj_find(args, "target", &target);
+    if (mj_find(target.p, "direction", &v)) {
+        char *name = mj_str(v);
+        for (i = 0; i < 8; i++) if (!strcmp(name, nnh_compass_names[i])) index += offsets[i];
+        free(name);
+    }
+    nnh_resolve_cell(&k, index, &cell);
+    mj_init(&b); mj_obj(&b);
+    mj_key(&b, "kind"); mj_strv(&b, "actions"); mj_key(&b, "sessionId"); mj_strv(&b, g->id);
+    nnh_emit_basis(&k, &b); nnh_emit_gate(&k, &b);
+    mj_key(&b, "cell"); nnh_emit_cell_actions(&cell, &b);
+    mj_endobj(&b); return mj_take(&b);
 }
 
 static char *
@@ -6027,6 +6215,9 @@ nhx_call(nhx_t *x, const char *request_json)
             free(tool); free(sid); free(rid);
             return out;
         }
+    }
+    if (tool && !strcmp(tool, "actions")) {
+        out = run_actions(g, request_json); free(tool); free(sid); free(rid); return out;
     }
     was_ended = g && g->ended;
     if (g && rid && tool && !strcmp(tool, "act") && req_lookup(g, rid)) retry = 1;

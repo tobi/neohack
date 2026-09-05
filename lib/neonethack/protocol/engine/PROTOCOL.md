@@ -222,3 +222,25 @@ engine-issued `game_ended` facts, and keep failures/uncertainty distinct.
 The native session supervisor has bounded shutdown and can abort an owned child
 before closing its input. Passive archive review uses none of this protocol:
 it reads public checkpoints without launching or commanding an engine.
+Map snapshot/delta cells may include `visible: boolean`, sampled from the engine's
+current sight mask at flush boundaries, including when the display glyph itself
+did not change. This is sight of the square, not the visibility of each entity
+(special senses may still render occupants). The adapter preserves terrain memory
+when the perceived glyph becomes dark; `S_darkroom` is perceived room floor, while
+`S_stone` does not reveal a new floor. Older engine pins omit sight rather than
+claiming a guessed value. No live unseen terrain is serialized.
+
+Affordance perception version 3 adds `affordanceVersion:1`, a monotonic
+`knowledgeEpoch` at existing input boundaries, `normalMap`, `ordinaryLocomotion`,
+`doorDiagonals` and `directionReliable`. These are restricted known-body/map facts;
+no intrinsic/extrinsic mask is exported. Perceived object glyphs may include a
+`boulder` boolean. `door_witness` notifications come only from player-facing
+branches, with branch/level, actual x/y, fact, turn and next boundary epoch. Facts:
+locked, unlocked, opened, closed, resisted, notClosed. They are replay evidence,
+not a query of raw door state after arbitrary input. Seeing a closed door never
+reports its hidden lock or trap bits.
+
+Map cells may also carry `appearance`, the neutral monster-type name represented
+by the displayed monster glyph. This is a glyph description, never a lookup of
+`m_at` or a monster's hidden data. It is omitted during hallucination. Deltas clear
+the previous appearance when the field is absent, including when a creature leaves.

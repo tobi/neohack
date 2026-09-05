@@ -103,6 +103,68 @@
       "idempotent": true
     },
     {
+      "name": "session.actions",
+      "description": "Read revision-bound attempts for here or an adjacent square using only perceived knowledge. No engine input, event consumption, receipt or automatic resume. Offers do not promise safety or success.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "x-maxBytes": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque session identifier returned by create or resume."
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "here"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "north",
+                      "northeast",
+                      "east",
+                      "southeast",
+                      "south",
+                      "southwest",
+                      "west",
+                      "northwest"
+                    ]
+                  }
+                },
+                "required": [
+                  "direction"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "sessionId",
+          "expectedRevision",
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "readOnly": true,
+      "idempotent": true
+    },
+    {
       "name": "session.resume",
       "description": "Re-enter a persisted session by replaying validated input with its pinned engine. Restores the recorded runtime profile, observation and pending decision without answering it. Unprofiled history is refused, not migrated with invented settings. Matching prompts are not a universal replay proof. Requires exclusive ownership. Integrity or uncertain-boundary failures block new operations. This runs an engine; archive review is a separate, read-only client facility.",
       "schema": {

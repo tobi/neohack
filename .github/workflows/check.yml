@@ -53,6 +53,13 @@ jobs:
           # Chrome. Never disable the browser sandbox to bypass host policy.
           command -v google-chrome
           CHROMIUM="$(command -v google-chrome)" npm run --prefix lib/neonethack test:browser
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: Pixel example and seeded dungeon renderer
+        run: |
+          bun install --frozen-lockfile --cwd example/pixel-bun
+          CHROMIUM="$(command -v google-chrome)" bun run --cwd example/pixel-bun test
       - name: Build checked source/native/npm previews with embedded source
         run: |
           CHROMIUM="$(command -v google-chrome)" npm run --prefix lib/neonethack package:preview -- "$RUNNER_TEMP/distribution"

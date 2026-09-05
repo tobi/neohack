@@ -113,11 +113,14 @@ struct hl_cell {
     unsigned long framecolor;
     int tileidx, color256idx;
     int cmap, background_cmap; /* perceived symbols, never unseen terrain */
+    int visible; /* engine sight, independent of remembered display glyphs */
+    int appearance; /* displayed monster type, never a hidden monster lookup */
     int dirty;
 };
 static struct hl_cell hl_map[ROWNO][COLNO];
 static int hl_map_dirty = 0;
 static int hl_snapshot_sent = 0;
+static long long hl_knowledge_epoch;
 
 static void
 hl_emit_glyph_obj(JBuf *jb, const glyph_info *glyph, const glyph_info *bg)
@@ -146,6 +149,22 @@ headless_flush(void)
 {
     JBuf jb, cells;
     int x, y;
+    /* Sight can change without a glyph redraw (remembered lit rooms). */
+    for (y = 0; y < ROWNO; y++)
+        for (x = 1; x < COLNO; x++) {
+            struct hl_cell *c = &hl_map[y][x];
+            int visible = cansee(x, y) ? 1 : 0;
+            int appearance = (!Hallucination && glyph_is_monster(c->glyph))
+                                 ? glyph_to_mon(c->glyph) + 1 : 0;
+            if (c->appearance != appearance) {
+                c->appearance = appearance;
+                c->dirty = hl_map_dirty = 1;
+            }
+            if (c->visible != visible) {
+                c->visible = visible;
+                c->dirty = hl_map_dirty = 1;
+            }
+        }
     if (!hl_map_dirty && hl_snapshot_sent)
         return;
     jb_init(&jb);
@@ -172,6 +191,14 @@ headless_flush(void)
             jb_int(&cells, c->cmap);
             jb_key(&cells, "backgroundCmap");
             jb_int(&cells, c->background_cmap);
+            jb_key(&cells, "boulder");
+            jb_bool(&cells, glyph_is_object(c->glyph) && glyph_to_obj(c->glyph) == BOULDER);
+            jb_key(&cells, "visible");
+            jb_bool(&cells, c->visible);
+            if (c->appearance > 0 && c->appearance <= NUMMONS) {
+                jb_key(&cells, "appearance");
+                jb_str(&cells, mons[c->appearance - 1].pmnames[NEUTRAL]);
+            }
             jb_key(&cells, "tileidx");
             jb_int(&cells, c->tileidx);
             jb_key(&cells, "color256idx");
@@ -493,6 +520,24 @@ headless_action_result(const char *action, const char *status)
     jb_key(&jb, "turn"); jb_int(&jb, svm.moves);
     jb_end_obj(&jb);
     if (jb.ok) rpc_notify("action_result", jb.buf);
+    jb_free(&jb);
+}
+
+/* Called only beside an existing player-facing disclosure, never by a query. */
+void
+headless_door_witness(coordxy x, coordxy y, const char *fact)
+{
+    JBuf jb;
+    if (windowprocs.wp_id != wp_headless || !isok(x, y)) return;
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "branch"); jb_int(&jb, u.uz.dnum);
+    jb_key(&jb, "level"); jb_int(&jb, u.uz.dlevel);
+    jb_key(&jb, "x"); jb_int(&jb, x); jb_key(&jb, "y"); jb_int(&jb, y);
+    jb_key(&jb, "fact"); jb_str(&jb, fact);
+    jb_key(&jb, "turn"); jb_int(&jb, svm.moves);
+    jb_key(&jb, "epoch"); jb_int(&jb, hl_knowledge_epoch + 1);
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("door_witness", jb.buf);
     jb_free(&jb);
 }
 
@@ -1136,7 +1181,16 @@ hl_perception(void)
         && !is_lava(u.ux, u.uy);
     jb_init(&jb);
     jb_begin_obj(&jb);
-    jb_key(&jb, "perceptionVersion"); jb_int(&jb, 2);
+    jb_key(&jb, "perceptionVersion"); jb_int(&jb, 3);
+    jb_key(&jb, "affordanceVersion"); jb_int(&jb, 1);
+    jb_key(&jb, "knowledgeEpoch"); jb_int(&jb, ++hl_knowledge_epoch);
+    jb_key(&jb, "normalMap"); jb_bool(&jb, !u.uswallow);
+    /* Base body/mount/transformation and confusion/stun are known to the hero.
+     * Do not inspect intrinsic/extrinsic bits or unidentified equipment powers.
+     * Unusual forms remain unknown in resolver v1. */
+    jb_key(&jb, "ordinaryLocomotion"); jb_bool(&jb, !Upolyd && !u.usteed);
+    jb_key(&jb, "doorDiagonals"); jb_bool(&jb, !Is_rogue_level(&u.uz));
+    jb_key(&jb, "directionReliable"); jb_bool(&jb, !Confusion && !Stunned);
     jb_key(&jb, "branch"); jb_int(&jb, u.uz.dnum);
     jb_key(&jb, "level"); jb_int(&jb, u.uz.dlevel);
     jb_key(&jb, "x"); jb_int(&jb, u.ux);

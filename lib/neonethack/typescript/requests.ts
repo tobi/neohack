@@ -3,6 +3,7 @@ export interface MethodParams {
   "protocol.describe": {  };
   "session.create": { name?: string; seed?: number; role?: "archeologist" | "barbarian" | "caveman" | "healer" | "knight" | "monk" | "priest" | "rogue" | "ranger" | "samurai" | "tourist" | "valkyrie" | "wizard"; race?: "human" | "elf" | "dwarf" | "gnome" | "orc"; gender?: "male" | "female"; align?: "lawful" | "neutral" | "chaotic" };
   "session.observe": { sessionId: string };
+  "session.actions": { sessionId: string; expectedRevision: number; target: "here" | { direction: "north" | "northeast" | "east" | "southeast" | "south" | "southwest" | "west" | "northwest" } };
   "session.resume": { sessionId: string };
   "session.close": { sessionId: string };
   "game.move": { sessionId: string; requestId: string; expectedRevision: number; direction: "north" | "northeast" | "east" | "southeast" | "south" | "southwest" | "west" | "northwest" };

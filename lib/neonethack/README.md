@@ -137,3 +137,5 @@ under `protocol/engine/` is implementation material, not a client interface.
 NetHack retains its original license in [`engine/dat/license`](engine/dat/license).
 The license for new standalone project code must be selected before publication;
 the npm package is deliberately private meanwhile. See [notices](NOTICE.md).
+
+Browser agents can use the complete MCP catalog through [`neonethack/webmcp`](docs/WEBMCP.md). The adapter uses native WebMCP and the application’s public transport; the pixel client shares its persistent engine and HUD with agent calls.

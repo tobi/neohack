@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "explorer.h"
+#include "minjson.h"
 
 static const char *BIN;
 static const char *HACKDIR_SRC;
@@ -214,7 +215,7 @@ main(int argc, char **argv)
           has(r, "\"status\":\"blocked\""), "kick settles");
     CHECK(has(r, "\"kicked\"") || has(r, "\"status\":\"blocked\""),
           "kick reports its effect");
-    CHECK(!has(r, "\"key\""), "no key leakage in kick");
+    CHECK(!has(r, "\"key\":106") && !has(r, "\"key\":\"j\""), "no raw input key leakage in kick");
     nhx_free(r);
 
     /* The kick above spent a turn: re-baseline for zero-turn checks. */
@@ -235,8 +236,11 @@ main(int argc, char **argv)
     {
         /* The observation legitimately carries gold; only the offered
          * options must be food. */
-        const char *opts = strstr(r, "\"options\"");
-        CHECK(opts && !strstr(opts, "gold pieces"), "gold is not food");
+        mj_val decision, options; size_t length = 0; char *opts = NULL;
+        if (mj_find(r, "decision", &decision) && mj_find(decision.p, "options", &options)) {
+            const char *raw = mj_raw(options, &length); opts = strndup(raw, length);
+        }
+        CHECK(opts && !strstr(opts, "gold pieces"), "gold is not food"); free(opts);
     }
     CHECK(obs_turn(r) == turn0, "listing costs no turn");
     CHECK(revision(r) == rev0, "listing costs no revision");

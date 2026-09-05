@@ -1,8 +1,9 @@
 # neonethack
 
 Fresh library-first repository. The supported implementation lives entirely in
-`lib/neonethack/`; `examples/` are clients of its public API. Do not restore the
-old Bun server, UI, generic public `act` tool or retired JS semantic adapter.
+`lib/neonethack/`; `examples/` and `example/pixel-bun/` are clients of its public
+API. Do not restore the old Bun server, UI, generic public `act` tool or retired
+JS semantic adapter.
 Legacy services are retired; do not recreate their local runtime aliases.
 
 ## Boundaries

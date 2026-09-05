@@ -1016,6 +1016,7 @@ extern void done(int);
 extern unsigned long headless_seed_override(void);
 extern void headless_terminal(int, const char *, long);
 extern void headless_action_result(const char *, const char *);
+extern void headless_door_witness(coordxy, coordxy, const char *);
 extern void headless_study_stopped(void);
 extern void headless_meal_stopped(void);
 extern void headless_lifesaved(int, long);

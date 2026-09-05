@@ -127,6 +127,9 @@ picklock(void)
             }
             You("succeed in disarming the trap.  The %s is still %slocked.",
                 what, alreadyunlocked ? "un" : "");
+#ifdef HEADLESS_GRAPHICS
+            if (gx.xlock.door) headless_door_witness(u.ux + u.dx, u.uy + u.dy, alreadyunlocked ? "unlocked" : "locked");
+#endif
             exercise(A_WIS, TRUE);
         } else {
             You("stop %s.", lock_action());
@@ -136,6 +139,9 @@ picklock(void)
     }
 
     You("succeed in %s.", lock_action());
+#ifdef HEADLESS_GRAPHICS
+    if (gx.xlock.door) headless_door_witness(u.ux + u.dx, u.uy + u.dy, (gx.xlock.door->doormask & D_LOCKED) ? "unlocked" : "locked");
+#endif
     if (gx.xlock.door) {
         if (gx.xlock.door->doormask & D_TRAPPED) {
             b_trapped("door", FINGER);
@@ -614,6 +620,9 @@ pick_lock(
             /* credit cards are only good for unlocking */
             if (picktyp == CREDIT_CARD && !(door->doormask & D_LOCKED)) {
                 You_cant("lock a door with a credit card.");
+#ifdef HEADLESS_GRAPHICS
+        headless_door_witness(cc.x, cc.y, "unlocked");
+#endif
                 return PICKLOCK_LEARNED_SOMETHING;
             }
 
@@ -621,6 +630,10 @@ pick_lock(
                     (door->doormask & D_LOCKED) ? "Unlock" : "Lock",
                     autounlock ? " with " : "",
                     autounlock ? yname(pick) : "");
+
+#ifdef HEADLESS_GRAPHICS
+        headless_door_witness(cc.x, cc.y, (door->doormask & D_LOCKED) ? "locked" : "unlocked");
+#endif
             c = ynq(qbuf);
             if (c != 'y')
                 return PICKLOCK_DID_NOTHING;
@@ -873,6 +886,9 @@ doopen_indir(coordxy x, coordxy y)
         }
         set_msg_xy(cc.x, cc.y);
         pline("This door%s.", mesg);
+#ifdef HEADLESS_GRAPHICS
+        headless_door_witness(cc.x, cc.y, locked ? "locked" : "notClosed");
+#endif
         if (locked && flags.autounlock) {
             struct obj *unlocktool;
 
@@ -904,6 +920,9 @@ doopen_indir(coordxy x, coordxy y)
     if (rnl(20) < (ACURRSTR + ACURR(A_DEX) + ACURR(A_CON)) / 3) {
         set_msg_xy(cc.x, cc.y);
         pline_The("door opens.");
+#ifdef HEADLESS_GRAPHICS
+        headless_door_witness(cc.x, cc.y, "opened");
+#endif
         if (door->doormask & D_TRAPPED) {
             b_trapped("door", FINGER);
             door->doormask = D_NODOOR;
@@ -917,6 +936,9 @@ doopen_indir(coordxy x, coordxy y)
         exercise(A_STR, TRUE);
         set_msg_xy(cc.x, cc.y);
         pline_The("door resists!");
+#ifdef HEADLESS_GRAPHICS
+        headless_door_witness(cc.x, cc.y, "resisted");
+#endif
     }
 
     return ECMD_TIME;
@@ -1038,6 +1060,9 @@ doclose(void)
         if (u.usteed
             || rn2(25) < (ACURRSTR + ACURR(A_DEX) + ACURR(A_CON)) / 3) {
             pline_The("door closes.");
+#ifdef HEADLESS_GRAPHICS
+        headless_door_witness(x, y, "closed");
+#endif
             door->doormask = D_CLOSED;
             feel_newsym(x, y); /* the hero knows she closed it */
             block_point(x, y); /* vision:  no longer see there */

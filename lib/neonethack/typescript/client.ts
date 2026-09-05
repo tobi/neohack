@@ -1,5 +1,5 @@
-import type { Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
-export type { Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
+import type { ActionTarget, ActionsResponse, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
+export type { ActionTarget, ActionsResponse, ActionOffer, ActionBasis, CellActions, Neighborhood, InputGate, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
 
 /** A transport owns its runtime, not game semantics. It must not retry input. */
 export interface Transport {
@@ -57,6 +57,8 @@ export class Neonethack {
   close(): Promise<void> { return this.transport.close(); }
 }
 
+export interface RevisionOptions { expectedRevision?: number }
+
 type GameMethod = Extract<Method, `game.${string}` | `decision.${string}`>;
 type Arguments<M extends GameMethod> = Omit<MethodParams[M], "sessionId" | "requestId" | "expectedRevision">;
 
@@ -97,15 +99,16 @@ export class Game {
     if (!(isSnapshot(response) && response.outcome.status === "unknown") && !("error" in response && response.error?.code === "incompleteRequest")) this.unresolved = null;
     return this.accept(response);
   }
-  private operation<M extends GameMethod>(method: M, args: Arguments<M>): Promise<Snapshot> {
+  private operation<M extends GameMethod>(method: M, args: Arguments<M>, options: RevisionOptions = {}): Promise<Snapshot> {
     // Copy inputs at invocation; caller mutation while queued cannot change intent.
     const copy = structuredClone(args);
+    const expectedRevision = options.expectedRevision;
     return this.enqueue(async () => {
       if (this.retired) throw Error("Session is closed; resume it explicitly.");
       if (this.unresolved) throw new UncertainExecution(this.unresolved);
       if (this.current.ended) throw Error("The game has ended.");
       if ([this.current.storage, this.current.recording].some(d => d && d.status !== "ok")) throw Error("Storage needs recovery before another operation.");
-      const request = freeze({ version: 1, method, params: { ...copy, sessionId: this.id, requestId: this.requestId(), expectedRevision: this.current.revision } } as Request);
+      const request = freeze({ version: 1, method, params: { ...copy, sessionId: this.id, requestId: this.requestId(), expectedRevision: expectedRevision ?? this.current.revision } } as Request);
       return this.send(request);
     });
   }
@@ -114,6 +117,17 @@ export class Game {
     return this.enqueue(async () => {
       if (!this.unresolved) throw Error("No uncertain request to retry.");
       return this.send(this.unresolved);
+    });
+  }
+  /** Pure query: never accepts a snapshot or resolves an uncertain operation. */
+  actions(target: ActionTarget, options: RevisionOptions = {}): Promise<ActionsResponse> {
+    const copy = structuredClone(target), expectedRevision = options.expectedRevision ?? this.current.revision;
+    return this.enqueue(async () => {
+      if (this.retired) throw Error("Session is closed; resume it explicitly.");
+      if (this.unresolved) throw new UncertainExecution(this.unresolved);
+      const r = await this.client.request("session.actions", { sessionId: this.id, expectedRevision, target: copy });
+      if (!("kind" in r) || r.kind !== "actions" || "error" in r) throw new WorldError(r);
+      return freeze(r);
     });
   }
   observe(): Promise<Snapshot> {
@@ -126,24 +140,24 @@ export class Game {
       return r;
     });
   }
-  move(direction: Compass) { return this.operation("game.move", { direction }); }
-  wait() { return this.operation("game.wait", {}); }
-  climb(direction: "up" | "down") { return this.operation("game.climb", { direction }); }
-  search() { return this.operation("game.search", {}); }
-  pray() { return this.operation("game.pray", {}); }
-  kick(direction?: Compass) { return this.operation("game.kick", direction ? { target: { direction } } : {}); }
-  open(direction?: Compass) { return this.operation("game.open", direction ? { target: { direction } } : {}); }
-  closeDoor(direction?: Compass) { return this.operation("game.close", direction ? { target: { direction } } : {}); }
-  pickup(item?: Item) { return this.operation("game.pickup", item === undefined ? {} : { item }); }
-  eat(item?: Item) { return this.operation("game.eat", item === undefined ? {} : { item }); }
-  drink(item?: Item) { return this.operation("game.drink", item === undefined ? {} : { item }); }
-  wield(item?: Item) { return this.operation("game.wield", item === undefined ? {} : { item }); }
-  equip(item?: Item) { return this.operation("game.equip", item === undefined ? {} : { item }); }
-  remove(item?: Item) { return this.operation("game.remove", item === undefined ? {} : { item }); }
-  read(item?: Item) { return this.operation("game.read", item === undefined ? {} : { item }); }
-  apply(item?: Item) { return this.operation("game.apply", item === undefined ? {} : { item }); }
-  drop(item?: Item) { return this.operation("game.drop", item === undefined ? {} : { item }); }
-  zap(item?: Item, target?: Target) { return this.operation("game.zap", { ...(item === undefined ? {} : { item }), ...(target === undefined ? {} : { target }) }); }
-  answer(decisionId: string, answer: Answer) { return this.operation("decision.answer", { decisionId, answer }); }
-  cancel(decisionId: string) { return this.operation("decision.cancel", { decisionId }); }
+  move(direction: Compass, options: RevisionOptions = {}) { return this.operation("game.move", { direction }, options); }
+  wait(options: RevisionOptions = {}) { return this.operation("game.wait", {}, options); }
+  climb(direction: "up" | "down", options: RevisionOptions = {}) { return this.operation("game.climb", { direction }, options); }
+  search(options: RevisionOptions = {}) { return this.operation("game.search", {}, options); }
+  pray(options: RevisionOptions = {}) { return this.operation("game.pray", {}, options); }
+  kick(direction?: Compass, options: RevisionOptions = {}) { return this.operation("game.kick", direction ? { target: { direction } } : {}, options); }
+  open(direction?: Compass, options: RevisionOptions = {}) { return this.operation("game.open", direction ? { target: { direction } } : {}, options); }
+  closeDoor(direction?: Compass, options: RevisionOptions = {}) { return this.operation("game.close", direction ? { target: { direction } } : {}, options); }
+  pickup(item?: Item, options: RevisionOptions = {}) { return this.operation("game.pickup", item === undefined ? {} : { item }, options); }
+  eat(item?: Item, options: RevisionOptions = {}) { return this.operation("game.eat", item === undefined ? {} : { item }, options); }
+  drink(item?: Item, options: RevisionOptions = {}) { return this.operation("game.drink", item === undefined ? {} : { item }, options); }
+  wield(item?: Item, options: RevisionOptions = {}) { return this.operation("game.wield", item === undefined ? {} : { item }, options); }
+  equip(item?: Item, options: RevisionOptions = {}) { return this.operation("game.equip", item === undefined ? {} : { item }, options); }
+  remove(item?: Item, options: RevisionOptions = {}) { return this.operation("game.remove", item === undefined ? {} : { item }, options); }
+  read(item?: Item, options: RevisionOptions = {}) { return this.operation("game.read", item === undefined ? {} : { item }, options); }
+  apply(item?: Item, options: RevisionOptions = {}) { return this.operation("game.apply", item === undefined ? {} : { item }, options); }
+  drop(item?: Item, options: RevisionOptions = {}) { return this.operation("game.drop", item === undefined ? {} : { item }, options); }
+  zap(item?: Item, target?: Target, options: RevisionOptions = {}) { return this.operation("game.zap", { ...(item === undefined ? {} : { item }), ...(target === undefined ? {} : { target }) }, options); }
+  answer(decisionId: string, answer: Answer, options: RevisionOptions = {}) { return this.operation("decision.answer", { decisionId, answer }, options); }
+  cancel(decisionId: string, options: RevisionOptions = {}) { return this.operation("decision.cancel", { decisionId }, options); }
 }

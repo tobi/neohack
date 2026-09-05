@@ -12,7 +12,9 @@
     "./native": { "types": "./dist/typescript/native.d.ts", "import": "./dist/typescript/native.js" },
     "./mcp": { "types": "./dist/mcp/server.d.ts", "import": "./dist/mcp/server.js" },
     "./wasm": { "types": "./dist/typescript/wasm.d.ts", "import": "./dist/typescript/wasm.js" },
-    "./protocol": "./protocol/catalog.json"
+    "./protocol": "./protocol/catalog.json",
+    "./webmcp": { "types": "./dist/typescript/webmcp.d.ts", "import": "./dist/typescript/webmcp.js" },
+    "./mcp/tools": { "types": "./dist/mcp/tools.d.ts", "import": "./dist/mcp/tools.js" }
   },
   "bin": { "neonethack-mcp": "./dist/mcp/cli.js" },
   "files": ["dist/", "include/", "protocol/*.json", "README.md", "docs/", "NOTICE.md"],

@@ -118,6 +118,7 @@ nnh_status nnh_dispatch(nnh_context *x, const char *json, size_t length, nnh_res
 #endif
         );
         mj_key(&b, "capabilities"); mj_obj(&b);
+        mj_key(&b, "affordanceVersion"); mj_intv(&b, 1);
         mj_key(&b, "runtimeProfile"); mj_intv(&b, 1);
 #ifdef __EMSCRIPTEN__
         {

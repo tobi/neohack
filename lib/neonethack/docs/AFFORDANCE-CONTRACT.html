@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Directional actions and neighborhood — implementation design</title>
+<style>
+  :root { color-scheme: light; background: #f5f2e9; color: #26392f; font: 17px/1.65 system-ui,sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { max-width: 1080px; margin: auto; padding: 55px 26px 85px; overflow-wrap: anywhere; }
+  h1 { font: 600 clamp(2.5rem,6vw,4.3rem)/1.08 Georgia,serif; max-width: 850px; }
+  h2 { font: 600 2rem/1.2 Georgia,serif; margin-top: 55px; }
+  h3 { line-height: 1.3; margin-top: 28px; }
+  p { max-width: 80ch; }
+  a { color: #325c46; text-underline-offset: 3px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: .72rem; font-weight: 750; }
+  .lead { font-size: 1.18rem; }
+  .note { border-left: 4px solid #557348; padding: 16px 22px; background: #e4eadc; }
+  .muted { color: #5a6759; font-size: .88rem; }
+  code { font-size: .87em; overflow-wrap: anywhere; }
+  pre { overflow: auto; background: #e9ece1; padding: 20px; border-radius: 6px; font-size: .9rem; line-height: 1.5; }
+  pre code { font-size: 1em; }
+  details { border-top: 1px solid #c4cdbb; padding: 20px 0; }
+  summary { font-weight: 700; cursor: pointer; }
+  li { margin: 10px 0; }
+  .table-wrap { overflow: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th,td { padding: 13px 12px; border-bottom: 1px solid #cad0c1; vertical-align: top; text-align: left; }
+  th { color: #40593f; }
+  .table-wrap table { min-width: 620px; }
+  button { border: 1px solid #8b9c81; padding: 8px 14px; font: inherit; color: inherit; background: transparent; border-radius: 5px; cursor: pointer; }
+  button[aria-pressed=true] { color: #fff; background: #294d3a; }
+  button:focus-visible { outline: 3px solid #9c641b; outline-offset: 3px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 15px 0; }
+  .controls button { font-size: .85rem; }
+  .demo-layout { display: grid; grid-template-columns: minmax(220px,360px) minmax(0,1fr); gap: 24px; align-items: start; }
+  .grid { display: grid; grid-template-columns: repeat(9,minmax(0,1fr)); gap: 2px; background: #d0d5c4; padding: 3px; }
+  .grid button { padding: 0; border: 0; border-radius: 1px; aspect-ratio: 1; font: 18px/1 monospace; background: #dce3ce; color: #26392f; }
+  .grid .unknown { background: #eeeede; color: #777d6f; }
+  .grid .wall { background: #63705a; color: #fff; }
+  .grid .door { background: #ccab6d; color: #302d22; }
+  .grid .hero { background: #294d3a; color: #fff; }
+  .grid button[aria-pressed=true] { box-shadow: inset 0 0 0 3px #aa5922; }
+  .demo-detail { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; min-height: 300px; }
+  @media(max-width:650px) { .demo-layout { grid-template-columns: 1fr; } .grid { max-width: 360px; } .demo-detail { min-height: 0; } }
+  @media print { .controls { display: none; } main { padding: 0; } h2 { break-after: avoid; } tr { break-inside: avoid; } }
+</style>
+</head>
+<body><main>
+<div class="eyebrow">neonethack · implementation design · 5 September 2026</div>
+<h1>One world of actions.<br>Every client can see it.</h1>
+<p class="lead">A read-only directional query and a 9×9 neighborhood should describe the player’s available attempts, using only what the player knows. Normal movement still opens doors. Discovered obstacles get useful alternatives.</p>
+<p><a href="MODERN-AFFORDANCES.html">← The broader 14-point design review</a></p>
+<div class="note"><strong>Design status:</strong> implemented in the shared C resolver, public catalog/schemas, SDK and pixel client. Fresh native/WASM scenarios cover revision-bound queries, door evidence, confirmations, replay and exact receipts. A separate temporary test engine varies hidden state to verify perception equivalence. Cell traversal, source-to-target movement and session input permission remain separate facts. The illustrative grid below is a design explanation, not a live game.</div>
+
+<h2>1. The product behavior to preserve</h2>
+<ol>
+  <li><strong>Move normally.</strong> One movement request retains the engine’s ordinary bump behavior. A door may open; a creature may be attacked; an ally may be displaced. No extra “interact?” question appears on every step.</li>
+  <li><strong>Explain a discovered obstruction.</strong> A locked-door result anchors a small action panel to that door. It offers Use a tool, Kick, and Back. A resistant unlocked door instead offers another opening attempt.</li>
+  <li><strong>Keep inspection free.</strong> Clicking any neighborhood tile opens a description and sensible actions without attempting any of them. Pointer, touch, keyboard and MCP clients use the same offers.</li>
+  <li><strong>Do not promise success.</strong> Availability means an appropriate attempt, not a prediction. A floor can be walkable and dangerous. A visible door can hide a trap. A tool can fail.</li>
+  <li><strong>Preserve intent.</strong> Selecting a menu action binds the perceived square/item and its revision. Old offers cannot quietly retarget themselves when the character moves.</li>
+</ol>
+
+<h2>2. Three questions, three answers</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Question</th><th>Field</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>Does the known terrain support ordinary traversal?</td><td><code>walkable: true | false | null</code></td><td>Knowledge-based terrain traversal for the hero’s known locomotion, including ordinary automatic door opening. Known unlocked doors are true. Untested closed doors are null. This excludes occupant interaction and source-dependent diagonal restrictions.</td></tr>
+<tr><td>What would trying to move toward this adjacent square mean?</td><td><code>movement</code></td><td>The source-to-target edge: adjacency, known geometric restriction, and the perceived interaction such as step, attempt opening, creature bump or possible push. It may remain unknown.</td></tr>
+<tr><td>Can another gameplay request be issued at this boundary?</td><td><code>inputGate</code></td><td>Ready, standing decision, recovery required, ended, or unavailable. This is session-wide. An offer never overrides it.</td></tr>
+</tbody></table></div>
+<p>An intact open doorway illustrates the separation: its terrain is walkable, but diagonal entry can be blocked. A creature on floor leaves the terrain walkable while the bump interaction becomes a creature encounter. A standing warning leaves all terrain facts intact while new gameplay input is unavailable.</p>
+<p><strong>No client should disable manual movement merely because <code>walkable</code> is false or null.</strong> A player can deliberately test an obstacle. Movement may also trigger a supported interaction such as digging. The field guides presentation and future route planning; it is not a legality guard or a new collision engine.</p>
+<p>For water, lava, unusual forms and unknown locomotion, v1 should return null unless the perception contract supplies enough knowledge to make the classification. Show known hazards separately. Do not turn “not a normal walking route” into “the engine cannot let you enter this square.”</p>
+
+<h2>3. Inspect the proposed neighborhood</h2>
+<p class="muted">Contract illustration only; this is not a running game. Select the door or another square. “Untested” has identical output whether the hidden door is locked, unlocked, trapped, or an indistinguishable disguise.</p>
+<neighborhood-demo></neighborhood-demo>
+<noscript><p>The illustration shows an untested door with unknown walkability, a witnessed locked door with false walkability and alternatives, and an open door with true walkability. The player remains below the doorway. Ordinary floor, walls and unknown cells are separately marked.</p></noscript>
+
+<h2>4. A concrete public contract</h2>
+<p>Use <code>session.actions</code> for discovery. Keep all execution in named <code>game.*</code> and <code>decision.*</code> operations. The public C ABI remains the existing JSON request interface; no public engine structs or generic execute-action method are necessary.</p>
+<pre><code>{
+  "version": 1,
+  "method": "session.actions",
+  "params": {
+    "sessionId": "g-…",
+    "expectedRevision": 12,
+    "target": { "direction": "north" }
+  }
+}</code></pre>
+<p>The first version accepts the eight compass directions and <code>target: "here"</code>. A later extension can accept an explicit level/cell or a perceived item ID through a closed target union. Up/down remain separate from compass directions: stairs are actions on “here,” not cells in a 2D grid.</p>
+<p>Require <code>expectedRevision</code> for this query so its result can be associated with the map the user inspected. Reject a mismatch before doing any work. A read-only query does not need a gameplay request ID, does not reserve a receipt, and does not consume the current event stream. Never start or resume an unloaded engine to answer it.</p>
+<pre><code>{
+  "version": 1,
+  "kind": "actions",
+  "sessionId": "g-…",
+  "basis": {
+    "revision": 12,
+    "levelId": "level-…",
+    "origin": { "x": 16, "y": 7 }
+  },
+  "inputGate": { "state": "ready" },
+  "cell": {
+    "x": 16, "y": 6, "dx": 0, "dy": -1,
+    "inBounds": true,
+    "visible": true,
+    "terrain": { "type": "closedDoor", "freshness": "current" },
+    "door": { "lock": "locked", "freshness": "witnessed", "observedTurn": 9 },
+    "walkable": false,
+    "movement": {
+      "relation": "adjacent",
+      "intent": "attemptOpen",
+      "knownRestriction": "lockedDoor"
+    },
+    "actions": [{
+      "key": "kick",
+      "method": "game.kick",
+      "arguments": { "target": { "direction": "north" } },
+      "availability": "attemptable",
+      "cost": "variable",
+      "cautions": ["mayInjure", "mayMakeNoise", "mayDamageProperty"]
+    }, {
+      "key": "apply",
+      "method": "game.apply",
+      "arguments": {},
+      "availability": "needsSelection",
+      "nextInput": "item",
+      "context": { "kind": "door", "x": 16, "y": 6 },
+      "cost": "variable"
+    }]
+  }
+}</code></pre>
+<p><strong>Important:</strong> <code>context</code> is explanatory context, not an argument to <code>game.apply</code>. The current apply method accepts an item, then may ask for direction and confirmation. Until a separately specified target-bearing tool operation exists, the client must present those decisions. It can highlight the original door but cannot pretend the direction was already passed to the engine.</p>
+<p>Action keys identify presentation entries within a response. They are not engine object IDs, decision IDs, authority tokens or an execution API. An action’s argument object is a typed subset of the corresponding generated method parameters; executing it adds a new request ID and the <em>basis revision</em>. Omit request identifiers from read-only offers.</p>
+
+<details open><summary>Action fields and availability</summary>
+<ul>
+  <li><code>attemptable</code>: meaningful from the current boundary based on public knowledge. It may fail or produce a warning.</li>
+  <li><code>needsSelection</code>: a named operation can begin but the player must select an item or target. Starting it is not the same as committing to an arbitrary candidate.</li>
+  <li><code>outOfReach</code>: this is a relevant interaction with a known distant feature, but the corresponding action cannot target it from here. Such entries have no executable arguments in v1.</li>
+  <li><code>knownBlocked</code>: a public, specific prerequisite is missing. Include a reason. Do not use hidden curses, object properties, or unseen obstructions to produce this state.</li>
+  <li><code>uncertain</code>: information is insufficient to make a stronger suggestion. Generic directional attempts remain discoverable.</li>
+</ul>
+<p>Use a closed union for these variants so, for example, an out-of-reach interaction cannot accidentally carry a runnable <code>game.open</code> direction. Keep unsupported operations out of live action offers; describe broader capability limits through discovery/help. Relevance and availability do not imply safety, success probability or tactical recommendation.</p>
+<p><code>inputGate</code> is evaluated separately and takes precedence over every entry. With a standing decision, the query may still describe the square, but the only actionable controls are that decision’s supported answers/cancellation. With recovery required, the old grid can be inspected with an explicit stale marker; it must not advertise usable input.</p>
+</details>
+
+<details><summary>Neighborhood shape, bounds and ordering</summary>
+<pre><code>observation.neighborhood = {
+  version: 1,
+  status: "available",
+  basis: { revision, levelId, origin: { x, y } },
+  radius: 4,
+  inputGate: { state: "ready" },
+  cells: [ /* exactly 81 entries, row-major dy=-4..4, dx=-4..4 */ ]
+}
+
+// Capability exists, but no current neighborhood is available:
+observation.neighborhood = {
+  version: 1,
+  status: "unavailable",
+  reason: "unknownPosition" // or unsupportedPerception / recoveryRequired
+}</code></pre>
+<p>Use exactly 81 slots for a stable grid. Mark out-of-map positions with <code>inBounds: false</code>, false walkability, no terrain assertion and no actions. Do not turn the map edge into a perceived wall. NetHack’s storage width is 80, but <code>isok</code> excludes column zero; use the engine’s public geometry contract rather than treating all array slots as playable.</p>
+<p>Center has <code>movement.relation: "here"</code>. The eight neighbors have <code>"adjacent"</code>. The outer 72 have <code>"distant"</code>; they have no immediate movement request to their coordinate. Floor-item IDs are usable only where perception actually exposes them. Distant object glyphs do not become item references.</p>
+<p>Build every cell from the same resolver as <code>session.actions</code>; the matching query cell must equal its neighborhood cell at the same basis. Fixed ordering and bounded fields make tests and rendering deterministic. The API returns intent, not preformatted buttons or per-client key bindings.</p>
+<p>Include the neighborhood on each new full semantic observation, including zero-turn decisions and non-movement operations. Missing on an old receipt means it did not exist there: do not recalculate and attach today’s neighborhood to historical data. Future engine support should be explicit in capability negotiation.</p>
+</details>
+
+<h2>5. Spoiler freedom is a data-flow property</h2>
+<p><strong>If two worlds are indistinguishable to the player, their action metadata must be indistinguishable too.</strong> This covers booleans, reason codes, menu presence, item filtering, preferred action order, text, cost estimates and invalidation. Hiding a field does not help if a button disappears or the response changes when an unseen monster moves.</p>
+<p>The implementation should have a narrow input boundary:</p>
+<pre><code>Engine perception + witnessed player-facing outcomes
+                        ↓
+C knowledge snapshot (with evidence and freshness)
+                        ↓
+Pure C affordance resolver
+               ↙                    ↘
+session.actions                  neighborhood
+                        ↓
+Native / WASM / TS / MCP / pixel client</code></pre>
+<p>The resolver must not receive live <code>levl</code>, monster lists, object internals, RNG state or engine action functions. It consumes a sanitized knowledge structure. When actor capabilities affect movement, the engine adapter must explicitly identify which capabilities the hero knows; dumping raw intrinsic/extrinsic property bits would reveal unidentified equipment effects.</p>
+<p><strong>Do not use <code>test_move</code> as the preview API.</strong> Despite its name, it reads live terrain, creatures, boulders and traps; it also resets <code>svc.context.door_opened</code>. Travel modes have their own tactical assumptions. Wrapping it in a “dry run” would neither establish spoiler freedom nor guarantee zero side effects.</p>
+<p>Existing <code>eligible_carried</code> is useful reference code but its callers are not automatically safe for discovery. In particular, older-engine inventory refresh paths can send commands. Factor a pure query over already known items; return uncertainty when current information is absent rather than invoking <code>ensure_inventory</code> or <code>ensure_floor</code>.</p>
+
+<h3>The equivalence cases that must pass</h3>
+<knowledge-cases></knowledge-cases>
+
+<h2>6. Door knowledge needs its own history</h2>
+<p>The current map describes open versus closed doors, but a witnessed lock is only an action reason/narration. Seeing a closed door does not tell you whether it is locked. Even when the square is visible, <strong>terrain freshness cannot refresh lock knowledge</strong>.</p>
+<p>Add a bounded, level-and-coordinate knowledge record fed by witnessed outcomes. Suggested facts: perceived door shape/orientation, last observed lock state, and last observation turn. Store knowledge, not an engine door identity or raw doormask. Treat a replaced/disguised feature as whatever the player can distinguish.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Player-facing evidence</th><th>Knowledge update</th><th>Client result</th></tr></thead><tbody>
+<tr><td>See a closed door for the first time</td><td>Lock unknown</td><td>Walkability unknown; moving attempts opening</td></tr>
+<tr><td>Attempt reports “This door is locked”</td><td>Record witnessed locked at that target</td><td>Obstacle panel with deliberate alternatives</td></tr>
+<tr><td>Opening resists after reaching the ordinary closed-door attempt</td><td>Only emit unlocked if the engine’s player-visible outcome supports that inference; no success probability</td><td>Offer Try opening again; do not relabel it as a lock</td></tr>
+<tr><td>Opening succeeds</td><td>Open terrain supersedes closed-door lock advice</td><td>Walkable; next movement is the engine’s next ordinary step</td></tr>
+<tr><td>The hero successfully closes an open door</td><td>Record a witnessed closed, unlocked door</td><td>Walkable with automatic opening, subject to edge geometry</td></tr>
+<tr><td>A lock/unlock tool prompt exposes “Lock it?” / “Unlock it?”</td><td>Record only the state genuinely disclosed, even if the player declines; preserve the standing confirmation</td><td>Accurate explanation; no automatic answer</td></tr>
+<tr><td>Leave view; later see a closed door again</td><td>Retain the old fact as remembered, not verified current lock state</td><td>Label last known lock state. A renewed attempt remains possible</td></tr>
+<tr><td>An unseen actor changes the door without perceptible evidence</td><td>No knowledge change, no offer invalidation caused by hidden state</td><td>The player can be surprised when trying the action</td></tr>
+</tbody></table></div>
+<p>Attach witness events at existing engine branches which report the player-facing fact, carrying the actual affected square. Deriving the affected square from the requested direction is unsafe under confusion or other redirection. Do not add a second pass which queries the door’s private state after every input.</p>
+<p>A remembered true/false is a claim about last-known traversability, qualified by evidence age. A client planning a route must treat remembered facts as provisional. If the public field is intended to guarantee current facts instead, collapse remembered values to null; do not mix these two definitions across clients. This design chooses <strong>last-known values with explicit freshness</strong>, matching the existing remembered map.</p>
+<p>Persist or deterministically reconstruct this ledger across native restart and WASM reload. A free query cannot write it. Rebuild from the pinned engine’s witnessed events during replay, or use integrity-checked semantic metadata tied to the exact input boundary; never mine a private save for the current hidden lock bits. A map clear is not necessarily a level change, so key records by real level identity and separate redraw handling from knowledge invalidation.</p>
+
+<h2>7. Movement and action edge cases</h2>
+<movement-cases></movement-cases>
+<p>For a release with incomplete actor-perception facts, prefer an honest null and generic attempt to a confident inference. The initial slice does not need exact handling of every polymorph form to be useful. It does need to avoid presenting the ordinary-human assumption as an engine guarantee.</p>
+
+<h2>8. A stale offer must stay stale</h2>
+<p>The wire protocol already has the essential guard: <code>expectedRevision</code>. However, the TypeScript <code>Game.operation</code> wrapper currently supplies <code>this.current.revision</code> when the queued callback runs. That is convenient for sequential key presses but insufficient for a button created from an earlier observation.</p>
+<pre><code>// Proposed SDK overload; not implemented.
+const offeredRevision = neighborhood.basis.revision;
+await game.kick("north", { expectedRevision: offeredRevision });
+
+// Existing low-level equivalent already carries the intended guard:
+await api.request("game.kick", {
+  sessionId: game.id,
+  requestId: newRequestId,
+  expectedRevision: offeredRevision,
+  target: { direction: "north" }
+});</code></pre>
+<p>Add optional revision-pinning options to the named SDK methods used by offers. Copy the revision and arguments at invocation; do not silently replace them with the latest state when queued. The usual movement methods can retain their current sequential behavior when no explicit basis is supplied.</p>
+<p>On stale rejection, refresh the panel and require another deliberate selection. On lost response, keep the original request and recover its receipt. Do not interpret an unavailable receipt or a new neighborhood as permission to repeat a kick. A historical receipt must not rewind a newer live map.</p>
+<p><code>session.actions</code> adds a distinct response variant to the generated/public TS union. Its SDK helper should serialize with other game work, return the action result, and avoid the <code>accept()</code> path that expects a full snapshot. It must neither clear <code>pendingRequest</code> nor make an unresolved game playable.</p>
+
+<h2>9. UX: few decisions, good explanations</h2>
+<ul>
+  <li><strong>Ordinary door:</strong> perform the normal auto-open attempt and show what happened. Keep focus on movement. Do not add a second automatic step or a retry loop.</li>
+  <li><strong>Locked door:</strong> stop held-key input, anchor a compact panel to the actual perceived target, and offer supported alternatives. Opening the panel itself does not advance time.</li>
+  <li><strong>Item/tool selection:</strong> use public IDs. Show known applicable tools prominently, and expose the broader supported Apply action without claiming every tool unlocks doors.</li>
+  <li><strong>Target decision:</strong> highlight the intended square, but preserve the actual prompt and decision ID. Selecting an item does not consent to every later confirmation.</li>
+  <li><strong>Hover/click:</strong> show “Walkable · remembered” or “Closed door · lock unknown,” then the available attempts. A small symbol supplements color for unknown and out-of-reach states.</li>
+  <li><strong>Map rendering:</strong> do not turn every uncertain square into a blocked tile. Keep unknown exploration possible. Keep known hazards visually distinct from ordinary walkable terrain.</li>
+  <li><strong>Keyboard/touch:</strong> a newly opened panel starts with no action accepted; repeats and queued pointer events cannot trigger it. Back closes suggestions; Cancel answers only an actual cancellable decision.</li>
+  <li><strong>MCP:</strong> provide compact structured actions and the same basis/unknown semantics. Agents should not need to interpret English narration to discover a lock or assemble a target.</li>
+</ul>
+
+<h2>10. Concrete change map</h2>
+<change-map></change-map>
+<p><strong>No startup-time upgrade of existing worlds.</strong> The new library can advertise its resolver version, while each session reports whether its pinned engine supplies the needed evidence. Old packages can expose a limited/unknown neighborhood or an explicit unsupported-perception result. Old receipts stay byte-for-byte historical. A changed perception hook still requires matching native pins/WASM artifacts and provenance; whether a new runtime profile is required depends on any changed game behavior or journal compatibility, not merely the addition of a display field.</p>
+
+<h2>11. The first shippable slice</h2>
+<ol>
+  <li><strong>Knowledge contract and pure resolver.</strong> Define actor-known locomotion and per-fact freshness, add a bounded C knowledge structure, and make the resolver callable without an engine handle. Implement floor, wall, unknown terrain, open/closed doors and ordinary adjacent geometry conservatively.</li>
+  <li><strong>Witnessed door facts.</strong> Emit targeted lock/open/close/resistance facts only where the engine actually discloses them. Preserve them through observation and restart. Prove that hidden lock changes cannot affect the resolver output.</li>
+  <li><strong>Query and 81-cell neighborhood.</strong> Generate the named query schema, response variant, capabilities, TS helper and MCP tool. Add the same resolver output to fresh full frames. Support a clear unavailable state.</li>
+  <li><strong>Intent-preserving client integration.</strong> Pin menu actions to their offered revision, retain normal bump-opening, show alternatives after locked failure, and render the same neighborhood facts for all input methods.</li>
+  <li><strong>Evidence before broader affordances.</strong> Pass real door/diagonal/reload/uncertainty scenarios on native and sandboxed browser backends, plus hidden-state equivalence tests. Then extend item menus, condition help and other recommendations.</li>
+</ol>
+<p>This slice does not require pathfinding, autoexploration, a generic action executor, new combat rules or automatic tool use. It also does not yet solve every missing verb. Separately adding a target-bearing unlock operation may reduce prompts, but it needs its own explicit item, target, confirmation and occupation contract.</p>
+<p>Keep the grid lightweight: one shared input gate and basis; no repeated inventory in all 81 cells; bounded reason/caution codes; item selection through the query when needed. Benchmark serialization size and p95 latency on native and browser builds before choosing a hard wire-size target. Compute from a snapshot in O(81) cell work plus a bounded inventory summary, without scanning the inventory anew for every cell. Do not claim a measured performance budget before those measurements exist.</p>
+
+<h2>12. Validation that proves the claim</h2>
+<ol>
+  <li><strong>Pure resolver:</strong> it accepts only the knowledge structure. Deterministic table tests cover three-valued traversal, edge geometry, bounds, ordering and availability variants. These tests verify the contract, not just a copy of the implementation.</li>
+  <li><strong>Engine adapter equivalence:</strong> controlled engine scenarios vary a hidden lock, trap, monster, curse or unobserved ability while preserving the player’s knowledge. Compare all metadata, including shape, order, reasons, visibility and invalidation. Resolve any difference; do not mask it in recordings.</li>
+  <li><strong>No input/no RNG:</strong> query the same frame repeatedly, compare input bytes and revisions, then execute identical commands in two fresh pinned worlds, only one of which was queried. Their subsequent observations and decision sequence must agree. A pure resolver must also have no RNG or engine-action linkage.</li>
+  <li><strong>Real gameplay:</strong> normal auto-open; locked bump and explicit alternative; unlocked-door close/reopen; resistant opening; intact-door diagonal; friendly encounter; a public known hazard; item ambiguity; a current standing decision.</li>
+  <li><strong>Storage:</strong> native cold restart and real IndexedDB browser reload preserve witnessed facts and pending context. Lost response after a real door/tool action returns the exact receipt without repeating the attempt. Corrupt knowledge metadata is reported, never repaired from hidden state.</li>
+  <li><strong>SDK races:</strong> create a button at revision N, perform another action, then activate the old button. It must reject instead of issuing its direction from the new position. An action query must not clear an uncertain request or accept an old frame as current.</li>
+  <li><strong>Compatibility:</strong> query against older pins and compare native/WASM capability discovery. Missing facts produce explicit uncertainty. Previously stored receipts never gain fresh neighborhoods.</li>
+  <li><strong>Browser use:</strong> pointer, keyboard and touch receive the same offers, held inputs cannot accept panels, focus returns predictably, and screen readers announce target/freshness without depending on color.</li>
+</ol>
+<p>Implemented checks live in <code>tests/affordance.c</code>, <code>tests/affordance-contracts.mjs</code>, <code>tests/hidden-knowledge.test.mjs</code> and the sandboxed browser suites. The hidden-state test links a temporary engine; its mutation hook is never included in the production engine. Late storage diagnostics override the gate captured in an earlier receipt: preserve that exact receipt and require recovery; fresh observations/queries report current unavailability.</p>
+<p>Use new temporary stores. Controlled hidden-state fixtures belong in test setup, never in the production resolver. Run the repository’s native, Node, WASM, browser and generated-schema checks after implementation. The exploratory probes below are current-behavior evidence, not passing tests for the proposed API.</p>
+
+<h2>13. Findings from fresh engine probes</h2>
+<probe-results></probe-results>
+<p>These probes used fresh temporary games through public APIs, with human female lawful Valkyries for movement and a human female chaotic Rogue for the tool prompt. Seeds 1–24 were tried until an ordinary and locked doorway were found on each target. Route staging used only perceived floor/door cells and stopped at unexpected decisions. No private save was used. The native input journal was read only to verify observation side effects; all fresh stores were removed.</p>
+<p>WASM probes used an explicitly volatile worker for this study, not browser durability testing. Native and WASM happened to agree on these cases; that is not a promise of cross-target seed equivalence. Existing local source changes adding cell visibility were present during review; the native probe lacked that field while the WASM probe supplied it. The affordance design must tolerate such capability differences.</p>
+<p>The biggest new implementation requirement is therefore <strong>persisted knowledge of what an action revealed</strong>. A directional menu built only from today’s <code>terrain.type</code> cannot distinguish a discovered lock from an untested door after the action’s message has passed.</p>
+
+<details><summary>Source references and audit locations</summary>
+<ul>
+  <li><a href="../engine/src/hack.c">engine/src/hack.c</a>: <code>test_move</code>, autoopen, diagonal entry/exit, squeeze checks, boulders and travel assumptions.</li>
+  <li><a href="../engine/src/lock.c">engine/src/lock.c</a>: <code>doopen_indir</code>, door resistance, <code>pick_lock</code>, lock/unlock prompts and witnessed effects.</li>
+  <li><a href="../engine/include/rm.h">engine/include/rm.h</a> and <a href="../engine/include/obj.h">obj.h</a>: raw door masks versus explicit container knowledge bits. A door mask is not a player knowledge record.</li>
+  <li><a href="../engine/win/headless/winheadless.c">headless window adapter</a>: <code>headless_flush</code>, <code>hl_perception</code>, perceived object IDs, visibility, and input-boundary publication.</li>
+  <li><a href="../src/explorer.c">shared driver</a>: <code>ingest_belongings</code>, <code>emit_world</code>, <code>eligible_carried</code>, <code>drive_settle</code>, <code>run_get_state</code>, replay and dispatch.</li>
+  <li><a href="../src/api.c">public C boundary</a>, <a href="../src/request_validation.inc">private request validation</a>, <a href="../protocol/catalog.ts">catalog</a> and <a href="../scripts/generate.ts">generator</a>: adding a named query needs both public and private routing/validation.</li>
+  <li><a href="../typescript/client.ts">TypeScript client</a>: <code>Game.operation</code>, <code>enqueue</code>, <code>accept</code> and <code>pendingRequest</code>. The offered revision must survive queueing.</li>
+  <li><a href="PROTOCOL.md">current protocol</a> and <a href="REPLAY.md">runtime/replay contract</a>: decisions, uncertainty, receipt history, package pins and existing perception limits.</li>
+</ul>
+</details>
+<p class="muted">This design and its illustrative grid are documentation. They do not add a second gameplay implementation to a client or advertise any new live capability.</p>
+</main>
+<script type="module">
+import { LitElement, html } from 'https://esm.sh/lit@3.3.1';
+class DocumentTable extends LitElement {
+  createRenderRoot() { return this; }
+  render() { return html`<div class="table-wrap"><table><thead><tr>${this.headers.map(h => html`<th scope="col">${h}</th>`)}</tr></thead><tbody>${this.rows.map(row => html`<tr>${row.map(c => html`<td>${c}</td>`)}</tr>`)}</tbody></table></div>`; }
+}
+class KnowledgeCases extends DocumentTable {
+  headers = ['Indistinguishable worlds', 'Required identical metadata', 'What can change the answer'];
+  rows = [
+    ['Untested locked / unlocked closed door', 'Lock unknown; walkability null; same ordinary opening offer', 'A witnessed attempt or explicit player-facing disclosure'],
+    ['Trapped / untrapped door', 'Same offers, costs, cautions and ordering', 'A genuine discovery or witnessed trap event'],
+    ['Ordinary wall / secret door', 'Same wall description and generic attempts', 'The engine reveals the feature'],
+    ['Unseen creature / empty perceived floor', 'Same traversal and no creature-specific menu', 'A perception or interaction actually reveals the creature'],
+    ['Mimic disguise / apparently identical feature', 'Same perceived-feature offers; no real species or monster ID', 'The disguise is exposed through gameplay'],
+    ['Unknown cursed / uncursed equipment', 'Same eligibility when public use state is otherwise equal', 'The curse is learned; successful removal still is not guaranteed'],
+    ['Unidentified wand powers or charges', 'Same general zap offer; no exact effect/range/success prediction', 'Identification or a witnessed effect permitted by the knowledge contract'],
+    ['Out-of-view locked door changed / unchanged', 'Same remembered lock record and freshness', 'A new player-perceived event, not an internal mutation callback'],
+    ['Hero has an undiscovered property / lacks it', 'No capability bit that identifies the hidden property', 'The engine establishes that the effect is known to the hero']
+  ];
+}
+customElements.define('knowledge-cases', KnowledgeCases);
+class MovementCases extends DocumentTable {
+  headers = ['Situation', 'Traversal / edge', 'Sensible UX'];
+  rows = [
+    ['Clear perceived floor', 'walkable true with known ordinary locomotion; adjacent step', 'Move; do not claim safety or absence of hidden creatures'],
+    ['Known unlocked closed door', 'walkable true; attemptOpen', 'Movement attempts automatic opening'],
+    ['Untested closed door', 'walkable null; attemptOpen', 'Try moving normally; no lock hint'],
+    ['Witnessed locked door', 'walkable false for ordinary walking; known locked restriction', 'Use a tool / Kick / Back; movement remains an explicit possible re-test'],
+    ['Intact open doorway, diagonal approach', 'walkable true; source-dependent diagonal restriction', 'Explain the doorway rule; no automatic detour'],
+    ['Diagonal exit from intact doorway', 'Destination floor can be walkable; source doorway blocks edge', 'Explain why this direction fails'],
+    ['Diagonal squeeze between remembered obstacles', 'Depends on known geometry and known body/burden; otherwise uncertain', 'Show only a supported reason; no hidden squeeze oracle'],
+    ['Known ally on floor', 'Terrain true; creature interaction from engine perception', 'Describe the normal bump attempt; do not promise displacement'],
+    ['Other perceived creature on floor', 'Terrain true; creature bump with unknown outcome', 'Movement may attack or prompt; do not label every non-ally hostile'],
+    ['Known boulder on floor', 'Terrain may be true; possible push, success unknown', 'Explicit push attempt through movement; do not reveal the square behind it'],
+    ['Known trap', 'Preserve terrain if known; hazard is independent of traversability', 'Warn from known facts; do not make every trap impassable'],
+    ['Water or lava', 'Known locomotion may permit traversal; otherwise conservative null in v1', 'Show known hazard; preserve engine consent and actual outcome'],
+    ['Blindness / darkness', 'Use remembered facts with their own freshness; sight may be false', 'No empty-square inference and no loss of knowledge just because sight is lost'],
+    ['Confusion / stun / fumbling', 'Requested direction need not be actual destination', 'Show uncertainty; attribute results using engine-provided target evidence'],
+    ['Wall-passing / oozing / chewing form', 'Requires known capability and public terrain limits; unknown restrictions stay unknown', 'Do not force an ordinary door menu over legitimate form-specific movement'],
+    ['Swallowed / unknown normal map position', 'Neighborhood unavailable or explicitly limited', 'Keep the actual supported actions/decisions; do not invent surrounding floor'],
+    ['Distant known door inside 9×9', 'Terrain known; relation distant; ordinary Open out of reach', 'Inspect now, no invented adjacent direction or automatic walk'],
+    ['Map edge / unknown square', 'Out of bounds is explicit; unknown in-bounds stays null', 'No fake wall or feature hints'],
+    ['Standing confirmation', 'Terrain unchanged; input gate decision', 'Answer/cancel that decision only'],
+    ['Lost action response', 'Do not promote a stale grid to ready', 'Recover the same request receipt before further input']
+  ];
+}
+customElements.define('movement-cases', MovementCases);
+class ChangeMap extends DocumentTable {
+  headers = ['Area', 'Concrete work'];
+  rows = [
+    ['Headless engine perception', 'Publish witnessed target facts and explicitly known actor abilities at existing boundaries; keep hidden state outside the resolver input. Coordinate with the existing visibility work.'],
+    ['Shared C driver', 'Introduce a bounded knowledge snapshot and pure resolver, per-level witnessed-door knowledge, serializer and read-only dispatch branch. Do not call commands to refresh discovery.'],
+    ['Catalog and validation', 'Add session.actions and its closed request schema. Update api.c translation and private request_validation.inc/dispatch, then regenerate JSON, C metadata, TS methods and MCP tool definitions.'],
+    ['Response schema and public types', 'Add discriminated ActionsResponse, Neighborhood, CellActions and ActionOffer variants; document walkability/freshness/gates. Keep previous responses valid.'],
+    ['TypeScript SDK', 'Add a serialized query helper and optional revision-pinning on named operations; preserve uncertainty and avoid accepting a query as a game snapshot.'],
+    ['MCP and WASM transport', 'Carry the generated query through existing generic transport routes; verify read-only annotations. No independent eligibility or game-rule code.'],
+    ['Pixel client', 'Use neighborhood for map affordances; preserve ordinary auto-open; show targeted failure recovery; capture basis revision; keep genuine tool/target/warning decisions.'],
+    ['Storage and replay', 'Bind knowledge to pinned perception and interaction boundary; preserve receipts; reconstruct facts from witnessed replay or validated metadata without reading hidden save state.'],
+    ['Tests and docs', 'Public native/browser scenarios, adapter equivalence, SDK race, read-only/RNG, capability fallback, package provenance and generated drift checks.']
+  ];
+}
+customElements.define('change-map', ChangeMap);
+class ProbeResults extends DocumentTable {
+  headers = ['Actual probe', 'Observed result', 'Design implication'];
+  rows = [
+    ['Native + WASM: ordinary doorway, seed 1', 'Bump returned openedDoor, no position change, no decision; reported zero elapsed turns in this case', 'Keep existing autoopen. Do not assume a turn cost or add a second step.'],
+    ['Native + WASM: diagonal entry after opening', 'Blocked / noProgress, zero elapsed turns, no explanation text', 'Need edge-specific reasons; a walkable tile is insufficient.'],
+    ['Native + WASM: locked doorway, seed 24', 'Blocked / lockedDoor, no standing decision; cell remained only closedDoor', 'Need targeted witnessed lock knowledge and contextual alternatives.'],
+    ['Native + WASM: 20 repeated observations', 'Turn and revision unchanged; native input journal bytes unchanged', 'Preserve this read-only baseline for the new query. This alone does not prove RNG neutrality.'],
+    ['Native + WASM: old-revision kick request', 'staleRevision rejection', 'The wire guard works; the SDK must carry the offer’s original revision.'],
+    ['Native: Rogue applying a lock pick, seed 42', 'Target decision, then “Lock it?” confirmation; cancelled explicitly', 'Use a tool is not always Unlock. Preserve direction and confirmation decisions.']
+  ];
+}
+customElements.define('probe-results', ProbeResults);
+class NeighborhoodDemo extends LitElement {
+  static properties = { phase: { state: true }, selected: { state: true } };
+  constructor() { super(); this.phase = 'untested'; this.selected = 31; }
+  createRenderRoot() { return this; }
+  cell(index) {
+    const dx = index % 9 - 4, dy = Math.floor(index / 9) - 4;
+    const door = dx === 0 && dy === -1, hero = dx === 0 && dy === 0;
+    const known = Math.abs(dx) <= 3 && dy >= -1 && dy <= 3;
+    const wall = known && !door && (dy === -1 || dy === 3 || Math.abs(dx) === 3);
+    const terrain = door ? (this.phase === 'opened' ? 'openDoor' : 'closedDoor') : !known ? 'unknown' : wall ? 'wall' : 'floor';
+    const relation = hero ? 'here' : Math.max(Math.abs(dx), Math.abs(dy)) === 1 ? 'adjacent' : 'distant';
+    const walkable = door ? (this.phase === 'locked' ? false : this.phase === 'opened' ? true : null) : !known ? null : !wall;
+    return { dx, dy, terrain, walkable, relation, door, hero, known, wall };
+  }
+  detail(c) {
+    return { dx: c.dx, dy: c.dy, terrain: c.terrain,
+      freshness: c.known ? 'current' : 'unknown',
+      ...(c.door ? { lock: this.phase === 'locked' ? 'witnessed locked' : this.phase === 'opened' ? 'not applicable: open' : 'unknown' } : {}),
+      walkable: c.walkable,
+      movement: { relation: c.relation, ...(c.relation === 'adjacent' ? { intent: c.door && this.phase !== 'opened' ? 'attemptOpen' : c.wall ? 'attemptObstacle' : 'step' } : {}) },
+      sensibleActions: c.door ? this.phase === 'locked' ? ['Use a tool…', 'Kick', 'Try opening again'] : this.phase === 'opened' ? ['Move', 'Close'] : ['Move (attempt opening)', 'Open', 'More…'] : c.hero ? ['Inspect here', 'Search', 'Wait'] : c.relation === 'adjacent' ? ['Attempt movement', 'Inspect'] : ['Inspect'] };
+  }
+  render() {
+    const selected = this.cell(this.selected);
+    return html`
+      <div class="controls" aria-label="Illustrated observed door state">${[['untested','Untested door'],['locked','After discovering a lock'],['opened','After opening']].map(([phase,label]) => html`<button aria-pressed=${this.phase === phase} @click=${() => { this.phase = phase; this.selected = 31; }}>${label}</button>`)}</div>
+      <div class="demo-layout">
+        <div><div class="grid" role="group" aria-label="Illustrative 9 by 9 neighborhood">${Array.from({length:81},(_,i) => {
+          const c = this.cell(i), label = `${c.hero ? 'You' : c.terrain} at offset ${c.dx}, ${c.dy}`;
+          return html`<button class=${c.hero ? 'hero' : c.door ? 'door' : c.wall ? 'wall' : c.known ? 'floor' : 'unknown'} aria-label=${label} aria-pressed=${this.selected === i} @click=${() => { this.selected = i; }}>${c.hero ? '@' : c.door ? this.phase === 'opened' ? '/' : '+' : c.wall ? '#' : c.known ? '·' : '?'}</button>`;
+        })}</div><p class="muted">@ you · + door · # wall · ? unknown</p></div>
+        <pre class="demo-detail" aria-live="polite"><code>${JSON.stringify(this.detail(selected),null,2)}</code></pre>
+      </div>`;
+  }
+}
+customElements.define('neighborhood-demo', NeighborhoodDemo);
+</script>
+</body></html>

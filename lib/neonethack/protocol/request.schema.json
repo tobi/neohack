@@ -145,6 +145,79 @@
           "const": 1
         },
         "method": {
+          "const": "session.actions"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "here"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "north",
+                        "northeast",
+                        "east",
+                        "southeast",
+                        "south",
+                        "southwest",
+                        "west",
+                        "northwest"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "direction"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "expectedRevision",
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
           "const": "session.resume"
         },
         "params": {
