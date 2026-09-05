@@ -4,6 +4,8 @@
 .env
 .env.*
 !.env.example
+/SOUL.md
+/bot.json
 
 # SDKs, dependencies and generated artifacts (never source distributions)
 /emsdk/
@@ -16,6 +18,9 @@
 # Local agent checkpoint contains workstation/process/backup bookkeeping.
 /lib/neonethack/PLAN.md
 /examples/wasm/neonethack.js
+/hosting/cloudflare/site/
+/hosting/cloudflare/node_modules/
+/hosting/cloudflare/.wrangler/
 *.o
 *.a
 *.so

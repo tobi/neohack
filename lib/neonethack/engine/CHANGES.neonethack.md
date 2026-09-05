@@ -12,6 +12,11 @@ owned project code. The repository's publication/license review remains open.
   transport, startup helpers and diagnostic driver. Exposes input boundaries,
   perceived map/inventory/status, action/lifecycle events and persistence hooks
   to the semantic C driver. It is not the public client protocol.
+  On 2026-09-05, `winheadless.c` also supplies visible background terrain beneath
+  objects/creatures without inspecting unseen terrain, and maps Escape through
+  the restricted prompt's quit/no/default cancellation contract rather than
+  returning an invalid raw Escape. The semantic driver retains door orientation
+  from disclosed map symbols; it does not query private door state.
 - `include/extern.h`, `include/winprocs.h`, `src/windows.c`: headless declarations
   and window-port registration.
 - `src/allmain.c`, `src/eat.c`, `src/spell.c`: action/occupation boundary and
