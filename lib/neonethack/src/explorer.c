@@ -183,6 +183,7 @@ typedef struct req_entry {
     char *rid;
     char *args_key;
     char *result;           /* stored response envelope */
+    int checkpointed;       /* exact result is durable in perceptions.jsonl */
     struct req_entry *next;
 } req_entry_t;
 
@@ -542,9 +543,11 @@ sidecar_save(game_t *g)
     mj_key(&b, "nextRef"); mj_intv(&b, g->next_ref);
     mj_key(&b, "requests"); mj_arr(&b);
     {
+        /* Keep the durable journal as the single historical copy. Only a
+         * response not yet checkpointed needs duplication in this boundary. */
         size_t kept = 0;
         for (e = g->requests; e && kept < 64; e = e->next) {
-            if (!e->result) continue;
+            if (!e->result || e->checkpointed) continue;
             kept++;
             mj_obj(&b);
             mj_key(&b, "rid"); mj_strv(&b, e->rid);
@@ -610,7 +613,7 @@ req_remember(game_t *g, const char *rid, const char *args_key,
         if (!e->rid || !e->args_key) { free(e->rid); free(e->args_key); free(e); return; }
         e->next = g->requests; g->requests = e; g->nrequests++;
     }
-    free(e->result); e->result = strdup(result);
+    free(e->result); e->result = strdup(result); e->checkpointed = 0;
     /* Keep recent responses hot; older receipts are read lazily from the
      * public checkpoint journal, while every reserved request id stays known. */
     for (it = g->requests; it; it = it->next) {
@@ -822,6 +825,7 @@ req_remember_nosave(game_t *g, const char *rid, const char *args_key,
     e->rid = strdup(rid);
     e->args_key = strdup(args_key);
     e->result = result ? strdup(result) : NULL;
+    e->checkpointed = 0;
     e->next = g->requests;
     if (!e->rid || !e->args_key || (result && !e->result)) {
         g->request_index_corrupt = 1;

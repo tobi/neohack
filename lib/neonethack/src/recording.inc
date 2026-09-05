@@ -232,6 +232,20 @@ record_frame(game_t *g, const char *request, const char *response)
     if (fclose(f)) ok = 0;
     f = NULL; mj_free(&b);
     if (!ok) goto data_failed;
+    /* Compact only duplicate receipts whose exact bytes just became durable.
+     * An uncheckpointed receipt must remain in the sidecar across failures.
+     * Reservations stay forever; cold retries use req_saved_result's validated
+     * journal lookup when the sidecar no longer contains a hot response. */
+    {
+        mj_val id;
+        if (mj_find(request, "requestId", &id)) {
+            char *rid = mj_str(id);
+            req_entry_t *entry = rid ? req_lookup(g, rid) : NULL;
+            if (entry && entry->result && !strcmp(entry->result, response))
+                entry->checkpointed = 1;
+            free(rid);
+        }
+    }
     /* Data committed: never reuse this sequence merely because a cache fails. */
     g->frame_count++; g->recording_bytes += length;
     g->recording_gaps += g->recording_gap; g->recording_gap = 0;
