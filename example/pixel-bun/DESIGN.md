@@ -141,7 +141,8 @@ stonework-2 surface seeds so existing paving and wear do not reshuffle.
 Corridors use connected 16px worn treads, distinct from room slabs. Stone shoulders
 frame the outside edges of the perceived passage with a raised cap and recessed
 face. These shoulders stay within known cells. A known adjacent surface opens the
-whole edge; an unexplored end gets a dark central notch, not a solid closure.
+whole edge; every unexplored edge gets a dark central notch, not a solid closure,
+including the sides of runs and junctions. Continuous trim requires a known wall.
 Side shoulders follow the known run, with corner openings for diagonal links.
 These are cutaway trim, not collision facts. The notch marks uncertainty, not a
 promise of a traversable route. No exterior

@@ -459,7 +459,6 @@ function passageEdges(
   const surface = (type: string | undefined) =>
     Boolean(type && !UNKNOWN.has(type) && type !== "wall");
   const joins = neighbors.map(surface);
-  const count = joins.filter(Boolean).length;
   for (let side = 0; side < 4; side++) {
     const neighbor = neighbors[side];
     if (joins[side]) continue;
@@ -476,8 +475,10 @@ function passageEdges(
     rect(c, p.shade, 0, 4, 16, 1);
     const joint = 3 + (h % 8);
     rect(c, p.shade, joint, 0, 1, 3);
-    if (fog && (count === 0 || (count === 1 && joins[(side + 2) % 4]))) {
+    if (fog) {
       // A recessed, feathered gap is deliberately unlike a closed wall.
+      // Every unknown edge is uncertain, including the sides of known runs
+      // and junctions; neighboring passages cannot establish a solid boundary.
       rect(c, p.floor[1], 5, 0, 6, 5);
       rect(c, p.seam, 5, 0, 6, 2);
       rect(c, "#26312f", 6, 0, 4, 1);
