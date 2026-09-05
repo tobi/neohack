@@ -115,6 +115,9 @@ void nnh_emit_cell_actions(const nnh_cell_actions *c, mj_Buf *b)
         mj_key(b, "visible"); if (c->known.visible < 0) mj_nullv(b); else mj_boolv(b, c->known.visible);
         mj_key(b, "terrain"); mj_obj(b);
         mj_key(b, "type"); mj_strv(b, nnh_terrain_names[c->known.terrain]);
+        if ((c->known.terrain == T_DOOR_CLOSED || c->known.terrain == T_DOOR_OPEN) && c->known.door_orientation) {
+            mj_key(b, "orientation"); mj_strv(b, c->known.door_orientation == 1 ? "horizontal" : "vertical");
+        }
         mj_key(b, "freshness"); mj_strv(b, !known ? "unknown" : c->known.visible == 1 ? "current" : "remembered");
         mj_endobj(b);
         if (c->known.terrain == T_DOOR_CLOSED || c->known.terrain == T_DOOR_OPEN) {

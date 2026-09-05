@@ -118,6 +118,13 @@
                 "remembered",
                 "unknown"
               ]
+            },
+            "orientation": {
+              "type": "string",
+              "enum": [
+                "horizontal",
+                "vertical"
+              ]
             }
           },
           "required": [
@@ -3038,6 +3045,13 @@
                               "current",
                               "remembered",
                               "unknown"
+                            ]
+                          },
+                          "orientation": {
+                            "type": "string",
+                            "enum": [
+                              "horizontal",
+                              "vertical"
                             ]
                           }
                         },
@@ -6038,6 +6052,13 @@
                   },
                   "knowledge": {
                     "const": "remembered"
+                  },
+                  "orientation": {
+                    "type": "string",
+                    "enum": [
+                      "horizontal",
+                      "vertical"
+                    ]
                   }
                 },
                 "required": [

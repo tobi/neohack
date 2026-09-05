@@ -156,6 +156,21 @@ headless_flush(void)
             int visible = cansee(x, y) ? 1 : 0;
             int appearance = (!Hallucination && glyph_is_monster(c->glyph))
                                  ? glyph_to_mon(c->glyph) + 1 : 0;
+            /* The stock optional background glyph deliberately omits room
+             * floor. An object first seen on it therefore has no terrain
+             * glyph for a layered client. Render the visible base explicitly,
+             * using the same secret-masking renderer as underfoot perception.
+             * Never consult unseen terrain or replace a furniture disguise. */
+            if (visible && !u.uswallow
+                && (glyph_is_object(c->glyph) || glyph_is_monster(c->glyph)
+                    || glyph_is_body(c->glyph))) {
+                int base = back_to_glyph(x, y);
+                int background = glyph_is_cmap(base) ? glyph_to_cmap(base) : -1;
+                if (c->background_cmap != background) {
+                    c->background_cmap = background;
+                    c->dirty = hl_map_dirty = 1;
+                }
+            }
             if (c->appearance != appearance) {
                 c->appearance = appearance;
                 c->dirty = hl_map_dirty = 1;
@@ -1293,6 +1308,18 @@ headless_yn_function(const char *query, const char *resp, char def)
             ans = s[0];
         free(s);
         free(r);
+    }
+    /* Window-port contract (doc/window.txt): Escape cancels through q, n,
+     * or the caller's default. Returning raw Escape for a restricted prompt
+     * makes the core report an impossible response. Unrestricted direction
+     * and inventory prompts must retain Escape for their own cancellation. */
+    if (ans == '\033' && resp) {
+        if (strchr(resp, 'q'))
+            ans = 'q';
+        else if (strchr(resp, 'n'))
+            ans = 'n';
+        else
+            ans = def;
     }
     return ans;
 }

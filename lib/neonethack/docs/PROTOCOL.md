@@ -95,6 +95,13 @@ on an unknown decision kind or outcome.
 ### Perception, not omniscience
 
 World cells layer remembered terrain and currently rendered occupants/objects.
+For perceived `openDoor` and `closedDoor` terrain, `terrain.orientation` is
+`horizontal` (frame runs east–west) or `vertical` (frame runs north–south).
+This is the frame/wall axis, not the direction of an open leaf or of travel.
+It comes from disclosed engine symbols, including perceived backgrounds beneath
+occupants, never unseen map structure or neighboring tiles. It is retained with
+terrain memory and omitted when unknown or when the terrain is not an intact
+door. Neighborhood and cell-action terrain expose the same orientation.
 Optional `cell.visible` reports the engine's current sight of that square.
 `false` retains remembered terrain; it does not imply an empty square or
 absence of a creature perceived through another sense. Older engine packages

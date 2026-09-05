@@ -14,6 +14,7 @@ typedef enum {
 
 typedef struct {
     int terrain, in_bounds, visible; /* visible -1 means unavailable */
+    int door_orientation; /* disclosed frame axis: 0 unknown, 1 horizontal, 2 vertical */
     int occupant; /* 0 none, 1 self, 2 creature, 3 ally: perceived, not hidden */
     int boulder, trap;
     int lock; /* 0 unknown, 1 witnessed locked, 2 witnessed unlocked */

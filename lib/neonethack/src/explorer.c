@@ -55,6 +55,7 @@ typedef struct {
     int present;
     int glyph, ch, color;
     int visibility_known, visible, boulder, trap_base;
+    int door_orientation; /* 0 unknown, 1 horizontal frame, 2 vertical frame */
     char appearance[128];
 } cell_t;
 
@@ -1195,6 +1196,16 @@ terrain_from_cmap(int c)
     }
 }
 
+/* Door symbols disclose the frame axis even when their printed marks match.
+ * Darkness retains the previous disclosure; an observed replacement clears it. */
+static void remember_door_orientation(cell_t *cell, int cmap)
+{
+    terrain_t terrain = terrain_from_cmap(cmap);
+    if (cmap == 13 || cmap == 15) cell->door_orientation = 2;
+    else if (cmap == 14 || cmap == 16) cell->door_orientation = 1;
+    else if (terrain != T_UNKNOWN && terrain != T_DARK) cell->door_orientation = 0;
+}
+
 /* Replayed from pinned disclosures; never from hidden save-state door bits. */
 static void index_door_facts(game_t *g)
 {
@@ -1286,8 +1297,10 @@ ingest_belongings(game_t *g, const char *params)
     if (mj_find(params, "y", &v) && mj_int(v, &n)) g->you_y = (int) n;
     g->have_you = 1;
     if (g->you_x >= 0 && g->you_x < MAP_W && g->you_y >= 0 && g->you_y < MAP_H &&
-        mj_find(params, "hereCmap", &v) && mj_int(v, &n))
+        mj_find(params, "hereCmap", &v) && mj_int(v, &n)) {
         g->terrain[g->you_y][g->you_x] = (unsigned char) terrain_from_cmap((int) n);
+        remember_door_orientation(&g->cells[g->you_y][g->you_x], (int) n);
+    }
     g->structured_perception = 1;
     if (mj_find(params, "perceptionVersion", &v) && mj_int(v, &n) && n >= 1 && n <= 16)
         g->structured_perception = (int) n;
@@ -1463,6 +1476,7 @@ ingest(game_t *g, const char *line)
                             long long symbol = -1, background = -1;
                             if (mj_find(ecpy, "cmap", &tv)) mj_int(tv, &symbol);
                             if (mj_find(ecpy, "backgroundCmap", &tv)) mj_int(tv, &background);
+                            remember_door_orientation(&g->cells[y][x], (int) (symbol >= 0 ? symbol : background));
                             if (symbol >= 0)
                                 g->terrain[y][x] = (unsigned char) terrain_from_cmap((int) symbol);
                             else if (background >= 0)
@@ -1476,6 +1490,7 @@ ingest(game_t *g, const char *line)
                                     gg < CMAP_LO + 77 ? 12 + ((int) gg - CMAP_LO - 56) :
                                     gg < CMAP_LO + 82 ? 33 : 34 + ((int) gg - CMAP_LO - 82);
                                 g->terrain[y][x] = (unsigned char) terrain_from_cmap(legacy);
+                                remember_door_orientation(&g->cells[y][x], legacy);
                             }
                             if (g->terrain[y][x] == T_TRAP && remembered != T_TRAP && remembered != T_UNKNOWN && remembered != T_DARK)
                                 g->cells[y][x].trap_base = remembered;
@@ -2786,6 +2801,9 @@ emit_world(game_t *g, mj_Buf *b)
             mj_key(b, "type");
             mj_strv(b, TERRAIN_NAMES[g->terrain[y][x] <= T_BRIDGE ? g->terrain[y][x] : T_UNKNOWN]);
             mj_key(b, "knowledge"); mj_strv(b, "remembered");
+            if ((g->terrain[y][x] == T_DOOR_CLOSED || g->terrain[y][x] == T_DOOR_OPEN) && c->door_orientation) {
+                mj_key(b, "orientation"); mj_strv(b, c->door_orientation == 1 ? "horizontal" : "vertical");
+            }
             mj_endobj(b);
             if (is_you) {
                 mj_key(b, "occupant"); mj_obj(b);
@@ -2915,6 +2933,7 @@ build_knowledge(game_t *g, nnh_knowledge *k, int recovery)
         if (!c->in_bounds) continue;
         source = &g->cells[y][x];
         c->terrain = g->terrain[y][x];
+        c->door_orientation = g->cells[y][x].door_orientation;
         c->visible = source->visibility_known ? source->visible : -1;
         c->trap = c->terrain == T_TRAP;
         /* Preserve a previously perceived base beneath a known trap. */

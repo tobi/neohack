@@ -10,7 +10,7 @@ static long fixture_resistance;
 static long fixture_hallucination;
 static void fixture_begin(void)
 {
-    int x, y, doors = 0, walls = 0, unseen = 0;
+    int x, y, doors = 0, walls = 0, unseen = 0, unseen_floor = 0;
     const char *variant = getenv("NNH_HIDDEN_VARIANT"), *report = getenv("NNH_HIDDEN_REPORT");
     struct obj *o;
     if (!variant || !isok(u.ux,u.uy)) return;
@@ -23,6 +23,10 @@ static void fixture_begin(void)
     fixture_mimic.data = &mons[PM_SMALL_MIMIC];
     fixture_mimic.m_ap_type = M_AP_FURNITURE; fixture_mimic.mappearance = S_hcdoor;
     for (x = 1; x < COLNO; x++) for (y = 0; y < ROWNO; y++) {
+        if (!cansee(x,y) && levl[x][y].typ == ROOM) {
+            unseen_floor++;
+            if (!strcmp(variant,"background")) levl[x][y].typ = POOL;
+        }
         if (IS_DOOR(levl[x][y].typ) && (levl[x][y].doormask & (D_CLOSED | D_LOCKED))) {
             doors++;
             if (!strcmp(variant,"lock")) levl[x][y].doormask = (levl[x][y].doormask & D_TRAPPED) | ((levl[x][y].doormask & D_LOCKED) ? D_CLOSED : D_LOCKED);
@@ -45,7 +49,7 @@ static void fixture_begin(void)
     if (!strcmp(variant,"property")) HFire_resistance ^= FROMOUTSIDE;
     if (report) {
         FILE *f = fopen(report,"w");
-        if (f) { fprintf(f,"%d %d %d %d\n",doors,walls,unseen,fixture_item != NULL); fclose(f); }
+        if (f) { fprintf(f,"%d %d %d %d %d\n",doors,walls,unseen,fixture_item != NULL,unseen_floor); fclose(f); }
     }
 }
 static void fixture_end(void)

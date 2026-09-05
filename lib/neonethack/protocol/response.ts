@@ -31,7 +31,7 @@ const actionOffer = { oneOf: offerMethods.flatMap(action => {
 }) };
 const cellActions = closed({
   x: integer, y: integer, dx: integer, dy: integer, inBounds: boolean, visible: nullable(boolean),
-  terrain: closed({ type: string, freshness: enumeration("current", "remembered", "unknown") }),
+  terrain: closed({ type: string, freshness: enumeration("current", "remembered", "unknown"), orientation: enumeration("horizontal", "vertical") }, ["type", "freshness"]),
   door: closed({ lock: enumeration("locked", "unlocked", "unknown"), freshness: enumeration("witnessed", "remembered", "unknown"), observedTurn: integer }, ["lock", "freshness"]),
   occupant: closed({ kind: enumeration("self", "creature", "ally") }), hazards: array(enumeration("trap", "water", "lava")),
   walkable: nullable(boolean), movement: closed({ relation: enumeration("here", "adjacent", "distant"), intent: enumeration("step", "attemptOpen", "attemptObstacle", "creatureBump", "allyBump", "possiblePush", "unknown"), knownRestriction: enumeration("intactDoorDiagonal", "lockedDoor", "knownTerrainObstacle") }, ["relation"]),
@@ -51,7 +51,7 @@ const observation = object({
   perception: object({ version: integer, inventory: enumeration("current", "lastKnown", "unknown"), here: enumeration("current", "lastKnown", "unknown"), equipment: enumeration("current", "lastKnown", "unknown") }),
   world: array(object({
     x: integer, y: integer, visible: boolean,
-    terrain: object({ type: string, knowledge: { const: "remembered" } }),
+    terrain: object({ type: string, knowledge: { const: "remembered" }, orientation: enumeration("horizontal", "vertical") }, ["type", "knowledge"]),
     occupant: object({ kind: enumeration("self", "creature", "ally"), mark: string, color: integer, appearance: string }, ["kind", "mark"]),
     objects: array(object({ mark: string, color: integer })),
   }, ["x", "y", "terrain"])), heard: array(string),

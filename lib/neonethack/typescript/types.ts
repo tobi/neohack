@@ -24,7 +24,7 @@ export type ActionOffer = { [M in OfferMethod]: {
 export interface CellActions {
   x: number; y: number; dx: number; dy: number; inBounds: boolean;
   visible?: boolean | null;
-  terrain?: { type: string; freshness: "current" | "remembered" | "unknown" };
+  terrain?: { type: string; freshness: "current" | "remembered" | "unknown"; orientation?: "horizontal" | "vertical" };
   door?: { lock: "locked" | "unlocked" | "unknown"; freshness: "witnessed" | "remembered" | "unknown"; observedTurn?: number };
   occupant?: { kind: "self" | "creature" | "ally" };
   hazards?: ("trap" | "water" | "lava")[];
@@ -46,7 +46,7 @@ export interface Cell {
   x: number; y: number;
   /** Engine sight at this boundary. Omitted by older engine packages. */
   visible?: boolean;
-  terrain: { type: string; knowledge: "remembered" };
+  terrain: { type: string; knowledge: "remembered"; orientation?: "horizontal" | "vertical" };
   occupant?: { kind: "self" | "creature" | "ally"; mark: string; color?: number; appearance?: string };
   objects?: { mark: string; color: number }[];
 }
