@@ -4,7 +4,7 @@ import { worker, type WorkerPort } from "../wasm/worker-port.mjs";
 
 export type WasmStorage =
   | { kind: "memory" }
-  | { kind: "indexeddb"; name: string };
+  | { kind: "indexeddb"; name: string; replicaUrl?: string };
 export interface WasmOptions {
   /** Defaults to volatile memory. IndexedDB also requires browser Web Locks. */
   storage?: WasmStorage;

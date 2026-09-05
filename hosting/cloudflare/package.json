@@ -1,0 +1,12 @@
+{
+  "name": "neohack-cloudflare",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "stage": "node scripts/stage.mjs",
+    "deploy": "node scripts/stage.mjs && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.127.1"
+  }
+}

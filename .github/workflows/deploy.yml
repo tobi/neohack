@@ -1,0 +1,53 @@
+name: Deploy neohack.dev
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: deploy-neohack-dev
+  cancel-in-progress: true
+jobs:
+  deploy:
+    name: Cloudflare Workers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: lib/neonethack/package-lock.json
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+        with:
+          install: false
+      - name: Native prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config libncurses-dev uuid-dev
+          mise install lua@5.4.9
+          echo "LUA_HOME=$(mise where lua@5.4.9)" >> "$GITHUB_ENV"
+      - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org --prefix lib/neonethack
+      - uses: mymindstorm/setup-emsdk@6ab9eb1bda2574c4ddb79809fc9247783eaf9021 # v14
+        with:
+          version: 6.0.9
+          actions-cache-folder: emsdk-cache
+      - run: make -C lib/neonethack wasm
+      - run: npm run --prefix lib/neonethack build
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+      - name: Pixel client
+        run: |
+          bun install --frozen-lockfile --cwd example/pixel-bun
+          bun run --cwd example/pixel-bun build
+      - run: node hosting/cloudflare/scripts/stage.mjs
+      - uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: hosting/cloudflare
+          command: deploy

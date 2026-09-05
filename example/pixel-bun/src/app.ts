@@ -24,7 +24,12 @@ import { creatureArtUrl, inventoryArt } from "./symbol-art";
 import { MovementInput } from "./movement-input";
 import type { WebMcpRegistration } from "/runtime/typescript/webmcp.js";
 import { loadRuntime, warmPackage } from "./runtime-loader";
-
+import {
+  cloudReady,
+  journalUrl,
+  publishCloud,
+  restoreAdventures,
+} from "./cloud";
 import { roles, heroArt } from "./characters";
 
 const STORE = "neonethack-pixel-bun-v1";
@@ -348,7 +353,15 @@ class PixelNethack extends HTMLElement {
         `WebMCP registration failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    this.text("#save-status", "Ready · saves stay in this browser");
+    void cloudReady().then((ok) => {
+      if (this.isConnected)
+        this.text(
+          "#save-status",
+          ok
+            ? "Ready · saves replica to neohack.dev (human + WebMCP)"
+            : "Ready · saves stay in this browser",
+        );
+    });
   }
   /** Same protocol as MCP. Human and agent input share one UI reservation. */
   private async webRequest(request: Request): Promise<Response> {
@@ -436,8 +449,12 @@ class PixelNethack extends HTMLElement {
               )
                 latest = observed;
             }
-            save.turn = latest.observation.turn;
-            save.ended = latest.ended;
+            // session.close retires the engine; its terminal transport frame
+            // does not mean the saved hero died or quit. Keep adventure status.
+            if (request.method !== "session.close") {
+              save.turn = latest.observation.turn;
+              save.ended = latest.ended;
+            }
             if (request.method === "session.close" && !response.error) {
               if (this.game?.id === response.sessionId) {
                 this.game = null;
@@ -488,8 +505,11 @@ class PixelNethack extends HTMLElement {
     if (this.api) return;
     await this.warm();
     this.assertConnected();
+    const replica = (await cloudReady()) ? journalUrl() : undefined;
     const wasm = await this.runtime.wasm.createWasm({
-      storage: { kind: "indexeddb", name: STORE },
+      storage: replica
+        ? { kind: "indexeddb", name: STORE, replicaUrl: replica }
+        : { kind: "indexeddb", name: STORE },
       workerUrl: new URL("/runtime/wasm/core-worker.mjs", location.href),
     });
     // Opening may finish after this element has been removed. Never adopt that
@@ -500,6 +520,10 @@ class PixelNethack extends HTMLElement {
     // Refresh only after acquiring ownership, before any request can persist it.
     try {
       this.readSaves();
+      if (!this.saves.length) {
+        const remote = await restoreAdventures();
+        if (remote?.length) this.saves = remote;
+      }
     } catch (error) {
       this.metadataHealthy = false;
       await wasm.close();
@@ -575,7 +599,10 @@ class PixelNethack extends HTMLElement {
     this.$(selector).hidden = !visible;
   }
   private error(error: unknown) {
-    this.text("#error", error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
+    this.text("#error", message.includes("Another worker or tab owns this WASM store")
+      ? "This game is open in another tab. Close that tab, or choose Save & return to doorway there, then try again here. Your save has not been changed."
+      : message);
     this.show("#error", true);
   }
   private button(
@@ -813,6 +840,15 @@ class PixelNethack extends HTMLElement {
     } catch (e) {
       this.error(e);
     } finally {
+      // A discovery call, rejected start or agent session.close can finish on
+      // the title screen. Retire its transport too, so no invisible worker
+      // keeps the whole origin's save store locked while this client is idle.
+      if (!this.game && this.api) {
+        const api = this.api;
+        this.api = null;
+        try { await api.close(); }
+        catch (error) { this.error(error); }
+      }
       if (this.game && this.current) {
         this.current.turn = this.game.observation.turn;
         this.current.ended = this.game.state.ended;
@@ -846,6 +882,7 @@ class PixelNethack extends HTMLElement {
         "Adventure metadata is unavailable; the stored list has not been overwritten.",
       );
     localStorage.setItem(INDEX, JSON.stringify(this.saves));
+    void publishCloud(this.saves).catch(() => {});
   }
   private controls() {
     (this.$("#text-map-button") as HTMLButtonElement).disabled = !this.game;

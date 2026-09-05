@@ -1,0 +1,26 @@
+name = "neohack"
+main = "src/worker.ts"
+compatibility_date = "2026-09-01"
+account_id = "6d0618991601f4e2c2aa7c4e35e23d08"
+workers_dev = true
+
+[assets]
+directory = "./site"
+binding = "ASSETS"
+run_worker_first = true
+
+[[routes]]
+pattern = "neohack.dev"
+custom_domain = true
+
+[[durable_objects.bindings]]
+name = "VAULTS"
+class_name = "Vault"
+
+[[durable_objects.bindings]]
+name = "BOARD"
+class_name = "Board"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Vault", "Board"]
