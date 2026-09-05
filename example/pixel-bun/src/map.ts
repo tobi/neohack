@@ -377,6 +377,7 @@ export class DungeonMap {
     const remaining = this.reducedMotion.matches
       ? 0
       : Math.max(0, 1 - (now - this.travelStarted) / 110);
+    if (remaining === 0) return { x: 0, y: 0 };
     return {
       x: Math.round(this.travelFrom.x * remaining),
       y: Math.round(this.travelFrom.y * remaining),
