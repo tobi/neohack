@@ -1,0 +1,1922 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
+import { chromium } from "playwright-core";
+
+const root = resolve(import.meta.dirname, "..");
+async function fixture(
+  t,
+  { insecure = false, touch = false, webmcp = false, setup } = {},
+) {
+  const server = spawn("bun", ["server.ts"], {
+    cwd: root,
+    env: { ...process.env, PORT: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  t.after(() => server.kill("SIGTERM"));
+  const url = await new Promise((resolve, reject) => {
+    let log = "";
+    const timer = setTimeout(
+      () => reject(Error(`Server did not start: ${log}`)),
+      10000,
+    );
+    const data = (chunk) => {
+      log += chunk;
+      const match = /NEONETHACK READY (http:\/\/127\.0\.0\.1:\d+)/.exec(log);
+      if (match) {
+        clearTimeout(timer);
+        resolve(match[1]);
+      }
+    };
+    server.stdout.on("data", data);
+    server.stderr.on("data", data);
+    server.on("error", reject);
+    server.on("exit", (code) => {
+      clearTimeout(timer);
+      reject(Error(`Server exited ${code}: ${log}`));
+    });
+  });
+  const browser = await chromium.launch({
+    executablePath: process.env.CHROMIUM ?? "/usr/bin/chromium",
+    headless: true,
+    chromiumSandbox: true,
+    args: [
+      ...(webmcp ? ["--enable-experimental-web-platform-features"] : []),
+      ...(insecure
+        ? [
+            "--host-resolver-rules=MAP pixel-preview.test 127.0.0.1",
+            "--no-proxy-server",
+          ]
+        : []),
+    ],
+  });
+  t.after(() => browser.close());
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1050 },
+    reducedMotion: "reduce",
+    hasTouch: touch,
+  });
+  const page = await context.newPage();
+  const errors = [],
+    requests = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("request", (req) =>
+    requests.push({ method: req.method(), url: req.url() }),
+  );
+  if (setup) await setup(page, context);
+  await mkdir(`${root}/test-results`, { recursive: true });
+  await page.goto(
+    insecure ? url.replace("127.0.0.1", "pixel-preview.test") : url,
+  );
+  await page.getByRole("button", { name: "Begin your adventure" }).waitFor();
+  if (!insecure)
+    await page.waitForFunction(
+      () => !document.querySelector("#new-adventure").disabled,
+    );
+  return { page, context, url, errors, requests };
+}
+const snapshot = (page) =>
+  page.evaluate(() => document.querySelector("pixel-nethack").snapshot);
+const ready = (page) =>
+  page.waitForFunction(
+    () =>
+      document.querySelector("pixel-nethack").getAttribute("aria-busy") ===
+      "false",
+  );
+
+test("plain HTTP remote origins explain secure access before starting WASM", async (t) => {
+  const { page, errors, requests } = await fixture(t, { insecure: true });
+  await ready(page);
+  assert.equal(await page.evaluate(() => window.isSecureContext), false);
+  assert.match(
+    await page.locator("#error").innerText(),
+    /Open the game over HTTPS/,
+  );
+  assert.match(
+    await page.locator("#error").innerText(),
+    /forward the server port to localhost/,
+  );
+  assert.equal(await page.locator("#new-adventure").isDisabled(), true);
+  assert.equal(await snapshot(page), null);
+  assert.match(
+    await page.locator("#save-status").textContent(),
+    /Browser saves unavailable/,
+  );
+  assert.equal(
+    requests.some((request) => request.url.includes("core-worker.mjs")),
+    false,
+  );
+  assert.equal(await page.evaluate(() => localStorage.length), 0);
+  assert.deepEqual(errors, []);
+});
+async function create(page, role = "valkyrie", seed = 42) {
+  await page.getByRole("button", { name: "Begin your adventure" }).click();
+  await page.getByLabel("YOUR NAME", { exact: true }).fill("Ada");
+  await page.locator(`input[name=role][value=${role}]`).check();
+  await page
+    .getByText("Choose a world seed (optional)", { exact: true })
+    .click();
+  await page
+    .getByLabel("A number for a repeatable starting world")
+    .fill(String(seed));
+  await page.getByRole("button", { name: "Enter the dungeon" }).click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector("pixel-nethack").snapshot?.observation.turn === 1,
+  );
+  await ready(page);
+}
+
+function openRun(state) {
+  const you = state.observation.you;
+  return [
+    ["ArrowRight", "east", 1, 0],
+    ["ArrowLeft", "west", -1, 0],
+    ["ArrowDown", "south", 0, 1],
+    ["ArrowUp", "north", 0, -1],
+  ]
+    .map(([key, direction, dx, dy]) => {
+      let length = 0;
+      while (
+        length < 15 &&
+        state.observation.world.some(
+          (cell) =>
+            cell.x === you.x + dx * (length + 1) &&
+            cell.y === you.y + dy * (length + 1) &&
+            ["floor", "corridor"].includes(cell.terrain.type) &&
+            !cell.occupant,
+        )
+      )
+        length++;
+      return { key, direction, dx, dy, length };
+    })
+    .sort((a, b) => b.length - a.length)[0];
+}
+
+test(
+  "hold keyboard or direction pad to walk, then stop on release, wall, menu and blur",
+  { timeout: 30000 },
+  async (t) => {
+    const { page, errors } = await fixture(t);
+    await page.getByRole("button", { name: "Begin your adventure" }).click();
+    const name = page.getByLabel("YOUR NAME", { exact: true });
+    await name.fill("");
+    await name.focus();
+    await page.keyboard.down("h");
+    await page.keyboard.down("h");
+    await page.keyboard.up("h");
+    assert.equal(
+      await name.inputValue(),
+      "hh",
+      "text fields retain native key repetition",
+    );
+    await page.keyboard.press("Escape");
+    await create(page);
+    const first = await snapshot(page),
+      run = openRun(first);
+    assert.ok(run.length >= 3, "real perceived room provides a straight run");
+    await page.keyboard.down(run.key);
+    await page.waitForFunction(
+      (turn) =>
+        document.querySelector("pixel-nethack").snapshot.observation.turn >=
+        turn + 3,
+      first.observation.turn,
+    );
+    await page.keyboard.up(run.key);
+    await ready(page);
+    const stopped = await snapshot(page);
+    await page.waitForTimeout(350);
+    assert.deepEqual(
+      await snapshot(page),
+      stopped,
+      "release cannot leave queued repeat steps",
+    );
+
+    const padRun = openRun(stopped);
+    assert.ok(padRun.length >= 2);
+    const pad = page.getByRole("button", {
+      name: `Move ${padRun.direction}`,
+      exact: true,
+    });
+    await pad.hover();
+    await page.mouse.down();
+    await page.waitForFunction(
+      (turn) =>
+        document.querySelector("pixel-nethack").snapshot.observation.turn >=
+        turn + 2,
+      stopped.observation.turn,
+    );
+    await page.mouse.up();
+    await ready(page);
+    const pointerStopped = await snapshot(page);
+    await page.waitForTimeout(350);
+    assert.deepEqual(
+      await snapshot(page),
+      pointerStopped,
+      "pointer release must not produce a second click action",
+    );
+
+    const wallRun = openRun(pointerStopped);
+    await page.keyboard.down(wallRun.key);
+    await page.waitForFunction(() => {
+      const app = document.querySelector("pixel-nethack");
+      return !app.movement.inFlight && !app.movement.held;
+    });
+    await ready(page);
+    const wall = await snapshot(page);
+    assert.equal(wall.outcome.positionChanged, false);
+    await page.keyboard.down(wallRun.key); // native autorepeat must not restart it
+    await page.waitForTimeout(350);
+    assert.deepEqual(
+      await snapshot(page),
+      wall,
+      "holding into a wall stops sending input",
+    );
+    await page.keyboard.up(wallRun.key);
+
+    await page.keyboard.down(openRun(wall).key);
+    await ready(page);
+    await page.getByLabel("Game menu", { exact: true }).click();
+    await page.getByRole("button", { name: "Field guide" }).click();
+    await ready(page);
+    const menu = await snapshot(page);
+    await page.waitForTimeout(350);
+    assert.deepEqual(
+      await snapshot(page),
+      menu,
+      "opening a menu stops held walking",
+    );
+    await page.keyboard.press("Escape");
+    await page.keyboard.up(openRun(wall).key);
+    const blurRun = openRun(menu);
+    await page.keyboard.down(blurRun.key);
+    await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    await ready(page);
+    const blurred = await snapshot(page);
+    await page.waitForTimeout(350);
+    assert.deepEqual(
+      await snapshot(page),
+      blurred,
+      "focus loss cancels repeats and pending taps",
+    );
+    await page.keyboard.up(blurRun.key);
+    assert.deepEqual(errors, []);
+  },
+);
+
+test("rapid taps buffer only one step while a real engine request is delayed", async (t) => {
+  const { page, errors } = await fixture(t);
+  await create(page);
+  const first = await snapshot(page),
+    run = openRun(first);
+  await page.evaluate(async () => {
+    const { WasmTransport } = await import("/runtime/typescript/wasm.js");
+    const original = WasmTransport.prototype.send;
+    window.moveProbe = { active: 0, maximum: 0, calls: 0 };
+    WasmTransport.prototype.send = async function (request) {
+      if (request.method !== "game.move") return original.call(this, request);
+      const p = window.moveProbe;
+      p.calls++;
+      p.active++;
+      p.maximum = Math.max(p.maximum, p.active);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        return await original.call(this, request);
+      } finally {
+        p.active--;
+      }
+    };
+  });
+  await page.keyboard.press(run.key);
+  await page.keyboard.press(run.key);
+  await page.keyboard.press(run.key);
+  await page.keyboard.press(run.key);
+  await page.waitForFunction(
+    (turn) =>
+      document.querySelector("pixel-nethack").snapshot.observation.turn ===
+      turn + 2,
+    first.observation.turn,
+  );
+  await ready(page);
+  await page.waitForTimeout(350);
+  assert.equal(
+    (await snapshot(page)).observation.turn,
+    first.observation.turn + 2,
+  );
+  assert.deepEqual(await page.evaluate(() => window.moveProbe), {
+    active: 0,
+    maximum: 1,
+    calls: 2,
+  });
+  assert.deepEqual(errors, []);
+});
+
+test("held walking stops after a committed move whose response is lost", async (t) => {
+  const { page } = await fixture(t);
+  await create(page);
+  const run = openRun(await snapshot(page));
+  await page.evaluate(async () => {
+    const { WasmTransport } = await import("/runtime/typescript/wasm.js");
+    const original = WasmTransport.prototype.send;
+    window.moveCalls = 0;
+    WasmTransport.prototype.send = async function (request) {
+      const result = await original.call(this, request);
+      if (request.method === "game.move") {
+        window.moveCalls++;
+        throw Error("Test: committed move response lost");
+      }
+      return result;
+    };
+  });
+  await page.keyboard.down(run.key);
+  await page.locator("#recovery").waitFor({ state: "visible" });
+  await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(() => window.moveCalls), 1);
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Search", exact: true })
+      .isDisabled(),
+    true,
+  );
+  const pending = await page.evaluate(
+    () =>
+      JSON.parse(localStorage.getItem("neonethack-pixel-bun-v1:adventures"))[0]
+        .pending,
+  );
+  assert.equal(pending.method, "game.move");
+  await page.keyboard.up(run.key);
+});
+
+test("authored directional motion follows real engine movement without spending idle turns", async (t) => {
+  const { page, errors } = await fixture(t);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await create(page);
+  const before = await snapshot(page);
+  const moves = [
+    ["east", 1, 0, "right"],
+    ["west", -1, 0, "left"],
+    ["north", 0, -1, "up"],
+    ["south", 0, 1, "down"],
+  ];
+  const move = moves.find(([, dx, dy]) =>
+    before.observation.world.some(
+      (cell) =>
+        cell.x === before.observation.you.x + dx &&
+        cell.y === before.observation.you.y + dy &&
+        cell.terrain.type === "floor" &&
+        !cell.occupant,
+    ),
+  );
+  assert.ok(move, "real initial room offers an observed adjacent floor");
+  await page
+    .getByRole("button", { name: `Move ${move[0]}`, exact: true })
+    .click();
+  await ready(page);
+  const after = await snapshot(page);
+  assert.equal(after.observation.you.x, before.observation.you.x + move[1]);
+  assert.equal(after.observation.you.y, before.observation.you.y + move[2]);
+  assert.equal(
+    await page.locator("#dungeon").getAttribute("data-facing"),
+    move[3],
+  );
+  assert.equal(
+    await page.locator("#dungeon").getAttribute("data-motion"),
+    "walk",
+  );
+  await page.waitForFunction(
+    () => document.querySelector("#dungeon").dataset.motion === "idle",
+  );
+  const frame = await page.locator("#dungeon").getAttribute("data-frame");
+  await page.waitForFunction(
+    (frame) => document.querySelector("#dungeon").dataset.frame !== frame,
+    frame,
+  );
+  assert.deepEqual(
+    await snapshot(page),
+    after,
+    "animation cannot issue game input",
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.waitForFunction(
+    () => document.querySelector("#dungeon").dataset.frame === "0",
+  );
+  assert.equal(await page.locator("#dungeon").getAttribute("data-frame"), "0");
+  assert.equal(
+    await page.locator("#dungeon").getAttribute("data-facing"),
+    move[3],
+  );
+  const still = await page
+    .locator("#dungeon")
+    .evaluate((canvas) => canvas.toDataURL());
+  await page.getByLabel("Game menu", { exact: true }).click();
+  await page.getByRole("button", { name: "Show NetHack symbols" }).click();
+  const symbols = await page
+    .locator("#dungeon")
+    .evaluate((canvas) => canvas.toDataURL());
+  assert.notEqual(
+    symbols,
+    still,
+    "visible creatures use art until symbols are requested",
+  );
+  assert.deepEqual(await snapshot(page), after, "symbol toggle costs no turns");
+  assert.deepEqual(errors, []);
+});
+
+test("perception-only corridor and sprite study: directions, loot and static reduced motion", async (t) => {
+  const { page } = await fixture(t);
+  const report = await page.evaluate(async () => {
+    // Isolated presentation fixture; never alters an engine session or save.
+    const app = document.querySelector("pixel-nethack");
+    const canvas = document.createElement("canvas");
+    const host = document.createElement("div");
+    host.style.cssText =
+      "position:fixed;inset:0;width:736px;height:416px;z-index:30;background:#171f23";
+    host.id = "art-study";
+    host.append(canvas);
+    document.body.append(host);
+    const map = new app.map.constructor(canvas, () => {});
+    map.zoom = 2;
+    const world = [];
+    const add = (x, y, type) => {
+      const cell = { x, y, terrain: { type, knowledge: "remembered" } };
+      world.push(cell);
+      return cell;
+    };
+    for (let y = 1; y < 10; y++)
+      for (let x = 1; x < 13; x++)
+        add(x, y, x === 1 || x === 12 || y === 1 || y === 9 ? "wall" : "floor");
+    world.find((c) => c.x === 12 && c.y === 5).terrain.type = "openDoor";
+    for (let x = 13; x < 19; x++) add(x, 5, "corridor");
+    for (let y = 2; y < 9; y++) if (y !== 5) add(16, y, "corridor");
+    add(17, 2, "corridor");
+    add(18, 2, "corridor");
+    add(19, 5, "stairsDown");
+    for (const [i, mark] of [...'%$!?+)[=*/("'].entries()) {
+      const cell = world.find(
+        (c) => c.x === 3 + (i % 6) && c.y === 3 + Math.floor(i / 6) * 2,
+      );
+      cell.objects = [{ mark, color: [3, 11, 1, 7, 5, 7][i % 6] }];
+    }
+    for (const [i, mark] of [..."dfBrSo"].entries()) {
+      const cell = world.find((c) => c.x === 3 + i && c.y === 7);
+      cell.occupant = { kind: i === 0 ? "ally" : "creature", mark, color: 3 };
+    }
+    const observation = {
+      location: { id: "art-study", depthLabel: "Study" },
+      you: { x: 10, y: 5 },
+      world,
+    };
+    map.update(observation, "explorer", "study:42");
+    const facing = [],
+      images = [],
+      matchingArt = [];
+    const source = new Image();
+    source.src = "/art/explorer-motion.png";
+    await source.decode();
+    for (const [dx, dy] of [
+      [-1, 0],
+      [0, -1],
+      [1, 0],
+      [0, 1],
+    ]) {
+      map.update(
+        {
+          ...observation,
+          you: { x: map.observation.you.x + dx, y: map.observation.you.y + dy },
+        },
+        "explorer",
+        "study:42",
+      );
+      facing.push(canvas.dataset.facing);
+      const sheet = document.createElement("canvas");
+      sheet.width = 16;
+      sheet.height = 32;
+      sheet
+        .getContext("2d")
+        .drawImage(
+          canvas,
+          Math.floor(canvas.width / 32) * 16,
+          Math.floor(canvas.height / 32) * 16 - 16,
+          16,
+          32,
+          0,
+          0,
+          16,
+          32,
+        );
+      images.push(sheet.toDataURL());
+      // Independently audited source order: right, up, left, down.
+      // Check opaque face pixels, not merely the renderer's direction label.
+      const expected = document.createElement("canvas");
+      expected.width = 16;
+      expected.height = 32;
+      const group = dx < 0 ? 2 : dx > 0 ? 0 : dy < 0 ? 1 : 3;
+      expected
+        .getContext("2d")
+        .drawImage(source, group * 96, 0, 16, 32, 0, 0, 16, 32);
+      const pixels = expected.getContext("2d").getImageData(0, 0, 16, 32).data;
+      const actual = sheet.getContext("2d").getImageData(0, 0, 16, 32).data;
+      matchingArt.push(
+        pixels.every(
+          (v, i) =>
+            pixels[Math.floor(i / 4) * 4 + 3] !== 255 || v === actual[i],
+        ),
+      );
+    }
+    const boulder = world.find((cell) => cell.x === 6 && cell.y === 2);
+    boulder.objects = [{ mark: "`", color: 7 }];
+    // Render-only overlap fixture: a tall rock in front of the north wall.
+    map.update(observation, "explorer", "study:42");
+    const rockPixel = (dx, dy) => [
+      ...canvas
+        .getContext("2d")
+        .getImageData(
+          (6 - map.origin.x) * 16 + dx,
+          (2 - map.origin.y) * 16 + dy,
+          1,
+          1,
+        ).data,
+    ];
+    const crownOverWall = rockPixel(8, -3);
+    const outsideTile = rockPixel(-3, 3);
+    const ordered = canvas.toDataURL();
+    map.update(
+      { ...observation, world: [...world].reverse() },
+      "explorer",
+      "study:42",
+    );
+    const inputOrderStable = canvas.toDataURL() === ordered;
+    // Mobile actors remain above the ground-object pass.
+    map.update({ ...observation, you: { x: 6, y: 1 } }, "explorer", "study:42");
+    const crownOverActor = rockPixel(8, -3);
+    map.update(observation, "explorer", "study:42");
+    map.destroy();
+    return {
+      facing,
+      uniqueDirections: new Set(images).size,
+      matchingArt,
+      crownOverWall,
+      crownOverActor,
+      outsideTile,
+      inputOrderStable,
+      motion: canvas.dataset.motion,
+      frame: canvas.dataset.frame,
+    };
+  });
+  assert.deepEqual(report.facing, ["left", "up", "right", "down"]);
+  assert.equal(report.uniqueDirections, 4);
+  assert.deepEqual(
+    report.matchingArt,
+    [true, true, true, true],
+    "sprite pixels must face the requested screen direction",
+  );
+  assert.equal(report.motion, "idle");
+  assert.equal(report.frame, "0");
+  assert.deepEqual(
+    report.crownOverWall,
+    [181, 180, 160, 255],
+    "boulder crown rises above the wall pass",
+  );
+  assert.deepEqual(
+    report.crownOverActor,
+    [70, 70, 94, 255],
+    "mobile actor pixels remain above the ground-object pass",
+  );
+  assert.deepEqual(
+    report.outsideTile,
+    [41, 50, 50, 255],
+    "boulder silhouette is wider than a floor tile",
+  );
+  assert.equal(
+    report.inputOrderStable,
+    true,
+    "foreground depth cannot depend on observation array order",
+  );
+  await page
+    .locator("#art-study")
+    .screenshot({ path: `${root}/test-results/perceived-corridor.png` });
+});
+
+test(
+  "real Bun/WASM adventure: onboarding, actions, choices, durable reload, ownership, responsive rendering",
+  { timeout: 120000 },
+  async (t) => {
+    const { page, context, url, errors, requests } = await fixture(t);
+    await page.screenshot({
+      path: `${root}/test-results/welcome-desktop.png`,
+      fullPage: true,
+    });
+    assert.equal(
+      await page
+        .locator("img")
+        .evaluateAll((images) =>
+          images.every((i) => i.complete && i.naturalWidth > 0),
+        ),
+      true,
+    );
+    await page.getByLabel("Game menu", { exact: true }).click();
+    await page.getByRole("button", { name: "Field guide" }).click();
+    assert.ok(
+      await page
+        .getByRole("heading", { name: "A small guide to a very big world." })
+        .isVisible(),
+    );
+    await page.keyboard.press("Escape");
+    await create(page);
+    const first = await snapshot(page);
+    assert.equal(first.observation.turn, 1);
+    assert.ok(first.observation.you);
+    assert.ok(await page.locator("#map-text").textContent());
+    await page.screenshot({
+      path: `${root}/test-results/game-desktop.png`,
+      fullPage: true,
+    });
+    const turn = first.observation.turn;
+    await page.locator("#dungeon").focus();
+    await page.keyboard.down(".");
+    await ready(page);
+    await page.keyboard.down(".");
+    await page.keyboard.up(".");
+    await ready(page);
+    assert.equal(
+      (await snapshot(page)).observation.turn,
+      turn + 1,
+      "held keys must not repeat input",
+    );
+    const inspected = await snapshot(page);
+    await page.keyboard.press("Shift+ArrowRight");
+    await page.locator("#dungeon").click({ position: { x: 400, y: 250 } });
+    assert.deepEqual(
+      await snapshot(page),
+      inspected,
+      "panning and inspecting must cost no turns",
+    );
+    await page.getByLabel("Game menu", { exact: true }).click();
+    await page.getByRole("button", { name: "Center on you" }).click();
+    await page.getByLabel("Game menu", { exact: true }).click();
+    await page.getByRole("button", { name: "Eat", exact: true }).click();
+    await ready(page);
+    const food = await snapshot(page);
+    assert.equal(food.decision.kind, "item");
+    await page.keyboard.press("ArrowRight");
+    assert.deepEqual(
+      await snapshot(page),
+      food,
+      "movement must not answer a standing decision",
+    );
+    for (const item of food.decision.options)
+      assert.ok(
+        await page
+          .getByRole("button", { name: item.label, exact: true })
+          .isVisible(),
+      );
+    await page
+      .getByRole("button", { name: "Cancel action", exact: true })
+      .click();
+    await ready(page);
+    assert.equal(
+      (await snapshot(page)).observation.turn,
+      food.observation.turn,
+    );
+    await page
+      .getByRole("button", { name: "More actions", exact: true })
+      .click();
+    await page.getByRole("button", { name: "Pray", exact: true }).click();
+    await ready(page);
+    const prayer = await snapshot(page);
+    assert.equal(prayer.decision.kind, "confirmation");
+    await page.screenshot({
+      path: `${root}/test-results/decision-desktop.png`,
+      fullPage: true,
+    });
+    // Abrupt page loss, without sending a close/answer action.
+    await page.reload();
+    await page.waitForFunction(
+      () => !document.querySelector("#new-adventure").disabled,
+    );
+    await page
+      .getByRole("button", { name: "Continue adventure", exact: true })
+      .click();
+    await ready(page);
+    const resumed = await snapshot(page);
+    assert.equal(resumed.sessionId, first.sessionId);
+    assert.deepEqual(resumed.decision, prayer.decision);
+    assert.deepEqual(resumed.observation, prayer.observation);
+    await page
+      .getByRole("button", { name: "No, not now", exact: true })
+      .click();
+    await ready(page);
+    assert.equal(
+      (await snapshot(page)).observation.turn,
+      prayer.observation.turn,
+    );
+    assert.equal((await snapshot(page)).decision, null);
+    // The same origin/store cannot quietly open a second game owner.
+    const competitor = await context.newPage();
+    await competitor.goto(url);
+    await competitor.waitForFunction(
+      () => !document.querySelector("#new-adventure").disabled,
+    );
+    assert.equal(
+      await competitor.locator("#error").isVisible(),
+      false,
+      "title tabs do not own saves",
+    );
+    await competitor
+      .getByRole("button", { name: "Continue adventure", exact: true })
+      .click();
+    await competitor.locator("#error").waitFor({ state: "visible" });
+    assert.match(
+      await competitor.locator("#error").textContent(),
+      /owns this WASM store/i,
+    );
+    assert.equal(
+      await snapshot(competitor),
+      null,
+      "a competing engine cannot open the save",
+    );
+    await competitor.close();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: `${root}/test-results/game-mobile.png`,
+      fullPage: true,
+    });
+    assert.ok(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      "mobile layout must not overflow horizontally",
+    );
+    await page.getByRole("button", { name: "Backpack", exact: false }).click();
+    const beforeBag = await snapshot(page);
+    await page.locator("#panel-body .item-row").first().click();
+    assert.ok(await page.locator("#item-actions").isVisible());
+    await page.keyboard.press("Escape");
+    assert.deepEqual(
+      await snapshot(page),
+      beforeBag,
+      "item inspection costs no turns",
+    );
+    await page.getByLabel("Game menu", { exact: true }).click();
+    await page
+      .getByRole("button", { name: "Your adventures", exact: false })
+      .click();
+    await page
+      .getByRole("button", { name: "Save & return to doorway", exact: true })
+      .click();
+    await ready(page);
+    await page.screenshot({
+      path: `${root}/test-results/welcome-mobile.png`,
+      fullPage: true,
+    });
+    assert.equal(await snapshot(page), null);
+    assert.deepEqual(errors, []);
+    assert.ok(
+      requests.length > 0 && requests.every((r) => r.method === "GET"),
+      "all gameplay stays inside the browser",
+    );
+    assert.ok(
+      requests.every((r) => r.url.startsWith(url)),
+      "no CDN, tracking or external runtime dependency",
+    );
+  },
+);
+
+test(
+  "all three starting paths create actual engine worlds",
+  { timeout: 120000 },
+  async (t) => {
+    for (const role of ["wizard", "ranger"]) {
+      const { page, errors } = await fixture(t);
+      await create(page, role, 42);
+      const state = await snapshot(page);
+      assert.equal(state.ended, false);
+      assert.ok(state.observation.inventory.length > 0);
+      assert.equal(state.error, undefined);
+      assert.deepEqual(errors, []);
+      await page.close();
+    }
+  },
+);
+
+test(
+  "a real committed turn with a lost response is recovered by its exact receipt after reload",
+  { timeout: 60000 },
+  async (t) => {
+    const { page } = await fixture(t);
+    await create(page);
+    const first = await snapshot(page);
+    await page.evaluate(async () => {
+      const { WasmTransport } = await import("/runtime/typescript/wasm.js");
+      const send = WasmTransport.prototype.send;
+      WasmTransport.prototype.send = async function (request) {
+        const response = await send.call(this, request);
+        if (request.method === "game.wait") {
+          WasmTransport.prototype.send = send;
+          throw Error(
+            "Test: response lost after the actual engine committed the turn",
+          );
+        }
+        return response;
+      };
+    });
+    await page
+      .getByRole("button", { name: "Wait one turn", exact: true })
+      .click();
+    await ready(page);
+    assert.ok(await page.locator("#recovery").isVisible());
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Search", exact: true })
+        .isDisabled(),
+      true,
+    );
+    const pending = await page.evaluate(
+      () =>
+        JSON.parse(
+          localStorage.getItem("neonethack-pixel-bun-v1:adventures"),
+        )[0].pending,
+    );
+    assert.equal(pending.method, "game.wait");
+    assert.equal(pending.params.sessionId, first.sessionId);
+    await page.reload();
+    await page.waitForFunction(
+      () => !document.querySelector("#new-adventure").disabled,
+    );
+    await page
+      .getByRole("button", { name: "Continue adventure", exact: true })
+      .click();
+    await ready(page);
+    const resumed = await snapshot(page);
+    assert.equal(resumed.observation.turn, first.observation.turn + 1);
+    assert.ok(await page.locator("#recovery").isVisible());
+    await page.evaluate(async () => {
+      const { WasmTransport } = await import("/runtime/typescript/wasm.js");
+      const send = WasmTransport.prototype.send;
+      window.checkedRequests = [];
+      WasmTransport.prototype.send = function (request) {
+        window.checkedRequests.push(structuredClone(request));
+        return send.call(this, request);
+      };
+    });
+    await page
+      .getByRole("button", { name: "Check last action", exact: true })
+      .click();
+    await ready(page);
+    assert.deepEqual(
+      await page.evaluate(() =>
+        window.checkedRequests.filter((r) => r.method === "game.wait"),
+      ),
+      [pending],
+    );
+    assert.equal(
+      (await snapshot(page)).observation.turn,
+      first.observation.turn + 1,
+      "receipt recovery must not spend another turn",
+    );
+    assert.equal(await page.locator("#recovery").isVisible(), false);
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Search", exact: true })
+        .isDisabled(),
+      false,
+    );
+  },
+);
+
+test(
+  "corrupt adventure metadata is reported without replacing it or creating a game",
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await fixture(t);
+    await page.evaluate(() =>
+      localStorage.setItem("neonethack-pixel-bun-v1:adventures", "{damaged"),
+    );
+    await page.reload();
+    await ready(page);
+    assert.ok(await page.locator("#error").isVisible());
+    assert.equal(await page.locator("#new-adventure").isDisabled(), true);
+    assert.equal(
+      await page.evaluate(() =>
+        localStorage.getItem("neonethack-pixel-bun-v1:adventures"),
+      ),
+      "{damaged",
+    );
+    assert.equal(await snapshot(page), null);
+  },
+);
+
+test(
+  "Bun exposes only static public files and the public runtime",
+  { timeout: 30000 },
+  async (t) => {
+    const { url } = await fixture(t);
+    for (const path of [
+      "/server.ts",
+      "/package.json",
+      "/.env",
+      "/runtime/../../AGENTS.md",
+      "/runtime/../package.json",
+      "/runtime/%2e%2e%2f%2e%2e%2fAGENTS.md",
+    ]) {
+      assert.equal((await fetch(url + path)).status, 404, path);
+    }
+    assert.equal(
+      (await fetch(url + "/", { method: "POST", body: "{}" })).status,
+      405,
+    );
+    const response = await fetch(url + "/runtime/wasm/neonethack-core.wasm");
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /application\/wasm/);
+    assert.equal(
+      (await fetch(url + "/style.css", { method: "HEAD" })).status,
+      200,
+    );
+  },
+);
+
+test(
+  "search and door results appear on the map; remembered floors stay dim and journals do not duplicate",
+  { timeout: 30000 },
+  async (t) => {
+    const { page, errors } = await fixture(t);
+    page.setDefaultTimeout(6000);
+    await create(page);
+    assert.equal(
+      await page.locator(".action-bubble").count(),
+      0,
+      "no replay of the introduction",
+    );
+    const turn = (await snapshot(page)).observation.turn;
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await ready(page);
+    const search = page
+      .locator(".action-bubble")
+      .filter({ hasText: "You search nearby." });
+    await search.waitFor();
+    assert.equal((await snapshot(page)).observation.turn, turn + 1);
+    assert.equal(
+      await search.evaluate((el) => getComputedStyle(el).animationName),
+      "none",
+    );
+    const you = (await snapshot(page)).observation.you;
+    assert.equal(await search.getAttribute("data-x"), String(you.x));
+    await page.evaluate(() => document.querySelector("pixel-nethack").render());
+    assert.equal(await page.locator(".action-bubble").count(), 1);
+    await page.screenshot({ path: `${root}/test-results/search-bubble.png` });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await search.scrollIntoViewIfNeeded();
+    const bubbleBounds = await search.boundingBox();
+    assert.ok(
+      bubbleBounds.x >= 0 && bubbleBounds.x + bubbleBounds.width <= 390,
+    );
+    await page.screenshot({
+      path: `${root}/test-results/search-bubble-mobile.png`,
+    });
+    await page.setViewportSize({ width: 1440, height: 1050 });
+    await search.waitFor({ state: "detached" });
+    for (const direction of ["south", "south", "west", "west"]) {
+      await page.evaluate(async (direction) => {
+        const app = document.querySelector("pixel-nethack");
+        await app.run(() => app.game.move(direction));
+      }, direction);
+    }
+    await page.getByRole("button", { name: "Open door", exact: true }).click();
+    await page.locator("#decision[open]").waitFor();
+    assert.equal(await page.locator(".action-bubble").count(), 0);
+    await page
+      .locator("#decision-body button")
+      .filter({ hasText: /^↓ south$/ })
+      .click();
+    await ready(page);
+    const door = page.locator(".action-bubble").filter({ hasText: "kreeek…" });
+    await door.waitFor();
+    assert.equal(await door.getAttribute("data-x"), "16");
+    assert.equal(await door.getAttribute("data-y"), "8");
+    await page.screenshot({ path: `${root}/test-results/door-bubble.png` });
+    for (let i = 0; i < 2; i++)
+      await page.evaluate(async () => {
+        const app = document.querySelector("pixel-nethack");
+        await app.run(() => app.game.move("south"));
+      });
+    const fog = await page.evaluate(() => {
+      const app = document.querySelector("pixel-nethack");
+      const cell = app.snapshot.observation.world.find(
+        (cell) =>
+          cell.visible === false &&
+          cell.terrain.type === "floor" &&
+          !cell.occupant &&
+          !cell.objects &&
+          cell.y >= 5,
+      );
+      if (!cell) throw Error("No remembered floor");
+      const map = app.map,
+        canvas = document.querySelector("#dungeon");
+      const sample = () => [
+        ...canvas
+          .getContext("2d")
+          .getImageData(
+            (cell.x - map.origin.x) * 16 + 8,
+            (cell.y - map.origin.y) * 16 + 8,
+            1,
+            1,
+          ).data,
+      ];
+      const dim = sample();
+      const current = structuredClone(app.snapshot.observation);
+      current.world.find((c) => c.x === cell.x && c.y === cell.y).visible =
+        true;
+      map.update(
+        current,
+        "explorer",
+        `${app.current.seed}:${current.location.id}`,
+      );
+      const lit = sample();
+      app.render();
+      return { dim, lit };
+    });
+    assert.ok(
+      fog.dim.slice(0, 3).reduce((a, b) => a + b, 0) <
+        fog.lit.slice(0, 3).reduce((a, b) => a + b, 0),
+      JSON.stringify(fog),
+    );
+    assert.ok(fog.dim[0] > 20, "remembered floor remains legible, not black");
+    await page.screenshot({ path: `${root}/test-results/remembered-room.png` });
+    await page.getByRole("button", { name: "Journal", exact: true }).click();
+    assert.equal(
+      await page
+        .locator(".journal-entry")
+        .filter({ hasText: "The door opens." })
+        .count(),
+      1,
+    );
+    assert.equal(
+      await page
+        .locator(".journal-entry")
+        .filter({ hasText: "You search nearby." })
+        .count(),
+      1,
+    );
+    await page.reload();
+    await ready(page);
+    await page
+      .getByRole("button", { name: "Continue adventure", exact: true })
+      .click();
+    await ready(page);
+    assert.equal(
+      await page.locator(".action-bubble").count(),
+      0,
+      "resume does not replay bubbles",
+    );
+    assert.ok(
+      (await snapshot(page)).observation.world.some(
+        (cell) => cell.visible === false && cell.terrain.type === "floor",
+      ),
+    );
+    assert.deepEqual(errors, []);
+  },
+);
+
+test(
+  "a saved adventure resumes with its original archived WASM package",
+  { timeout: 20000 },
+  async (t) => {
+    const { page, errors } = await fixture(t);
+    const original = await page.evaluate(async () => {
+      const app = document.querySelector("pixel-nethack");
+      await app.api?.close();
+      const packages = await (await fetch("/build/runtime.json")).json();
+      const { createWasm } = await import("/runtime/typescript/wasm.js");
+      const old = await createWasm({
+        storage: { kind: "indexeddb", name: "neonethack-pixel-bun-v1" },
+        workerUrl: new URL(
+          `/runtime/wasm-packages/${packages.legacyBuildId}/core-worker.mjs`,
+          location.href,
+        ),
+      });
+      const game = await old.create({
+        name: "Earlier chapter",
+        seed: 42,
+        role: "valkyrie",
+        race: "dwarf",
+        gender: "female",
+        align: "lawful",
+      });
+      await game.search();
+      const observation = game.observation;
+      // Legacy display metadata predates the optional buildId. The saved engine
+      // pin is still authoritative; this is a fresh store, never a user's save.
+      localStorage.setItem(
+        "neonethack-pixel-bun-v1:adventures",
+        JSON.stringify([
+          {
+            id: game.id,
+            name: "Earlier chapter",
+            seed: 42,
+            role: "valkyrie",
+            turn: observation.turn,
+            ended: false,
+          },
+        ]),
+      );
+      await old.close();
+      return { observation, buildId: packages.legacyBuildId };
+    });
+    await page.reload();
+    await ready(page);
+    await page
+      .getByRole("button", { name: "Continue adventure", exact: true })
+      .click();
+    await ready(page);
+    assert.deepEqual((await snapshot(page)).observation, original.observation);
+    assert.equal(
+      await page.evaluate(
+        () => document.querySelector("pixel-nethack").buildId,
+      ),
+      original.buildId,
+    );
+    assert.equal(await page.locator(".action-bubble").count(), 0);
+    assert.deepEqual(errors, []);
+  },
+);
+
+test(
+  "confirmed movement glides and sight fades without extra turns; reduced motion settles immediately",
+  { timeout: 20000 },
+  async (t) => {
+    const { page, errors } = await fixture(t);
+    await create(page);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    const result = await page.evaluate(async () => {
+      const app = document.querySelector("pixel-nethack");
+      for (const direction of ["south", "south", "west", "west"])
+        await app.run(() => app.game.move(direction));
+      await app.run(() => app.game.open());
+      await app.run(() =>
+        app.game.answer(app.game.decision.id, {
+          kind: "target",
+          target: { direction: "south" },
+        }),
+      );
+      await app.run(() => app.game.move("south"));
+      const map = app.map;
+      const travel = [0, 55, 110].map((ms) =>
+        map.travel(map.travelStarted + ms),
+      );
+      const cell = app.snapshot.observation.world.find(
+        (cell) =>
+          cell.terrain.type === "floor" &&
+          !cell.occupant &&
+          !cell.objects &&
+          map.fog.has(`${cell.x},${cell.y}`),
+      );
+      if (!cell) throw Error("No real sight transition occurred");
+      const fade = map.fog.get(`${cell.x},${cell.y}`);
+      const canvas = document.querySelector("#dungeon");
+      const shades = [0, 120, 240].map((ms) => {
+        const now = fade.started + ms;
+        map.draw(now);
+        const shift = map.travel(now);
+        return [
+          ...canvas
+            .getContext("2d")
+            .getImageData(
+              (cell.x - map.origin.x) * 16 + 8 + shift.x,
+              (cell.y - map.origin.y) * 16 + 8 + shift.y,
+              1,
+              1,
+            ).data,
+        ]
+          .slice(0, 3)
+          .reduce((a, b) => a + b, 0);
+      });
+      return { travel, shades, turn: app.snapshot.observation.turn };
+    });
+    assert.ok(Math.abs(result.travel[0].y) > Math.abs(result.travel[1].y));
+    assert.deepEqual(result.travel[2], { x: 0, y: 0 });
+    assert.ok(
+      result.shades[0] > result.shades[1] &&
+        result.shades[1] > result.shades[2],
+      `Actual floor pixels should dim gradually: ${result.shades}`,
+    );
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const settled = await page.evaluate(() => {
+      const app = document.querySelector("pixel-nethack");
+      return {
+        shift: app.map.travel(app.map.travelStarted),
+        turn: app.snapshot.observation.turn,
+      };
+    });
+    assert.deepEqual(settled.shift, { x: 0, y: 0 });
+    assert.equal(settled.turn, result.turn);
+    assert.deepEqual(errors, []);
+  },
+);
+
+test("neighborhood inspection is free, revision-bound, keyboard accessible and preserves tool choices", async (t) => {
+  const { page, errors } = await fixture(t);
+  await create(page);
+  await ready(page);
+  const before = await snapshot(page);
+  await page.keyboard.press("Enter");
+  await page.getByRole("dialog", { name: "Tile actions" }).waitFor();
+  assert.equal((await snapshot(page)).revision, before.revision);
+  await page
+    .getByRole("dialog", { name: "Tile actions" })
+    .getByRole("button", { name: "Search here" })
+    .click();
+  await ready(page);
+  assert.equal(
+    (await snapshot(page)).observation.turn,
+    before.observation.turn + 1,
+  );
+  await page.evaluate(() => {
+    const app = document.querySelector("pixel-nethack");
+    const p = app.game.observation.you;
+    app.inspectTile(p.x, p.y);
+  });
+  await page.evaluate(async () => {
+    const app = document.querySelector("pixel-nethack");
+    await app.game.wait();
+  });
+  await page
+    .getByRole("dialog", { name: "Tile actions" })
+    .getByRole("button", { name: "Search here" })
+    .click();
+  await ready(page);
+  assert.match(await page.locator("#error").textContent(), /staleRevision/);
+  assert.equal(
+    (await snapshot(page)).observation.turn,
+    before.observation.turn + 2,
+  );
+  assert.deepEqual(errors, []);
+});
+
+test("held locked-door bump opens a targeted panel once; touch inspection and lock survive reload", async (t) => {
+  const { page, errors } = await fixture(t, { touch: true });
+  await create(page, "valkyrie", 24);
+  await ready(page);
+  for (let i = 0; i < 8; i++)
+    await page.evaluate(async () => {
+      const app = document.querySelector("pixel-nethack");
+      await app.run(() => app.game.move("east"));
+    });
+  const before = await snapshot(page);
+  await page.keyboard.down("ArrowRight");
+  const panel = page.getByRole("dialog", { name: "Tile actions" });
+  await panel.waitFor();
+  const after = await snapshot(page);
+  assert.equal(after.outcome.reason, "lockedDoor");
+  await page.waitForTimeout(450);
+  await page.keyboard.up("ArrowRight");
+  assert.equal((await snapshot(page)).revision, after.revision);
+  assert.equal(after.revision, before.revision + 1);
+  assert.equal(await panel.getAttribute("data-x"), "45");
+  assert.equal(await panel.getAttribute("data-y"), "14");
+  assert.equal(
+    await panel.getByRole("button", { name: "Use a tool…" }).isDisabled(),
+    true,
+  );
+  await panel
+    .getByRole("button", { name: "Close tile actions", exact: true })
+    .click();
+  const location = await page.evaluate(() => {
+    const app = document.querySelector("pixel-nethack"),
+      map = app.map,
+      rect = document.querySelector("#dungeon").getBoundingClientRect();
+    return {
+      x: rect.x + (45 - map.origin.x + 0.5) * 16 * map.zoom,
+      y: rect.y + (14 - map.origin.y + 0.5) * 16 * map.zoom,
+    };
+  });
+  await page.touchscreen.tap(location.x, location.y);
+  await panel.waitFor();
+  assert.equal((await snapshot(page)).revision, after.revision);
+  await page.screenshot({ path: `${root}/test-results/locked-door-panel.png` });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await panel.scrollIntoViewIfNeeded();
+  const bounds = await panel.boundingBox();
+  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 390);
+  await page.screenshot({
+    path: `${root}/test-results/locked-door-mobile.png`,
+  });
+  await page.reload();
+  await page
+    .getByRole("button", { name: /Continue/ })
+    .first()
+    .click();
+  await ready(page);
+  const restored = await snapshot(page);
+  assert.equal(
+    restored.observation.neighborhood.cells.find(
+      (c) => c.x === 45 && c.y === 14,
+    ).door.lock,
+    "locked",
+  );
+  assert.deepEqual(errors, []);
+});
+
+test("walk-in welcome teaches directions, stops on release and opens creation only at the hall", async (t) => {
+  const { page, errors } = await fixture(t, { touch: true });
+  const intro = () =>
+    page.evaluate(() => ({
+      ...document.querySelector("pixel-nethack").map.intro,
+    }));
+  const initial = await intro();
+  await page.keyboard.press("ArrowRight");
+  assert.equal((await intro()).x, initial.x + 8);
+  assert.equal((await intro()).facing, 0, "authored right-facing group");
+  await page.keyboard.press("ArrowLeft");
+  assert.equal((await intro()).x, initial.x);
+  assert.equal((await intro()).facing, 2, "authored left-facing group");
+  await page.keyboard.down("ArrowUp");
+  await page.waitForFunction(
+    () => document.querySelector("pixel-nethack").map.intro.y < 184,
+  );
+  await page.keyboard.up("ArrowUp");
+  const stopped = await intro();
+  await page.waitForTimeout(350);
+  assert.deepEqual(await intro(), stopped);
+  assert.equal(await snapshot(page), null);
+  assert.equal(await page.locator("#menu").getAttribute("open"), null);
+  assert.equal(
+    await page.evaluate(() =>
+      localStorage.getItem("neonethack-pixel-bun-v1:adventures"),
+    ),
+    null,
+  );
+  await page.keyboard.down("ArrowUp");
+  await page.locator("#create-form").waitFor();
+  await page.keyboard.up("ArrowUp");
+  assert.equal(
+    await snapshot(page),
+    null,
+    "walking is decorative, not engine input",
+  );
+  await page.keyboard.press("Escape");
+  assert.equal((await intro()).y, initial.y, "cancel restores the approach");
+  await page.setViewportSize({ width: 390, height: 844 });
+  const north = page.getByRole("button", {
+    name: "Walk north toward the entrance",
+  });
+  for (let i = 0; i < 14; i++) await north.tap();
+  await page.locator("#create-form").waitFor();
+  assert.equal(await snapshot(page), null);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Begin your adventure" }).click();
+  await page.locator("#create-form").waitFor();
+  assert.equal(await page.locator("dialog[open]").count(), 1);
+  await page.keyboard.press("Escape");
+  const size = await page.locator(".map-viewport").boundingBox();
+  assert.equal(size.width, 390);
+  assert.equal(size.height, 844);
+  assert.deepEqual(errors, []);
+});
+
+test(
+  "native WebMCP exposes the entire MCP catalog and shares durable engine state with the HUD",
+  { timeout: 60000 },
+  async (t) => {
+    const { page, errors } = await fixture(t, { webmcp: true });
+    await page.waitForFunction(
+      () => document.querySelector("pixel-nethack").dataset.webmcp === "ready",
+    );
+    const { tools } = await import("../../../lib/neonethack/dist/mcp/tools.js");
+    const registered = await page.evaluate(() =>
+      navigator.modelContextTesting.listTools(),
+    );
+    assert.deepEqual(
+      registered.map((t) => t.name).sort(),
+      tools.map((t) => t.name).sort(),
+    );
+    for (const tool of tools) {
+      const native = registered.find((t) => t.name === tool.name);
+      assert.equal(native.description, tool.description);
+      assert.deepEqual(JSON.parse(native.inputSchema), tool.inputSchema);
+    }
+    const call = (method, args = {}) =>
+      page.evaluate(
+        async ({ method, args }) => {
+          const result = await navigator.modelContextTesting.executeTool(
+            `neonethack_${method.replaceAll(".", "_")}`,
+            JSON.stringify(args),
+          );
+          return JSON.parse(result);
+        },
+        { method, args },
+      );
+    assert.equal((await call("protocol.describe")).isError, false);
+    assert.equal(await snapshot(page), null);
+    const created = await call("session.create", {
+      name: "Mira",
+      role: "valkyrie",
+      race: "human",
+      gender: "female",
+      align: "lawful",
+      seed: 42,
+    });
+    assert.equal(created.isError, false);
+    let state = created.structuredContent;
+    assert.deepEqual(await snapshot(page), state);
+    assert.equal(await page.locator("#hero-name").textContent(), "Mira");
+    assert.equal(
+      await page.locator(".map-viewport").evaluate((el) => el.clientHeight),
+      1050,
+    );
+    await page.screenshot({
+      path: `${root}/test-results/fullscreen-hud-desktop.png`,
+    });
+    const args = (requestId, extra = {}) => ({
+      sessionId: state.sessionId,
+      requestId,
+      expectedRevision: state.revision,
+      ...extra,
+    });
+    const prayerArgs = args("web-pray");
+    const prayer = await call("game.pray", prayerArgs);
+    state = prayer.structuredContent;
+    assert.equal(state.decision.kind, "confirmation");
+    await page.locator("#decision[open]").waitFor();
+    await page.waitForTimeout(200);
+    assert.deepEqual(
+      await snapshot(page),
+      state,
+      "warnings await an explicit answer",
+    );
+    const decline = await call(
+      "decision.answer",
+      args("web-decline", {
+        decisionId: state.decision.id,
+        answer: { kind: "confirmation", confirm: false },
+      }),
+    );
+    state = decline.structuredContent;
+    assert.equal(state.decision, null);
+    const waitArgs = args("web-wait");
+    state = (await call("game.wait", waitArgs)).structuredContent;
+    const next = (await call("game.wait", args("web-next"))).structuredContent;
+    assert.deepEqual(
+      (await call("game.wait", waitArgs)).structuredContent,
+      state,
+      "exact receipt retry",
+    );
+    assert.deepEqual(
+      await snapshot(page),
+      next,
+      "old receipts never rewind the HUD",
+    );
+    state = next;
+    const stale = await call("game.wait", {
+      ...args("web-stale"),
+      expectedRevision: 0,
+    });
+    assert.equal(stale.isError, true);
+    assert.equal((await snapshot(page)).revision, state.revision);
+    const actions = await call("session.actions", {
+      sessionId: state.sessionId,
+      expectedRevision: state.revision,
+      target: "here",
+    });
+    assert.equal(actions.isError, false);
+    assert.equal((await snapshot(page)).revision, state.revision);
+    await page.evaluate(async () => {
+      const { WasmTransport } = await import("/runtime/typescript/wasm.js");
+      const original = WasmTransport.prototype.send;
+      WasmTransport.prototype.send = async function (request) {
+        const response = await original.call(this, request);
+        if (request.method === "game.wait") {
+          WasmTransport.prototype.send = original;
+          throw Error("Test WebMCP lost receipt after committed input");
+        }
+        return response;
+      };
+    });
+    const uncertain = args("web-lost");
+    assert.equal((await call("game.wait", uncertain)).isError, true);
+    await page.locator("#recovery").waitFor({ state: "visible" });
+    const wrong = await call("game.wait", args("web-wrong-retry"));
+    assert.equal(wrong.isError, true);
+    assert.match(wrong.content[0].text, /uncertain request/);
+    const recovered = await call("game.wait", uncertain);
+    assert.equal(recovered.isError, false);
+    assert.equal(
+      recovered.structuredContent.observation.turn,
+      state.observation.turn + 1,
+    );
+    state = recovered.structuredContent;
+    assert.deepEqual(await snapshot(page), state);
+    await page.locator("#recovery").waitFor({ state: "hidden" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: `${root}/test-results/fullscreen-hud-mobile.png`,
+    });
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollHeight <= innerHeight,
+      ),
+      true,
+    );
+    await call("session.close", { sessionId: state.sessionId });
+    assert.equal(await snapshot(page), null);
+    const resumed = await call("session.resume", {
+      sessionId: state.sessionId,
+    });
+    assert.equal(resumed.isError, false);
+    assert.equal(
+      (await snapshot(page)).observation.turn,
+      state.observation.turn,
+    );
+    await page.evaluate(() => document.querySelector("pixel-nethack").remove());
+    // Chromium 148 drops native unregister-algorithm handles during GC
+    // (model_context.cc registerTool ignores AddAlgorithm's returned handle).
+    // Retired callbacks must reject before touching the closed transport even
+    // when that browser retains descriptors. Navigation clears the registry.
+    const retired = await page.evaluate(async () => {
+      try {
+        return JSON.parse(
+          await navigator.modelContextTesting.executeTool(
+            "neonethack_protocol_describe",
+            "{}",
+          ),
+        );
+      } catch (error) {
+        return { removed: /Tool not found/.test(String(error)) };
+      }
+    });
+    assert.ok(
+      retired.removed ||
+        (retired.isError &&
+          /cancelled before submission/.test(retired.content[0].text)),
+    );
+    await page.goto("about:blank");
+    assert.equal(
+      (
+        await page.evaluate(
+          () => navigator.modelContextTesting?.listTools() ?? [],
+        )
+      ).length,
+      0,
+    );
+    assert.deepEqual(errors, []);
+  },
+);
+
+test(
+  "title remains interactive during library downloads and acquires no store until entry",
+  { timeout: 30000 },
+  async (t) => {
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    t.after(() => release());
+    const workers = [];
+    const { page, requests, errors } = await fixture(t, {
+      setup: async (page) => {
+        page.on("worker", (worker) => workers.push(worker.url()));
+        await page.route("**/runtime/typescript/wasm.js", async (route) => {
+          await held;
+          await route.continue();
+        });
+      },
+    });
+    assert.equal(await snapshot(page), null);
+    assert.equal(workers.length, 0);
+    assert.deepEqual(
+      await page.evaluate(async () => (await navigator.locks.query()).held),
+      [],
+    );
+    const before = await page.evaluate(
+      () => document.querySelector("pixel-nethack").map.intro.x,
+    );
+    await page.keyboard.press("ArrowRight");
+    assert.equal(
+      await page.evaluate(
+        () => document.querySelector("pixel-nethack").map.intro.x,
+      ),
+      before + 8,
+    );
+    release();
+    await page.waitForFunction(
+      () => document.querySelector("pixel-nethack").warmed.size > 0,
+    );
+    await page.evaluate(async () =>
+      Promise.all(document.querySelector("pixel-nethack").warmed.values()),
+    );
+    assert.ok(
+      requests.some((r) => r.url.endsWith("neonethack-engine.wasm")),
+      "WASM downloaded on title",
+    );
+    assert.equal(workers.length, 0, "warmup must not instantiate the engine");
+    assert.deepEqual(
+      await page.evaluate(async () => (await navigator.locks.query()).held),
+      [],
+    );
+    await create(page);
+    assert.ok(workers.some((url) => url.endsWith("core-worker.mjs")));
+    const companions = (await snapshot(page)).observation.world.filter(
+      (c) => c.occupant?.kind === "ally",
+    );
+    assert.ok(companions.length);
+    assert.ok(
+      companions.every((c) => typeof c.occupant.appearance === "string"),
+      "visible pet has its engine appearance without attacking",
+    );
+    await page.evaluate(
+      ({ x, y }) => document.querySelector("pixel-nethack").inspectTile(x, y),
+      companions[0],
+    );
+    const card = page.getByRole("dialog", { name: "Tile actions" });
+    assert.equal(
+      await card.locator("strong").textContent(),
+      companions[0].occupant.appearance,
+    );
+    assert.equal(await card.locator(".tile-relation").textContent(), "Ally");
+    assert.ok(
+      await card.getByRole("button", { name: "Move toward ally" }).isVisible(),
+    );
+    await page.screenshot({ path: `${root}/test-results/companion-card.png` });
+    assert.deepEqual(errors, []);
+  },
+);
+
+test(
+  "a waiting title tab refreshes adventure metadata after acquiring the store",
+  { timeout: 30000 },
+  async (t) => {
+    const { page, context, url } = await fixture(t);
+    const waiting = await context.newPage();
+    await waiting.goto(url);
+    await waiting.waitForFunction(
+      () => !document.querySelector("#new-adventure").disabled,
+    );
+    await create(page);
+    const first = (await snapshot(page)).sessionId;
+    await page.close();
+    await create(waiting, "wizard", 21);
+    const saves = await waiting.evaluate(() =>
+      JSON.parse(localStorage.getItem("neonethack-pixel-bun-v1:adventures")),
+    );
+    assert.equal(saves.length, 2);
+    assert.ok(saves.some((save) => save.id === first));
+  },
+);
+
+test(
+  "ground loot is free to read, pickup targets its item, and pet swapping stays quiet",
+  { timeout: 30000 },
+  async (t) => {
+    const { page, errors } = await fixture(t);
+    await create(page);
+    const dropped = await page.evaluate(async () => {
+      const app = document.querySelector("pixel-nethack");
+      const item = app.game.observation.inventory.find(
+        (item) => item.category === "food",
+      );
+      if (!item) throw Error("Actual starting food required");
+      await app.run(() => app.game.drop({ id: item.id }));
+      return {
+        item: app.game.observation.here.items[0],
+        revision: app.game.state.revision,
+        foodCount: app.game.observation.inventory
+          .filter((item) => item.category === "food")
+          .reduce((sum, item) => sum + item.quantity, 0),
+      };
+    });
+    await page
+      .getByRole("complementary", { name: "On the ground", exact: true })
+      .waitFor();
+    assert.equal(
+      (await snapshot(page)).revision,
+      dropped.revision,
+      "displaying loot sends no inspect action",
+    );
+    await page
+      .getByRole("button", {
+        name: "Pick up " + dropped.item.label,
+        exact: true,
+      })
+      .click();
+    await ready(page);
+    assert.equal((await snapshot(page)).observation.here.items.length, 0);
+    assert.equal(
+      (await snapshot(page)).observation.inventory
+        .filter((item) => item.category === "food")
+        .reduce((sum, item) => sum + item.quantity, 0),
+      dropped.foodCount + dropped.item.quantity,
+      "pickup may merge stacks and issue new references",
+    );
+    assert.equal(await page.locator("#ground-loot").isVisible(), false);
+    // A fresh seeded adventure starts beside the actual pet.
+    await page.evaluate(async () => {
+      const app = document.querySelector("pixel-nethack");
+      await app.game.close();
+      app.game = await app.api.create({
+        name: "Companion",
+        seed: 42,
+        role: "valkyrie",
+        race: "human",
+        gender: "female",
+        align: "lawful",
+      });
+      app.current = null;
+      app.render();
+      const n = app.game.observation.neighborhood;
+      const pet = n.cells.find(
+        (cell) =>
+          cell.occupant?.kind === "ally" &&
+          cell.movement.relation === "adjacent",
+      );
+      if (!pet) throw Error("Actual adjacent pet required");
+      const move = pet.actions.find((offer) => offer.key === "move");
+      await app.run(() => app.executeOffer(app.game, move, n.basis.revision));
+    });
+    const state = await snapshot(page);
+    assert.ok(
+      state.events.some(
+        (event) =>
+          event.type === "heard" && /^You swap places with /.test(event.text),
+      ),
+      "real pet-swap narration required",
+    );
+    assert.equal(
+      await page
+        .locator(".action-bubble")
+        .filter({ hasText: /swap places/ })
+        .count(),
+      0,
+    );
+    assert.deepEqual(errors, []);
+  },
+);
+
+test("early creature art stands above terrain and known appearances clear question marks", async (t) => {
+  const { page } = await fixture(t);
+  const checks = await page.evaluate(async () => {
+    const app = document.querySelector("pixel-nethack");
+    const host = document.createElement("div");
+    host.id = "creature-study";
+    host.style.cssText =
+      "position:fixed;left:0;top:0;width:1024px;height:512px;z-index:30;background:#171f23";
+    const canvas = document.createElement("canvas");
+    host.append(canvas);
+    document.body.append(host);
+    const map = new app.map.constructor(canvas, () => {});
+    map.zoom = 4;
+    const species = [
+      "newt",
+      "jackal",
+      "lichen",
+      "goblin",
+      "kobold",
+      "sewer rat",
+      "giant rat",
+    ];
+    const marks = [":", "d", "F", "o", "k", "r", "r"];
+    const world = [];
+    for (let x = 1; x <= 16; x++)
+      for (let y = 1; y <= 4; y++)
+        world.push({
+          x,
+          y,
+          visible: true,
+          terrain: { type: "floor", knowledge: "remembered" },
+        });
+    species.forEach((appearance, i) => {
+      world.find((c) => c.x === 2 + i * 2 && c.y === 3).occupant = {
+        kind: "creature",
+        mark: marks[i],
+        appearance,
+        color: 3,
+      };
+    });
+    const dog = world.find((c) => c.x === 8 && c.y === 1);
+    dog.occupant = {
+      kind: "ally",
+      mark: "d",
+      appearance: "little dog",
+      color: 15,
+    };
+    // Large loot overlaps its actor but retains an exposed crown beyond the actor footprint.
+    dog.objects = [{ mark: "`", color: 7 }];
+    const observation = {
+      location: { id: "creature-study", depthLabel: "Art" },
+      you: { x: 9, y: 1 },
+      world,
+    };
+    map.update(observation, "explorer", "creatures:42");
+    const pixel = (x, y, dx, dy) => [
+      ...canvas
+        .getContext("2d")
+        .getImageData(
+          (x - map.origin.x) * 16 + dx,
+          (y - map.origin.y) * 16 + dy,
+          1,
+          1,
+        ).data,
+    ];
+    const crownWithActor = pixel(8, 1, 8, -3);
+    const known = pixel(8, 1, 12, -6);
+    delete dog.occupant.appearance;
+    map.draw();
+    const unknown = pixel(8, 1, 12, -6);
+    dog.occupant.appearance = "little dog";
+    map.draw();
+    map.destroy();
+    return { known, unknown, crownWithActor };
+  });
+  assert.deepEqual(
+    checks.unknown,
+    [241, 223, 172, 255],
+    "unavailable appearance has a separate question badge",
+  );
+  assert.notDeepEqual(
+    checks.known,
+    checks.unknown,
+    "appearance removes the badge",
+  );
+  assert.deepEqual(
+    checks.crownWithActor,
+    [181, 180, 160, 255],
+    "ground loot is still drawn with an occupant",
+  );
+  await page
+    .locator("#creature-study")
+    .screenshot({ path: `${root}/test-results/early-creatures.png` });
+});
+
+test(
+  "confirmed injury gets a brief impact and small shake; reduced motion disables both",
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await fixture(t);
+    await create(page);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    const evidence = await page.evaluate(async () => {
+      const app = document.querySelector("pixel-nethack");
+      for (
+        let i = 0;
+        i < 6 &&
+        !app.game.observation.neighborhood.cells.some(
+          (c) =>
+            c.movement.relation === "adjacent" && c.terrain?.type === "wall",
+        );
+        i++
+      ) {
+        await app.run(() => app.game.move("north"));
+      }
+      const wall = app.game.observation.neighborhood.cells.find(
+        (c) => c.movement.relation === "adjacent" && c.terrain?.type === "wall",
+      );
+      if (!wall) throw Error("A publicly observed adjacent wall is required");
+      const direction = [
+        "northwest",
+        "north",
+        "northeast",
+        "west",
+        null,
+        "east",
+        "southwest",
+        "south",
+        "southeast",
+      ][(wall.dy + 1) * 3 + wall.dx + 1];
+      let hurt = false;
+      for (let i = 0; i < 16 && !hurt; i++) {
+        const before = Number(app.game.observation.vitals.health);
+        await app.run(() => app.game.kick(direction));
+        hurt = Number(app.game.observation.vitals.health) < before;
+      }
+      return {
+        hurt,
+        impacts: document.querySelectorAll(".combat-impact.hurt").length,
+        animations: app.map.canvas.getAnimations().length,
+      };
+    });
+    assert.equal(
+      evidence.hurt,
+      true,
+      "actual engine injury, not a fabricated damage event",
+    );
+    assert.equal(evidence.impacts, 1);
+    assert.equal(evidence.animations, 1);
+    await page.waitForFunction(() => !document.querySelector(".combat-impact"));
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const quiet = await page.evaluate(async () => {
+      const app = document.querySelector("pixel-nethack");
+      const before = app.game.state;
+      // Exercise the presentation of the actual injured receipt under reduced motion.
+      const previous = structuredClone(before);
+      previous.revision--;
+      previous.observation.vitals.health =
+        Number(before.observation.vitals.health) + 1;
+      app.map.showMessages(previous, before);
+      return {
+        impacts: document.querySelectorAll(".combat-impact").length,
+        animations: app.map.canvas.getAnimations().length,
+      };
+    });
+    assert.deepEqual(quiet, { impacts: 0, animations: 0 });
+  },
+);

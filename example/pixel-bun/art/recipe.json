@@ -1,0 +1,123 @@
+{
+  "version": 1,
+  "name": "The threshold",
+  "description": "Lantern-lit stone, moss, a traveler and a companion. Title-screen illustration only; the live map uses public observations.",
+  "tileSize": 16,
+  "scale": 2,
+  "source": "../src/map.ts",
+  "terrainSource": "../src/dungeon-art.ts",
+  "rendererVersion": "stonework-2",
+  "seed": "threshold:42",
+  "palette": {
+    "void": "#171f23",
+    "floor": "#454b44",
+    "stone": "#515950",
+    "moss": "#798553",
+    "torch": "#f0bb68"
+  },
+  "assets": [
+    {
+      "file": "explorer.png",
+      "source": "pixel-art-interfaces curated avatar-03",
+      "size": [
+        16,
+        32
+      ],
+      "credit": "Modern Interiors by LimeZu"
+    },
+    {
+      "file": "scholar.png",
+      "source": "pixel-art-interfaces curated avatar-02",
+      "size": [
+        16,
+        32
+      ],
+      "credit": "Modern Interiors by LimeZu"
+    },
+    {
+      "file": "dog.png",
+      "source": "original dog template",
+      "recipe": "dog.json",
+      "color": "#c79b67",
+      "size": [
+        16,
+        16
+      ]
+    },
+    {
+      "file": "bat.png",
+      "source": "original bat template",
+      "recipe": "bat.json",
+      "size": [
+        16,
+        16
+      ]
+    },
+    {
+      "file": "explorer-motion.png",
+      "source": "modern-premade-character-03",
+      "size": [
+        384,
+        64
+      ],
+      "credit": "Modern Interiors by LimeZu"
+    },
+    {
+      "file": "scholar-motion.png",
+      "source": "modern-premade-character-02",
+      "size": [
+        384,
+        64
+      ],
+      "credit": "Modern Interiors by LimeZu"
+    },
+    {
+      "file": "cat.png",
+      "source": "original cat template",
+      "recipe": "cat.json",
+      "size": [
+        16,
+        16
+      ]
+    }
+  ],
+  "liveMap": {
+    "geometry": "Integer 16px tiles at 1x or 2x; native 16x32 traveler with bottom-center anchor at the perceived tile foot.",
+    "knowledge": "Remembered terrain; only occupants/objects supplied in the current public observation. No persistent occupant cache or species inference.",
+    "movement": "No art controller, pathfinding, collision or game rules. Named library operations own all game behavior.",
+    "symbols": "Class art in src/symbol-art.ts; original glyphs retained in inspection, text map and optional symbol mode. No species/item identity inference."
+  },
+  "animation": {
+    "source": "Modern Interiors primary premade characters 03 and 02",
+    "sourceRect": [
+      0,
+      32,
+      384,
+      64
+    ],
+    "frameSize": [
+      16,
+      32
+    ],
+    "pivot": [
+      8,
+      32
+    ],
+    "directions": [
+      "right",
+      "up",
+      "left",
+      "down"
+    ],
+    "framesPerDirection": 6,
+    "rows": {
+      "idle": 0,
+      "walk": 32
+    },
+    "fps": {
+      "idle": 6,
+      "walk": 10
+    },
+    "reducedMotion": "directional idle frame 0"
+  }
+}

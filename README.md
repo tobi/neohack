@@ -39,6 +39,10 @@ CMake/Ninja recipes and the public APIs.
 - `lib/neonethack/` — C core and engine, protocol, TypeScript, MCP, builds, docs.
 - `examples/wasm/` — small browser client (`index.html`, `neonethack.ts`).
 - `examples/c/` — client of the installed public C header and library.
+- [`example/pixel-bun/`](example/pixel-bun/README.md) — an approachable pixel-art
+  browser client, served by Bun and powered by the public WASM API. Its
+  [visual design](example/pixel-bun/DESIGN.md) covers raised walls, seeded variety,
+  accessible controls and the boundary between decoration and game knowledge.
 
 **Release preparation is in progress.** Native and shared-core WASM integration
 is tested, including real browser play, IndexedDB resume, native leases and

@@ -1,0 +1,70 @@
+import { realpath, stat } from "node:fs/promises";
+import { resolve, sep } from "node:path";
+
+// Bun serves files only. Worlds and journals belong to the browser's owned
+// IndexedDB store. There is deliberately no server-side game route.
+export async function startServer(port = Number(process.env.PORT ?? 3333)) {
+  const publicRoot = await realpath(resolve(import.meta.dir, "public"));
+  const runtimeRoot = await realpath(
+    resolve(import.meta.dir, "../../lib/neonethack/dist"),
+  );
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port,
+    async fetch(request) {
+      const headers = {
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+        "Cache-Control": "no-cache",
+        "Content-Security-Policy":
+          "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; worker-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'",
+      };
+      if (!["GET", "HEAD"].includes(request.method))
+        return new Response("Method not allowed", {
+          status: 405,
+          headers: { ...headers, Allow: "GET, HEAD" },
+        });
+      try {
+        const path = decodeURIComponent(new URL(request.url).pathname);
+        const runtime = path.startsWith("/runtime/");
+        const root = runtime ? runtimeRoot : publicRoot;
+        const relative = runtime
+          ? path.slice(9)
+          : path === "/"
+            ? "index.html"
+            : path.slice(1);
+        const file = await realpath(resolve(root, relative));
+        if (!file.startsWith(root + sep) || !(await stat(file)).isFile())
+          throw Error("Not a public file");
+        const blob = Bun.file(file);
+        return new Response(request.method === "HEAD" ? null : blob, {
+          headers: {
+            ...headers,
+            // Archived packages are immutable and addressed by their manifest hash.
+            // Title-screen warmup and later worker loads share the HTTP cache.
+            "Cache-Control":
+              /^\/runtime\/wasm-packages\/[a-f0-9]{64}\/[\w.-]+$/.test(path)
+                ? "public, max-age=31536000, immutable"
+                : "no-cache",
+            "Content-Type": file.endsWith(".mjs")
+              ? "text/javascript"
+              : blob.type,
+            "Content-Length": String(blob.size),
+          },
+        });
+      } catch {
+        return new Response("Not found", { status: 404, headers });
+      }
+    },
+  });
+  return server;
+}
+if (import.meta.main) {
+  const server = await startServer();
+  console.log(`NEONETHACK READY http://127.0.0.1:${server.port}`);
+  for (const signal of ["SIGINT", "SIGTERM"] as const)
+    process.on(signal, () => {
+      server.stop(true);
+      process.exit(0);
+    });
+}
