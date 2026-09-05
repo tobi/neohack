@@ -744,7 +744,7 @@ test(
       () => !document.querySelector("#new-adventure").disabled,
     );
     await page
-      .getByRole("button", { name: "Continue adventure", exact: true })
+      .getByRole("button", { name: /^Continue previous run/ })
       .click();
     await ready(page);
     const resumed = await snapshot(page);
@@ -772,7 +772,7 @@ test(
       "title tabs do not own saves",
     );
     await competitor
-      .getByRole("button", { name: "Continue adventure", exact: true })
+      .getByRole("button", { name: /^Continue previous run/ })
       .click();
     await competitor.locator("#error").waitFor({ state: "visible" });
     assert.match(
@@ -896,7 +896,7 @@ test(
       () => !document.querySelector("#new-adventure").disabled,
     );
     await page
-      .getByRole("button", { name: "Continue adventure", exact: true })
+      .getByRole("button", { name: /^Continue previous run/ })
       .click();
     await ready(page);
     const resumed = await snapshot(page);
@@ -1142,7 +1142,7 @@ test(
     await page.reload();
     await ready(page);
     await page
-      .getByRole("button", { name: "Continue adventure", exact: true })
+      .getByRole("button", { name: /^Continue previous run/ })
       .click();
     await ready(page);
     assert.equal(
@@ -2337,4 +2337,146 @@ test("twelve additional encounters have distinct small art and preserve unknown 
   assert.equal(new Set(report.map(r => r.art)).size, 12);
   assert.deepEqual(errors, []);
   await page.locator("#encounter-art-study").screenshot({ path: `${root}/test-results/encounter-art.png` });
+});
+
+test("dungeon loading scene covers creation and previous-run resume without extra input", { timeout: 30000 }, async t => {
+  const { page, errors } = await fixture(t);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  assert.equal(await page.locator("#continue-adventure").isVisible(), false);
+  const delayEntry = () => page.evaluate(() => {
+    const app = document.querySelector("pixel-nethack");
+    const connect = app.connectRuntime.bind(app);
+    app.connectRuntime = async () => {
+      await new Promise(resolve => { globalThis.releaseEntry = resolve; });
+      return connect();
+    };
+  });
+  await delayEntry();
+  await page.getByRole("button", { name: "Begin your adventure" }).click();
+  await page.getByRole("button", { name: "Enter the dungeon" }).click();
+  await page.waitForFunction(() => typeof globalThis.releaseEntry === "function");
+  const loading = page.locator("#dungeon-loading");
+  assert.equal(await loading.isVisible(), true);
+  assert.equal(await snapshot(page), null);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("ArrowUp");
+  assert.equal(await loading.isVisible(), true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: `${root}/test-results/dungeon-loading-mobile.png` });
+  await page.evaluate(() => globalThis.releaseEntry());
+  await ready(page);
+  const first = await snapshot(page);
+  assert.equal(first.observation.turn, 1);
+  assert.equal(await loading.isVisible(), false);
+  await page.reload();
+  await page.locator("#continue-adventure").waitFor();
+  assert.match(await page.locator("#continue-adventure").innerText(), /Continue previous run\s+Ada · Turn 1/);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await delayEntry();
+  await page.locator("#continue-adventure").click();
+  await page.waitForFunction(() => typeof globalThis.releaseEntry === "function");
+  assert.equal(await loading.isVisible(), true);
+  assert.equal(await page.locator("#loading-title").innerText(), "Returning to the dungeon");
+  assert.equal(await page.locator(".arch-near").evaluate(node => getComputedStyle(node).animationName), "none");
+  await page.evaluate(() => globalThis.releaseEntry());
+  await ready(page);
+  assert.equal((await snapshot(page)).sessionId, first.sessionId);
+  assert.equal((await snapshot(page)).observation.turn, first.observation.turn);
+  assert.equal(await loading.isVisible(), false);
+  assert.deepEqual(errors, []);
+});
+
+test("failed dungeon entry removes the loading scene and exposes the error", async t => {
+  const { page } = await fixture(t);
+  await page.evaluate(() => {
+    document.querySelector("pixel-nethack").connectRuntime = async () => { throw Error("Entry fixture failure"); };
+  });
+  await page.getByRole("button", { name: "Begin your adventure" }).click();
+  await page.getByRole("button", { name: "Enter the dungeon" }).click();
+  await ready(page);
+  assert.equal(await page.locator("#dungeon-loading").isVisible(), false);
+  assert.match(await page.locator("#error").innerText(), /Entry fixture failure/);
+  assert.equal(await snapshot(page), null);
+});
+
+test("typing and choosing a class in a menu cannot answer a standing direction", { timeout: 30000 }, async t => {
+  const { page, errors } = await fixture(t);
+  await create(page);
+  await page.evaluate(() => document.querySelector("pixel-nethack").action("kick"));
+  await page.locator("#direction-target").waitFor();
+  const standing = await snapshot(page);
+  await page.getByLabel("Game menu", { exact: true }).click();
+  await page.getByRole("button", { name: "Your adventures", exact: true }).click();
+  await page.getByRole("button", { name: "Start a new adventure", exact: true }).click();
+  const name = page.getByLabel("YOUR NAME", { exact: true });
+  await name.fill("");
+  await name.pressSequentially("hjkl yubn");
+  await page.locator("input[name=role]").first().focus();
+  await page.keyboard.press("ArrowDown");
+  await ready(page);
+  assert.equal(await name.inputValue(), "hjkl yubn");
+  assert.deepEqual(await snapshot(page), standing, "menu input must not answer or cancel the engine decision");
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page.locator('[data-target-direction="north"]').focus();
+  await page.keyboard.press("Escape");
+  await ready(page);
+  assert.equal((await snapshot(page)).decision, null);
+  assert.equal((await snapshot(page)).observation.turn, standing.observation.turn);
+  assert.deepEqual(errors, []);
+});
+
+test("saving a standing warning returns to an unowned title and another tab resumes it", { timeout: 30000 }, async t => {
+  const { page, context, url, errors } = await fixture(t);
+  await create(page);
+  await page.evaluate(() => document.querySelector("pixel-nethack").action("pray"));
+  await page.locator("#decision[open]").waitFor();
+  const standing = await snapshot(page);
+  assert.equal(standing.decision.kind, "confirmation");
+  await page.getByRole("button", { name: "Save & return to doorway", exact: true }).click();
+  await ready(page);
+  assert.equal(await snapshot(page), null);
+  assert.equal(await page.evaluate(() => document.querySelector("pixel-nethack").api), null, "the title must release the store, not just the world");
+  const peer = await context.newPage();
+  await peer.goto(url);
+  await peer.getByRole("button", { name: /^Continue previous run/ }).click();
+  await peer.locator("#decision[open]").waitFor();
+  await ready(peer);
+  const resumed = await snapshot(peer);
+  assert.equal(resumed.sessionId, standing.sessionId);
+  assert.deepEqual(resumed.decision, standing.decision);
+  assert.deepEqual(resumed.observation, standing.observation);
+  assert.deepEqual(errors, []);
+});
+
+test("removing the client during runtime opening closes the late store owner", { timeout: 30000 }, async t => {
+  const { page, context, url } = await fixture(t);
+  const result = await page.evaluate(async () => {
+    const app = document.querySelector("pixel-nethack");
+    await app.preparation;
+    const createWasm = app.runtime.wasm.createWasm;
+    let acquired, release, closes = 0;
+    const owned = new Promise(resolve => { acquired = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    app.runtime = { ...app.runtime, wasm: { ...app.runtime.wasm, createWasm: async options => {
+      const wasm = await createWasm(options);
+      const close = wasm.close.bind(wasm);
+      wasm.close = async () => { closes++; await close(); };
+      acquired();
+      await gate;
+      return wasm;
+    } } };
+    const opening = app.connectRuntime().then(() => "opened", error => String(error));
+    await owned;
+    app.remove();
+    release();
+    const status = await opening;
+    return { status, closes, adopted: app.api !== null };
+  });
+  assert.match(result.status, /closed/i);
+  assert.equal(result.closes, 1);
+  assert.equal(result.adopted, false);
+  const peer = await context.newPage();
+  await peer.goto(url);
+  await create(peer);
+  assert.equal((await snapshot(peer)).observation.turn, 1, "another client can acquire the store");
 });

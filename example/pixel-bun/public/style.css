@@ -1449,3 +1449,35 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
   outline: 2px solid var(--sage);
   outline-offset: 2px;
 }
+
+/* The engine loads behind a small, pixel-stepped descent through stone arches. */
+#dungeon-loading { outline: none; border-radius: 0; width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 24px; border: 0; background: #101b20; color: #e6dec0; text-align: center; box-shadow: none; overflow: hidden; }
+#dungeon-loading[open] { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#dungeon-loading::backdrop { background: #101b20; }
+#dungeon-loading h2 { font-size: clamp(20px, 4vw, 28px); margin: 22px 0 8px; }
+#loading-detail { max-width: 320px; color: #a4b19b; font-size: 14px; }
+.descent-scene { position: relative; width: 288px; height: 224px; overflow: hidden; background: #0b1418; border-bottom: 4px solid #46564e; }
+.descent-arch { position: absolute; left: 50%; bottom: 0; width: 168px; height: 192px; border: 12px solid #46564e; border-bottom: 0; box-shadow: inset 4px 4px #263b39, 4px 0 #1c2a2c; transform-origin: 50% 100%; animation: descend-arch 2400ms steps(16) infinite; }
+.arch-mid { animation-delay: -800ms; }
+.arch-far { animation-delay: -1600ms; }
+.descent-path { position: absolute; left: 100px; bottom: 0; width: 88px; height: 56px; background: repeating-linear-gradient(0deg, #283b37 0 4px, #182928 4px 16px); clip-path: polygon(36% 0,64% 0,100% 100%,0 100%); animation: descend-path 800ms steps(4) infinite; }
+#loading-traveler { position: absolute; width: 48px; height: 96px; object-fit: contain; image-rendering: pixelated; bottom: 4px; left: 120px; animation: descend-step 600ms steps(2) infinite; }
+.descent-torch { position: absolute; bottom: 64px; width: 8px; height: 24px; background: #7e603d; }
+.torch-left { left: 44px; } .torch-right { right: 44px; }
+.descent-torch::before { content: ''; position: absolute; left: -4px; top: -16px; width: 16px; height: 20px; background: #edbc66; box-shadow: inset 4px -4px #ba793e, 0 -4px #bf8a48; animation: descent-flame 800ms steps(2) infinite; }
+.descent-dots { display: flex; gap: 8px; margin-top: 12px; }
+.descent-dots i { width: 4px; height: 4px; background: #c2b879; animation: descent-flame 1200ms steps(2) infinite; }
+.descent-dots i:nth-child(2) { animation-delay: -400ms; } .descent-dots i:nth-child(3) { animation-delay: -800ms; }
+#continue-adventure { order: -1; flex-basis: 100%; max-width: 280px; margin: 8px 0; }
+#continue-adventure small { display: block; margin-top: 4px; font-size: 12px; color: inherit; font-weight: normal; }
+@keyframes descend-arch { from { transform: translateX(-50%) scale(.35); opacity: .25; } to { transform: translateX(-50%) scale(1.7); opacity: 1; } }
+@keyframes descend-path { to { background-position-y: 16px; } }
+@keyframes descend-step { 50% { transform: translateY(-4px); } }
+@keyframes descent-flame { 50% { opacity: .55; } }
+@media (max-height: 500px) { .descent-scene { height: 160px; } #dungeon-loading h2 { margin-top: 12px; } }
+@media (prefers-reduced-motion: reduce) {
+  .descent-scene *, .descent-scene *::before, .descent-dots i { animation: none; }
+  .arch-near { transform: translateX(-50%) scale(1.2); }
+  .arch-mid { transform: translateX(-50%) scale(.8); }
+  .arch-far { transform: translateX(-50%) scale(.45); }
+}

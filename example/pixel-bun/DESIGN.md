@@ -396,7 +396,11 @@ player, stairs and bottom actions. Show it expanded by default; three single-lin
 entries truncate visually, while the full journal retains the original text. A
 small chevron collapses/expands the preview, and a separate small arrow opens the
 full journal. Both have 44px touch targets around compact 24px visible controls.
-Keep the user’s collapsed choice through subsequent actions.
+Keep the user’s collapsed choice through subsequent actions. Direction shortcuts
+must not answer a standing choice while a modal, menu, drawer or editable control
+has focus. Returning to the welcome screen from any decision releases the runtime
+store owner without answering that decision. A runtime that finishes opening after
+its client is removed must be closed, not adopted or used to create a world.
 
 Consecutive identical journal messages share one entry with an accessible ×N repeat
 count and their first/last turns. The preview shows the latest three groups with the
@@ -495,3 +499,14 @@ The browser encounter-art test renders all twelve beside the hero using the live
 map renderer, checks distinct art against same-category fallbacks, bounds painted
 footprints, and checks unknown-appearance feedback. Its labeled comparison is
 saved to ignored `test-results/encounter-art.png`.
+
+### Loading into an adventure
+
+After character creation or resume, cover engine preparation with a full-viewport
+charcoal scene: repeated hard-pixel stone arches, an advancing tread, two amber
+torches and the selected existing traveler portrait. This is a loading illustration,
+not game movement or a progress estimate. Keep input blocked until the real result;
+finish immediately on readiness and expose errors instead of leaving the cover up.
+Reduced motion shows static nested arches. The welcome offers a prominent Continue
+previous run button with name and turn when an unfinished save exists; a resumed
+run moves to the front of the existing save list.

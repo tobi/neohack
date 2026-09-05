@@ -204,7 +204,7 @@ class PixelNethack extends HTMLElement {
             <button data-intro="east" aria-label="Walk east"><kbd>→</kbd></button>
           </div>
           <p class="intro-hint">Hold the arrow keys · or touch them here</p>
-          <div class="intro-links"><button id="new-adventure" class="text-button">Begin your adventure</button><button id="continue-adventure" class="secondary" hidden>Continue adventure</button></div>
+          <div class="intro-links"><button id="new-adventure" class="text-button">Begin your adventure</button><button id="continue-adventure" class="primary" hidden>Continue previous run</button></div>
         </section>
         <a id="creator-link" class="creator-link" href="https://x.com/tobi" target="_blank" rel="noopener noreferrer" aria-label="@tobi on X (opens in a new tab)">@tobi</a>
         <section class="hero-hud" aria-label="Adventurer" hidden>
@@ -249,6 +249,7 @@ class PixelNethack extends HTMLElement {
         <aside class="rightbar" aria-label="Field notes" hidden><button id="close-panel" aria-label="Close field notes">×</button><div class="section-title"><h2 id="panel-heading" tabindex="-1">Your backpack</h2><span id="panel-count"></span></div><div id="panel-body"></div><details id="accessible-map" hidden><summary>Read the perceived map as text</summary><pre id="map-text"></pre><p>Remembered terrain and currently perceived occupants.</p></details></aside>
         <div class="sr-only"><span id="inspect-text" role="status"></span><span id="latest-message" role="status"></span></div>
       </main>
+      <dialog id="dungeon-loading" aria-labelledby="loading-title" aria-describedby="loading-detail"><div class="descent-scene" aria-hidden="true"><div class="descent-arch arch-far"></div><div class="descent-arch arch-mid"></div><div class="descent-arch arch-near"></div><div class="descent-path"></div><i class="descent-torch torch-left"></i><i class="descent-torch torch-right"></i><img id="loading-traveler" src="/art/${heroArt("ranger")}.png" alt=""></div><h2 id="loading-title">Entering the dungeon</h2><p id="loading-detail" role="status"></p><div class="descent-dots" aria-hidden="true"><i></i><i></i><i></i></div></dialog>
       <dialog id="menu" aria-labelledby="menu-title"><div class="dialog-top"><span class="eyebrow">NEONETHACK</span><button aria-label="Close dialog" class="close-dialog">×</button></div><div id="menu-content"></div></dialog>
       <dialog id="decision" aria-labelledby="decision-title"><div class="eyebrow">ONE MOMENT, ADVENTURER</div><h2 id="decision-title"></h2><p id="decision-about"></p><p id="decision-error" class="notice error" role="alert" hidden></p><div id="decision-body"></div></dialog>`;
     this.map = new DungeonMap(this.querySelector("#dungeon")!, (text, x, y) => {
@@ -478,15 +479,23 @@ class PixelNethack extends HTMLElement {
       this.map.showMessages(before, this.game.state);
     return response;
   }
+  private assertConnected() {
+    if (!this.isConnected || this.preloadAbort.signal.aborted)
+      throw Error("Game interface closed before opening storage.");
+  }
   private async connectRuntime() {
+    this.assertConnected();
     if (this.api) return;
     await this.warm();
-    if (!this.isConnected)
-      throw Error("Game interface closed before opening storage.");
+    this.assertConnected();
     const wasm = await this.runtime.wasm.createWasm({
       storage: { kind: "indexeddb", name: STORE },
       workerUrl: new URL("/runtime/wasm/core-worker.mjs", location.href),
     });
+    // Opening may finish after this element has been removed. Never adopt that
+    // late worker/store owner, even if the same element was reattached meanwhile.
+    try { this.assertConnected(); }
+    catch (error) { await wasm.close(); throw error; }
     // A title tab may have waited while another tab updated adventure metadata.
     // Refresh only after acquiring ownership, before any request can persist it.
     try {
@@ -496,7 +505,7 @@ class PixelNethack extends HTMLElement {
       await wasm.close();
       throw error;
     }
-    this.api = new this.runtime.client.Neonethack({
+    const api = new this.runtime.client.Neonethack({
       send: async (request) => {
         // Keep the exact outgoing request in display metadata before forwarding.
         // The engine's IndexedDB journal remains the authoritative receipt store.
@@ -528,18 +537,18 @@ class PixelNethack extends HTMLElement {
       },
       close: () => wasm.close(),
     });
-    const description = await this.api.describe();
-    if (
-      description.capabilities.persistence !== "indexeddb" ||
-      description.capabilities.durability !== "indexeddb-transaction"
-    ) {
-      await this.api.close();
-      this.api = null;
-      throw Error(
-        "Durable browser saves are unavailable. No adventure was started.",
-      );
+    try {
+      const description = await api.describe();
+      this.assertConnected();
+      if (
+        description.capabilities.persistence !== "indexeddb" ||
+        description.capabilities.durability !== "indexeddb-transaction"
+      ) throw Error("Durable browser saves are unavailable. No adventure was started.");
+      this.api = api;
+    } catch (error) {
+      await api.close();
+      throw error;
     }
-
   }
   disconnectedCallback() {
     this.preloadAbort.abort();
@@ -552,7 +561,9 @@ class PixelNethack extends HTMLElement {
     document.removeEventListener("focusin", this.focusChanged);
     this.stopMovement();
     this.map.destroy();
-    void this.api?.close();
+    const api = this.api;
+    this.api = null;
+    void api?.close();
   }
   private $(selector: string) {
     return this.querySelector<HTMLElement>(selector)!;
@@ -773,7 +784,7 @@ class PixelNethack extends HTMLElement {
       )
     );
   }
-  private async run(action: () => Promise<unknown>) {
+  private async run(action: () => Promise<unknown>, entry?: { name: string; role: string; resume?: boolean }) {
     if (this.busy) return;
     this.closeTile();
     const game = this.game;
@@ -782,7 +793,21 @@ class PixelNethack extends HTMLElement {
     this.busy = true;
     if (this.metadataHealthy) this.show("#error", false);
     this.controls();
+    const loading = this.querySelector<HTMLDialogElement>("#dungeon-loading")!;
     try {
+      if (entry) {
+        this.stopMovement();
+        this.text("#loading-title", entry.resume ? "Returning to the dungeon" : "Entering the dungeon");
+        this.text("#loading-detail", entry.resume ? "Finding " + entry.name + "’s place in the story…" : entry.name + " takes the first steps into the dark…");
+        (this.$("#loading-traveler") as HTMLImageElement).src = `/art/${heroArt(entry.role)}.png`;
+        loading.oncancel = event => event.preventDefault();
+        loading.showModal();
+        // Paint before engine work, without stalling entry in a hidden tab.
+        await new Promise<void>(resolve => {
+          const timer = setTimeout(() => { cancelAnimationFrame(frame); resolve(); }, 100);
+          const frame = requestAnimationFrame(() => { clearTimeout(timer); resolve(); });
+        });
+      }
       await action();
       completed = true;
     } catch (e) {
@@ -799,6 +824,7 @@ class PixelNethack extends HTMLElement {
           this.error(e);
         }
       }
+      if (entry && loading.open) loading.close();
       this.busy = false;
       if (!this.game?.decision) this.map.context = null;
       this.render();
@@ -868,6 +894,8 @@ class PixelNethack extends HTMLElement {
       "#continue-adventure",
       this.saves.some((s) => !s.ended),
     );
+    const previousRun = this.saves.find(save => !save.ended);
+    this.$("#continue-adventure").innerHTML = "Continue previous run" + (previousRun ? `<small>${escape(previousRun.name)} · Turn ${previousRun.turn}</small>` : "");
     this.classList.toggle("in-game", !!state);
     if (state) {
       this.introMovement.stop();
@@ -1399,7 +1427,7 @@ class PixelNethack extends HTMLElement {
         this.lastFrame = "";
         this.map.center();
         this.$("#dungeon").focus();
-      });
+      }, { name, role: role.id });
     };
     this.querySelector<HTMLInputElement>("#adventurer-name")!.oninput = (e) =>
       (e.target as HTMLInputElement).setCustomValidity("");
@@ -1415,11 +1443,19 @@ class PixelNethack extends HTMLElement {
       await this.connectRuntime();
       this.game = await this.api!.resume(save.id);
       this.current = this.saves.find((record) => record.id === save.id) ?? save;
+      this.saves = [this.current, ...this.saves.filter(record => record.id !== save.id)];
       this.journal = [];
       this.lastFrame = "";
       this.map.center();
       this.$("#dungeon").focus();
-    });
+    }, { name: save.name, role: save.role, resume: true });
+  }
+  private async returnToDoorway() {
+    await this.game?.close();
+    this.game = null;
+    this.current = null;
+    await this.api?.close();
+    this.api = null;
   }
   private adventures() {
     this.openMenu(
@@ -1441,13 +1477,7 @@ class PixelNethack extends HTMLElement {
     if (this.game) {
       const b = this.button("Save & return to doorway", () => {
         this.closeMenu();
-        void this.run(async () => {
-          await this.game!.close();
-          this.game = null;
-          this.current = null;
-          await this.api!.close();
-          this.api = null;
-        });
+        void this.run(() => this.returnToDoorway());
       });
       b.dataset.operation = "";
       this.$("#save-actions").append(b);
@@ -1754,11 +1784,7 @@ class PixelNethack extends HTMLElement {
       );
     add(
       "Save & return to doorway",
-      async () => {
-        await this.game!.close();
-        this.game = null;
-        this.current = null;
-      },
+      () => this.returnToDoorway(),
       "text-button",
     );
     if (!dialog.open) dialog.showModal();
@@ -1767,6 +1793,13 @@ class PixelNethack extends HTMLElement {
   private key(e: KeyboardEvent) {
     const target = this.querySelector<HTMLElement>("#direction-target");
     if (target && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.defaultPrevented || this.querySelector("dialog[open], .rightbar:not([hidden])") ||
+          (e.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
+      const menu = this.querySelector<HTMLDetailsElement>(".hud-menu[open]");
+      if (menu) {
+        if (e.key === "Escape") { e.preventDefault(); menu.open = false; }
+        return;
+      }
       const keys: Record<string, string> = { ArrowUp: "north", ArrowDown: "south", ArrowLeft: "west", ArrowRight: "east", h: "west", j: "south", k: "north", l: "east", y: "northwest", u: "northeast", b: "southwest", n: "southeast", "<": "up", ">": "down" };
       if (keys[e.key] || e.key === "Escape") {
         e.preventDefault();
