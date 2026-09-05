@@ -6,7 +6,24 @@
   "scale": 2,
   "source": "../src/map.ts",
   "terrainSource": "../src/dungeon-art.ts",
-  "rendererVersion": "stonework-2",
+  "rendererVersion": "masonry-3d-2",
+  "structureSource": "../src/structure-sprites.ts",
+  "structureGeometry": {
+    "projection": "screenX=x-0.375*z; screenY=y-0.75*z",
+    "wallThickness": 10,
+    "wallHeight": 20,
+    "cutawayHeight": 6,
+    "doorFrameHeight": 24,
+    "spriteSize": [
+      25,
+      34
+    ],
+    "anchorOffset": [
+      9,
+      18
+    ],
+    "cacheLimit": 256
+  },
   "seed": "threshold:42",
   "palette": {
     "void": "#171f23",

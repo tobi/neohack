@@ -61,9 +61,15 @@ render order, turns or mutable room-component IDs enter the surface hashes.
 Neighbors affect only structural joins, shoreline and contact shading. As a new
 cell is discovered those joins may update truthfully; existing material and paving
 do not shuffle. Render with all supplied public cells, even when the camera crops
-them, so a viewport edge does not remove a known neighbor. All drawing is clipped
-to a supplied known cell: wall faces never paint unknown space or cover another
-cell's actor. Callers draw current objects and occupants after terrain.
+them, so a viewport edge does not remove a known neighbor. Surface drawing is clipped
+to a supplied known cell. Walls and doors use original 3D meshes from
+`src/structure-sprites.ts`, rendered to cached 25×34 pixel sprites with a fixed
+oblique projection. Full walls have a 15px apparent rise; foreground walls are cut
+down to about 5px. Door jambs, lintels and leaves use the same projection and wall
+thickness. Their observed silhouettes can rise/overhang into the dark backdrop,
+without inventing any floor or unseen destination. Callers draw current objects
+and occupants after terrain and fixtures. The receipt hashes both rendering
+sources and records projection/rise values.
 
 The live interface includes the public level ID with the actual game seed. To
 reproduce that surface in the CLI, pass the same combined string to `--seed`.

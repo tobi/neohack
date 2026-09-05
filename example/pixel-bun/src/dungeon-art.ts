@@ -1,5 +1,12 @@
 /** Original, deterministic dungeon surfaces. This module knows no game rules. */
-export const RENDERER_VERSION = "stonework-2";
+import {
+  drawWallSprite,
+  drawDoorSprite,
+  STRUCTURE_RISE,
+  STRUCTURE_OVERHANG,
+} from "./structure-sprites";
+export { STRUCTURE_RISE, STRUCTURE_OVERHANG } from "./structure-sprites";
+export const RENDERER_VERSION = "masonry-3d-2";
 export interface TerrainCell {
   x: number;
   y: number;
@@ -13,10 +20,26 @@ export interface TerrainOptions {
   rows: number;
   /** The live client draws doors in its foreground sprite pass. */
   omitDoors?: boolean;
+  /** Omit raised masonry when inspecting the ground-only layer. */
+  omitWalls?: boolean;
   omitDecals?: boolean;
 }
 
 const UNKNOWN = new Set(["unknown", "dark", "stone", "unexplored"]);
+const DOORS = new Set(["closedDoor", "openDoor", "doorway"]);
+// Orientation is cosmetic and uses only supplied wall neighbors. A single
+// known jamb is enough at the edge of exploration; ambiguous doors face south.
+function sideDoor(
+  typeAt: (x: number, y: number) => string | undefined,
+  x: number,
+  y: number,
+) {
+  const ns =
+    Number(typeAt(x, y - 1) === "wall") + Number(typeAt(x, y + 1) === "wall");
+  const ew =
+    Number(typeAt(x - 1, y) === "wall") + Number(typeAt(x + 1, y) === "wall");
+  return ns > ew;
+}
 const SURFACES = new Set([
   "wall",
   "floor",
@@ -76,7 +99,8 @@ type Palette = (typeof palettes)[number];
 
 function seedHash(seed: string | number) {
   let h = 2166136261;
-  for (const char of `${RENDERER_VERSION}:${seed}`)
+  // Keep existing surface seeds stable when only feature geometry changes.
+  for (const char of `stonework-2:${seed}`)
     h = Math.imul(h ^ char.charCodeAt(0), 16777619);
   return h >>> 0;
 }
@@ -164,7 +188,7 @@ export function renderDecals(
   }
 }
 
-/** All drawing is clipped to a known cell; no extrusion reveals an unknown cell. */
+/** Ground stays inside known cells; observed masonry sprites rise above their anchors. */
 export function renderTerrain(
   c: CanvasRenderingContext2D,
   cells: readonly TerrainCell[],
@@ -177,9 +201,30 @@ export function renderTerrain(
     cells.map((cell) => [`${cell.x},${cell.y}`, cell.terrain.type]),
   );
   const typeAt = (x: number, y: number) => known.get(`${x},${y}`);
+  const joinsWall = (x: number, y: number, vertical: boolean) =>
+    typeAt(x, y) === "wall" ||
+    (DOORS.has(typeAt(x, y) ?? "") && sideDoor(typeAt, x, y) === vertical);
   const district = (x: number, y: number) => districtAt(seed, x, y);
+  const surface = (x: number, y: number) => {
+    const t = typeAt(x, y);
+    return Boolean(t && SURFACES.has(t) && t !== "wall" && !DOORS.has(t));
+  };
+  const cutaway = (x: number, y: number) =>
+    (surface(x - 1, y) && !surface(x + 1, y)) ||
+    (surface(x, y - 1) && !surface(x, y + 1)) ||
+    // At an outer corner the room touches the wall only diagonally. Include
+    // the three viewer-facing diagonals so a foreground run keeps one height
+    // through its corner instead of stepping from 6 to 20 units.
+    surface(x - 1, y - 1) ||
+    surface(x + 1, y - 1) ||
+    surface(x - 1, y + 1);
+  const heightAt = (x: number, y: number) =>
+    DOORS.has(typeAt(x, y) ?? "") ? 24 : cutaway(x, y) ? 6 : 20;
   c.save();
   c.imageSmoothingEnabled = false;
+  c.beginPath();
+  c.rect(0, 0, columns * 16, rows * 16);
+  c.clip();
   for (const cell of cells) {
     const { x: wx, y: wy } = cell,
       type = cell.terrain.type;
@@ -207,12 +252,9 @@ export function renderTerrain(
       rect(c, "#bdbca0", x + 7, y + 7, 3, 2);
       rect(c, "#bdbca0", x + 7, y + 11, 2, 2);
     } else if (type === "wall") {
-      wall(c, x, y, wx, wy, h, p, {
-        n: typeAt(wx, wy - 1) === "wall",
-        s: typeAt(wx, wy + 1) === "wall",
-        w: typeAt(wx - 1, wy) === "wall",
-        e: typeAt(wx + 1, wy) === "wall",
-      });
+      // A footing remains inside the observed wall cell; the raised mesh is
+      // composited after all floors, so tile iteration cannot erase its faces.
+      rect(c, "#293630", x, y, 16, 16);
     } else if (type === "water" || type === "lava") {
       liquid(
         c,
@@ -257,20 +299,7 @@ export function renderTerrain(
         if (!options.omitDecals) mossDecal(c, p, x, y, h, region);
       }
       if (typeAt(wx - 1, wy) === "wall") rect(c, "#303b34", x, y, 2, 16);
-      if (
-        !options.omitDoors &&
-        (type === "closedDoor" || type === "openDoor" || type === "doorway")
-      )
-        door(
-          c,
-          x,
-          y,
-          type,
-          p,
-          h,
-          typeAt(wx, wy - 1) === "wall" && typeAt(wx, wy + 1) === "wall",
-        );
-      else if (type === "stairsUp" || type === "stairsDown")
+      if (type === "stairsUp" || type === "stairsDown")
         stairs(c, x, y, type === "stairsUp", p);
       else if (type === "fountain") fountain(c, x, y, p);
       else if (type === "altar") {
@@ -348,6 +377,69 @@ export function renderTerrain(
     }
     c.restore();
   }
+  // Bake connected 3D masonry after ground. Include offscreen anchors whose
+  // raised/overhanging silhouette still enters the viewport.
+  const structures = [...cells].sort((a, b) => a.y - b.y || a.x - b.x);
+  for (const cell of structures) {
+    const x = (cell.x - originX) * 16,
+      y = (cell.y - originY) * 16;
+    if (
+      x + 16 <= 0 ||
+      y + 16 <= 0 ||
+      x - STRUCTURE_OVERHANG >= columns * 16 ||
+      y - STRUCTURE_RISE >= rows * 16
+    )
+      continue;
+    if (cell.terrain.type === "wall" && !options.omitWalls) {
+      const { x: wx, y: wy } = cell;
+      drawWallSprite(
+        c,
+        x,
+        y,
+        {
+          n: joinsWall(wx, wy - 1, true),
+          e: joinsWall(wx + 1, wy, false),
+          s: joinsWall(wx, wy + 1, true),
+          w: joinsWall(wx - 1, wy, false),
+          heights: [
+            heightAt(wx, wy - 1),
+            heightAt(wx + 1, wy),
+            heightAt(wx, wy + 1),
+            heightAt(wx - 1, wy),
+          ],
+        },
+        cutaway(wx, wy),
+        palettes[material % palettes.length]!,
+        hash(seed, wx, wy, 10),
+        wx,
+        wy,
+      );
+    }
+  }
+  // Match the live fixture pass: door frames remain readable above masonry,
+  // and mobile actors will be drawn in front of both by the client.
+  if (!options.omitDoors)
+    for (const cell of structures) {
+      const x = (cell.x - originX) * 16,
+        y = (cell.y - originY) * 16;
+      if (
+        !DOORS.has(cell.terrain.type) ||
+        x + 16 <= 0 ||
+        y + 16 <= 0 ||
+        x - STRUCTURE_OVERHANG >= columns * 16 ||
+        y - STRUCTURE_RISE >= rows * 16
+      )
+        continue;
+      drawDoorSprite(
+        c,
+        x,
+        y,
+        cell.terrain.type,
+        sideDoor(typeAt, cell.x, cell.y),
+        palettes[material % palettes.length]!,
+        hash(seed, cell.x, cell.y, 10),
+      );
+    }
   c.restore();
 }
 
@@ -464,77 +556,6 @@ function paving(
   }
 }
 
-function wall(
-  c: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  wx: number,
-  wy: number,
-  h: number,
-  p: Palette,
-  n: { n: boolean; e: boolean; s: boolean; w: boolean },
-) {
-  rect(c, "#222e2b", x, y, 16, 16);
-  // Connected top plane; exposed south edge drops a full eight pixels.
-  const left = n.w ? 0 : 1,
-    right = n.e ? 16 : 13,
-    top = n.n ? 0 : 1,
-    bottom = n.s ? 16 : 8;
-  rect(c, p.cap, x + left, y + top, right - left, bottom - top);
-  if (!n.n) {
-    rect(c, p.edge, x + left, y + top, right - left, 1);
-    rect(c, p.edge, x + left, y + top + 1, 1, Math.max(1, bottom - top - 2));
-  }
-  if (!n.e) {
-    rect(c, p.shade, x + 13, y + top + 2, 3, 16);
-    rect(c, "#626959", x + 13, y + top + 1, 1, bottom - top);
-  }
-  // Cap joints follow world masonry courses, continuing across tile boundaries.
-  const joint = mod(wy, 2) ? 5 : 11;
-  if (h % 3 !== 0 || n.s) {
-    rect(c, p.face, x + joint, y + top + 1, 1, bottom - top - 1);
-    rect(c, p.edge, x + joint + 1, y + top + 1, 1, bottom - top - 2);
-  }
-  if (n.s && n.n) {
-    rect(c, p.face, x + left + 1, y + 7, Math.max(1, right - left - 2), 1);
-    rect(c, p.edge, x + left + 1, y + 8, Math.max(1, right - left - 2), 1);
-  }
-  if (!n.s) {
-    rect(c, p.face, x + left, y + 8, right - left, 6);
-    rect(c, p.shade, x + left, y + 14, right - left, 2);
-    rect(c, "#28342f", x + left, y + 11, right - left, 1);
-    const seam = mod(wx * 16 + wy * 7, 11);
-    rect(
-      c,
-      "#303b32",
-      x + left + (seam % Math.max(1, right - left)),
-      y + 8,
-      1,
-      3,
-    );
-    rect(
-      c,
-      "#303b32",
-      x + left + ((seam + 5) % Math.max(1, right - left)),
-      y + 12,
-      1,
-      2,
-    );
-    rect(c, p.edge, x + left, y + 7, right - left, 1);
-    if (h % 4 === 0) rect(c, "#65705b", x + 3, y + 9, 4, 1);
-  }
-  // Sparse repairs and cap wear share a coherent material palette.
-  if (h % 5 === 0) {
-    rect(c, p.edge, x + 3, y + 3, 4, 1);
-    rect(c, p.face, x + 9, y + 5, 2, 1);
-  }
-  if (h % 7 < 2) {
-    rect(c, p.moss, x + 2, y + 2, 4, 2);
-    rect(c, p.moss, x + 4, y + 4, 4, 1);
-    if (!n.s) rect(c, "#506344", x + 3, y + 8, 2, 4);
-  }
-}
-
 export function renderDoor(
   c: CanvasRenderingContext2D,
   cell: TerrainCell,
@@ -543,60 +564,20 @@ export function renderDoor(
   x: number,
   y: number,
 ) {
+  if (!DOORS.has(cell.terrain.type)) return;
   const seed = seedHash(seedValue),
     p = palettes[hash(seed, 0, 0, 4) % palettes.length]!;
-  const wallAt = (dy: number) =>
-    cells.some(
-      (other) =>
-        other.x === cell.x &&
-        other.y === cell.y + dy &&
-        other.terrain.type === "wall",
-    );
-  door(
+  const typeAt = (wx: number, wy: number) =>
+    cells.find((other) => other.x === wx && other.y === wy)?.terrain.type;
+  drawDoorSprite(
     c,
     x,
-    y - 4,
+    y,
     cell.terrain.type,
+    sideDoor(typeAt, cell.x, cell.y),
     p,
     hash(seed, cell.x, cell.y, 10),
-    wallAt(-1) && wallAt(1),
   );
-}
-
-function door(
-  c: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  type: string,
-  p: Palette,
-  h: number,
-  vertical: boolean,
-) {
-  // A visible threshold and two stone jambs keep even side doors recognizable.
-  rect(c, "#94836a", x + 2, y + 14, 12, 2);
-  rect(c, p.face, x, y + 2, 3, 12);
-  rect(c, p.cap, x, y, 3, 10);
-  rect(c, p.face, x + 13, y + 2, 3, 12);
-  rect(c, p.cap, x + 13, y, 3, 10);
-  rect(c, p.edge, x, y, 3, 1);
-  rect(c, p.edge, x + 13, y, 3, 1);
-  if (type === "doorway") return;
-  if (type === "closedDoor") {
-    rect(c, "#3c342a", x + 3, y + 1, 10, 13);
-    rect(c, h % 2 ? "#94754a" : "#8a704e", x + 4, y + 2, 8, 11);
-    for (const i of [6, 9]) rect(c, "#5d4e37", x + i, y + 2, 1, 11);
-    rect(c, "#4d5147", x + 4, y + 4, 8, 1);
-    rect(c, "#4d5147", x + 4, y + 10, 8, 1);
-    rect(c, "#d2b773", x + 10, y + 7, 2, 2);
-  } else {
-    rect(c, "#9b7b4e", x + 3, y + 2, 3, 11);
-    rect(c, "#554935", x + 6, y + 4, 1, 9);
-    rect(c, "#c1a268", x + 3, y + 2, 1, 10);
-  }
-  if (!vertical) {
-    rect(c, p.cap, x + 2, y, 12, 2);
-    rect(c, p.edge, x + 2, y, 12, 1);
-  }
 }
 
 function stairs(

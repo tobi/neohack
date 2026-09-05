@@ -139,6 +139,7 @@ try {
           columns = layout.columns,
           rows = layout.rows,
           reverse = false,
+          omitDoors = false,
         ) {
           const canvas = document.createElement("canvas");
           canvas.width = columns * 16;
@@ -149,7 +150,15 @@ try {
           renderTerrain(
             c,
             reverse ? [...layout.cells].reverse() : layout.cells,
-            { seed, originX, originY, columns, rows },
+            {
+              seed,
+              originX,
+              originY,
+              columns,
+              rows,
+              omitDoors,
+              omitWalls: omitDoors,
+            },
           );
           return canvas;
         }
@@ -205,7 +214,18 @@ try {
             const known = new Set(
               layout.cells.map((cell) => `${cell.x},${cell.y}`),
             );
-            const pixels = full
+            // Unknown ground remains empty. The separate fixture pass may
+            // project observed masonry above its own anchor, like an actor.
+            const pixels = terrain(
+              layout,
+              seeds[0]!,
+              0,
+              0,
+              layout.columns,
+              layout.rows,
+              false,
+              true,
+            )
               .getContext("2d")!
               .getImageData(0, 0, full.width, full.height).data;
             for (let y = 0; y < layout.rows * 16; y++)
@@ -263,7 +283,7 @@ try {
             "input-order",
             "seed-variety",
             "camera-crop",
-            "unknown-cells",
+            "unknown-ground",
             "explicit-unknown-types",
             "future-terrain",
           );
@@ -341,12 +361,21 @@ try {
     const receipt = {
       rendererVersion: RENDERER_VERSION,
       sourceSha256: digest(
-        await Bun.file(join(root, "src/dungeon-art.ts")).text(),
+        (
+          await Promise.all(
+            ["dungeon-art.ts", "structure-sprites.ts"].map((name) =>
+              Bun.file(join(root, "src", name)).text(),
+            ),
+          )
+        ).join("\n"),
       ),
       seeds,
       scale: options.scale,
       nativeCellPixels: 16,
-      apparentWallRisePixels: 8,
+      apparentWallRisePixels: 15,
+      cutawayWallRisePixels: 4.5,
+      maximumStructureRisePixels: 18,
+      structureProjection: { xPerHeight: -0.375, yPerHeight: -0.75 },
       width: result.width,
       height: result.height,
       outputSha256: digest(png),

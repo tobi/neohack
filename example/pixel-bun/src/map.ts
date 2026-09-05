@@ -1,5 +1,11 @@
 import type { Cell, Observation, Snapshot, Compass } from "neonethack/types";
-import { renderTerrain, renderDoor, renderDecals } from "./dungeon-art";
+import {
+  renderTerrain,
+  renderDoor,
+  renderDecals,
+  STRUCTURE_RISE,
+  STRUCTURE_OVERHANG,
+} from "./dungeon-art";
 import { categoryMark, drawCreatureArt, drawSymbolArt } from "./symbol-art";
 
 const images = new Map<string, HTMLImageElement>();
@@ -572,7 +578,9 @@ export class DungeonMap {
       const proposedTop = Math.min(
         canvas.offsetTop +
           y +
-          (terrain ? -4 * this.zoom - height : -22 * this.zoom - height),
+          (terrain
+            ? -(STRUCTURE_RISE + 2) * this.zoom - height
+            : -22 * this.zoom - height),
         previousTop - height - 10,
       );
       if (previousTop !== Infinity && proposedTop < 8) {
@@ -624,7 +632,7 @@ export class DungeonMap {
         (Number(panel.dataset.x) - this.origin.x + 0.5) * 16 * this.zoom;
       const y = (Number(panel.dataset.y) - this.origin.y) * 16 * this.zoom;
       let left = x - panel.offsetWidth / 2,
-        top = y - panel.offsetHeight - 12;
+        top = y - panel.offsetHeight - (STRUCTURE_RISE + 2) * this.zoom;
       if (top < 8 && x + 16 * this.zoom + panel.offsetWidth < width - 8) {
         left = x + 16 * this.zoom;
         top = y - panel.offsetHeight / 2;
@@ -677,7 +685,7 @@ export class DungeonMap {
         y >= canvas.height + 32
       )
         continue;
-      if (["closedDoor", "openDoor"].includes(cell.terrain.type))
+      if (["closedDoor", "openDoor", "doorway"].includes(cell.terrain.type))
         fixtures.push({
           x,
           y,
@@ -808,19 +816,37 @@ export class DungeonMap {
       if (!shade || ["dark", "unknown"].includes(cell.terrain.type)) continue;
       const x = (cell.x - this.origin.x) * 16,
         y = (cell.y - this.origin.y) * 16;
-      if (x < -16 || y < -16 || x > canvas.width || y > canvas.height) continue;
-      const rise =
-        (cell.occupant && cell.occupant.kind !== "self") ||
-        ["closedDoor", "openDoor"].includes(cell.terrain.type)
+      const structure = ["wall", "closedDoor", "openDoor", "doorway"].includes(
+        cell.terrain.type,
+      );
+      const rise = structure
+        ? STRUCTURE_RISE
+        : cell.occupant && cell.occupant.kind !== "self"
           ? 8
           : cell.objects?.length
             ? 4
             : 0;
+      const shadeX = structure ? x - STRUCTURE_OVERHANG : x;
+      const shadeWidth = structure ? 16 + STRUCTURE_OVERHANG : rise ? 19 : 16;
+      if (
+        shadeX + shadeWidth <= 0 ||
+        y + 16 <= 0 ||
+        shadeX >= canvas.width ||
+        y - rise >= canvas.height
+      )
+        continue;
       c.globalAlpha = shade;
       c.globalCompositeOperation = "saturation";
-      rect(c, "#000", x, y - rise, rise ? 19 : 16, 16 + rise);
+      rect(c, "#000", shadeX, y - rise, shadeWidth, 16 + rise);
       c.globalCompositeOperation = "source-over";
-      rect(c, "rgba(23, 31, 35, 0.32)", x, y - rise, rise ? 19 : 16, 16 + rise);
+      rect(
+        c,
+        "rgba(23, 31, 35, 0.32)",
+        shadeX,
+        y - rise,
+        shadeWidth,
+        16 + rise,
+      );
     }
     c.restore();
     c.restore();

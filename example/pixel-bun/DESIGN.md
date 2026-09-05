@@ -13,15 +13,16 @@ flat square tiles before we call it finished.
 
 ## View, geometry and depth
 
-- Orthographic, three-quarter pixel view. Keep NetHack's square grid and eight
-  directions legible. No perspective distortion or isometric input mapping.
+- Fixed three-quarter pixel view. Bake 3D masonry with an oblique projection
+  that preserves NetHack's square ground grid and eight directions. There is no
+  perspective scaling or isometric input mapping.
 - World cells use a native 16×16 footprint. Human figures are 16×32 with a stable
   bottom-center anchor. Display at integer scales; disable canvas smoothing.
 - **Walls have height.** Draw distinct top/cap planes, dark vertical faces,
   lighter upper edges, courses of masonry and a small ground-contact shadow.
   Corners, intersections, door jambs and narrow corridors must connect plausibly.
   Use neighbor masks to select geometry, not a disconnected cube per cell.
-- A six-to-eight-pixel apparent rise is the initial target. Keep passages readable;
+- Full walls rise 15 screen pixels; foreground cutaways rise about five. Keep passages readable;
   shadows or a foreground wall must never erase a known doorway or occupant.
   Actors and meaningful objects remain identifiable, with selection markers and
   text descriptions where geometry overlaps.
@@ -96,11 +97,44 @@ with the exact symbol retained in tile inspection, the text map and a symbol tog
 Never paint an invented chest, trap, collectible, creature or usable torch into
 the live dungeon. Cosmetic chips, masonry, seams and moss do not become entities.
 The welcome illustration can have props because it is clearly separate from a
-game observation. Unknown cells stay dark and contain no seeded hints.
+game observation. Unknown terrain stays dark and contains no seeded hints.
+An already observed actor, wall or door sprite may rise above its anchor into that
+backdrop; its silhouette describes only that known feature, never hidden terrain.
 
 The seed changes surface treatment only. It never changes terrain, doors, room
 connectivity, visibility, movement, encounters, item identity or engine results.
 No decorative pathfinding or creature AI runs alongside NetHack's rules.
+
+### 3D masonry sprites
+
+The user chose the 3D wall-sprite direction for NEO-2. Use the original stonework
+palette and existing character art. `src/structure-sprites.ts` is the editable
+geometry and rasterizer: volumetric walls, jambs, lintels and wooden leaves are
+baked together with per-pixel depth, stone courses and plank/iron textures.
+
+Ground anchors stay 16×16. Wall thickness is 10 units; full wall height is 20,
+foreground height is 6, and door frames reach 24. The fixed projection is
+`screenX = x - 0.375*z`, `screenY = y - 0.75*z`. Sprites occupy at most 25×34
+pixels with an anchor offset of (9,18). Display at integer scales with smoothing
+disabled. This is 3D geometry rendered to cached sprites, without a WebGL camera
+or another game simulation. The cache holds at most 256 sprites.
+
+Neighbor masks form continuous wall volumes and expose risers between different
+heights. Supplied surface cells north/west of a wall choose a foreground cutaway
+when the opposite side has no supplied surface. Northwest, northeast and southwest
+diagonal surfaces also lower the corresponding outer corner so foreground runs do
+not jump to full height at a turn; southeast remains a rear corner. This uses public
+observation only and may update as exploration reveals terrain.
+Door frames match the wall thickness and rotate as one mesh into the side-wall
+orientation. Closed leaves sit at the visible wall face; open leaves fold against
+the jamb. Bare doorways retain the frame. Apertures do not invent a floor or an
+unseen destination. One observed jamb can select orientation; ties face south.
+
+Draw ground, then wall sprites, then door fixtures, then actors. Known raised
+silhouettes can overlap the dark backdrop; unknown ground stays unpainted. Fog,
+viewport culling and feedback placement account for the full sprite bounds.
+Workshop and live rendering share the same meshes. `masonry-3d-2` retains the
+stonework-2 surface seeds so existing paving and wear do not reshuffle.
 
 ### Passage edges and actor motion
 
@@ -168,7 +202,7 @@ handle a partially explored live map.
   Bubbles last about three seconds, never cover decisions, and do not replace the
   journal. Repeated renders, receipt recovery and resume must not replay them.
 - Remembered terrain stays readable in cool gray, about one third dimmer; unknown
-  space remains empty. Sight comes from the engine's optional `cell.visible`,
+  ground remains empty behind observed raised sprites. Sight comes from the engine's optional `cell.visible`,
   never a client sight radius. Fade sight changes over 240 ms, and glide the camera
   over 110 ms after a confirmed step, rounding drawing positions to native pixels.
   Neither animation queues input or delays the next turn. Reduced motion settles
@@ -202,8 +236,9 @@ release. No automatic deployment or publication is part of this implementation.
 
 Inspect native and 2× renderings; desktop and 390px browser screenshots; corners,
 T-junctions, doors on each side, isolated pillars, narrow corridors and irregular
-rooms. Verify seeded repeatability, meaningful variety across seeds and no marks
-on unknown cells. Verify camera/resize stability, real engine turns, every supported
+rooms. Verify seeded repeatability, meaningful variety across seeds and no invented
+surfaces on unknown cells. Check raised observed sprites against their declared
+bounds, including anchors just outside the viewport. Verify camera/resize stability, real engine turns, every supported
 decision kind, serialized held movement and one-shot occupations, saved warnings across reload, failed ownership,
 and failed/corrupt-storage states. A screenshot or compilation alone does not prove
 playability. The workshop and real browser tests are complementary evidence.
