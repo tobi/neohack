@@ -1,0 +1,1770 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "libneonethack request v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "protocol.describe"
+        },
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "session.create"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 31,
+              "x-maxBytes": 31,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "archeologist",
+                "barbarian",
+                "caveman",
+                "healer",
+                "knight",
+                "monk",
+                "priest",
+                "rogue",
+                "ranger",
+                "samurai",
+                "tourist",
+                "valkyrie",
+                "wizard"
+              ]
+            },
+            "race": {
+              "type": "string",
+              "enum": [
+                "human",
+                "elf",
+                "dwarf",
+                "gnome",
+                "orc"
+              ]
+            },
+            "gender": {
+              "type": "string",
+              "enum": [
+                "male",
+                "female"
+              ]
+            },
+            "align": {
+              "type": "string",
+              "enum": [
+                "lawful",
+                "neutral",
+                "chaotic"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "session.observe"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            }
+          },
+          "required": [
+            "sessionId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "session.resume"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            }
+          },
+          "required": [
+            "sessionId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "session.close"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            }
+          },
+          "required": [
+            "sessionId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.move"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "north",
+                "northeast",
+                "east",
+                "southeast",
+                "south",
+                "southwest",
+                "west",
+                "northwest"
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision",
+            "direction"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.wait"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.climb"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "up",
+                "down"
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision",
+            "direction"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.search"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.kick"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "north",
+                    "northeast",
+                    "east",
+                    "southeast",
+                    "south",
+                    "southwest",
+                    "west",
+                    "northwest"
+                  ]
+                }
+              },
+              "required": [
+                "direction"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.open"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "north",
+                    "northeast",
+                    "east",
+                    "southeast",
+                    "south",
+                    "southwest",
+                    "west",
+                    "northwest"
+                  ]
+                }
+              },
+              "required": [
+                "direction"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.close"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "north",
+                    "northeast",
+                    "east",
+                    "southeast",
+                    "south",
+                    "southwest",
+                    "west",
+                    "northwest"
+                  ]
+                }
+              },
+              "required": [
+                "direction"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.pickup"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "item": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 127,
+                  "x-maxBytes": 127,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "x-maxBytes": 64,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.eat"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "item": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 127,
+                  "x-maxBytes": 127,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "x-maxBytes": 64,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.drink"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "item": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 127,
+                  "x-maxBytes": 127,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "x-maxBytes": 64,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.wield"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "item": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 127,
+                  "x-maxBytes": 127,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "x-maxBytes": 64,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.equip"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "item": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 127,
+                  "x-maxBytes": 127,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "x-maxBytes": 64,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.remove"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "item": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 127,
+                  "x-maxBytes": 127,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "x-maxBytes": 64,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.read"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "item": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 127,
+                  "x-maxBytes": 127,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "x-maxBytes": 64,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.apply"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "item": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 127,
+                  "x-maxBytes": 127,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "x-maxBytes": 64,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.drop"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "item": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 127,
+                  "x-maxBytes": 127,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "x-maxBytes": 64,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.zap"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "item": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 127,
+                  "x-maxBytes": 127,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "x-maxBytes": 64,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "self"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "north",
+                        "northeast",
+                        "east",
+                        "southeast",
+                        "south",
+                        "southwest",
+                        "west",
+                        "northwest",
+                        "up",
+                        "down"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "direction"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.pray"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "decision.answer"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "decisionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+            },
+            "answer": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "item"
+                    },
+                    "item": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 127,
+                          "x-maxBytes": 127,
+                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64,
+                              "x-maxBytes": 64,
+                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "item"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "target"
+                    },
+                    "target": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "self"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "direction": {
+                              "type": "string",
+                              "enum": [
+                                "north",
+                                "northeast",
+                                "east",
+                                "southeast",
+                                "south",
+                                "southwest",
+                                "west",
+                                "northwest",
+                                "up",
+                                "down"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "direction"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "confirmation"
+                    },
+                    "confirm": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "confirm"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "choice"
+                    },
+                    "choose": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 64,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "choose"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "text"
+                    },
+                    "text": {
+                      "type": "string",
+                      "minLength": 0,
+                      "maxLength": 128,
+                      "x-maxBytes": 128,
+                      "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision",
+            "decisionId",
+            "answer"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "decision.cancel"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            },
+            "decisionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision",
+            "decisionId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

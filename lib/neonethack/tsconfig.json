@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "NodeNext", "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true, "noUncheckedIndexedAccess": true,
+    "declaration": true, "sourceMap": true, "inlineSources": true, "resolveJsonModule": true,
+    "skipLibCheck": true, "rootDir": ".", "outDir": "dist"
+  },
+  "include": ["typescript/**/*.ts", "mcp/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

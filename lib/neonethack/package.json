@@ -1,0 +1,37 @@
+{
+  "name": "neonethack",
+  "version": "1.0.0-alpha.1",
+  "description": "NetHack as a perception-limited C, WebAssembly, TypeScript and MCP library",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "repository": { "type": "git", "url": "https://github.com/tobi/neonethack.git", "directory": "lib/neonethack" },
+  "exports": {
+    ".": { "types": "./dist/typescript/client.d.ts", "import": "./dist/typescript/client.js" },
+    "./types": { "types": "./dist/typescript/types.d.ts", "import": "./dist/typescript/types.js" },
+    "./native": { "types": "./dist/typescript/native.d.ts", "import": "./dist/typescript/native.js" },
+    "./mcp": { "types": "./dist/mcp/server.d.ts", "import": "./dist/mcp/server.js" },
+    "./wasm": { "types": "./dist/typescript/wasm.d.ts", "import": "./dist/typescript/wasm.js" },
+    "./protocol": "./protocol/catalog.json"
+  },
+  "bin": { "neonethack-mcp": "./dist/mcp/cli.js" },
+  "files": ["dist/", "include/", "protocol/*.json", "README.md", "docs/", "NOTICE.md"],
+  "scripts": {
+    "generate": "node scripts/generate.ts",
+    "sources:update": "node scripts/update-engine-sources.mjs",
+    "prepack": "npm run build && node scripts/generate.ts --check && node scripts/check-package.mjs",
+    "package:preview": "node scripts/package.mjs",
+    "test:archives": "node scripts/check-archives.mjs",
+    "test:install": "node --test tests/install.mjs",
+    "test:lua-layout": "node tests/lua-layout.mjs",
+    "check:generated": "node scripts/generate.ts --check",
+    "build": "tsc -p tsconfig.json && node scripts/copy-runtime.mjs",
+    "build:example": "npm run build && node scripts/build-example.mjs",
+    "serve:example": "node scripts/serve-example.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "test:wasm": "npm run build && node --test tests/wasm/runtime.test.mjs",
+    "test:browser": "npm run build:example && node --test tests/wasm/browser.test.mjs"
+  },
+  "dependencies": { "@modelcontextprotocol/sdk": "1.30.0" },
+  "devDependencies": { "@types/node": "24.10.1", "typescript": "5.9.3", "ajv": "8.20.0", "playwright-core": "1.63.0" }
+}

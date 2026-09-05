@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>neonethack · WASM example</title>
+  <style>
+    html { color-scheme: dark; font: 16px/1.5 system-ui, sans-serif; background: #101318; color: #e6e9ee; }
+    body { max-width: 78rem; margin: 2rem auto; padding: 0 1rem; }
+    a { color: #a6d1ff; }
+  </style>
+  <script type="importmap">
+    {"imports":{"neonethack/wasm":"../../lib/neonethack/dist/typescript/wasm.js","neonethack":"../../lib/neonethack/dist/typescript/client.js"}}
+  </script>
+</head>
+<body>
+  <h1>neonethack</h1>
+  <p>A tiny client of the public TypeScript API. The C core and NetHack engine run in local WebAssembly workers. No game server.</p>
+  <neonethack-example></neonethack-example>
+  <p><a href="../../lib/neonethack/docs/PROTOCOL.md">Protocol</a> · <a href="./neonethack.ts">Example source</a></p>
+  <script type="module" src="./neonethack.js"></script>
+</body>
+</html>

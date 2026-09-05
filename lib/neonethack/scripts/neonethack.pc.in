@@ -1,0 +1,10 @@
+prefix=${pcfiledir}/../..
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: neonethack
+Description: Perception-limited NetHack world API
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lneonethack
+Libs.private: -pthread
+Cflags: -I${includedir}

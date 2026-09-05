@@ -1,32 +1,25 @@
-# Runtime state and private game histories
+# Private runtime state and credentials
 /sessions/
 *.log
 .env
 .env.*
 !.env.example
 
-# Downloaded dependencies and generated browser bundles
-/node_modules/
-/client/dist/
+# SDKs, dependencies and generated artifacts (never source distributions)
 /emsdk/
-/client/wasm/nethack.js
-/client/wasm/nethack.wasm
-/client/wasm/nethack.data
-
-# Native and WASM build products
-/mcp/bin/
-/lib/test_lib
-/lib/test_explorer
-/wasm/obj/
-/wasm/luaobj/
-/wasm/stage/
-/wasm/lua-*/
-/wasm/lua.tar.gz
-/wasm/objs.txt
-/upstream/playground/
+/node_modules/
+/lib/neonethack/node_modules/
+/lib/neonethack/build/
+/lib/neonethack/dist/
+/lib/neonethack/engine/playground/
+/lib/neonethack/*.tgz
+# Local agent checkpoint contains workstation/process/backup bookkeeping.
+/lib/neonethack/PLAN.md
+/examples/wasm/neonethack.js
 *.o
 *.a
 *.so
+*.so.*
 *.dylib
 *.dSYM/
 .DS_Store

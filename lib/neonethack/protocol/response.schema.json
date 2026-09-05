@@ -1,0 +1,990 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "libneonethack response v1",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "requestId": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "revision": {
+      "type": "integer"
+    },
+    "outcome": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "needsChoice",
+            "blocked",
+            "cancelled",
+            "interrupted",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "turnsElapsed": {
+          "type": "integer"
+        },
+        "positionChanged": {
+          "type": "boolean"
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "action",
+        "status",
+        "turnsElapsed",
+        "positionChanged",
+        "effects"
+      ]
+    },
+    "observation": {
+      "type": "object",
+      "properties": {
+        "turn": {
+          "type": "integer"
+        },
+        "location": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "depthLabel": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "depthLabel"
+          ]
+        },
+        "you": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "integer"
+                },
+                "y": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "vitals": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        },
+        "inventory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "location": {
+                "type": "string",
+                "enum": [
+                  "inventory",
+                  "here"
+                ]
+              },
+              "quantity": {
+                "type": "integer"
+              },
+              "category": {
+                "type": "string"
+              },
+              "usage": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "worn",
+                    "wielded",
+                    "offhand",
+                    "alternate",
+                    "quivered",
+                    "attached"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "location",
+              "quantity"
+            ]
+          }
+        },
+        "inventoryKnown": {
+          "type": "boolean"
+        },
+        "here": {
+          "type": "object",
+          "properties": {
+            "known": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "string",
+                    "enum": [
+                      "inventory",
+                      "here"
+                    ]
+                  },
+                  "quantity": {
+                    "type": "integer"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "usage": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "worn",
+                        "wielded",
+                        "offhand",
+                        "alternate",
+                        "quivered",
+                        "attached"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "location",
+                  "quantity"
+                ]
+              }
+            }
+          },
+          "required": [
+            "known",
+            "items"
+          ]
+        },
+        "perception": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "integer"
+            },
+            "inventory": {
+              "type": "string",
+              "enum": [
+                "current",
+                "lastKnown",
+                "unknown"
+              ]
+            },
+            "here": {
+              "type": "string",
+              "enum": [
+                "current",
+                "lastKnown",
+                "unknown"
+              ]
+            },
+            "equipment": {
+              "type": "string",
+              "enum": [
+                "current",
+                "lastKnown",
+                "unknown"
+              ]
+            }
+          },
+          "required": [
+            "version",
+            "inventory",
+            "here",
+            "equipment"
+          ]
+        },
+        "world": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer"
+              },
+              "y": {
+                "type": "integer"
+              },
+              "terrain": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "knowledge": {
+                    "const": "remembered"
+                  }
+                },
+                "required": [
+                  "type",
+                  "knowledge"
+                ]
+              },
+              "occupant": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "self",
+                      "creature",
+                      "ally"
+                    ]
+                  },
+                  "mark": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "mark"
+                ]
+              },
+              "objects": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "mark": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "mark",
+                    "color"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "terrain"
+            ]
+          }
+        },
+        "heard": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "turn",
+        "location",
+        "you",
+        "vitals",
+        "inventory",
+        "inventoryKnown",
+        "here",
+        "perception",
+        "world",
+        "heard"
+      ]
+    },
+    "decision": {
+      "anyOf": [
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "about": {
+                  "type": "string"
+                },
+                "cancellable": {
+                  "type": "boolean"
+                },
+                "kind": {
+                  "const": "item"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "location": {
+                        "type": "string",
+                        "enum": [
+                          "inventory",
+                          "here"
+                        ]
+                      },
+                      "quantity": {
+                        "type": "integer"
+                      },
+                      "category": {
+                        "type": "string"
+                      },
+                      "usage": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "worn",
+                            "wielded",
+                            "offhand",
+                            "alternate",
+                            "quivered",
+                            "attached"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label",
+                      "location",
+                      "quantity"
+                    ]
+                  }
+                },
+                "selection": {
+                  "type": "object",
+                  "properties": {
+                    "min": {
+                      "type": "integer"
+                    },
+                    "max": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "min",
+                    "max"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "action",
+                "kind",
+                "cancellable",
+                "options",
+                "selection"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "about": {
+                  "type": "string"
+                },
+                "cancellable": {
+                  "type": "boolean"
+                },
+                "kind": {
+                  "const": "target"
+                },
+                "allowedTargets": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "self",
+                      "direction"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "action",
+                "kind",
+                "cancellable",
+                "allowedTargets"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "about": {
+                  "type": "string"
+                },
+                "cancellable": {
+                  "type": "boolean"
+                },
+                "kind": {
+                  "const": "confirmation"
+                }
+              },
+              "required": [
+                "id",
+                "action",
+                "kind",
+                "cancellable"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "about": {
+                  "type": "string"
+                },
+                "cancellable": {
+                  "type": "boolean"
+                },
+                "kind": {
+                  "const": "choice"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "label": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label"
+                    ]
+                  }
+                },
+                "selection": {
+                  "type": "object",
+                  "properties": {
+                    "min": {
+                      "type": "integer"
+                    },
+                    "max": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "min",
+                    "max"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "action",
+                "kind",
+                "cancellable",
+                "options"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "about": {
+                  "type": "string"
+                },
+                "cancellable": {
+                  "type": "boolean"
+                },
+                "kind": {
+                  "const": "text"
+                }
+              },
+              "required": [
+                "id",
+                "action",
+                "kind",
+                "cancellable"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "saw"
+              },
+              "x": {
+                "type": "integer"
+              },
+              "y": {
+                "type": "integer"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "mark": {
+                "type": "string"
+              },
+              "color": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "type",
+              "x",
+              "y",
+              "kind",
+              "mark",
+              "color"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "felt"
+              },
+              "sense": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "sense",
+              "value"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "heard"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "text"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "shown"
+              },
+              "about": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "about",
+              "items"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "actionResult"
+              },
+              "action": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "interrupted"
+                ]
+              },
+              "turn": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "type",
+              "action",
+              "status",
+              "turn"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "lifeSaved"
+              },
+              "cause": {
+                "type": "string"
+              },
+              "turn": {
+                "type": "integer"
+              },
+              "health": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "type",
+              "cause",
+              "turn",
+              "health"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "death",
+                  "ascended",
+                  "escaped",
+                  "quit",
+                  "disconnected",
+                  "engineError",
+                  "unknown"
+                ]
+              },
+              "cause": {
+                "type": "string"
+              },
+              "turn": {
+                "type": "integer"
+              },
+              "type": {
+                "const": "ended"
+              }
+            },
+            "required": [
+              "kind",
+              "turn",
+              "type"
+            ]
+          }
+        ]
+      }
+    },
+    "ended": {
+      "type": "boolean"
+    },
+    "end": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "death",
+                "ascended",
+                "escaped",
+                "quit",
+                "disconnected",
+                "engineError",
+                "unknown"
+              ]
+            },
+            "cause": {
+              "type": "string"
+            },
+            "turn": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "turn"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "recording": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "libraryVersion": {
+      "type": "string"
+    },
+    "backend": {
+      "type": "string",
+      "enum": [
+        "native",
+        "wasm"
+      ]
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "persistence": {
+          "type": "string",
+          "enum": [
+            "filesystem",
+            "memory",
+            "indexeddb"
+          ]
+        },
+        "durability": {
+          "type": "string",
+          "enum": [
+            "fsync",
+            "none",
+            "indexeddb-transaction"
+          ]
+        },
+        "ownership": {
+          "type": "string",
+          "enum": [
+            "process-lease",
+            "isolated-worker",
+            "origin-web-lock"
+          ]
+        },
+        "resume": {
+          "type": "string",
+          "enum": [
+            "pinned-executable",
+            "same-package"
+          ]
+        },
+        "runtimeProfile": {
+          "const": 1
+        }
+      },
+      "required": [
+        "persistence",
+        "durability",
+        "ownership",
+        "resume"
+      ]
+    },
+    "catalog": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "methods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "schema": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "name",
+              "description",
+              "schema"
+            ]
+          }
+        }
+      },
+      "required": [
+        "version",
+        "methods"
+      ]
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "sessionId",
+        "requestId",
+        "revision",
+        "outcome",
+        "observation",
+        "events",
+        "decision",
+        "ended",
+        "end"
+      ]
+    },
+    {
+      "required": [
+        "error"
+      ]
+    },
+    {
+      "required": [
+        "libraryVersion",
+        "backend",
+        "catalog",
+        "capabilities"
+      ]
+    }
+  ]
+}
