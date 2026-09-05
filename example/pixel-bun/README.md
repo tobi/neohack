@@ -119,7 +119,7 @@ Creation/resume are never automatically retried.
 
 Closing a world or reloading preserves the game and its standing decision.
 Clearing browser site data deletes it. Different origins/ports have separate saves.
-Keep the exact same WASM package for an old world: a rebuild is not a save migration.
+Old worlds are not supported across incompatible rebuilds.
 No service worker upgrades or automatic game-version replacements are installed.
 The visible journal contains observations received since opening the adventure;
 the underlying game journal remains owned by the library.
@@ -147,20 +147,14 @@ asset pack. NetHack's notices and NGPL obligations remain in effect. The project
 owner must approve licensing and publication under the library's
 [distribution guidance](../../lib/neonethack/docs/DISTRIBUTION.md).
 
-### Keeping existing adventures playable during development
+### Development saves
 
-Each example build preserves the complete current WASM package under ignored
-`lib/neonethack/dist/wasm-packages/<buildId>/`, and saves record that package ID.
-A generated local index remembers the original package for older display metadata.
-Resume selects the original package; it never upgrades a saved game to another
-binary. Keep the package archive and its index when rebuilding this preview.
-Before the first engine rebuild of an existing installation, run
-`bun example/pixel-bun/scripts/preserve-runtime.ts` to retain its current package.
-Do not publish these local build directories as source.
-
-Older adventures remain playable with their original engine. Packages without
-`cell.visible` retain their original terrain display; full sight-based dimming
-is available in new adventures. Bubbles and interface animation work with both.
+Only the current package under `/runtime/wasm/` is supported. Builds replace it;
+there are no package archives, legacy loaders or save migrations. Old development
+saves are disposable. Start a new adventure after an incompatible rebuild and
+clear browser site data if the old save index is no longer useful. Storage schema
+upgrades replace the old database contents outright. Current-format reloads still
+preserve exact receipts and standing decisions.
 
 ## Fullscreen HUD and browser agents
 
@@ -181,7 +175,7 @@ tabs still cannot write the same store; close the other game tab before resuming
 
 New engine packages expose apparent creature names from their displayed glyphs.
 Recognizable creatures need no attack or identify action to lose the question mark.
-Older pinned adventures retain the category fallback. The example includes original
+Unidentified appearances retain the category fallback. The example includes original
 newt, jackal, lichen, goblin, kobold and rat sprites in `src/symbol-art.ts`.
 Ground loot renders below actors and appears in a free-to-read, clickable list at
 the right. Pickup uses explicit item IDs and the displayed revision.

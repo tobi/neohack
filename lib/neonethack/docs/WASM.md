@@ -105,9 +105,9 @@ The WASM runtime pins a content-derived **package identity**, including core,
 engine, data and worker code. Binary/data resources are checked against the
 manifest before use. A stored game from another build is refused without
 rewriting its input journal or pin. It is never silently replayed on upgraded
-code. Retain the original complete WASM package if its worlds must remain
-resumable; unlike native executable pins, browser storage does not archive every
-old package's binaries for you.
+code. Backwards compatibility is not supported during development. Replace old
+packages and start fresh adventures after incompatible changes. The pixel client
+serves only the current package; it does not archive or load older runtimes.
 
 Native and WASM use different target architectures; **identical maps across
 native and WASM builds are not promised**. Matching build, data and inputs are

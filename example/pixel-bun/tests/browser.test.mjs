@@ -916,6 +916,8 @@ test(
     for (const path of [
       "/server.ts",
       "/package.json",
+      "/build/runtime.json",
+      "/runtime/wasm-packages/index.json",
       "/.env",
       "/runtime/../../AGENTS.md",
       "/runtime/../package.json",
@@ -1075,69 +1077,6 @@ test(
         (cell) => cell.visible === false && cell.terrain.type === "floor",
       ),
     );
-    assert.deepEqual(errors, []);
-  },
-);
-
-test(
-  "a saved adventure resumes with its original archived WASM package",
-  { timeout: 20000 },
-  async (t) => {
-    const { page, errors } = await fixture(t);
-    const original = await page.evaluate(async () => {
-      const app = document.querySelector("pixel-nethack");
-      await app.api?.close();
-      const packages = await (await fetch("/build/runtime.json")).json();
-      const { createWasm } = await import("/runtime/typescript/wasm.js");
-      const old = await createWasm({
-        storage: { kind: "indexeddb", name: "neonethack-pixel-bun-v1" },
-        workerUrl: new URL(
-          `/runtime/wasm-packages/${packages.legacyBuildId}/core-worker.mjs`,
-          location.href,
-        ),
-      });
-      const game = await old.create({
-        name: "Earlier chapter",
-        seed: 42,
-        role: "valkyrie",
-        race: "dwarf",
-        gender: "female",
-        align: "lawful",
-      });
-      await game.search();
-      const observation = game.observation;
-      // Legacy display metadata predates the optional buildId. The saved engine
-      // pin is still authoritative; this is a fresh store, never a user's save.
-      localStorage.setItem(
-        "neonethack-pixel-bun-v1:adventures",
-        JSON.stringify([
-          {
-            id: game.id,
-            name: "Earlier chapter",
-            seed: 42,
-            role: "valkyrie",
-            turn: observation.turn,
-            ended: false,
-          },
-        ]),
-      );
-      await old.close();
-      return { observation, buildId: packages.legacyBuildId };
-    });
-    await page.reload();
-    await ready(page);
-    await page
-      .getByRole("button", { name: "Continue adventure", exact: true })
-      .click();
-    await ready(page);
-    assert.deepEqual((await snapshot(page)).observation, original.observation);
-    assert.equal(
-      await page.evaluate(
-        () => document.querySelector("pixel-nethack").buildId,
-      ),
-      original.buildId,
-    );
-    assert.equal(await page.locator(".action-bubble").count(), 0);
     assert.deepEqual(errors, []);
   },
 );
@@ -1600,10 +1539,10 @@ test(
     );
     release();
     await page.waitForFunction(
-      () => document.querySelector("pixel-nethack").warmed.size > 0,
+      () => document.querySelector("pixel-nethack").warmed !== null,
     );
     await page.evaluate(async () =>
-      Promise.all(document.querySelector("pixel-nethack").warmed.values()),
+      document.querySelector("pixel-nethack").warmed,
     );
     assert.ok(
       requests.some((r) => r.url.endsWith("neonethack-engine.wasm")),

@@ -6,6 +6,17 @@ API. Do not restore the old Bun server, UI, generic public `act` tool or retired
 JS semantic adapter.
 Legacy services are retired; do not recreate their local runtime aliases.
 
+## Development compatibility
+
+- Backwards compatibility is not a requirement. Replace old implementations and
+  delete obsolete code, formats, fallbacks and generated artifacts outright.
+- Do not add migrations, compatibility adapters, legacy runtime loaders or package
+  archives to preserve old development saves. Those saves are disposable; start
+  fresh after an incompatible change.
+- Keep current-format integrity checks and durable request/receipt guarantees.
+  Never silently replay an old save on a different engine or treat an uncertain
+  request as permission to execute it again.
+
 ## Boundaries
 
 - Public contract: `lib/neonethack/docs/PROTOCOL.md`, generated JSON schemas,

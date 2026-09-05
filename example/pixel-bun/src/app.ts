@@ -91,7 +91,6 @@ type Adventure = {
   turn: number;
   ended: boolean;
   pending?: Request;
-  buildId?: string;
 };
 const escape = (text: unknown) =>
   String(text ?? "").replace(
@@ -107,10 +106,8 @@ class PixelNethack extends HTMLElement {
   private preparation!: Promise<void>;
   private titleReady = false;
   private preloadAbort = new AbortController();
-  private warmed = new Map<string, Promise<void>>();
+  private warmed: Promise<void> | null = null;
   private webMcp: WebMcpRegistration | null = null;
-  private buildId = "";
-  private packages = { currentBuildId: "", legacyBuildId: "" };
   private game: Game | null = null;
   private busy = false;
   private saves: Adventure[] = [];
@@ -317,9 +314,6 @@ class PixelNethack extends HTMLElement {
             typeof s.role !== "string" ||
             typeof s.turn !== "number" ||
             typeof s.ended !== "boolean" ||
-            (s.buildId !== undefined &&
-              (typeof s.buildId !== "string" ||
-                !/^[a-f0-9]{64}$/.test(s.buildId))) ||
             (s.seed !== undefined &&
               (!Number.isInteger(s.seed) ||
                 s.seed < 0 ||
@@ -335,15 +329,9 @@ class PixelNethack extends HTMLElement {
       this.saves = data;
     } else this.saves = [];
   }
-  private warm(buildId: string) {
-    if (!this.warmed.has(buildId)) {
-      // A failed warmup is optional. The verified runtime load can retry on entry.
-      this.warmed.set(
-        buildId,
-        warmPackage(buildId, this.preloadAbort.signal).catch(() => {}),
-      );
-    }
-    return this.warmed.get(buildId)!;
+  private warm() {
+    // Speculative warmup is optional; the verified runtime load retries on entry.
+    return this.warmed ??= warmPackage(this.preloadAbort.signal).catch(() => {});
   }
   private async prepareRuntime() {
     if (!window.isSecureContext) {
@@ -358,10 +346,7 @@ class PixelNethack extends HTMLElement {
     }
     this.runtime = await loadRuntime();
     if (!this.isConnected) return;
-    this.packages = this.runtime.packages;
-    void this.warm(this.packages.currentBuildId);
-    const latest = this.saves.find((save) => !save.ended);
-    if (latest) void this.warm(latest.buildId ?? this.packages.legacyBuildId);
+    void this.warm();
     try {
       this.webMcp = await this.runtime.webmcp.registerWebMcp({
         send: (request) => this.webRequest(request),
@@ -404,25 +389,7 @@ class PixelNethack extends HTMLElement {
       try {
         const params = request.params as Record<string, unknown>;
         let save = this.saves.find((s) => s.id === params.sessionId);
-        const packageId =
-          request.method === "session.create"
-            ? this.packages.currentBuildId
-            : save
-              ? (save.buildId ?? this.packages.legacyBuildId)
-              : this.buildId || this.packages.currentBuildId;
-        if (!this.api || packageId !== this.buildId) {
-          if (
-            this.api &&
-            !["session.create", "session.resume"].includes(request.method)
-          )
-            throw Error(
-              "Explicitly resume this adventure to load its original engine package. Tool was not submitted.",
-            );
-          if (this.game) await this.game.close();
-          this.game = null;
-          this.current = null;
-          await this.connectRuntime(packageId);
-        }
+        await this.connectRuntime();
         save = this.saves.find((s) => s.id === params.sessionId);
         if ("requestId" in params && save?.pending) {
           // Object property order is immaterial; retain every argument and value.
@@ -455,7 +422,6 @@ class PixelNethack extends HTMLElement {
           if (!save && !response.error) {
             save = {
               id: response.sessionId,
-              buildId: this.buildId,
               name:
                 typeof params.name === "string" ? params.name : "Adventurer",
               role: typeof params.role === "string" ? params.role : "valkyrie",
@@ -531,20 +497,14 @@ class PixelNethack extends HTMLElement {
       this.map.showMessages(before, this.game.state);
     return response;
   }
-  private async connectRuntime(buildId: string) {
-    if (this.api && this.buildId === buildId) return;
-    if (this.api) await this.api.close();
-    this.api = null;
-    this.buildId = "";
-    await this.warm(buildId);
+  private async connectRuntime() {
+    if (this.api) return;
+    await this.warm();
     if (!this.isConnected)
       throw Error("Game interface closed before opening storage.");
     const wasm = await this.runtime.wasm.createWasm({
       storage: { kind: "indexeddb", name: STORE },
-      workerUrl: new URL(
-        `/runtime/wasm-packages/${buildId}/core-worker.mjs`,
-        location.href,
-      ),
+      workerUrl: new URL("/runtime/wasm/core-worker.mjs", location.href),
     });
     // A title tab may have waited while another tab updated adventure metadata.
     // Refresh only after acquiring ownership, before any request can persist it.
@@ -599,7 +559,6 @@ class PixelNethack extends HTMLElement {
       );
     }
 
-    this.buildId = buildId;
   }
   disconnectedCallback() {
     this.preloadAbort.abort();
@@ -1398,11 +1357,10 @@ class PixelNethack extends HTMLElement {
         this.game = null;
         this.current = null;
         await this.preparation;
-        await this.connectRuntime(this.packages.currentBuildId);
+        await this.connectRuntime();
         this.game = await this.api!.create({ ...role.identity, name, seed });
         this.current = {
           id: this.game.id,
-          buildId: this.buildId,
           name,
           role: role.id,
           seed,
@@ -1427,7 +1385,7 @@ class PixelNethack extends HTMLElement {
       this.game = null;
       this.current = null;
       await this.preparation;
-      await this.connectRuntime(save.buildId ?? this.packages.legacyBuildId);
+      await this.connectRuntime();
       this.game = await this.api!.resume(save.id);
       this.current = this.saves.find((record) => record.id === save.id) ?? save;
       this.journal = [];
@@ -1462,7 +1420,6 @@ class PixelNethack extends HTMLElement {
           this.current = null;
           await this.api!.close();
           this.api = null;
-          this.buildId = "";
         });
       });
       b.dataset.operation = "";

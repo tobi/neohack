@@ -267,13 +267,14 @@ An accessible Begin button walks the approach automatically. Cancel returns the
 traveler outside the threshold. Stop movement on blur, menus, visibility loss and
 release. Reduced motion removes interpolation without changing input or entry.
 
-Load public client libraries and warm the pinned WASM package in the background
+Load public client libraries and warm the current WASM package in the background
 while the player explores the title courtyard. Intro art and movement must not wait
 for engine downloads. Warmup downloads files only: no engine, save-store lock or
 session until starting/resuming an adventure or explicitly invoking a WebMCP tool.
 Entering early waits for preparation with input reserved once, never queues duplicate
-starts. Immutable package URLs share the browser cache with the eventual worker;
-saved adventures retain their original engine package. Idle title tabs do not compete
+starts. Warmup and workers use the current package under `/runtime/wasm/` with cache
+revalidation. Replace old builds and discard incompatible development saves;
+there are no package archives or migration paths. Idle title tabs do not compete
 for save ownership. Active engines still require the exclusive store lock, and a tab
 refreshes adventure metadata after acquiring it so waiting title tabs cannot overwrite
 another tab's saved progress. Failed speculative downloads are retried by the verified
@@ -286,8 +287,7 @@ available, using the same names, descriptions and JSON schemas as stdio MCP. Sha
 tool definitions so future catalog additions cannot drift. All calls retain supplied
 request IDs, expected revisions, targets and decision answers, and run through the
 public persistent WASM transport. Synchronize the visible game after agent actions;
-serialize access with human input, retain uncertain requests, and keep package pins
-for saved games. Never auto-answer warnings or repeat uncertain input with a new ID.
+serialize access with human input, retain uncertain requests, and retain current-runtime integrity checks. Never auto-answer warnings or repeat uncertain input with a new ID.
 Unsupported browsers keep the human game fully functional; do not claim a JavaScript
 shim is native WebMCP. Document capability detection and test the browser registration
 contract plus actual engine calls.
@@ -297,8 +297,7 @@ contract plus actual engine calls.
 Use the engine's optional `occupant.appearance` to name the displayed creature and
 choose species art. A visible newt is recognizable by looking; fighting is not an
 identification requirement. This is the apparent form, never the hidden identity
-of a disguised creature. Do not parse combat prose into identity. Older pinned
-packages and hallucinated observations may omit the field; show a category and
+of a disguised creature. Do not parse combat prose into identity. Hallucinated observations may omit the field; show a category and
 explain the question mark in inspection rather than inventing an identify action.
 
 Inspection leads with the clicked occupant, a sprite portrait and an Ally/Creature

@@ -1,7 +1,6 @@
 import ts from "typescript";
 import { resolve } from "node:path";
 import { access } from "node:fs/promises";
-import { preserveRuntime } from "./preserve-runtime";
 
 const root = resolve(import.meta.dir, "..");
 const library = resolve(root, "../../lib/neonethack");
@@ -59,7 +58,6 @@ const result = await Bun.build({
 });
 if (!result.success)
   throw new AggregateError(result.logs, "Browser build failed");
-await preserveRuntime();
 console.log(
   "Pixel client typechecked and built. Gameplay uses the public neonethack API.",
 );

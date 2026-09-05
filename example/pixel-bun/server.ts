@@ -33,6 +33,8 @@ export async function startServer(port = Number(process.env.PORT ?? 3333)) {
           : path === "/"
             ? "index.html"
             : path.slice(1);
+        if (runtime && !/^(?:wasm|typescript|mcp|protocol)\//.test(relative))
+          throw Error("Not a public runtime file");
         const file = await realpath(resolve(root, relative));
         if (!file.startsWith(root + sep) || !(await stat(file)).isFile())
           throw Error("Not a public file");
@@ -40,12 +42,6 @@ export async function startServer(port = Number(process.env.PORT ?? 3333)) {
         return new Response(request.method === "HEAD" ? null : blob, {
           headers: {
             ...headers,
-            // Archived packages are immutable and addressed by their manifest hash.
-            // Title-screen warmup and later worker loads share the HTTP cache.
-            "Cache-Control":
-              /^\/runtime\/wasm-packages\/[a-f0-9]{64}\/[\w.-]+$/.test(path)
-                ? "public, max-age=31536000, immutable"
-                : "no-cache",
             "Content-Type": file.endsWith(".mjs")
               ? "text/javascript"
               : blob.type,
