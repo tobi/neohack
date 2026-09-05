@@ -223,10 +223,15 @@ handle a partially explored live map.
 
 ## Assets and release
 
-Use the pixel-art-interfaces skill and its assets with provenance. Export only
-the few finished-project assets in use, include exact terms and visible credit,
-and keep the private pack/catalog/viewer out of the repository. Editable recipes
-and original rendering code belong beside the example.
+Use the pixel-art-interfaces skill and its assets with provenance. The user chose
+to keep only the finished-project exports actually used: two 16×32 UI portraits,
+two cropped idle/walk sheets, and three 16×16 creature portraits. Preserve the
+selected appearance; do not copy raw skill assets, editable creature templates,
+full vendor sheets, catalogs, pack archives, private tools or behavior metadata.
+Keep nonpixel export parameters in `art/recipe.json`, not public JSON sidecars.
+Exact terms and visible credit remain required. Original rendering code and
+layout recipes authored for this example stay editable beside it. Asset
+minimization is not redistribution permission or approval to publish old history.
 
 The desired product is a beautiful free-to-play revival. That is not a blanket
 asset redistribution license. NetHack attribution and NGPL terms remain intact;
@@ -281,6 +286,12 @@ These refinements are implemented with current public perception and confirmed
 results; the journal preserves the original engine narration.
 
 ## Fullscreen world and walk-in welcome
+
+Keep a discreet, small-font `@tobi` link to `https://x.com/tobi` at the welcome
+screen's bottom-right corner. Use readable muted text, a keyboard focus indicator
+and a generous invisible touch target. Respect safe areas and keep it clear of
+intro controls on narrow/short screens. Open a separate tab so the courtyard stays
+in place; hide this secondary credit during gameplay to leave the HUD unobstructed.
 
 The world fills the viewport. Remove the website shell, marketing cards, permanent
 sidebars and duplicate narration. A small HUD floats above the map: health and

@@ -35,7 +35,9 @@
   "assets": [
     {
       "file": "explorer.png",
-      "source": "pixel-art-interfaces curated avatar-03",
+      "source": "Modern Interiors premade character 03 by LimeZu",
+      "export": { "asset": "avatar-03", "rect": [48, 0, 16, 32], "scale": 1 },
+      "use": "HUD portrait and starting-path cards",
       "size": [
         16,
         32
@@ -44,7 +46,9 @@
     },
     {
       "file": "scholar.png",
-      "source": "pixel-art-interfaces curated avatar-02",
+      "source": "Modern Interiors premade character 02 by LimeZu",
+      "export": { "asset": "avatar-02", "rect": [48, 0, 16, 32], "scale": 1 },
+      "use": "Wizard HUD portrait and starting-path card",
       "size": [
         16,
         32
@@ -53,9 +57,9 @@
     },
     {
       "file": "dog.png",
-      "source": "original dog template",
-      "recipe": "dog.json",
-      "color": "#c79b67",
+      "source": "Original pixel-art-interfaces dog template; finished portrait only",
+      "export": { "template": "dog", "name": "Companion", "color": "#c79b67" },
+      "use": "Canine illustration, welcome companion and favicon",
       "size": [
         16,
         16
@@ -63,8 +67,9 @@
     },
     {
       "file": "bat.png",
-      "source": "original bat template",
-      "recipe": "bat.json",
+      "source": "Original pixel-art-interfaces bat template; finished portrait only",
+      "export": { "template": "bat", "name": "Bat" },
+      "use": "Bat-class illustration",
       "size": [
         16,
         16
@@ -72,7 +77,9 @@
     },
     {
       "file": "explorer-motion.png",
-      "source": "modern-premade-character-03",
+      "source": "Modern Interiors premade character 03 by LimeZu",
+      "export": { "asset": "modern-premade-character-03", "rect": [0, 32, 384, 64], "scale": 1 },
+      "use": "Welcome traveler and game character idle/walk clips",
       "size": [
         384,
         64
@@ -81,7 +88,9 @@
     },
     {
       "file": "scholar-motion.png",
-      "source": "modern-premade-character-02",
+      "source": "Modern Interiors premade character 02 by LimeZu",
+      "export": { "asset": "modern-premade-character-02", "rect": [0, 32, 384, 64], "scale": 1 },
+      "use": "Wizard game character idle/walk clips",
       "size": [
         384,
         64
@@ -90,8 +99,9 @@
     },
     {
       "file": "cat.png",
-      "source": "original cat template",
-      "recipe": "cat.json",
+      "source": "Original pixel-art-interfaces cat template; finished portrait only",
+      "export": { "template": "cat", "name": "Feline" },
+      "use": "Feline illustration",
       "size": [
         16,
         16

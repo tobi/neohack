@@ -86,6 +86,41 @@ const ready = (page) =>
       "false",
   );
 
+test("welcome creator link stays small, accessible and clear of controls", { timeout: 60_000 }, async (t) => {
+  const { page, context, errors } = await fixture(t);
+  const link = page.getByRole("link", { name: "@tobi on X (opens in a new tab)" });
+  assert.equal(await link.textContent(), "@tobi");
+  assert.equal(await link.getAttribute("href"), "https://x.com/tobi");
+  assert.equal(await link.getAttribute("target"), "_blank");
+  assert.deepEqual((await link.getAttribute("rel")).split(" ").sort(), ["noopener", "noreferrer"]);
+  for (const [name, width, height] of [["desktop", 1440, 1050], ["mobile", 390, 844], ["landscape", 844, 390]]) {
+    await page.setViewportSize({ width, height });
+    assert.equal(await link.isVisible(), true);
+    const bounds = await link.boundingBox();
+    assert.ok(bounds.width >= 44 && bounds.height >= 44, "small text retains a touch target");
+    assert.ok(width - bounds.x - bounds.width >= 8 && width - bounds.x - bounds.width <= 20);
+    assert.ok(height - bounds.y - bounds.height >= 8 && height - bounds.y - bounds.height <= 20);
+    const controls = await page.locator("#welcome-actions").boundingBox();
+    assert.ok(bounds.x >= controls.x + controls.width || bounds.x + bounds.width <= controls.x || bounds.y >= controls.y + controls.height || bounds.y + bounds.height <= controls.y, `${name}: link must not overlap intro controls`);
+    assert.equal(await link.evaluate(el => document.elementFromPoint(el.getBoundingClientRect().x + el.clientWidth / 2, el.getBoundingClientRect().y + el.clientHeight / 2) === el), true);
+    assert.equal(await link.evaluate(el => getComputedStyle(el).fontSize), "11px");
+    await page.screenshot({ path: `${root}/test-results/creator-link-${name}.png` });
+  }
+  // Exercise keyboard activation without contacting the external service.
+  await context.route("https://x.com/tobi", route => route.fulfill({ contentType: "text/html", body: "<title>@tobi</title>" }));
+  await link.focus();
+  assert.equal(await link.evaluate(el => el.matches(":focus-visible")), true);
+  const [popup] = await Promise.all([page.waitForEvent("popup"), link.press("Enter")]);
+  await popup.waitForLoadState();
+  assert.equal(popup.url(), "https://x.com/tobi");
+  await popup.close();
+  assert.equal(await snapshot(page), null);
+  await page.setViewportSize({ width: 1440, height: 1050 });
+  await create(page);
+  assert.equal(await link.isVisible(), false, "gameplay controls stay unobstructed");
+  assert.deepEqual(errors, []);
+});
+
 test("plain HTTP remote origins explain secure access before starting WASM", async (t) => {
   const { page, errors, requests } = await fixture(t, { insecure: true });
   await ready(page);
@@ -912,10 +947,42 @@ test(
   "Bun exposes only static public files and the public runtime",
   { timeout: 30000 },
   async (t) => {
-    const { url } = await fixture(t);
+    const { url, page, requests } = await fixture(t);
+    const art = [
+      "/art/bat.png",
+      "/art/cat.png",
+      "/art/dog.png",
+      "/art/explorer-motion.png",
+      "/art/explorer.png",
+      "/art/scholar-motion.png",
+      "/art/scholar.png",
+    ];
+    assert.deepEqual(
+      [...new Set(requests.map(({ url }) => new URL(url).pathname))]
+        .filter((path) => path.startsWith("/art/"))
+        .sort(),
+      art,
+      "the client actually loads every retained export, without public source metadata",
+    );
+    await page.evaluate(async (paths) => {
+      await Promise.all(paths.map(async (path) => {
+        const image = new Image();
+        image.src = path;
+        await image.decode();
+      }));
+    }, art);
     for (const path of [
       "/server.ts",
       "/package.json",
+      "/art/bat.json",
+      "/art/cat.json",
+      "/art/dog.json",
+      "/art/explorer.json",
+      "/art/scholar.json",
+      "/art/explorer-motion.json",
+      "/art/scholar-motion.json",
+      "/art/recipe.json",
+      "/art/LimeZu-LICENSE.txt",
       "/build/runtime.json",
       "/runtime/wasm-packages/index.json",
       "/.env",

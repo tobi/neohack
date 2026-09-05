@@ -228,6 +228,7 @@ class PixelNethack extends HTMLElement {
           <p class="intro-hint">Hold the arrow keys · or touch them here</p>
           <div class="intro-links"><button id="new-adventure" class="text-button">Begin your adventure</button><button id="continue-adventure" class="secondary" hidden>Continue adventure</button></div>
         </section>
+        <a id="creator-link" class="creator-link" href="https://x.com/tobi" target="_blank" rel="noopener noreferrer" aria-label="@tobi on X (opens in a new tab)">@tobi</a>
         <section class="hero-hud" aria-label="Adventurer" hidden>
           <img id="portrait" src="/art/explorer.png" alt="">
           <div class="hero-identity"><strong id="hero-name"></strong><span id="hero-role"></span></div>
@@ -863,6 +864,7 @@ class PixelNethack extends HTMLElement {
     this.renderGround();
     this.show("#welcome-copy", !state);
     this.show("#welcome-actions", !state);
+    this.show("#creator-link", !state);
     this.show("#play-controls", !!state);
     this.show(".hero-hud", !!state);
     this.show("#character-stats", !!state);
