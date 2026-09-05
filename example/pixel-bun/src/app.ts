@@ -11,7 +11,6 @@ import type {
   ActionOffer,
   CellActions,
   Decision,
-  Identity,
   ItemRef,
 } from "neonethack/types";
 import {
@@ -26,6 +25,8 @@ import { MovementInput } from "./movement-input";
 import type { WebMcpRegistration } from "/runtime/typescript/webmcp.js";
 import { loadRuntime, warmPackage } from "./runtime-loader";
 
+import { roles, heroArt } from "./characters";
+
 const STORE = "neonethack-pixel-bun-v1";
 const INDEX = `${STORE}:adventures`;
 const directions: [Compass, string][] = [
@@ -37,51 +38,6 @@ const directions: [Compass, string][] = [
   ["southwest", "↙"],
   ["south", "↓"],
   ["southeast", "↘"],
-];
-const roles: {
-  id: string;
-  title: string;
-  description: string;
-  art: string;
-  identity: Identity;
-}[] = [
-  {
-    id: "valkyrie",
-    title: "The Valkyrie",
-    description:
-      "A sturdy first step. A shield, a sword, and a little courage.",
-    art: "explorer",
-    identity: {
-      role: "valkyrie",
-      race: "human",
-      gender: "female",
-      align: "lawful",
-    },
-  },
-  {
-    id: "wizard",
-    title: "The Wizard",
-    description: "For the curious. Books, magic, and wonderfully risky ideas.",
-    art: "scholar",
-    identity: {
-      role: "wizard",
-      race: "human",
-      gender: "male",
-      align: "neutral",
-    },
-  },
-  {
-    id: "ranger",
-    title: "The Ranger",
-    description: "Travel light. A bow, keen eyes, and a path of your own.",
-    art: "explorer",
-    identity: {
-      role: "ranger",
-      race: "elf",
-      gender: "female",
-      align: "chaotic",
-    },
-  },
 ];
 type Adventure = {
   id: string;
@@ -252,7 +208,7 @@ class PixelNethack extends HTMLElement {
         </section>
         <a id="creator-link" class="creator-link" href="https://x.com/tobi" target="_blank" rel="noopener noreferrer" aria-label="@tobi on X (opens in a new tab)">@tobi</a>
         <section class="hero-hud" aria-label="Adventurer" hidden>
-          <img id="portrait" src="/art/explorer.png" alt="">
+          <img id="portrait" src="/art/${heroArt("ranger")}.png" alt="">
           <div class="hero-identity"><strong id="hero-name"></strong><span id="hero-role"></span></div>
           <div id="character-stats" class="character-stats" hidden></div>
         </section>
@@ -930,7 +886,7 @@ class PixelNethack extends HTMLElement {
           ?.title.replace("The ", "") ?? "Adventurer",
       );
       (this.$("#portrait") as HTMLImageElement).src =
-        `/art/${this.current?.role === "wizard" ? "scholar" : "explorer"}.png`;
+        `/art/${heroArt(this.current?.role)}.png`;
       this.text(
         "#location-heading",
         o.location.depthLabel.replace(/^Dlvl:/, "Dungeon, level ") ||
@@ -1045,7 +1001,7 @@ class PixelNethack extends HTMLElement {
           ? "Ready · saves stay in this browser"
           : "Browser saves unavailable",
       );
-      (this.$("#portrait") as HTMLImageElement).src = "/art/explorer.png";
+      (this.$("#portrait") as HTMLImageElement).src = `/art/${heroArt("ranger")}.png`;
       this.$("#dungeon").setAttribute(
         "aria-label",
         "Dungeon entrance. Use arrow keys to walk into the hall.",
@@ -1054,7 +1010,7 @@ class PixelNethack extends HTMLElement {
     }
     this.map.update(
       state?.observation ?? null,
-      this.current?.role === "wizard" ? "scholar" : "explorer",
+      heroArt(this.current?.role),
       `${this.current?.seed ?? this.current?.id ?? 0}:${state?.observation.location.id ?? "threshold"}`,
     );
     this.renderPanel();
@@ -1400,7 +1356,7 @@ class PixelNethack extends HTMLElement {
   }
   private newAdventure() {
     this.openMenu(
-      `<h2 id="menu-title">Every story needs an adventurer.</h2><p class="subtle">Choose a starting path. The rest is up to you.</p><form id="create-form"><label class="field-label" for="adventurer-name">YOUR NAME</label><input id="adventurer-name" name="name" required maxlength="24" autocomplete="off" placeholder="What should we call you?" value="Ada"><fieldset><legend>YOUR STARTING PATH</legend>${roles.map((r, i) => `<label class="role-card"><input type="radio" name="role" value="${r.id}" ${i === 0 ? "checked" : ""}><img src="/art/${r.art}.png" alt=""><span><strong>${r.title}${i === 0 ? "<small>FIRST ADVENTURE PICK</small>" : ""}</strong><span>${r.description}</span></span></label>`).join("")}</fieldset><details class="seed-details"><summary>Choose a world seed (optional)</summary><label for="world-seed">A number for a repeatable starting world</label><input id="world-seed" name="seed" type="number" min="0" max="4294967295" step="1" placeholder="Surprise me"></details><p class="save-explanation">Progress is saved on this browser and address. Clearing site data deletes it. Each life is an adventure of its own.</p><button data-operation class="primary" type="submit">Enter the dungeon →</button></form>`,
+      `<h2 id="menu-title">Every story needs an adventurer.</h2><p class="subtle">Choose a starting path. The rest is up to you.</p><form id="create-form"><label class="field-label" for="adventurer-name">YOUR NAME</label><input id="adventurer-name" name="name" required maxlength="24" autocomplete="off" placeholder="What should we call you?" value="Ada"><fieldset class="class-picker"><legend>YOUR STARTING PATH · ${roles.length} CLASSES</legend>${roles.map((r, i) => `<label class="role-card"><input type="radio" name="role" value="${r.id}" ${i === 0 ? "checked" : ""}><img src="/art/${r.art}.png" alt=""><span><strong>${r.title}${i === 0 ? "<small>FIRST ADVENTURE PICK</small>" : ""}</strong><span>${r.description}</span></span></label>`).join("")}</fieldset><details class="seed-details"><summary>Choose a world seed (optional)</summary><label for="world-seed">A number for a repeatable starting world</label><input id="world-seed" name="seed" type="number" min="0" max="4294967295" step="1" placeholder="Surprise me"></details><p class="save-explanation">Progress is saved on this browser and address. Clearing site data deletes it. Each life is an adventure of its own.</p><button data-operation class="primary" type="submit">Enter the dungeon →</button></form>`,
     );
     const form = this.querySelector<HTMLFormElement>("#create-form")!;
     form.onsubmit = (e) => {
@@ -1975,7 +1931,7 @@ class PixelNethack extends HTMLElement {
   }
   private credits() {
     this.openMenu(
-      `<h2 id="menu-title">An old world. An open door.</h2><p>neonethack is a new, approachable window into NetHack, built on the neonethack library and its shared C engine.</p><p>NetHack by the NetHack DevTeam and its contributors, under the NetHack General Public License. Original notices remain with the engine.</p><p>Modern Interiors character art by <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noreferrer">LimeZu</a>. Companion and bat illustrations use original templates from the pixel-art-interfaces skill. Dungeon tiles and interface design are original to this example.</p><p class="subtle">This is a local preview toward a free-to-play revival. Art retains its own license; it is not a freely redistributable asset pack. Project publication and licensing are still being prepared.</p><p>No accounts, ads, analytics, or gameplay server. Your adventure lives in your browser.</p>`,
+      `<h2 id="menu-title">An old world. An open door.</h2><p>neonethack is a new, approachable window into NetHack, built on the neonethack library and its shared C engine.</p><p>NetHack by the NetHack DevTeam and its contributors, under the NetHack General Public License. Original notices remain with the engine.</p><p>Valkyrie, Wizard and Ranger artwork created for neonethack. Other character art from Modern Interiors by <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noreferrer">LimeZu</a>. Companion and bat illustrations use original templates from the pixel-art-interfaces skill. Dungeon tiles and interface design are original to this example.</p><p class="subtle">This is a local preview toward a free-to-play revival. Art retains its own license; it is not a freely redistributable asset pack. Project publication and licensing are still being prepared.</p><p>No accounts, ads, analytics, or gameplay server. Your adventure lives in your browser.</p>`,
     );
   }
 }

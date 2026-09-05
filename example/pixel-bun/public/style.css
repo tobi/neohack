@@ -341,7 +341,7 @@ legend,
   flex-shrink: 0;
 }
 .role-card > img {
-  width: 32px;
+  width: 48px;
   height: 64px;
   object-fit: contain;
   margin-top: -10px;
@@ -737,7 +737,7 @@ pixel-nethack:not(.in-game) .location-hud {
   left: max(20px, env(safe-area-inset-left));
   z-index: 5;
   display: grid;
-  grid-template-columns: 36px 220px;
+  grid-template-columns: 48px 220px;
   gap: 4px 12px;
   padding: 12px 16px 10px 12px;
   background: #202d29;
@@ -745,7 +745,8 @@ pixel-nethack:not(.in-game) .location-hud {
   box-shadow: 3px 3px #111a1e;
 }
 .hero-hud > img {
-  width: 32px;
+  object-fit: contain;
+  width: 48px;
   height: 64px;
   grid-row: 1/3;
   align-self: start;
@@ -1110,7 +1111,7 @@ dialog p {
   }
   .hero-hud > img {
     width: 24px;
-    height: 48px;
+    height: 32px;
   }
   #hero-name {
     font-size: 16px;
@@ -1435,3 +1436,16 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
 #contextual-stairs { position: fixed; top: 70%; left: 50%; transform: translate(-50%, -50%); z-index: 7; display: flex; gap: 12px; }
 #contextual-stairs[hidden], pixel-nethack:has(.rightbar:not([hidden])) #contextual-stairs, pixel-nethack:has(#menu[open]) #contextual-stairs { display: none; }
 #contextual-stairs button { min-height: 56px; min-width: 200px; padding: 14px 24px; font-size: 18px; color: #f0e4bd; background: #283a30; border: 2px solid #96a77c; box-shadow: 3px 3px #101819; }
+
+/* Keep thirteen paths navigable without pushing the submit action off-screen. */
+.class-picker {
+  max-height: min(46dvh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 5px 4px;
+  scrollbar-width: thin;
+}
+.role-card:focus-within {
+  outline: 2px solid var(--sage);
+  outline-offset: 2px;
+}

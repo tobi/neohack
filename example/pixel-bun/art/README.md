@@ -81,3 +81,42 @@ chests, torches, creatures or collectible props are sprinkled into the map.
 doors on all four sides, concave rooms and every feature. `rooms.txt` and
 `waterworks.txt` test broader compositions. Inspect both native and enlarged PNGs;
 pixel invariants do not establish artistic quality or gameplay correctness.
+
+## Character art
+
+All thirteen playable classes have selected character art. Ten retain LimeZu
+prototype portraits and cropped 16×32 idle/walk clips; Valkyrie, Wizard and Ranger
+use original 24×32 designs. See [ATTRIBUTION.md](ATTRIBUTION.md) for the distinct
+source terms, [classes.json](classes.json) for the prototype layer IDs and
+[recipe.json](recipe.json) for all 29 runtime PNGs and their export geometry.
+Runtime PNGs do not have public JSON sidecars. Comparison pages and retired
+prototype exports are not part of this source selection.
+
+```sh
+# Only for rebuilding the ten prototypes with authorized local art tools:
+PIXEL=/path/to/pixel bun run art:characters
+# Rebuild the three original hero pairs from editable project pixel grids:
+bun run art:original
+# Check exact inventories, dimensions and original-source provenance:
+node --test tests/assets.test.mjs
+```
+
+The prototype builder keeps full generated sheets and exporter metadata in its
+temporary directory, copying only the selected portrait and idle/walk PNGs.
+Ordinary app builds do not require the private skill. Minimal exports still
+require the source-redistribution permission described in the attribution.
+
+### Original fantasy pilot
+
+The ten files in [original-heroes/](original-heroes/README.md) retain the three
+original source PNGs, exact prompts and editable JSON frame grids plus their
+README. These are original project art inputs, not vendor-skill templates.
+
+```sh
+# Only when deliberately replacing grid edits from the saved source images:
+bun run art:original:import
+```
+
+The import step is separate because rerunning it replaces those editable grids.
+No API call or private skill is needed to rebuild the original game artwork.
+Generated inspection screenshots belong in ignored `test-results/art/`.

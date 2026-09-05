@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "source": "LimeZu adult character generator; appearance presets, not equipment state",
+  "characters": [
+    {
+      "id": "archeologist",
+      "body": "generator-body-03",
+      "eyes": "generator-eyes-02",
+      "outfit": "generator-outfit-19-01",
+      "hair": "generator-hairstyle-01-02",
+      "accessories": [
+        "generator-accessory-08-detective-hat-01"
+      ]
+    },
+    {
+      "id": "barbarian",
+      "body": "generator-body-05",
+      "eyes": "generator-eyes-02",
+      "outfit": "generator-outfit-14-01",
+      "hair": "generator-hairstyle-04-01",
+      "accessories": []
+    },
+    {
+      "id": "caveman",
+      "body": "generator-body-04",
+      "eyes": "generator-eyes-02",
+      "outfit": "generator-outfit-23-01",
+      "hair": "generator-hairstyle-04-02",
+      "accessories": [
+        "generator-accessory-13-beard-02"
+      ]
+    },
+    {
+      "id": "healer",
+      "body": "generator-body-02",
+      "eyes": "generator-eyes-02",
+      "outfit": "generator-outfit-08-01",
+      "hair": "generator-hairstyle-02-02",
+      "accessories": []
+    },
+    {
+      "id": "knight",
+      "body": "generator-body-03",
+      "eyes": "generator-eyes-02",
+      "outfit": "generator-outfit-05-01",
+      "hair": "generator-hairstyle-01-01",
+      "accessories": []
+    },
+    {
+      "id": "monk",
+      "body": "generator-body-05",
+      "eyes": "generator-eyes-02",
+      "outfit": "generator-outfit-16-01",
+      "accessories": []
+    },
+    {
+      "id": "priest",
+      "body": "generator-body-03",
+      "eyes": "generator-eyes-02",
+      "outfit": "generator-outfit-33-01",
+      "hair": "generator-hairstyle-01-04",
+      "accessories": [
+        "generator-accessory-13-beard-04"
+      ]
+    },
+    {
+      "id": "rogue",
+      "body": "generator-body-02",
+      "eyes": "generator-eyes-02",
+      "outfit": "generator-outfit-30-01",
+      "accessories": []
+    },
+    {
+      "id": "samurai",
+      "body": "generator-body-04",
+      "eyes": "generator-eyes-02",
+      "outfit": "generator-outfit-07-01",
+      "hair": "generator-hairstyle-02-01",
+      "accessories": []
+    },
+    {
+      "id": "tourist",
+      "body": "generator-body-03",
+      "eyes": "generator-eyes-02",
+      "outfit": "generator-outfit-24-01",
+      "hair": "generator-hairstyle-01-03",
+      "accessories": [
+        "generator-accessory-03-backpack-03"
+      ]
+    }
+  ]
+}

@@ -8,14 +8,13 @@ import {
 } from "./dungeon-art";
 import { categoryMark, drawCreatureArt, drawSymbolArt } from "./symbol-art";
 
+import { roles, heroArt, heroFrameWidth } from "./characters";
+
 const images = new Map<string, HTMLImageElement>();
 export async function loadArt() {
   await Promise.all(
     [
-      "explorer",
-      "scholar",
-      "explorer-motion",
-      "scholar-motion",
+      ...roles.flatMap(({ art }) => [art, `${art}-motion`]),
       "dog",
       "cat",
       "bat",
@@ -122,7 +121,7 @@ function drawContents(
     rect(c, "#26312b", x + 3, y + 13, 10, 2);
     if (symbols) glyph(c, mark, color, x, y);
     else {
-      // Class illustrations: the API does not expose exact creature identities.
+      // Use apparent species when supplied, otherwise a category illustration.
       const sprite = images.get(
         ({ d: "dog", f: "cat", B: "bat" } as Record<string, string>)[mark] ??
           "",
@@ -130,11 +129,7 @@ function drawContents(
       if (!drawCreatureArt(c, cell.occupant.appearance, x, y)) {
         if (sprite) c.drawImage(sprite, x, y - 2);
         else {
-          c.save();
-          c.translate(x - 8, y - 15);
-          c.scale(2, 2);
-          drawSymbolArt(c, "creature", mark, color, 0, 0);
-          c.restore();
+          drawSymbolArt(c, "creature", mark, color, x, y);
         }
       }
       // Preserve the engine's display color as a small perception swatch.
@@ -269,7 +264,7 @@ export class DungeonMap {
   private origin = { x: 0, y: 0 };
   private observer: ResizeObserver;
   private observation: Observation | null = null;
-  private hero = "explorer";
+  private hero = heroArt("valkyrie");
   private seed = "0";
   private facing: "left" | "up" | "right" | "down" = "down";
   private walkStarted = -Infinity;
@@ -360,7 +355,7 @@ export class DungeonMap {
       );
     });
   }
-  update(observation: Observation | null, hero = "explorer", seed = "0") {
+  update(observation: Observation | null, hero = heroArt("valkyrie"), seed = "0") {
     const now = performance.now();
     if (
       !observation ||
@@ -851,6 +846,7 @@ export class DungeonMap {
           rect(c, "#26312b", x + 2, y + 13, 12, 2);
           rect(c, "#a6be87", x + 4, y + 15, 8, 1);
           const image = images.get(`${this.hero}-motion`);
+          const width = heroFrameWidth(this.hero);
           const walking = !this.reducedMotion.matches && now < this.walkUntil;
           const frame = this.reducedMotion.matches
             ? 0
@@ -865,14 +861,14 @@ export class DungeonMap {
             c.drawImage(
               image,
               // Audited face direction in the source sheet: right, up, left, down.
-              { right: 0, up: 1, left: 2, down: 3 }[this.facing] * 96 +
-                frame * 16,
+              { right: 0, up: 1, left: 2, down: 3 }[this.facing] * 6 * width +
+                frame * width,
               walking ? 32 : 0,
-              16,
+              width,
               32,
-              x,
+              x + 8 - width / 2,
               y - 16,
-              16,
+              width,
               32,
             );
           else glyph(c, "@", "#e7d498", x, y);
@@ -1126,7 +1122,9 @@ export class DungeonMap {
     }
     const dog = images.get("dog");
     if (dog) c.drawImage(dog, 181, 205);
-    const hero = images.get("explorer-motion");
+    const introArt = heroArt("ranger");
+    const hero = images.get(`${introArt}-motion`);
+    const width = heroFrameWidth(introArt);
     const moving = now < this.intro.moved + 140;
     const t = this.reducedMotion.matches
       ? 1
@@ -1155,13 +1153,13 @@ export class DungeonMap {
       c.globalAlpha = Math.max(0.25, Math.ceil((1 - dissolve) * 4) / 4);
       c.drawImage(
         hero,
-        this.intro.facing * 96 + frame * 16,
+        this.intro.facing * 6 * width + frame * width,
         moving && !this.reducedMotion.matches ? 32 : 0,
-        16,
+        width,
         32,
-        x - 8,
+        x - width / 2,
         y - 32,
-        16,
+        width,
         32,
       );
       c.restore();

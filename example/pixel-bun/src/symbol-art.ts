@@ -1,3 +1,5 @@
+import { encounterArt, type CreaturePixels } from "./encounter-art";
+
 /** Original pixel silhouettes for public display categories, never item IDs.
  * A food token also covers remains; a canine token does not identify a species.
  * Source grids are editable assets. Each character is one native pixel.
@@ -437,24 +439,18 @@ export function inventoryArt(category: string): string {
 // The engine's apparent species selects art; glyph/color never supplies identity.
 const earlyCreatures: Record<
   string,
-  { pixels: string[]; body: string; shade: string }
+  CreaturePixels
 > = {
   newt: {
     body: "#c1a66d",
     shade: "#76623e",
     pixels: [
-      "............",
-      "............",
-      "......#####.",
-      ".....#hhhoo#",
-      "....#hho#oo#",
-      "...#hhoooo#.",
-      "..#hhooss#..",
-      ".#hoooss#...",
-      "#ooo##os##..",
-      "#ss#..##..#.",
-      ".##.........",
-      "............",
+      "......###.",
+      ".....#hoo#",
+      "..###oo#o#",
+      ".#hhooos#.",
+      "#ss#os#...",
+      ".##.##....",
     ],
   },
   jackal: {
@@ -479,18 +475,12 @@ const earlyCreatures: Record<
     body: "#9dac65",
     shade: "#536a4b",
     pixels: [
-      "............",
-      "....###.....",
-      "...#hho#....",
-      "..##hoos##..",
-      ".#hhoooohh#.",
-      "#hhoosoooos#",
-      "#ooossoooos#",
-      ".#oossssos#.",
-      "..#soosss#..",
-      ".#hhooooss#.",
-      ".#ssssssss#.",
-      "..########..",
+      "...###...",
+      ".##hoo##.",
+      "#hhooooh#",
+      "#ooossoo#",
+      ".#ssssss#",
+      "..######.",
     ],
   },
   goblin: {
@@ -529,7 +519,17 @@ const earlyCreatures: Record<
       "..###..###..",
     ],
   },
-  "sewer rat": { body: "#a58a78", shade: "#655b57", pixels: icons.rodent! },
+  "sewer rat": {
+    body: "#a58a78",
+    shade: "#655b57",
+    pixels: [
+      "....##....",
+      "..##ho###.",
+      ".#hoooo#o#",
+      "#sssssoss#",
+      "#..##.##..",
+    ],
+  },
   "giant rat": { body: "#a99b83", shade: "#6f6759", pixels: icons.rodent! },
 };
 export function drawCreatureArt(
@@ -538,21 +538,24 @@ export function drawCreatureArt(
   x: number,
   y: number,
 ): boolean {
-  const art = appearance ? earlyCreatures[appearance] : undefined;
+  const art = appearance ? earlyCreatures[appearance] ?? encounterArt[appearance] : undefined;
   if (!art) return false;
   const palette: Record<string, string> = {
     "#": "#1c2729",
-    h: "#eadbb2",
+    h: art.highlight ?? "#eadbb2",
     o: art.body,
     s: art.shade,
   };
   c.fillStyle = "#172321";
-  c.fillRect(x, y + 14, 16, 2);
+  const width = art.pixels[0]!.length;
+  const left = x + Math.floor((16 - width) / 2);
+  const top = y + 15 - art.pixels.length - (art.rise ?? 0);
+  c.fillRect(left + 1, y + 14, width - 2, 1);
   for (const [row, pixels] of art.pixels.entries())
     for (const [col, pixel] of [...pixels].entries()) {
       if (pixel === ".") continue;
       c.fillStyle = palette[pixel]!;
-      c.fillRect(x - 4 + col * 2, y - 8 + row * 2, 2, 2);
+      c.fillRect(left + col, top + row, 1, 1);
     }
   return true;
 }
@@ -573,7 +576,11 @@ export function creatureArtUrl(
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 32;
   const c = canvas.getContext("2d")!;
-  if (!drawCreatureArt(c, appearance, 8, 12))
-    drawSymbolArt(c, "creature", mark, "#b6bba0", 8, 12);
+  // Inspection is a magnified illustration, independent of world size.
+  c.save();
+  c.scale(2, 2);
+  const drawn = drawCreatureArt(c, appearance, 0, 0);
+  c.restore();
+  if (!drawn) drawSymbolArt(c, "creature", mark, "#b6bba0", 8, 12);
   return canvas.toDataURL();
 }

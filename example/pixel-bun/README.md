@@ -70,7 +70,9 @@ repeatability checks. Generated art stays under ignored `test-results/`.
 ## Play
 
 Walk the traveler into the entrance hall with the overlaid arrows, keyboard or
-Begin button. Then choose a name and starting path (Valkyrie, Wizard or Ranger).
+Begin button. Then choose a name and one of all thirteen NetHack starting classes.
+Valkyrie, Wizard and Ranger use the original fantasy-art pilot; the remaining
+classes retain their individually illustrated prototype art.
 The courtyard is a separate tutorial: it creates no engine session or turns. An optional seed
 is available. Tap an arrow key or direction button for one step; hold to walk.
 The first step is immediate, repetition starts after 240 ms and continues at up
@@ -131,7 +133,7 @@ bun run --cwd example/pixel-bun test
 ```
 
 Uses actual engine worlds in sandboxed Chromium (`CHROMIUM` can override its path),
-fresh browser stores, all three starting paths, no-turn inspection, held movement,
+fresh browser stores, all thirteen starting paths, no-turn inspection, held movement,
 bounded tap buffering, release/blur/wall stops, one-shot actions, item cancellation,
 a warning across abrupt reload, ownership exclusion,
 static-server boundaries and desktop/mobile screenshots. Generated screenshots

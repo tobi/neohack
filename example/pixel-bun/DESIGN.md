@@ -16,8 +16,8 @@ flat square tiles before we call it finished.
 - Fixed three-quarter pixel view. Bake 3D masonry with an oblique projection
   that preserves NetHack's square ground grid and eight directions. There is no
   perspective scaling or isometric input mapping.
-- World cells use a native 16×16 footprint. Human figures are 16×32 with a stable
-  bottom-center anchor. Display at integer scales; disable canvas smoothing.
+- World cells use a native 16×16 footprint. The original hero pilot uses 24×32 figures; the remaining
+  prototype classes use 16×32. Both have a stable bottom-center anchor. Display at integer scales; disable canvas smoothing.
 - **Walls have height.** Draw distinct top/cap planes, dark vertical faces,
   lighter upper edges, courses of masonry and a small ground-contact shadow.
   Corners, intersections, door jambs and narrow corridors must connect plausibly.
@@ -151,8 +151,8 @@ promise of a traversable route. No exterior
 wall cells, exits or hidden floor are fabricated. Corners and junctions follow the
 currently supplied neighbors and update as exploration reveals more.
 
-The primary LimeZu premade characters retain their original appearance. Each uses
-six authored frames for each of four idle and four walk clips, on a 16×32 canvas,
+The remaining LimeZu prototype characters use six authored frames for each of
+four idle and four walk clips, on a 16×32 canvas,
 with feet anchored at the bottom center of the player's actual tile. Walking plays
 once after an observed adjacent displacement; blocked actions do not animate a
 step. Facing persists through idle and inspections. Long displacements and level
@@ -210,7 +210,7 @@ handle a partially explored live map.
   over 110 ms after a confirmed step, rounding drawing positions to native pixels.
   Neither animation queues input or delays the next turn. Reduced motion settles
   immediately. Use View Transitions for panel changes, not per-turn map snapshots.
-- Welcome: one clear beginning, a name, three valid starting paths, an optional
+- Welcome: one clear beginning, a name, thirteen valid starting paths, an optional
   seed, and an honest statement about browser-local saves.
 - Play: map first, readable health/status, tactile direction controls, a backpack,
   field notes and an obvious path to more actions. One keypress sends one action.
@@ -406,3 +406,92 @@ When the current public neighborhood offers an attemptable climb at the player's
 cell, show a large Go upstairs/Go downstairs button centered at 70% viewport height.
 It uses that offer and revision and disappears while input is busy, uncertain, ended
 or awaiting a decision. Drawers and menus hide it to keep their controls clear.
+
+## Class roster and character study
+
+Character creation exposes all thirteen engine roles as fixed valid identity
+presets in `src/characters.ts`. That catalog also selects creation portraits,
+HUD portraits and live animation sheets. Art must never collapse every non-wizard
+back to a generic traveler. The title traveler now uses the original Ranger.
+
+The user delegated the direction after reviewing the character study. The chosen
+original fantasy pilot replaces Valkyrie, Wizard and Ranger. The remaining ten
+classes retain the LimeZu layered prototypes in `art/classes.json`.
+
+The 16px-wide trial lost shoulder, hat and cloak structure. Final original frames
+are **24×32**, pivot **(12,32)**, over the unchanged 16×16 ground cell. They overhang
+four pixels on either side and use the renderer's existing raised-sprite margins.
+The packed atlas is 576×64: right/up/left/down, six timing cells per direction,
+idle row 0 and walk row 32. The remaining prototypes keep their 384×64 atlases.
+`src/characters.ts` owns these presentation dimensions; no game rules changed.
+
+Built-in image_gen produced three separate 887×1774 transparent source sheets.
+Actual prompts, sources, hashes, shared 27-color palette and editable pixel grids
+are in `art/original-heroes/`. The tool did not report its model version or seed.
+The prompts requested 16×32 pixels but the outputs were high-resolution source
+art, not grid-perfect native sprites; the import step records that distinction.
+`scripts/import-original-heroes.mjs` reduces fixed 6×8 source cells to 24×32,
+thresholds alpha at 160, snaps colors to the shared palette and translates each
+complete clip to one ground baseline. It never independently resizes or mirrors
+walking poses. Directional idle holds the first drawing across six cells to avoid
+generated shimmer; six generated walking poses play at 10 fps. This is a stylized
+walk, not equipment-specific combat animation. Reduced motion freezes idle.
+`scripts/build-original-heroes.mjs` rebuilds from editable grids without imagegen.
+Re-importing is explicit because it overwrites manual grid edits.
+
+Valkyrie has broad slate shoulders, a braid and split ivory tunic. Wizard has a
+pointed violet hat and long robe. Ranger has a green hood and asymmetric mantle.
+Hands are empty; costume is class illustration, not an inventory assertion.
+Keep weapon, shield and mount drawing separate and grounded in public state.
+
+The private character and movement studies established this direction. Their
+retired prototype baselines and generated review pages are not shipped as source
+or loaded by the game. Full-roster original conversion is a later production
+stage; these three form the validated direction and size reference.
+
+## Early-monster scale
+
+The user flagged oversized early monsters. Creature pixel grids now render at
+one native pixel per grid entry; map zoom is the only world enlargement. Remove
+neither native size differences nor the full-tile interaction target to improve
+readability. Never restore the old unconditional 2× creature/category transform.
+
+Newt and lichen silhouettes are six pixels tall, sewer rats five. Jackal, goblin,
+kobold and giant-rat art uses native 12×12 grids, substantially smaller than the
+32px-tall hero canvas. Giant rats stay visibly larger than sewer rats. All align
+to the tile's lower center with a small contact shadow. Tiny creatures need not
+protrude above their ground cell to be recognizable. Existing 16px companion
+assets retain their native size. Unsupported apparent species use compact class
+illustrations; neither glyph nor color supplies an exact species or physical size.
+
+Inspection portraits magnify the early-creature drawing separately, so making a
+newt small in the world does not make its inspection inaccessible. The sprite
+selection still uses only publicly supplied appearance; unknown-species badges,
+actor/loot ordering, text inspection and engine interaction rules remain intact.
+
+The browser early-creature study compares the painted footprint to an empty
+observation, enforces small bounds and the sewer/giant-rat size distinction, and
+renders the group beside the original hero. Its screenshot is in ignored
+`test-results/early-creatures.png`. Real-game and corridor-rendering regression
+checks also cover this change.
+
+## Additional common encounters
+
+`src/encounter-art.ts` adds original editable native-pixel silhouettes for grid
+bugs, giant ants, killer bees, cave spiders, geckos, garter snakes, foxes, coyotes,
+floating eyes, gas spores, acid blobs and brown mold. The existing original
+creature-grid renderer consumes them directly; there are no new vendor assets or
+image-generation dependencies. Shapes, not color alone, distinguish each entry.
+
+Grids range from 8–14 pixels wide and 6–10 pixels tall. The bee, eye and spore have
+small static hover offsets, retaining their ground contact shadow and tile
+anchor. Hover offset is illustration only, not a flight or collision rule.
+No extra world scaling is applied. Portrait magnification remains separate.
+Art selection requires the engine's apparent species; undisclosed or unpictured
+creatures retain category art and normal knowledge badges. Static images do not
+imply a turn, attack or movement.
+
+The browser encounter-art test renders all twelve beside the hero using the live
+map renderer, checks distinct art against same-category fallbacks, bounds painted
+footprints, and checks unknown-appearance feedback. Its labeled comparison is
+saved to ignored `test-results/encounter-art.png`.

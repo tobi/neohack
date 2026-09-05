@@ -503,12 +503,14 @@ test("perception-only corridor and sprite study: directions, loot and static red
       you: { x: 10, y: 5 },
       world,
     };
-    map.update(observation, "explorer", "study:42");
+    map.update(observation, "valkyrie-original", "study:42");
     const facing = [],
       images = [],
       matchingArt = [];
     const source = new Image();
-    source.src = "/art/explorer-motion.png";
+    for (const hero of ["valkyrie-original", "wizard-original", "ranger-original"]) {
+    map.update(observation, hero, "study:42");
+    source.src = `/art/${hero}-motion.png`;
     await source.decode();
     for (const [dx, dy] of [
       [-1, 0],
@@ -521,38 +523,38 @@ test("perception-only corridor and sprite study: directions, loot and static red
           ...observation,
           you: { x: map.observation.you.x + dx, y: map.observation.you.y + dy },
         },
-        "explorer",
+        hero,
         "study:42",
       );
       facing.push(canvas.dataset.facing);
       const sheet = document.createElement("canvas");
-      sheet.width = 16;
+      sheet.width = 24;
       sheet.height = 32;
       sheet
         .getContext("2d")
         .drawImage(
           canvas,
-          Math.floor(canvas.width / 32) * 16,
+          Math.floor(canvas.width / 32) * 16 - 4,
           Math.floor(canvas.height / 32) * 16 - 16,
-          16,
+          24,
           32,
           0,
           0,
-          16,
+          24,
           32,
         );
       images.push(sheet.toDataURL());
       // Independently audited source order: right, up, left, down.
       // Check opaque face pixels, not merely the renderer's direction label.
       const expected = document.createElement("canvas");
-      expected.width = 16;
+      expected.width = 24;
       expected.height = 32;
       const group = dx < 0 ? 2 : dx > 0 ? 0 : dy < 0 ? 1 : 3;
       expected
         .getContext("2d")
-        .drawImage(source, group * 96, 0, 16, 32, 0, 0, 16, 32);
-      const pixels = expected.getContext("2d").getImageData(0, 0, 16, 32).data;
-      const actual = sheet.getContext("2d").getImageData(0, 0, 16, 32).data;
+        .drawImage(source, group * 144, 0, 24, 32, 0, 0, 24, 32);
+      const pixels = expected.getContext("2d").getImageData(0, 0, 24, 32).data;
+      const actual = sheet.getContext("2d").getImageData(0, 0, 24, 32).data;
       matchingArt.push(
         pixels.every(
           (v, i) =>
@@ -560,10 +562,13 @@ test("perception-only corridor and sprite study: directions, loot and static red
         ),
       );
     }
+    }
+    source.src = "/art/valkyrie-original-motion.png";
+    await source.decode();
     const boulder = world.find((cell) => cell.x === 6 && cell.y === 2);
     boulder.objects = [{ mark: "`", color: 7 }];
     // Render-only overlap fixture: a tall rock in front of the north wall.
-    map.update(observation, "explorer", "study:42");
+    map.update(observation, "valkyrie-original", "study:42");
     const rockPixel = (dx, dy) => [
       ...canvas
         .getContext("2d")
@@ -579,14 +584,19 @@ test("perception-only corridor and sprite study: directions, loot and static red
     const ordered = canvas.toDataURL();
     map.update(
       { ...observation, world: [...world].reverse() },
-      "explorer",
+      "valkyrie-original",
       "study:42",
     );
     const inputOrderStable = canvas.toDataURL() === ordered;
     // Mobile actors remain above the ground-object pass.
-    map.update({ ...observation, you: { x: 6, y: 1 } }, "explorer", "study:42");
-    const crownOverActor = rockPixel(8, -3);
-    map.update(observation, "explorer", "study:42");
+    map.update({ ...observation, you: { x: 6, y: 1 } }, "valkyrie-original", "study:42");
+    const crownOverActor = rockPixel(6, -3);
+    const sourceCanvas = document.createElement("canvas");
+    sourceCanvas.width = source.width; sourceCanvas.height = source.height;
+    const sourceContext = sourceCanvas.getContext("2d");
+    sourceContext.drawImage(source, 0, 0);
+    const expectedActor = [...sourceContext.getImageData(3 * 144 + 10, 29, 1, 1).data];
+    map.update(observation, "valkyrie-original", "study:42");
     map.destroy();
     return {
       facing,
@@ -594,17 +604,18 @@ test("perception-only corridor and sprite study: directions, loot and static red
       matchingArt,
       crownOverWall,
       crownOverActor,
+      expectedActor,
       outsideTile,
       inputOrderStable,
       motion: canvas.dataset.motion,
       frame: canvas.dataset.frame,
     };
   });
-  assert.deepEqual(report.facing, ["left", "up", "right", "down"]);
-  assert.equal(report.uniqueDirections, 4);
+  assert.deepEqual(report.facing, Array(3).fill(["left", "up", "right", "down"]).flat());
+  assert.equal(report.uniqueDirections, 12);
   assert.deepEqual(
     report.matchingArt,
-    [true, true, true, true],
+    Array(12).fill(true),
     "sprite pixels must face the requested screen direction",
   );
   assert.equal(report.motion, "idle");
@@ -614,9 +625,10 @@ test("perception-only corridor and sprite study: directions, loot and static red
     [181, 180, 160, 255],
     "boulder crown rises above the wall pass",
   );
+  assert.equal(report.expectedActor[3], 255, "overlap test samples an opaque boot pixel");
   assert.deepEqual(
     report.crownOverActor,
-    [70, 70, 94, 255],
+    report.expectedActor,
     "mobile actor pixels remain above the ground-object pass",
   );
   assert.deepEqual(
@@ -820,12 +832,15 @@ test(
 );
 
 test(
-  "all three starting paths create actual engine worlds",
-  { timeout: 120000 },
+  "all thirteen starting paths create actual engine worlds with matching portraits",
+  { timeout: 300000 },
   async (t) => {
-    for (const role of ["wizard", "ranger"]) {
+    for (const role of ["valkyrie", "wizard", "ranger", "archeologist", "barbarian", "caveman", "healer", "knight", "monk", "priest", "rogue", "samurai", "tourist"]) {
       const { page, errors } = await fixture(t);
       await create(page, role, 42);
+      const art = ["valkyrie", "wizard", "ranger"].includes(role) ? `${role}-original` : role;
+      assert.ok((await page.locator("#portrait").getAttribute("src")).endsWith(`/art/${art}.png`));
+      assert.equal(await page.evaluate(() => document.querySelector("pixel-nethack").map.hero), art);
       const state = await snapshot(page);
       assert.equal(state.ended, false);
       assert.ok(state.observation.inventory.length > 0);
@@ -948,15 +963,11 @@ test(
   { timeout: 30000 },
   async (t) => {
     const { url, page, requests } = await fixture(t);
+    const heroes = ["archeologist", "barbarian", "caveman", "healer", "knight", "monk", "priest", "rogue", "samurai", "tourist", "valkyrie-original", "wizard-original", "ranger-original"];
     const art = [
-      "/art/bat.png",
-      "/art/cat.png",
-      "/art/dog.png",
-      "/art/explorer-motion.png",
-      "/art/explorer.png",
-      "/art/scholar-motion.png",
-      "/art/scholar.png",
-    ];
+      "/art/bat.png", "/art/cat.png", "/art/dog.png",
+      ...heroes.flatMap(name => [`/art/${name}.png`, `/art/${name}-motion.png`]),
+    ].sort();
     assert.deepEqual(
       [...new Set(requests.map(({ url }) => new URL(url).pathname))]
         .filter((path) => path.startsWith("/art/"))
@@ -981,6 +992,9 @@ test(
       "/art/scholar.json",
       "/art/explorer-motion.json",
       "/art/scholar-motion.json",
+      ...heroes.map(name => `/art/${name}-motion.json`),
+      "/art/explorer.png", "/art/explorer-motion.png",
+      "/art/scholar.png", "/art/scholar-motion.png",
       "/art/recipe.json",
       "/art/LimeZu-LICENSE.txt",
       "/build/runtime.json",
@@ -1096,7 +1110,7 @@ test(
         true;
       map.update(
         current,
-        "explorer",
+        "valkyrie-original",
         `${app.current.seed}:${current.location.id}`,
       );
       const lit = sample();
@@ -1790,7 +1804,7 @@ test(
   },
 );
 
-test("early creature art stands above terrain and known appearances clear question marks", async (t) => {
+test("early creatures stay small beside the hero and known appearances clear question marks", async (t) => {
   const { page } = await fixture(t);
   const checks = await page.evaluate(async () => {
     const app = document.querySelector("pixel-nethack");
@@ -1844,7 +1858,25 @@ test("early creature art stands above terrain and known appearances clear questi
       you: { x: 9, y: 1 },
       world,
     };
-    map.update(observation, "explorer", "creatures:42");
+    map.update({ ...observation, world: world.map(cell =>
+      cell.y === 3 ? { ...cell, occupant: undefined } : cell)
+    }, "valkyrie-original", "creatures:42");
+    const context = canvas.getContext("2d");
+    const before = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    map.update(observation, "valkyrie-original", "creatures:42");
+    const after = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const sizes = species.map((name, i) => {
+      const ox = (2 + i * 2 - map.origin.x) * 16;
+      const oy = (3 - map.origin.y) * 16;
+      const changed = [];
+      for (let dy = -24; dy < 16; dy++) for (let dx = -8; dx < 24; dx++) {
+        const offset = ((oy + dy) * canvas.width + ox + dx) * 4;
+        if ([0, 1, 2, 3].some(channel => before[offset + channel] !== after[offset + channel]))
+          changed.push([dx, dy]);
+      }
+      return { name, width: Math.max(...changed.map(p => p[0])) - Math.min(...changed.map(p => p[0])) + 1,
+        height: Math.max(...changed.map(p => p[1])) - Math.min(...changed.map(p => p[1])) + 1 };
+    });
     const pixel = (x, y, dx, dy) => [
       ...canvas
         .getContext("2d")
@@ -1863,8 +1895,15 @@ test("early creature art stands above terrain and known appearances clear questi
     dog.occupant.appearance = "little dog";
     map.draw();
     map.destroy();
-    return { known, unknown, crownWithActor };
+    return { known, unknown, crownWithActor, sizes };
   });
+  for (const size of checks.sizes) {
+    assert.ok(size.width > 0 && size.width <= 12, size.name + " stays within a small footprint");
+    assert.ok(size.height > 0 && size.height <= 12, size.name + " stays shorter than the hero");
+  }
+  for (const name of ["newt", "lichen", "sewer rat"])
+    assert.ok(checks.sizes.find(s => s.name === name).height <= 6, name + " is a low creature");
+  assert.ok(checks.sizes.find(s => s.name === "giant rat").height > checks.sizes.find(s => s.name === "sewer rat").height);
   assert.deepEqual(
     checks.unknown,
     [241, 223, 172, 255],
@@ -1948,7 +1987,7 @@ test(
         you: { x: 6, y: 6 },
         world,
       });
-      map.update(observation(beforeWorld), "explorer", "motion:42");
+      map.update(observation(beforeWorld), "valkyrie-original", "motion:42");
 
       const afterWorld = makeWorld();
       at(afterWorld, 5, 4).occupant = structuredClone(
@@ -1971,7 +2010,7 @@ test(
       at(afterWorld, 7, 7).occupant = structuredClone(
         at(beforeWorld, 10, 7).occupant,
       );
-      map.update(observation(afterWorld), "explorer", "motion:42");
+      map.update(observation(afterWorld), "valkyrie-original", "motion:42");
       const keys = [...map.actorMotions.keys()];
       const started = map.actorMotions.get("5,4").started;
       const petCell = at(afterWorld, 5, 4);
@@ -2011,11 +2050,11 @@ test(
         world,
       });
       firstWorld[0].occupant = { kind: "ally", mark: "d", color: 3 };
-      map.update(frame(firstWorld), "explorer", "reduced:42");
+      map.update(frame(firstWorld), "valkyrie-original", "reduced:42");
       const secondWorld = structuredClone(firstWorld);
       delete secondWorld[0].occupant;
       secondWorld[1].occupant = { kind: "ally", mark: "d", color: 3 };
-      map.update(frame(secondWorld), "explorer", "reduced:42");
+      map.update(frame(secondWorld), "valkyrie-original", "reduced:42");
       const count = map.actorMotions.size;
       map.destroy();
       host.remove();
@@ -2098,7 +2137,6 @@ test(
     assert.deepEqual(quiet, { impacts: 0, animations: 0 });
   },
 );
-
 
 test("on-map targeting cancels and answers actual kicks; recent notes expand", { timeout: 30000 }, async t => {
   const { page } = await fixture(t);
@@ -2227,4 +2265,76 @@ test("mobile journal preview is on by default and collapses without consuming a 
   await page.screenshot({ path: `${root}/test-results/journal-mobile-compact.png` });
   await page.getByRole("button", { name: "Expand journal", exact: true }).tap();
   assert.equal(await page.locator(".rightbar").isVisible(), true);
+});
+
+test("twelve additional encounters have distinct small art and preserve unknown appearances", async (t) => {
+  const { page, errors } = await fixture(t);
+  const report = await page.evaluate(async () => {
+    const app = document.querySelector("pixel-nethack");
+    const host = document.createElement("section");
+    host.id = "encounter-art-study";
+    host.style.cssText = "position:absolute;left:0;top:0;width:1024px;z-index:40;padding:16px;box-sizing:border-box;background:#171f23;color:#e8d7ab;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;font:16px system-ui";
+    document.body.append(host);
+    const canvas = document.createElement("canvas");
+    const mapHost = document.createElement("div");
+    mapHost.style.cssText = "position:fixed;width:800px;height:480px;left:0;top:0;visibility:hidden";
+    mapHost.append(canvas); document.body.append(mapHost);
+    const map = new app.map.constructor(canvas, () => {});
+    map.zoom = 2;
+    const world = [];
+    for (let y = 0; y <= 8; y++) for (let x = 0; x <= 12; x++)
+      world.push({ x, y, visible: true, terrain: { type: "floor", knowledge: "remembered" } });
+    const target = world.find(c => c.x === 8 && c.y === 4);
+    const observation = { location: { id: "encounter-study", depthLabel: "Study" }, you: { x: 5, y: 4 }, world };
+    const encounters = [["grid bug", "x"], ["giant ant", "a"], ["killer bee", "a"], ["cave spider", "s"],
+      ["gecko", ":"], ["garter snake", "S"], ["fox", "d"], ["coyote", "d"], ["floating eye", "e"],
+      ["gas spore", "e"], ["acid blob", "b"], ["brown mold", "F"]];
+    const crop = (pixels = false) => {
+      const out = document.createElement("canvas"); out.width = 24; out.height = 32;
+      out.getContext("2d").drawImage(canvas, (8-map.origin.x)*16-4, (4-map.origin.y)*16-16, 24, 32, 0, 0, 24, 32);
+      return pixels ? out.getContext("2d").getImageData(0, 0, 24, 32).data : out.toDataURL();
+    };
+    const results = [];
+    for (const [appearance, mark] of encounters) {
+      delete target.occupant;
+      map.update(observation, "valkyrie-original", "encounters:42");
+      const empty = crop(true);
+      // Same known category/color, only the public apparent species differs.
+      target.occupant = { kind: "creature", mark, appearance: "unpictured creature", color: 3 };
+      map.update(observation, "valkyrie-original", "encounters:42");
+      const fallback = crop();
+      target.occupant.appearance = appearance; map.draw();
+      const art = crop();
+      const painted = crop(true), changed = [];
+      for (let p = 0; p < painted.length; p += 4)
+        if ([0, 1, 2, 3].some(channel => painted[p + channel] !== empty[p + channel]))
+          changed.push([(p / 4) % 24, Math.floor(p / 4 / 24)]);
+      const width = Math.max(...changed.map(p => p[0])) - Math.min(...changed.map(p => p[0])) + 1;
+      const height = Math.max(...changed.map(p => p[1])) - Math.min(...changed.map(p => p[1])) + 1;
+      results.push({ appearance, distinct: art !== fallback, art, width, height });
+      const card = document.createElement("article");
+      card.style.cssText = "border:1px solid #48534a;padding:10px;background:#25312d";
+      const title = document.createElement("h3"); title.textContent = appearance; title.style.margin = "0 0 12px";
+      const view = document.createElement("canvas"); view.width=80; view.height=48;
+      view.style.cssText = "width:320px;height:192px;max-width:100%;image-rendering:pixelated";
+      view.getContext("2d").drawImage(canvas,(5-map.origin.x)*16-8,(4-map.origin.y)*16-24,80,48,0,0,80,48);
+      card.append(title,view);host.append(card);
+      delete target.occupant.appearance;map.draw();
+      const unknown = crop();
+      target.occupant.appearance = "unpictured creature";map.draw();
+      // Unknown and unpictured stay category art; only the knowledge badge differs.
+      results.at(-1).unknownBadge = unknown !== crop();
+    }
+    map.destroy(); mapHost.remove();
+    return results;
+  });
+  for (const result of report) {
+    assert.ok(result.width > 0 && result.width <= 14, result.appearance + " fits its native footprint");
+    assert.ok(result.height > 0 && result.height <= 12, result.appearance + " remains small including hover clearance");
+    assert.ok(result.distinct, result.appearance + " has species art instead of its generic category");
+    assert.ok(result.unknownBadge, result.appearance + " does not suppress missing-appearance feedback");
+  }
+  assert.equal(new Set(report.map(r => r.art)).size, 12);
+  assert.deepEqual(errors, []);
+  await page.locator("#encounter-art-study").screenshot({ path: `${root}/test-results/encounter-art.png` });
 });
