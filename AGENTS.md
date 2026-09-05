@@ -3,8 +3,7 @@
 Fresh library-first repository. The supported implementation lives entirely in
 `lib/neonethack/`; `examples/` are clients of its public API. Do not restore the
 old Bun server, UI, generic public `act` tool or retired JS semantic adapter.
-Do not remove Git-ignored local runtime aliases supporting already-running
-legacy services; they are not source or new-library dependencies.
+Legacy services are retired; do not recreate their local runtime aliases.
 
 ## Boundaries
 
