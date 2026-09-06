@@ -84,10 +84,14 @@ let lastTurnSeen = null;
 let toollessSteps = 0; // consecutive model steps without any tool call
 
 // ---- MCP: the neonethack MCP stdio server hosts the C engine directly ----
-log(`connecting neonethack MCP stdio server (model ${MODEL} @ ${BASE_URL})...`);
+// Prefer the compiled server at ~/.local/bin/neohack-mcp (bun build --compile
+// dist/mcp/cli.js); falls back to `node dist/mcp/cli.js` from the checkout.
+const MCP_BIN = process.env.NEONETHACK_MCP ?? (existsSync(join(homedir(), '.local/bin/neohack-mcp')) ? join(homedir(), '.local/bin/neohack-mcp') : join(LIB, 'dist/mcp/cli.js'));
+const useNodeScript = MCP_BIN.endsWith('.js');
+log(`connecting neonethack MCP stdio server (${MCP_BIN}, model ${MODEL} @ ${BASE_URL})...`);
 const transport = new StdioClientTransport({
-  command: 'node',
-  args: [join(LIB, 'dist/mcp/cli.js'), ENGINE, DATA, SESSIONS],
+  command: useNodeScript ? 'node' : MCP_BIN,
+  args: useNodeScript ? [MCP_BIN, ENGINE, DATA, SESSIONS] : [ENGINE, DATA, SESSIONS],
   env: { ...process.env, NEONETHACK_EXECUTABLE: EXECUTABLE },
   cwd: LIB,
 });
@@ -98,7 +102,7 @@ async function callBridge(tool, params) {
   const r = await client.callTool({ name: tool, arguments: params });
   let text = r?.content?.map(c => c.text ?? '').join('') ?? '';
   if (!text && r?.structuredContent) text = JSON.stringify(r.structuredContent);
-  return text;
+  return { text, isError: r?.isError === true };
 }
 
 // The server exposes the same 27 game tools natively (session_create,
@@ -119,10 +123,11 @@ for (const t of mcpTools) {
     execute: async (args) => {
       opCount++;
       try {
-        let text = await callBridge(t.name, args ?? {});
+        const { text, isError: bridgeIsError } = await callBridge(t.name, args ?? {});
         const turn = text.match(/"turn"\s*:\s*(\d+)/)?.[1];
         const depth = text.match(/"depth"\s*:\s*("?\s*\d+)|(\d+)/)?.[0];
-        const sid = text.match(/"sessionId"\s*:\s*"([^"]+)"/)?.[1];
+        // capture session id from game-tool results (full id shape only, skip error envelopes)
+        const sid = !bridgeIsError ? text.match(/"sessionId"\s*:\s*"(g-[A-Za-z0-9]+-[A-Za-z0-9]+-\d+-[A-Za-z0-9]+)"/)?.[1] : undefined;
         if (sid && sid !== lastSessionId) {
           lastSessionId = sid;
           state.gameId = sid;
