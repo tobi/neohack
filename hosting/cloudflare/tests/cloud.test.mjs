@@ -183,14 +183,26 @@ test('ledger ranks all runs, preserves progress, bounds diagnostics and renders 
   await page.selectOption('#status','ascended');assert.equal(await page.locator('#runs tr').count(),1);
   await page.goto(url);
   await page.waitForFunction(()=>!document.querySelector('#new-adventure').disabled);
+  // Hold the background report to prove the ledger is checked after its commit.
+  // waitForFunction treats an async predicate's Promise as truthy immediately.
+  let releaseReport, reportEntered;
+  const reportGate = new Promise(resolve => { releaseReport = resolve; });
+  const reportStarted = new Promise(resolve => { reportEntered = resolve; });
+  t.after(() => releaseReport());
+  await page.route('**/api/errors', async route => {
+    reportEntered(); await reportGate; await route.continue();
+  });
+  const reported = page.waitForResponse(response => new URL(response.url()).pathname === '/api/errors' && response.request().method() === 'POST');
   await page.evaluate(()=>{
     const error=new Error("Unexpected keyword 'with'. PRIVATE #vault=secret");
     for(let i=0;i<3;i++) window.dispatchEvent(new ErrorEvent('error',{error,message:error.message}));
   });
-  await page.waitForFunction(async () => {
-    const stats=await (await fetch('/api/stats')).json();
-    return stats.errors.some(row=>row.code==='module_load' && row.count===2);
-  });
+  await reportStarted;
+  stats=await (await fetch(url+'/api/stats')).json();
+  assert.equal(stats.errors.find(row=>row.code==='module_load').count,1,'held report has not committed yet');
+  releaseReport();
+  const response = await reported;
+  assert.equal(response.status(),204);
   stats=await (await fetch(url+'/api/stats')).json();
   assert.equal(stats.errors.find(row=>row.code==='module_load').count,2,'one browser report per category despite repeat errors');
   assert.ok(!JSON.stringify(stats).includes('PRIVATE'));
