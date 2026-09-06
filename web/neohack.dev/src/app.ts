@@ -1,3 +1,5 @@
+import './component';
+import { PublicReplayRecorder, embedCode, replayLink } from './public-replay';
 import { actionIcon } from "./action-icons";
 import { accountApi, RunRecorder } from './account-client';
 import { reportError } from "./telemetry";
@@ -226,10 +228,19 @@ class PixelNethack extends HTMLElement {
   private accountChanged = (event: Event) => { this.accountUser = Promise.resolve((event as CustomEvent).detail); this.accountSession = ''; this.accountRecorder = null; };
   private accountRecorder: RunRecorder | null = null;
   private accountSession = '';
+  private publicRecorder?: PublicReplayRecorder;
+  private publicSession='';
   private inputSource: PlayControl = "manual";
-  private recordAccount() {
+  private recordReplays() {
     const frame = this.game?.state, current = this.current;
     if(!frame || !current?.buildId) return;
+    if(this.cloudEnabled) {
+      if(this.publicSession!==frame.sessionId){
+        this.publicSession=frame.sessionId;this.text('#copy-embed','Copy run embed');
+        this.publicRecorder=new PublicReplayRecorder(frame.sessionId,this.vault,()=>publishCloud(this.saves,this.vault),message=>{if(this.publicSession!==frame.sessionId)return;const node=this.querySelector('#public-recording');if(node)node.textContent=message;});
+      }
+      this.publicRecorder?.record(frame);
+    }
     void this.accountUser.then(user => {
       if(!user) return;
       if(this.accountSession !== frame.sessionId) {
@@ -299,7 +310,7 @@ class PixelNethack extends HTMLElement {
           <details class="hud-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
             <button id="adventures-button">Your adventures</button><button id="pickup-settings" data-game>Automatic pickup</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button>
             <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
-            <button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p><p id="account-recording" role="status"></p><a class="menu-github" href="/component" target="_blank" rel="noopener">Embed the world ↗</a><a class="menu-github" href="/bots" target="_blank" rel="noopener">Ascender workshop ↗</a><a class="menu-github" href="/login" target="_blank" rel="noopener">Your account & replays ↗</a>
+            <button id="copy-embed">Copy run embed</button><p id="public-recording" role="status">Public replays record observed scenes from this visit.</p><button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p><p id="account-recording" role="status"></p><a class="menu-github" href="/component" target="_blank" rel="noopener">Embed the world ↗</a><a class="menu-github" href="/bots" target="_blank" rel="noopener">Ascender workshop ↗</a><a class="menu-github" href="/login" target="_blank" rel="noopener">Your account & replays ↗</a>
           </div></details>
         </div>
         <div class="notices"><div class="notice error" id="error" role="alert" hidden></div>
@@ -772,6 +783,15 @@ class PixelNethack extends HTMLElement {
       this.closePanel();
       this.$("#dungeon").focus();
     };
+    this.$('#copy-embed').addEventListener('click',()=>void (async()=>{
+      this.stopMovement();
+      const id=this.game?.state.sessionId;
+      if(!id){this.openMenu('<h2>Start a run first</h2><p>An embed needs a recorded adventure.</p>');return;}
+      const saved=await this.publicRecorder?.flush();
+      const code=embedCode(id);
+      try {if(!saved)throw Error();await navigator.clipboard.writeText(code);this.$('#copy-embed').textContent='Embed copied';}
+      catch {this.openMenu('<h2>Run embed</h2><p>'+ (saved?'Copy this code into your page.':'No public frames saved yet. This embed will show replay unavailable until recording succeeds.') +'</p><textarea id="embed-code" readonly aria-label="Embed code" style="width:100%;min-height:140px"></textarea>');const field=this.querySelector<HTMLTextAreaElement>('#embed-code')!;field.value=code;field.select();}
+    })());
     this.$(".hud-menu").addEventListener("toggle", () => {
       if (this.querySelector(".hud-menu[open]")) this.stopMovement();
     });
@@ -1024,7 +1044,7 @@ class PixelNethack extends HTMLElement {
         catch (error) { this.error(error); }
       }
       if (this.game && this.current) {
-        this.recordAccount();
+        this.recordReplays();
         this.enrich(this.current);
         if (this.game.pendingRequest)
           this.current.pending = this.game.pendingRequest;
@@ -1306,9 +1326,25 @@ class PixelNethack extends HTMLElement {
       ).join("\n") : "";
       this.text("#nearby-ascii", near);
       this.show("#ended", state.ended);
-      if (state.ended)
-        this.$("#ended").innerHTML =
-          `<strong>This chapter has ended.</strong><p>${escape(state.end?.cause ?? state.end?.kind ?? "Your adventure is over.")} · Turn ${o.turn}. Your journal is still here. Start another chapter from Your adventures.</p>`;
+      if (state.ended && this.$('#ended').dataset.session !== state.sessionId) {
+        const ended=this.$('#ended');ended.dataset.session=state.sessionId;
+        ended.innerHTML = '<strong>This chapter has ended.</strong><p>'+escape(state.end?.cause ?? state.end?.kind ?? 'Your adventure is over.')+' · Turn '+o.turn+'. Your journal is still here. Start another chapter from Your adventures.</p><div id="death-replay"></div><div class="replay-sharing"><button id="death-copy-embed">Copy embed</button><button id="death-copy-link">Copy replay link</button><a id="death-replay-link">Open replay ↗</a></div><p id="death-share-status" role="status">Loading the recorded journey…</p><textarea id="death-share-code" readonly hidden aria-label="Share replay"></textarea>';
+        const id=state.sessionId;
+        const viewer=document.createElement('neohack-world');viewer.setAttribute('controls','');viewer.setAttribute('autoplay','');viewer.setAttribute('speed','4');
+        this.$('#death-replay').append(viewer);
+        const link=this.querySelector<HTMLAnchorElement>('#death-replay-link')!;link.href=replayLink(id);link.target='_blank';link.rel='noopener';
+        const copy=async(text:string)=>{try{await navigator.clipboard.writeText(text);this.text('#death-share-status','Copied. Ready to share.');}catch{const field=this.querySelector<HTMLTextAreaElement>('#death-share-code');if(field){field.hidden=false;field.value=text;field.select();}}};
+        this.$('#death-copy-embed').onclick=()=>void copy(embedCode(id));
+        this.$('#death-copy-link').onclick=()=>void copy(replayLink(id));
+        // The final observation is queued by the operation before this microtask.
+        void Promise.resolve().then(async()=>{
+          await this.publicRecorder?.flush();
+          if(!viewer.isConnected)return;
+          viewer.setAttribute('src',replayLink(id));
+          this.text('#death-share-status','Share this read-only replay. Recording may begin partway through the run.');
+        });
+      }
+      if(!state.ended){this.$('#ended').replaceChildren();delete this.$('#ended').dataset.session;}
     } else {
       delete this.dataset.turn;
       delete this.dataset.sessionId;
@@ -1340,12 +1376,14 @@ class PixelNethack extends HTMLElement {
         "Dungeon entrance. Use arrow keys to walk into the hall.",
       );
       this.show("#ended", false);
+      this.$("#ended").replaceChildren();delete this.$("#ended").dataset.session;
     }
     this.map.positionCursor = state?.decision?.kind === "position" ? state.decision.cursor : null;
     this.map.update(
       state?.observation ?? null,
       heroArt(this.current?.role),
       `${this.current?.seed ?? this.current?.id ?? 0}:${state?.observation.location.id ?? "threshold"}`,
+      state,
     );
     this.renderPanel();
     this.renderDecision();

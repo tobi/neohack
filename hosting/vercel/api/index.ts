@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { Accounts } from "../src/accounts.ts";
 import { vaults } from "../src/vaults.ts";
+import { replay } from '../src/replays.ts';
 import { board } from "../src/board.ts";
 import { configured, Conflict } from "../src/storage.ts";
 async function dispatch(request: Request) {
@@ -17,6 +18,8 @@ async function dispatch(request: Request) {
   if (!configured())
     return json({ error: "Private Vercel Blob is not configured" }, 503);
   try {
+    const publicReplay=pathname.match(/^\/api\/runs\/([\w-]{1,64})\/replay$/);
+    if(publicReplay)return await replay(request,publicReplay[1]);
     if (pathname === "/api/health")
       return json({ ok: true, platform: "vercel", webmcp: "browser-mediated" });
     if (pathname === "/api/account" || pathname.startsWith("/api/account/"))

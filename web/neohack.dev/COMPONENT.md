@@ -52,7 +52,7 @@ must validate that iframe's origin and source before forwarding messages.
 | `world.render` | `{snapshot}`; presentation only |
 | `replay.load` | `{frames}` |
 | `replay.seek` | `{index}` |
-| `replay.play` | `{interval}` (optional, default 250 ms) |
+| `replay.play` | `{interval}` (optional, default 62.5 ms at 4×) |
 | `replay.pause` | none |
 
 Without a transport, tool discovery returns an empty list. `tools/call` returns
@@ -130,3 +130,25 @@ An insecure address is explained before any runtime is loaded.
 
 See the [typed Hero API](../../lib/neonethack/docs/HERO.md) for sensing, movement,
 melee and inventory conveniences. Its declarations drive the workshop editor.
+
+## Public replay embeds
+
+```html
+<script type="module" src="https://neohack.dev/component/neohack.js"></script>
+<neohack-world src="https://neohack.dev/dashboard?run=RUN_ID"
+  autoplay speed="4" controls style="height:480px"></neohack-world>
+```
+
+`src` accepts a ledger URL or HTTP JSON containing a Snapshot array or
+`{frames, next, role?, seed?}`. A numeric `next` is the next `offset`; `null` ends
+pagination. Loads omit credentials and cancel when the source changes or the
+viewer is removed. A failed or missing recording remains a visible error.
+`autoplay`, `controls`, `sound` and `loop` are boolean attributes (absent or
+`="false"` means disabled). `speed` is 0.5–5×, default 4×; 1× is 250ms/frame.
+`play(interval)` still accepts explicit milliseconds; no interval uses `speed`.
+Controls overlay the bottom. Sound is off by default and requires a user gesture;
+when embedding on another origin, allow the module origin's `/audio/` in your CSP.
+Every ledger run opens in a modal viewer. `/dashboard?run=RUN_ID` is the share link.
+The game menu and death notice copy an embed with that public source; private save
+URLs are never included. New cloud game visits record observed scenes separately
+from the engine journal. Older entries without public frames show unavailable.

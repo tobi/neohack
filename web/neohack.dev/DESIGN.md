@@ -1062,3 +1062,33 @@ inline pixel SVG, embedded existing sprites, no JavaScript, external fonts or
 runtime requests. Recovery is a normal link to the entrance; server failures
 remind players to keep their bookmark and browser data without promising that
 unsynced progress reached the server. Keep ordinary API errors structured JSON.
+
+## Embeddable public replays
+
+`neohack-world` accepts a public ledger `src` (`/dashboard?run=…`) or paginated
+observation JSON, `autoplay`, `speed`, `sound`, `controls` and `loop`. Default speed
+is 4× (16 recorded frames per second); controls overlay the bottom with Play/Pause,
+frame seeking, speed and gesture-enabled optional sound. HTML controls retain
+44px targets and keyboard focus. Removal cancels loading and pauses playback.
+The game hamburger remains anchored beneath its 44px button with a bounded menu.
+Its Copy run embed action supplies a public source without the private vault URL.
+
+New cloud-backed game visits publish a separate, browser-reported scene recording
+using the vault capability for writes only. Public reads preserve canonical observations, decisions, events and outcomes; no private saves, journals, bot
+source or storage descriptors. Upload failures stop recording visibly. Existing
+private account recordings stay private. Public ledger entries open an accessible
+replay lightbox; links with a run id open it directly. Missing historical frames
+are stated explicitly, never reconstructed from summaries or engine hidden state.
+Death notices embed the same viewer beneath the witnessed cause, with Copy embed,
+Copy replay link and Open replay. The final frame upload settles before loading.
+
+## Hero tombstone
+
+A confirmed `ended: true` / `end.kind: "death"` replaces the hero with the existing
+original gravestone sprite at the current public `observation.you` position. Both
+the live map and replay viewer pass these terminal facts to the shared renderer.
+It is a still, foot-sorted presentation marker, never a new terrain cell, inventory
+item or operation target. Other terminal outcomes retain the hero; seeking before
+death restores the hero. No marker is placed when the final position is absent.
+`drawTombstone` in `src/dungeon-art.ts` shares the existing 16px grave artwork and
+its palette/shading with observed graves; no new runtime PNG or vendor asset.

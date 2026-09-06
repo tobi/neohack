@@ -1,13 +1,34 @@
 const $ = selector => document.querySelector(selector);
 const format = value => Number(value ?? 0).toLocaleString();
 function element(tag, text) {const node=document.createElement(tag);node.textContent=text;return node;}
-let data;
+let data, openedInitial=false;
+let activeRun;
+const dialog=$('#replay-lightbox');
+function openReplay(run) {
+  activeRun=run;
+  $('#replay-title').textContent=run.name;
+  $('#copy-status').textContent='';$('#embed-code').hidden=true;
+  const world=document.createElement('neohack-world');
+  world.setAttribute('src',new URL('/dashboard?run='+encodeURIComponent(run.id),location.origin).href);
+  world.setAttribute('autoplay','');world.setAttribute('controls','');world.setAttribute('speed','4');
+  $('#replay-world').replaceChildren(world);
+  if(!dialog.open)dialog.showModal();
+}
+$('#close-replay').onclick=()=>dialog.close();
+dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();}});
+dialog.addEventListener('close',()=>$('#replay-world').replaceChildren());
+$('#copy-replay').onclick=async()=>{
+  const src=new URL('/dashboard?run='+encodeURIComponent(activeRun.id),location.origin).href;
+  const code='<script type="module" src="'+location.origin+'/component/neohack.js"></script>\n<neohack-world src="'+src+'" autoplay speed="4" controls style="height:480px"></neohack-world>';
+  try{await navigator.clipboard.writeText(code);$('#copy-status').textContent='Embed copied.';}
+  catch{$('#embed-code').hidden=false;$('#embed-code').value=code;$('#embed-code').select();$('#copy-status').textContent='Copy the selected embed code.';}
+};
 function renderRuns() {
   const filter=$("#status").value;
   const runs=data.best.filter(run=>filter==="all" || filter==="living" && !run.ended || filter==="ended" && run.ended || filter==="ascended" && run.endKind==="ascended");
   $("#runs").replaceChildren(...runs.map(run=>{
     const row=document.createElement("tr"), name=element("td",run.name);
-    name.append(element("small",run.role)); row.append(name);
+    const replay=element("button",run.name);replay.className="run-replay";replay.setAttribute("aria-label","Replay "+run.name);replay.onclick=()=>openReplay(run);name.replaceChildren(replay);name.append(element("small",run.role)); row.append(name);
     for(const value of [run.maxLevel || "—",format(run.turn),run.depthLabel || "—",run.ended ? run.endKind || "Ended" : "Adventuring"]) row.append(element("td",value));
     return row;
   }));
@@ -23,6 +44,7 @@ async function refresh() {
       const node=element("div","");node.className="metric";node.append(element("strong",format(value)),element("span",label));return node;
     }));
     renderRuns();
+    if(!openedInitial){openedInitial=true;const id=new URL(location.href).searchParams.get("run");if(id)openReplay(data.best.find(r=>r.id===id)??{id,name:"Adventure replay"});}
     $("#roles").replaceChildren(...data.roles.map(role=>{
       const node=element("div","");node.className="role";const label=element("label",role.role);label.append(element("span",format(role.count)));
       const bar=element("div","");bar.className="bar";const fill=element("i","");fill.style.width=(100*role.count/Math.max(1,data.totals.runs))+"%";bar.append(fill);node.append(label,bar);return node;

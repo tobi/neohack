@@ -1669,3 +1669,15 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
 #journal-preview .journal-scroll-link { pointer-events: auto; }
 .potion-narration { padding: 12px 16px; border-left: 2px solid #9b946b; background: #ffffff05; }
 .potion-narration blockquote { white-space: pre-wrap; margin: 0; font: 17px/1.6 Georgia, serif; }
+
+/* Anchor the disclosure to its own button, below the site rail and inside the viewport. */
+.hud-menu { flex: 0 0 44px; width: 44px; }
+.hud-menu > summary { height: 44px; padding: 0; }
+.hud-menu-body { top: calc(100% + 8px); width: min(280px, calc(100vw - 32px)); max-height: calc(100dvh - 156px); overscroll-behavior: contain; }
+#ended:has(neohack-world) { max-height:calc(100dvh - 170px);overflow:auto;pointer-events:auto; }
+#ended neohack-world { height:380px;min-height:320px;margin:16px 0; }
+.replay-sharing { display:flex;flex-wrap:wrap;align-items:center;gap:10px; }
+#death-share-code { width:100%;min-height:100px; }
+@media(max-width:600px){#ended neohack-world{height:340px}#ended:has(neohack-world){max-height:calc(100dvh - 145px)}}
+.world-hud:has(.hud-menu[open]) { z-index:20; }
+.notices:has(#ended:not([hidden]) neohack-world) { top:84px;width:min(880px,calc(100% - 32px));max-height:calc(100% - 100px);pointer-events:auto; }

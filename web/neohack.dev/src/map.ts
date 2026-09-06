@@ -3,6 +3,7 @@ import { layoutForSeed, type LayoutType } from "./layout-art";
 import type { Cell, Observation, Snapshot, Compass } from "neonethack/types";
 import {
   renderTerrain,
+  drawTombstone,
   STRUCTURE_RISE,
   STRUCTURE_OVERHANG,
 } from "./dungeon-art";
@@ -307,6 +308,7 @@ export class DungeonMap {
   private origin = { x: 0, y: 0 };
   private observer: ResizeObserver;
   private observation: Observation | null = null;
+  private heroDead = false;
   private hero = heroArt("valkyrie");
   private seed = "0";
   private layoutType: LayoutType = "dungeon";
@@ -403,13 +405,18 @@ export class DungeonMap {
         (cell) => cell.x === x && cell.y === y,
       );
       this.inspect(
-        cell ? cellDescription(cell) : `${x}, ${y}: Unexplored`,
+        this.heroDead && this.observation.you?.x === x && this.observation.you.y === y
+          ? `${x}, ${y}: Your final position. Tombstone marks your death; it is not a dungeon object.`
+          : cell ? cellDescription(cell) : `${x}, ${y}: Unexplored`,
         x,
         y,
       );
     });
   }
-  update(observation: Observation | null, hero = heroArt("valkyrie"), seed = "0") {
+  update(observation: Observation | null, hero = heroArt("valkyrie"), seed = "0", terminal?: Pick<Snapshot, "ended" | "end"> | null) {
+    this.heroDead = terminal?.ended === true && terminal.end?.kind === "death";
+    this.canvas.dataset.hero = this.heroDead && observation?.you ? "tombstone" : observation?.you ? "hero" : "none";
+    this.canvas.setAttribute("aria-description", this.heroDead && observation?.you ? "A tombstone marks your final position." : "");
     const now = performance.now();
     if (
       !observation ||
@@ -471,6 +478,7 @@ export class DungeonMap {
       }
     }
     if (!observation) { this.endDrag(); cancelAnimationFrame(this.zoomFrame); this.zoomFrame = 0; }
+    if(this.heroDead){this.walkUntil = -Infinity;this.travelStarted = -Infinity;}
     this.observation = observation;
     this.hero = hero;
     this.seed = seed;
@@ -910,6 +918,11 @@ export class DungeonMap {
         x,
         y,
         draw: () => {
+          if(this.heroDead){
+            drawTombstone(c,x,y);
+            this.canvas.dataset.motion="still";this.canvas.dataset.frame="0";
+            return;
+          }
           rect(c, "#26312b", x + 2, y + 13, 12, 2);
           rect(c, "#a6be87", x + 4, y + 15, 8, 1);
           const image = images.get(`${this.hero}-motion`);

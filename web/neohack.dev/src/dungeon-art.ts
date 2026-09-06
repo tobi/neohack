@@ -316,12 +316,7 @@ export function renderTerrain(
         rect(c, "#4e4b3c", x + 2, y, 1, 16);
         rect(c, "#4e4b3c", x + 13, y, 1, 16);
       } else if (type === "grave") {
-        rect(c, "#27322e", x + 3, y + 12, 11, 3);
-        rect(c, p.face, x + 5, y + 3, 8, 10);
-        rect(c, "#a4a38c", x + 4, y + 3, 7, 10);
-        rect(c, "#a4a38c", x + 5, y + 2, 5, 2);
-        rect(c, "#646e5c", x + 7, y + 5, 1, 5);
-        rect(c, "#646e5c", x + 5, y + 7, 5, 1);
+        drawTombstone(c, x, y, p.face);
       } else if (type === "sink") {
         rect(c, p.face, x + 3, y + 8, 11, 6);
         rect(c, "#abb19b", x + 2, y + 5, 12, 5);
@@ -660,4 +655,14 @@ function earth(c: CanvasRenderingContext2D,x:number,y:number,wx:number,wy:number
     const color=grain%227===0?p.light:grain%97===0?p.seam:p.floor[patch%p.floor.length]!;
     rect(c,color,x+px,y+py,1,1);
   }
+}
+
+/** Existing original grave artwork, also used as a presentation-only death marker. */
+export function drawTombstone(c: CanvasRenderingContext2D, x: number, y: number, face = "#68715f") {
+  rect(c, "#27322e", x + 3, y + 12, 11, 3);
+  rect(c, face, x + 5, y + 3, 8, 10);
+  rect(c, "#a4a38c", x + 4, y + 3, 7, 10);
+  rect(c, "#a4a38c", x + 5, y + 2, 5, 2);
+  rect(c, "#646e5c", x + 7, y + 5, 1, 5);
+  rect(c, "#646e5c", x + 5, y + 7, 5, 1);
 }

@@ -12,7 +12,7 @@ export class DungeonSound {
   private generation = 0;
   private disposed = false;
   private hidden = () => { if (document.hidden) this.stop(); };
-  constructor() { document.addEventListener("visibilitychange", this.hidden); }
+  constructor(private base = "/audio/") { document.addEventListener("visibilitychange", this.hidden); }
   async enable() {
     const generation = ++this.generation;
     this.context ??= new AudioContext();
@@ -21,12 +21,13 @@ export class DungeonSound {
     await context.resume();
     await Promise.all(clips.map(async clip => {
       if (this.buffers.has(clip)) return;
-      const response = await fetch(`/audio/${clip}.ogg`);
+      const response = await fetch(`${this.base}${clip}.ogg`);
       if (!response.ok) throw Error("Sound could not load. Try enabling it again.");
       this.buffers.set(clip, await context.decodeAudioData(await response.arrayBuffer()));
     }));
     if (!this.disposed && generation === this.generation) this.enabled = true;
   }
+  reset() { this.seen.clear(); this.stop(); }
   disable() { this.generation++; this.enabled = false; this.stop(); }
   private stop() {
     for (const source of this.active) source.stop();
