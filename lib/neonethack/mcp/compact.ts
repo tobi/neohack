@@ -23,8 +23,19 @@ export class CompactResponses {
     const before = old.observation, after = result.observation;
     const observation: Record<string, any> = {};
     const remove = Object.keys(before).filter(key => !(key in after));
+    const equal = (field: string, left: any, right: any) => {
+      // knowledge carries observedTurn, which advances on every ordinary turn;
+      // compare the disclosed content without that marker so a static block is
+      // not re-sent in full each delta. The baseline keeps the last knowledge;
+      // perception.knowledge and knowledge.observedTurn signal currency.
+      if (field === "knowledge" && left && right && typeof left === "object" && typeof right === "object") {
+        left = { ...left }; delete left.observedTurn;
+        right = { ...right }; delete right.observedTurn;
+      }
+      return JSON.stringify(left) === JSON.stringify(right);
+    };
     for (const [key, value] of Object.entries(after)) {
-      if (key !== "world" && JSON.stringify(value) !== JSON.stringify(before[key])) observation[key] = value;
+      if (key !== "world" && !equal(key, value, before[key])) observation[key] = value;
     }
     const key = (cell: any) => `${cell.x},${cell.y}`;
     const cells = new Map(before.world.map((cell: any) => [key(cell), cell]));
