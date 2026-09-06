@@ -233,7 +233,7 @@ test("plain HTTP remote origins explain secure access before starting WASM", asy
   assert.equal(await page.evaluate(() => localStorage.length), 0);
   assert.deepEqual(errors, []);
 });
-async function create(page, role = "valkyrie", seed = 42) {
+async function create(page, role = "valkyrie", seed = 42, keepStory = false) {
   await page.getByRole("button", { name: "Begin your adventure" }).click();
   await page.getByLabel("YOUR NAME", { exact: true }).fill("Ada");
   await page.locator(`input[name=role][value=${role}]`).check();
@@ -249,6 +249,8 @@ async function create(page, role = "valkyrie", seed = 42) {
       document.querySelector("pixel-nethack").snapshot?.observation.turn === 1,
   );
   await ready(page);
+  if (!keepStory && await page.locator("#journal-scroll").isVisible())
+    await page.getByRole("button", { name: "Return to the adventure", exact: true }).click();
 }
 
 function openRun(state) {
@@ -3219,4 +3221,69 @@ test('underfoot chest opens a container dialog, shows contents and transfers cho
   assert.equal((await snapshot(page)).observation.inventory.some(i => i.id === potion.id), false);
   assert.equal((await snapshot(page)).observation.here.items.length, 1);
   assert.deepEqual(errors, []);
+});
+
+
+test("opening story is a complete, free, reopenable journal scroll", async t => {
+  const {page, errors} = await fixture(t);
+  await page.setViewportSize({width:390,height:844});
+  await create(page, "barbarian", 42, true);
+  const before = await snapshot(page);
+  const heard = before.events.filter(e => e.type === "heard").map(e => e.text);
+  assert.ok(heard.some(line => line.includes("Amulet")), "real engine opening story");
+  assert.equal(await page.locator("#journal-scroll").isVisible(), true);
+  const text = await page.locator("#scroll-text").textContent();
+  assert.equal(text, heard.join("\n"), "complete receipt including paragraph breaks");
+  assert.ok(text.includes("from birth"));
+  const footer = await page.locator("#finish-scroll").boundingBox();
+  assert.ok(footer.y + footer.height <= 844, "reading controls stay visible on mobile");
+  await page.keyboard.press("ArrowRight");
+  assert.equal((await snapshot(page)).revision, before.revision);
+  await page.screenshot({path:root+"/test-results/journal-scroll-mobile.png"});
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator("#journal-scroll").isVisible(), false);
+  await page.evaluate(() => { const app=document.querySelector("pixel-nethack"); app.render(); app.render(); });
+  assert.equal(await page.locator("#journal-scroll").isVisible(), false);
+  await page.getByRole("button", {name:"Read journal scroll · turn 1", exact:true}).click();
+  assert.equal(await page.locator("#scroll-text").textContent(), text);
+  await page.getByRole("button", {name:"Return to the adventure",exact:true}).click();
+  await page.getByRole("button",{name:"Expand journal",exact:true}).click();
+  await page.locator(".journal-entry .journal-scroll-link").click();
+  assert.equal(await page.locator("#scroll-text").textContent(), text);
+  await page.getByRole("button",{name:"Close scroll",exact:true}).click();
+  assert.equal((await snapshot(page)).revision,before.revision);
+  assert.equal((await snapshot(page)).observation.turn,before.observation.turn);
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector("pixel-nethack").snapshot?.sessionId);
+  await ready(page);
+  assert.equal(await page.locator("#journal-scroll").isVisible(),false,"resume does not reopen the story");
+  assert.deepEqual(errors,[]);
+});
+
+test('potion nickname dialog explains witnessed effects and generates only an editable suggestion', async t => {
+  const {page,errors}=await fixture(t);
+  await create(page,'valkyrie',34);
+  await page.evaluate(async()=>{
+    const app=document.querySelector('pixel-nethack');
+    for(const direction of ['east','east','south'])await app.run(()=>app.game.move(direction));
+    await app.run(()=>app.game.pickup({id:app.game.observation.here.items.find(i=>i.category==='potion').id}));
+    await app.run(()=>app.game.drink({id:app.game.observation.inventory.find(i=>i.category==='potion').id}));
+  });
+  const pending=await snapshot(page);
+  assert.equal(pending.decision.purpose,'consumedPotionNickname');
+  assert.equal(await page.locator('#decision-title').textContent(),'Give this potion a nickname');
+  assert.match(await page.locator('#decision-about').textContent(),/aren’t sure/);
+  assert.match(await page.locator('.potion-narration').textContent(),/You drank the potion.*liquid fire/s);
+  assert.equal(await page.getByLabel('Nickname',{exact:true}).inputValue(),'Ooph! This tastes like liquid fire!');
+  assert.equal(await page.getByRole('button',{name:'Cancel action',exact:true}).count(),0);
+  await page.setViewportSize({width:390,height:844});
+  await page.getByRole('button',{name:'Generate nickname',exact:true}).click();
+  assert.match(await page.getByLabel('Nickname',{exact:true}).inputValue(),/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+  assert.deepEqual(await snapshot(page),pending,'generation sends no engine request');
+  await page.screenshot({path:root+'/test-results/potion-nickname-mobile.png'});
+  await page.getByLabel('Nickname',{exact:true}).fill('My strange drink');
+  await page.getByRole('button',{name:'Use nickname',exact:true}).click(); await ready(page);
+  assert.equal((await snapshot(page)).decision,null);
+  assert.equal(await page.locator('#decision').isVisible(),false);
+  assert.deepEqual(errors,[]);
 });

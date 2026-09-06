@@ -76,3 +76,8 @@ headers, binaries, playgrounds, saves and optional submodule checkouts are absen
   also clears apparent species, preventing stale labels after hallucination or
   disappearance. Shared C projection now uses these perceived display facts
   consistently; monster behavior, hidden knowledge and action costs are unchanged.
+
+- Mark the optional type-naming prompt reached after an inconclusive potion drink
+  with explicit headless text context. The shared driver exposes this as an
+  optional text-decision purpose; potion effects, identification, consumption and
+  cancellation remain the original engine operations.

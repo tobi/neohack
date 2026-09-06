@@ -543,3 +543,11 @@ score, achievements, conduct and remembered places without inventing progress.
 
 See [COMMAND_COVERAGE.md](COMMAND_COVERAGE.md) for tested scenarios, intentional
 omissions and the distinction between endgame fixtures and a completed run.
+
+Text decisions may include `purpose: "consumedPotionNickname"`. This explicit
+engine context means drinking has occurred without conclusively identifying the
+potion type, and the engine is offering an optional user label for that type.
+Display the received `heard` events as the witnessed effects; do not infer the
+potion's true identity. Answer with the normal text decision contract or cancel
+naming. Cancellation does not undo consumption or its consequences. Other text
+prompts do not acquire this meaning from the initiating action or prompt wording.

@@ -87,7 +87,7 @@ export const responseSchema: Schema = {
       decision("target", { allowedTargets: array(enumeration("self", "direction")), allowedDirections: array(enumeration(...compass.enum, "up", "down")) }, ["allowedDirections"]),
       decision("confirmation", { context: object({ action: string, direction: enumeration("north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest", "up", "down"), itemId: string }, ["action"]) }, ["context"]),
       decision("choice", { options: array(object({ id: integer, label: string, transfer: enumeration("take", "put") }, ["id", "label"])), selection, containerPhase: enumeration("inspect", "transfer") }, ["selection", "containerPhase"]),
-      decision("text"),
+      decision("text", { purpose: enumeration("consumedPotionNickname") }, ["purpose"]),
       decision("position", { cursor: closed({ x: integer, y: integer }), mode: enumeration("browse", "select") }),
     ] }),
     events: array({ oneOf: [

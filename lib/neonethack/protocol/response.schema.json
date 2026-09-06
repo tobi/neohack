@@ -12781,6 +12781,12 @@
                 },
                 "kind": {
                   "const": "text"
+                },
+                "purpose": {
+                  "type": "string",
+                  "enum": [
+                    "consumedPotionNickname"
+                  ]
                 }
               },
               "required": [

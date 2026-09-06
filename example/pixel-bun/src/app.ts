@@ -317,6 +317,7 @@ class PixelNethack extends HTMLElement {
       </main>
       <dialog id="dungeon-loading" aria-labelledby="loading-title" aria-describedby="loading-detail"><div class="descent-scene" aria-hidden="true"><div class="descent-arch arch-far"></div><div class="descent-arch arch-mid"></div><div class="descent-arch arch-near"></div><div class="descent-path"></div><i class="descent-torch torch-left"></i><i class="descent-torch torch-right"></i><img id="loading-traveler" src="/art/${heroArt("ranger")}.png" alt=""></div><h2 id="loading-title">Entering the dungeon</h2><p id="loading-detail" role="status"></p><div class="descent-dots" aria-hidden="true"><i></i><i></i><i></i></div></dialog>
       <dialog id="menu" aria-labelledby="menu-title"><div class="dialog-top"><span class="eyebrow">NEONETHACK</span><button aria-label="Close dialog" class="close-dialog">×</button></div><div id="menu-content"></div></dialog>
+      <dialog id="journal-scroll" aria-labelledby="scroll-title"><div class="dialog-top"><span class="eyebrow">FROM YOUR JOURNAL</span><button id="close-scroll" aria-label="Close scroll">×</button></div><h2 id="scroll-title">A page from your adventure</h2><p id="scroll-turn" class="eyebrow"></p><div id="scroll-text" role="region" aria-label="Journal passage" tabindex="0"></div><button id="finish-scroll" class="primary">Return to the adventure</button></dialog>
       <dialog id="decision" aria-labelledby="decision-title"><div class="eyebrow">ONE MOMENT, ADVENTURER</div><h2 id="decision-title"></h2><p id="decision-about"></p><p id="decision-error" class="notice error" role="alert" hidden></p><div id="decision-body"></div></dialog>`;
     this.map = new DungeonMap(this.querySelector("#dungeon")!, (text, x, y) => {
       this.text("#inspect-text", text);
@@ -924,6 +925,9 @@ class PixelNethack extends HTMLElement {
         }
         if (!this.game.pendingRequest) this.current.pending = undefined;
       });
+    const scroll = this.querySelector<HTMLDialogElement>("#journal-scroll")!;
+    this.$("#close-scroll").onclick = this.$("#finish-scroll").onclick = () => scroll.close();
+    scroll.addEventListener("close", () => this.controls());
     this.$(".close-dialog").onclick = () => this.closeMenu();
     this.querySelector<HTMLDialogElement>("#menu")!.addEventListener(
       "close",
@@ -1017,6 +1021,8 @@ class PixelNethack extends HTMLElement {
       this.busy = false;
       if (!this.game?.decision) this.map.context = null;
       this.render();
+      if (completed && entry && !entry.resume && this.game && !this.game.decision && this.journal.length)
+        this.openJournalScroll(this.journal[0]!);
       if (completed && before && game === this.game && !this.uncertain())
         this.map.showMessages(before, this.game!.state);
       if (completed && before && game === this.game && this.playable()) {
@@ -1168,14 +1174,18 @@ class PixelNethack extends HTMLElement {
         o.heard,
       ]);
       if (frameKey !== this.lastFrame) {
-        for (const text of this.lastFrame ? actionMessages(state) : o.heard)
-          if (text.trim()) {
-            const previous = this.journal.at(-1);
-            if (previous?.text === text) {
-              previous.count++;
-              previous.lastTurn = o.turn;
-            } else this.journal.push({ turn: o.turn, lastTurn: o.turn, text, count: 1 });
-          }
+        // Use the complete receipt, including blank text-window lines. The
+        // observation's heard list is only a rolling ten-line preview.
+        const heard = state.events.flatMap(event => event.type === "heard" ? [event.text] : []);
+        const messages = heard.length ? heard : this.lastFrame ? actionMessages(state) : o.heard;
+        const text = messages.join("\n");
+        if (text.trim()) {
+          const previous = this.journal.at(-1);
+          if (previous?.text === text) {
+            previous.count++;
+            previous.lastTurn = o.turn;
+          } else this.journal.push({ turn: o.turn, lastTurn: o.turn, text, count: 1 });
+        }
         this.lastFrame = frameKey;
       }
       this.text(
@@ -1184,7 +1194,13 @@ class PixelNethack extends HTMLElement {
           o.heard.at(-1) ??
           "Take a moment. Your next step is yours to choose.",
       );
-      this.$("#recent-messages").innerHTML = this.journal.slice(-3).map(entry => `<p>${this.journalText(entry)}</p>`).join("");
+      const recent = this.$("#recent-messages");
+      recent.replaceChildren();
+      for (const entry of this.journal.slice(-3)) {
+        const p = document.createElement("p");
+        this.appendJournalContent(p, entry);
+        recent.append(p);
+      }
       const status = state.outcome.status;
       this.text(
         "#inspect-text",
@@ -1392,7 +1408,8 @@ class PixelNethack extends HTMLElement {
       for (const entry of [...this.journal].reverse()) {
         const p = document.createElement("p");
         p.className = "journal-entry";
-        p.innerHTML = `<small>TURN ${entry.turn}${entry.lastTurn !== entry.turn ? `–${entry.lastTurn}` : ""}</small>${this.journalText(entry)}`;
+        p.innerHTML = `<small>TURN ${entry.turn}${entry.lastTurn !== entry.turn ? `–${entry.lastTurn}` : ""}</small>`;
+        this.appendJournalContent(p, entry);
         body.append(p);
       }
       if (!this.journal.length)
@@ -1403,6 +1420,25 @@ class PixelNethack extends HTMLElement {
         "Notes shown since opening this adventure. The saved game retains its own history.";
       body.append(note);
     }
+  }
+  private appendJournalContent(host: HTMLElement, entry: {turn: number; text: string; count: number}) {
+    if (!entry.text.includes("\n")) {
+      host.insertAdjacentHTML("beforeend", this.journalText(entry));
+      return;
+    }
+    const button = this.button("", () => this.openJournalScroll(entry), "journal-scroll-link");
+    button.innerHTML = '<span aria-hidden="true" class="scroll-mark">▤</span><span><strong>Read journal scroll</strong><span class="scroll-excerpt"></span></span>';
+    button.querySelector(".scroll-excerpt")!.textContent = entry.text.trim().split("\n")[0]!;
+    button.setAttribute("aria-label", "Read journal scroll · turn " + entry.turn);
+    host.append(button);
+  }
+  private openJournalScroll(entry: {turn: number; text: string}) {
+    this.stopMovement();
+    this.text("#scroll-turn", "TURN " + entry.turn);
+    this.text("#scroll-text", entry.text);
+    const dialog = this.querySelector<HTMLDialogElement>("#journal-scroll")!;
+    if (!dialog.open) dialog.showModal();
+    this.controls();
   }
   private journalText(entry: { text: string; count: number }) {
     return escape(entry.text) + (entry.count > 1
@@ -2001,9 +2037,10 @@ class PixelNethack extends HTMLElement {
     if (this.decisionIdentity === d.id && dialog.open) return;
     this.closeMenu();
     this.decisionIdentity = d.id;
+    const potionNickname = d.kind === "text" && d.purpose === "consumedPotionNickname";
     this.text(
       "#decision-title",
-      (
+      potionNickname ? "Give this potion a nickname" : (
         {
           item: "What would you like to use?",
           target: "Which direction?",
@@ -2015,7 +2052,7 @@ class PixelNethack extends HTMLElement {
     );
     this.text(
       "#decision-about",
-      d.about ?? "The dungeon is waiting for your answer.",
+      potionNickname ? "You aren’t sure what the potion did. Give it a nickname, or generate one." : d.about ?? "The dungeon is waiting for your answer.",
     );
     const body = this.$("#decision-body");
     body.replaceChildren();
@@ -2185,14 +2222,39 @@ class PixelNethack extends HTMLElement {
       const form = document.createElement("form"),
         label = document.createElement("label"),
         input = document.createElement("input");
-      label.textContent = "Your answer";
+      if (potionNickname) {
+        const narration = document.createElement("section"); narration.className = "potion-narration";
+        const heading = document.createElement("p"); heading.textContent = "You drank the potion.";
+        const effects = document.createElement("blockquote");
+        const heard = this.game!.state.events.flatMap(event => event.type === "heard" ? [event.text] : []);
+        effects.textContent = (heard.length ? heard : this.game!.observation.heard).join("\n");
+        input.value = effects.textContent.replace(/\s+/g, " ").trim().slice(0, 256);
+        narration.append(heading, effects); body.append(narration);
+        const appearance = document.createElement("p"); appearance.className = "subtle";
+        appearance.textContent = d.about ?? ""; body.append(appearance);
+      }
+      label.textContent = potionNickname ? "Nickname" : "Your answer";
       input.name = "answer";
       input.maxLength = 256;
       label.append(input);
       form.append(label);
       body.append(form);
       const submit = document.createElement("button");
-      submit.textContent = "Send answer";
+      submit.textContent = potionNickname ? "Use nickname" : "Send answer";
+      if (potionNickname) {
+        input.required = true;
+        const generate = this.button("Generate nickname", () => {
+          const words = crypto.getRandomValues(new Uint32Array(2));
+          const first = ["Velvet", "Moonlit", "Wandering", "Quiet", "Copper", "Twilight", "Little", "Distant"];
+          const last = ["Mystery", "Whisper", "Riddle", "Echo", "Secret", "Fable", "Wonder", "Tale"];
+          input.value = first[words[0]! % first.length] + " " + last[words[1]! % last.length];
+          input.focus();
+        }, "secondary");
+        form.append(generate);
+        const help = document.createElement("p"); help.className = "subtle";
+        help.textContent = "This is your label for this potion type, not an identification. A generated nickname is just a suggestion; edit it before choosing Use nickname.";
+        form.append(help);
+      }
       submit.className = "primary";
       submit.dataset.choice = "";
       form.append(submit);
@@ -2210,7 +2272,7 @@ class PixelNethack extends HTMLElement {
     }
     if (d.cancellable)
       add(
-        "Cancel action",
+        potionNickname ? "Skip nickname" : "Cancel action",
         () => this.game!.cancel(d.id),
         "text-button cancel-choice",
       );

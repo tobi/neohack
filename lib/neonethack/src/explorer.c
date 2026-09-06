@@ -3361,25 +3361,8 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
         mj_endobj(b);
         return 1;
     }
-    if (!strcmp(g->pending.kind, "getlin")) {
-        mj_key(b, "decision");
-        mj_obj(b);
-        mj_key(b, "id");
-        mj_strv(b, offer_id(g, "text"));
-        mj_key(b, "kind");
-        mj_strv(b, "text");
-        snprintf(kind_out, kind_cap, "text");
-        mj_key(b, "action");
-        mj_strv(b, g->operation.action[0] ? g->operation.action : "act");
-        if (g->pending.prompt && g->pending.prompt[0]) {
-            mj_key(b, "about");
-            mj_strv(b, g->pending.prompt);
-        }
-        mj_key(b, "cancellable");
-        mj_boolv(b, 1);
-        mj_endobj(b);
-        return 1;
-    }
+    if (!strcmp(g->pending.kind, "getlin"))
+        return emit_text_decision(g, b, kind_out, kind_cap);
     if (!strcmp(g->pending.kind, "extcmd")) {
         mj_key(b, "decision");
         mj_obj(b);
@@ -5208,6 +5191,9 @@ emit_text_decision(game_t *g, mj_Buf *b, char *kind_out, size_t kind_cap)
     if (g->pending.prompt && g->pending.prompt[0]) {
         mj_key(b, "about");
         mj_strv(b, g->pending.prompt);
+    }
+    if (!strcmp(g->pending.context, "consumedPotionNickname")) {
+        mj_key(b, "purpose"); mj_strv(b, "consumedPotionNickname");
     }
     mj_key(b, "cancellable");
     mj_boolv(b, 1);

@@ -95,7 +95,7 @@ export type Decision = DecisionBase & (
   | { kind: "confirmation"; context?: { action: string; direction?: Direction; itemId?: string } }
   | { kind: "choice"; options: { id: number; label: string; transfer?: "take" | "put" }[]; selection?: { min: number; max: number }; containerPhase?: "inspect" | "transfer" }
   | { kind: "position"; cursor: { x: number; y: number }; mode: "browse" | "select" }
-  | { kind: "text" }
+  | { kind: "text"; purpose?: "consumedPotionNickname" }
 );
 export interface Outcome {
   action: string;

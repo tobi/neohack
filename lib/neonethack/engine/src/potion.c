@@ -633,8 +633,15 @@ dopotion(struct obj *otmp)
         if (!gp.potion_unkn) {
             makeknown(otmp->otyp);
             more_experienced(0, 10);
-        } else
+        } else {
+#ifdef HEADLESS_GRAPHICS
+            headless_text_context("consumedPotionNickname");
+#endif
             trycall(otmp);
+#ifdef HEADLESS_GRAPHICS
+            headless_text_context((const char *) 0);
+#endif
+        }
     }
     useup(otmp);
     return ECMD_TIME;

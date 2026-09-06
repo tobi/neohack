@@ -991,3 +991,30 @@ Actors remain readable above terrain through the existing cutaway policy; these
 flat character sheets do not acquire invented 3D body geometry. Selection and
 status cues remain a distinct interface overlay. Independent ray/box checks cover
 both door orientations, all three door states and four neighboring wall heights.
+
+## Journal scrolls
+
+Keep complete heard-event batches from public receipts, including blank lines;
+the rolling observation preview can omit the beginning of a passage. Multiline
+batches appear as clearly labeled, clickable scrolls in recent notes and the full
+journal. A modal reading surface preserves the exact text and paragraph breaks
+above the game, with keyboard dismissal and an explicit return button. Opening
+and closing it are free presentation actions, and held movement stops. Show the
+first passage automatically after successful human character creation, never on
+resume or repeated rendering. Notes remain scoped to the current visit, as the
+journal explains. Grouping is presentation only: do not infer quest rules or
+hidden narrative categories from wording.
+
+## Naming a consumed potion
+
+A text decision explicitly marked `consumedPotionNickname` lifts the witnessed
+narration into the dialog: “You drank the potion”, the engine's effect text,
+and “You aren’t sure what the potion did. Give it a nickname, or generate one.”
+Retain the original appearance prompt and the journal copy. Explain that this
+labels the potion type rather than identifies it. Prefill the editable nickname
+with the witnessed effect text, folding whitespace for the single-line field.
+Generate nickname fills an
+editable suggestion only; Use nickname submits the standing decision, and Skip
+nickname declines naming without implying that drinking can be undone. Cosmetic
+name generation uses browser randomness, never the engine's random stream.
+Other text decisions retain their ordinary wording.

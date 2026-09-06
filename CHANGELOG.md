@@ -4,6 +4,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Full story passages can be reopened as journal scrolls; your opening story appears
+  automatically after character creation.
+
 - Cleaner backpack entries with a compact row of action icons.
 - Corrected door, wall and cave-rock overlaps, plus more natural layering of
   characters and ground objects.

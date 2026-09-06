@@ -1416,9 +1416,9 @@ dialog p {
 #recent-messages p:first-child { opacity: .4; }
 #recent-messages p:last-child { opacity: .85; }
 .journal-preview-tools { order: -1; display: flex; justify-content: flex-end; height: 36px; }
-#journal-preview button { pointer-events: auto; width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 10px; border: 0; background: transparent; box-shadow: none; }
-#journal-preview button span { display: grid; place-items: center; width: 24px; height: 24px; background: #172123; border: 1px solid #66735f; font-size: 16px; line-height: 1; }
-#journal-preview button:hover span { border-color: #d1d4b2; }
+#journal-preview .journal-preview-tools button { pointer-events: auto; width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 10px; border: 0; background: transparent; box-shadow: none; }
+#journal-preview .journal-preview-tools button span { display: grid; place-items: center; width: 24px; height: 24px; background: #172123; border: 1px solid #66735f; font-size: 16px; line-height: 1; }
+#journal-preview .journal-preview-tools button:hover span { border-color: #d1d4b2; }
 pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([hidden])) #journal-preview { display: none; }
 #direction-target { position: absolute; z-index: 18; transform: translate(-50%, -84px); width: 168px; }
 .target-arrows { display: grid; grid-template: repeat(3, 48px) / repeat(3, 48px); gap: 12px; }
@@ -1648,3 +1648,21 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
 /* Site account rail stays above the game without covering its HUD. */
 .game-page pixel-nethack{height:calc(100dvh - 60px)}
 @media(max-width:1099px){.game-page .welcome-paths{top:calc(100dvh - 60px)}}
+
+/* Engine passages remain readable above the dungeon, without taking a turn. */
+.journal-scroll-link { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 10px 12px; text-align: left; color: #eee4ba; border: 1px solid #7d8962; background: #303a2c; }
+.journal-scroll-link > span:last-child { min-width: 0; }
+.journal-scroll-link strong { display: block; font-size: 14px; }
+.scroll-mark { font-size: 28px; color: #c9b980; }
+.scroll-excerpt { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: #bdcba9; }
+#journal-scroll { width: min(620px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); box-sizing: border-box; color: #eee4ba; border: 2px solid #9b946b; background: #283229; }
+#journal-scroll::backdrop { background: #080e12bb; }
+#scroll-text { white-space: pre-wrap; overflow-wrap: anywhere; font: 18px/1.7 Georgia, serif; margin: 24px 0; }
+#finish-scroll { min-height: 44px; }
+#journal-scroll[open] { display: flex; flex-direction: column; overflow: hidden; }
+#journal-scroll > :not(#scroll-text) { flex-shrink: 0; }
+#scroll-text { min-height: 0; overflow-y: auto; padding-right: 8px; }
+
+#journal-preview .journal-scroll-link { pointer-events: auto; }
+.potion-narration { padding: 12px 16px; border-left: 2px solid #9b946b; background: #ffffff05; }
+.potion-narration blockquote { white-space: pre-wrap; margin: 0; font: 17px/1.6 Georgia, serif; }

@@ -1498,6 +1498,9 @@ headless_yn_function(const char *query, const char *resp, char def)
     return ans;
 }
 
+static const char *hl_text_context;
+void headless_text_context(const char *context) { hl_text_context = context; }
+
 static void
 headless_getlin(const char *query, char *bufp)
 {
@@ -1507,6 +1510,9 @@ headless_getlin(const char *query, char *bufp)
     jb_begin_obj(&jb);
     jb_key(&jb, "prompt");
     jb_str(&jb, query ? query : "");
+    if (hl_text_context) {
+        jb_key(&jb, "context"); jb_str(&jb, hl_text_context);
+    }
     jb_end_obj(&jb);
     r = hl_input("getlin", hl_frag(&jb));
     jb_free(&jb);
