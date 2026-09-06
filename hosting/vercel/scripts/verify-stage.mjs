@@ -4,6 +4,9 @@ const root = resolve(import.meta.dirname, "../public");
 for (const file of [
   "index.html",
   "dashboard.html",
+  "400.html",
+  "404.html",
+  "500.html",
   "dashboard.js",
   "component/index.html",
   "login/index.html",

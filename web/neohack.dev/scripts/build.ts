@@ -1,3 +1,4 @@
+import "./build-errors.mjs";
 import ts from "typescript";
 import { resolve } from "node:path";
 import { access } from "node:fs/promises";

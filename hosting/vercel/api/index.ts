@@ -1,8 +1,9 @@
+import { readFile } from "node:fs/promises";
 import { Accounts } from "../src/accounts.ts";
 import { vaults } from "../src/vaults.ts";
 import { board } from "../src/board.ts";
 import { configured, Conflict } from "../src/storage.ts";
-export async function handler(request: Request) {
+async function dispatch(request: Request) {
   const url = new URL(request.url);
   const path = url.searchParams.get("__path");
   if (path) {
@@ -40,6 +41,19 @@ export async function handler(request: Request) {
     ).catch(() => {});
     return json({ error: "Storage unavailable" }, 503);
   }
+}
+// Document navigations get a readable fallback; programmatic clients retain
+// their structured error and the original HTTP status.
+export async function handler(request: Request) {
+  const response = await dispatch(request);
+  if (!request.headers.get('accept')?.includes('text/html')) return response;
+  const file = response.status >= 500 ? new URL('../public/500.html', import.meta.url)
+    : response.status === 400 ? new URL('../public/400.html', import.meta.url)
+    : response.status === 404 ? new URL('../public/404.html', import.meta.url) : null;
+  if (!file) return response;
+  try {
+    return new Response(await readFile(file, 'utf8'), {status:response.status,headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});
+  } catch { return response; }
 }
 export {
   handler as GET,

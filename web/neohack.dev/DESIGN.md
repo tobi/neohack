@@ -1039,3 +1039,13 @@ script author and engine turn, and signed-in users can read the private script
 journal beside saved source/replay. These annotations never appear as engine facts.
 Automatic pickup has an explicit Review before collecting toggle: the engine asks
 for a selection before transfer, preserving its suggestions without auto-selecting.
+
+## Error pages
+
+400, 404 and 500 pages use stone numerals, amber torches, the existing LimeZu
+Valkyrie and original dog. The editable generator is `scripts/build-errors.mjs`
+and styling is `art/errors/style.css`. Outputs are self-contained static HTML:
+inline pixel SVG, embedded existing sprites, no JavaScript, external fonts or
+runtime requests. Recovery is a normal link to the entrance; server failures
+remind players to keep their bookmark and browser data without promising that
+unsynced progress reached the server. Keep ordinary API errors structured JSON.

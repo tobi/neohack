@@ -60,3 +60,13 @@ an isolated CAS fixture; tests run the actual API and staged browser client,
 including real browser passkeys, fresh-browser resume and competing writers.
 Hosted Blob and domain bindings still require the production smoke check. Old
 development data on retired hosting is not migrated.
+
+## Error pages
+
+Static `400.html`, `404.html` and `500.html` pages carry their own artwork and
+styles. They need no runtime or asset downloads. Missing static URLs use the 404
+page. Handled API failures use these pages for HTML document requests while
+keeping their actual status; ordinary fetch clients continue receiving JSON.
+Vercel automatically uses static error pages for platform crashes/timeouts only
+on Enterprise plans. On Hobby, a failure before our handler starts still uses
+Vercel’s platform page. No paid-plan change is made by this repository.

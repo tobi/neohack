@@ -62,7 +62,7 @@ export async function startServer(port = Number(process.env.PORT ?? 3333)) {
           },
         });
       } catch {
-        return new Response("Not found", { status: 404, headers });
+        return new Response(Bun.file(resolve(publicRoot,"404.html")), { status: 404, headers: {...headers,"Content-Type":"text/html; charset=utf-8"} });
       }
     },
   });
