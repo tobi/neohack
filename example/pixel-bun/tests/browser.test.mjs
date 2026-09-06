@@ -675,7 +675,8 @@ test("perception-only corridor and sprite study: directions, loot and static red
       "study:42",
     );
     const inputOrderStable = canvas.toDataURL() === ordered;
-    // Mobile actors remain above the ground-object pass.
+    // A nearer boulder covers an actor behind it; use the rock-only pixel as reference.
+    const expectedRock = rockPixel(6, -3);
     map.update({ ...observation, you: { x: 6, y: 1 } }, "valkyrie", "study:42");
     const crownOverActor = rockPixel(6, -3);
     const sourceCanvas = document.createElement("canvas");
@@ -683,6 +684,9 @@ test("perception-only corridor and sprite study: directions, loot and static red
     const sourceContext = sourceCanvas.getContext("2d");
     sourceContext.drawImage(source, 0, 0);
     const expectedActor = [...sourceContext.getImageData(3 * 96 + 6, 29, 1, 1).data];
+    map.update({ ...observation, you: { x: 6, y: 2 } }, "valkyrie", "study:42");
+    const underfootActor = rockPixel(8, 8);
+    const expectedUnderfootActor = [...sourceContext.getImageData(3 * 96 + 8, 24, 1, 1).data];
     map.update(observation, "valkyrie", "study:42");
     map.destroy();
     return {
@@ -692,6 +696,9 @@ test("perception-only corridor and sprite study: directions, loot and static red
       crownOverWall,
       crownOverActor,
       expectedActor,
+      expectedRock,
+      underfootActor,
+      expectedUnderfootActor,
       outsideTile,
       inputOrderStable,
       motion: canvas.dataset.motion,
@@ -715,9 +722,11 @@ test("perception-only corridor and sprite study: directions, loot and static red
   assert.equal(report.expectedActor[3], 255, "overlap test samples an opaque boot pixel");
   assert.deepEqual(
     report.crownOverActor,
-    report.expectedActor,
-    "mobile actor pixels remain above the ground-object pass",
+    report.expectedRock,
+    "nearer boulder pixels cover the actor behind it",
   );
+  assert.equal(report.expectedUnderfootActor[3], 255);
+  assert.deepEqual(report.underfootActor, report.expectedUnderfootActor, "the player remains above objects directly underfoot");
   assert.deepEqual(
     report.outsideTile,
     [41, 50, 50, 255],
@@ -2891,6 +2900,15 @@ test('backpack actions use current engine item IDs and show wielded equipment', 
   }
   assert.equal((await snapshot(page)).revision, before.revision);
   await page.setViewportSize({width: 390, height: 844});
+  for (const button of await page.locator('.inventory-actions button').all()) {
+    assert.equal(await button.locator('svg[aria-hidden="true"]').count(), 1);
+    assert.equal(await button.textContent(), '');
+    assert.ok(await button.getAttribute('aria-label'));
+    assert.ok(await button.getAttribute('title'));
+    const box = await button.boundingBox();
+    assert.ok(box.width >= 44 && box.height >= 44, 'icon retains a touch-sized target');
+  }
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({path: root + '/test-results/backpack-actions-mobile.png'});
   await page.getByRole('button', {name: 'Drop ' + food.label, exact: true}).click();
   await ready(page);

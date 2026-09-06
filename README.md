@@ -31,6 +31,8 @@ or build your own interface, learning environment, or model evaluation on the sa
 JSON protocol. NetHack’s C engine handles the world; your application chooses how
 to experience it.
 
+See the [changelog](CHANGELOG.md) for recent improvements to the playing experience.
+
 ## Build
 
 ```sh

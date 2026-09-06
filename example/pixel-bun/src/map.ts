@@ -3,7 +3,6 @@ import { layoutForSeed, type LayoutType } from "./layout-art";
 import type { Cell, Observation, Snapshot, Compass } from "neonethack/types";
 import {
   renderTerrain,
-  renderDoor,
   STRUCTURE_RISE,
   STRUCTURE_OVERHANG,
 } from "./dungeon-art";
@@ -847,7 +846,6 @@ export class DungeonMap {
       originY: this.origin.y - 1,
       columns: cols + 2,
       rows: rows + 2,
-      omitDoors: true,
       readableCells: [
         ...(you ? [{ x: you.x, y: you.y, rise: 16 }] : []),
         ...this.observation.world.filter(cell => cell.visible !== false &&
@@ -859,7 +857,6 @@ export class DungeonMap {
       ambienceTimeMs: this.reducedMotion.matches || document.hidden ? undefined : now,
     });
     c.restore();
-    const fixtures: { x: number; y: number; draw: () => void }[] = [];
     const foreground: { x: number; y: number; draw: () => void }[] = [];
     for (const cell of this.observation.world) {
       const x = (cell.x - this.origin.x) * 16,
@@ -872,13 +869,6 @@ export class DungeonMap {
         y >= canvas.height + 32
       )
         continue;
-      if (["closedDoor", "openDoor", "doorway"].includes(cell.terrain.type))
-        fixtures.push({
-          x,
-          y,
-          draw: () =>
-            renderDoor(c, cell, this.observation!.world, this.seed, x, y, this.layoutType),
-        });
       // The player glyph covers floor glyphs. Current underfoot perception is
       // still public and lets loot survive beneath that actor, without caching.
       const contents =
@@ -895,7 +885,7 @@ export class DungeonMap {
               })),
             }
           : cell;
-      fixtures.push({
+      foreground.push({
         x,
         y,
         draw: () => drawContents(c, contents, x, y, this.symbols, "loot"),
@@ -906,7 +896,7 @@ export class DungeonMap {
           actorY = Math.round((actor.y - this.origin.y) * 16) - actor.hop;
         foreground.push({
           x: actorX,
-          y: actorY,
+          y: Math.round((actor.y - this.origin.y) * 16),
           draw: () =>
             drawContents(c, cell, actorX, actorY, this.symbols, "actor"),
         });
@@ -952,10 +942,8 @@ export class DungeonMap {
         },
       });
     }
-    // Every entity sits above the terrain pass. Foot-Y order lets a boulder
-    // cover walls/actors behind it while an actor in front covers the boulder.
-    fixtures.sort((a, b) => a.y - b.y || a.x - b.x);
-    for (const layer of fixtures) layer.draw();
+    // Objects and actors share foot-Y order above the readable cutaway terrain.
+    // A nearer boulder covers a figure behind it; underfoot objects stay below it.
     foreground.sort((a, b) => a.y - b.y || a.x - b.x);
     for (const layer of foreground) layer.draw();
     const cursor = this.positionCursor ?? this.context;

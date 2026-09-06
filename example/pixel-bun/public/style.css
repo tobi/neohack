@@ -1605,10 +1605,17 @@ pixel-nethack:not(.in-game) .intro-controls {
 .weapon-line { font-size: 12px; line-height: 1.4; margin: 8px 0 0; overflow-wrap: anywhere; }
 .weapon-line small { color: #a7b398; font-size: 9px; }
 button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px #9e703c, 0 0 12px #dfa45460; }
-.inventory-entry { border-bottom: 1px solid #4c5d4c; padding-bottom: 8px; }
-.inventory-entry .item-row { border-bottom: 0; }
-.inventory-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px; }
-.inventory-actions button { min-height: 44px; padding: 6px 12px; font-size: 13px; }
+.pickup-shortcut { width: 100%; min-height: 44px; padding: 8px 0; margin: 0 0 8px; text-align: left; color: #bdcba9; background: none; border: 0; border-bottom: 1px solid #4c5d4c; font-size: 13px; }
+.inventory-entry { border-bottom: 1px solid #39483d; padding: 6px 0; }
+.inventory-entry .item-row { border: 0; background: none; margin: 0; padding: 6px 0 2px; min-height: 48px; }
+.inventory-entry .item-row:hover { background: #ffffff05; }
+.inventory-entry .item-icon { background: none; border: 0; }
+.inventory-entry .item-copy { line-height: 1.35; gap: 3px; }
+.inventory-actions { display: flex; flex-wrap: nowrap; gap: 2px; padding: 0 0 0 39px; overflow-x: auto; }
+.inventory-actions button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; width: 44px; height: 44px; min-height: 44px; padding: 10px; border: 0; background: none; color: #bdcba9; }
+.inventory-actions button:hover { background: #364434; color: #eee4ba; }
+.inventory-actions button:focus-visible { outline: 1px solid #c5d49e; outline-offset: -3px; }
+.inventory-actions svg { width: 22px; height: 22px; }
 #contextual-stairs { flex-wrap: wrap; justify-content: center; width: max-content; max-width: min(640px, calc(100vw - 24px)); max-height: 22vh; overflow-y: auto; }
 #contextual-stairs button { min-width: 0; }
 @media (max-width: 600px) {

@@ -965,3 +965,29 @@ listener coordinates actions. The editable strategy biases toward unknown areas,
 flees disclosed enemies, eats eligible food, attempts newly observed equipment,
 and seeks downward stairs. Eligibility and movement facts originate in C; policy
 remains in the example. Never present a sighting event as a hidden spawn/death.
+
+## Backpack action strip and shared structure depth
+
+Backpack entries use a quiet divider and a single row of unboxed action icons,
+not a second stack of text buttons. Preserve the perceived item label and status.
+Every icon retains its full action/item accessible name, a short hover title and
+44px touch target; item details retain text action buttons. The Automatic pickup
+shortcut is a compact line above the list. Actions still come from the current
+engine item offer, with the existing revision guard and explicit decisions.
+
+`terrain-3d-10` retains per-pixel height from the original structure rasterizer
+and composites walls, cave rock and doors into one shared depth layer. With
+`screenX = x - .375*z` and `screenY = y - .75*z`, greater Z at a shared screen
+pixel is nearer the viewer. Ground-anchor order breaks coplanar ties consistently.
+A separate doors-on-top pass is no longer used in the live map. Standalone door
+previews are still useful for sprite/anchor inspection, not for scene composition.
+The viewport buffers and baked color/depth data are reused; native pixel alignment,
+revealed-cell boundaries, cutaways and reduced-motion behavior remain in effect.
+
+LimeZu actors and perceived objects use their ground/foot positions within one
+foreground layer: a nearer boulder can cover a figure behind it, and a nearer
+figure covers the boulder. Animation hops change drawing position, not depth.
+Actors remain readable above terrain through the existing cutaway policy; these
+flat character sheets do not acquire invented 3D body geometry. Selection and
+status cues remain a distinct interface overlay. Independent ray/box checks cover
+both door orientations, all three door states and four neighboring wall heights.

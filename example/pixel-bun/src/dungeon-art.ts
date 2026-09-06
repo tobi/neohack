@@ -3,13 +3,14 @@ import { ambienceHash, decorationAt, drawDecoration } from "./ambience";
 /** Original, deterministic dungeon surfaces. This module knows no game rules. */
 import {
   drawWallSprite,
+  structureLayer,
   drawRockSprite,
   drawDoorSprite,
   STRUCTURE_RISE,
   STRUCTURE_OVERHANG,
 } from "./structure-sprites";
 export { STRUCTURE_RISE, STRUCTURE_OVERHANG } from "./structure-sprites";
-export const RENDERER_VERSION = "terrain-3d-9";
+export const RENDERER_VERSION = "terrain-3d-10";
 export interface TerrainCell {
   x: number;
   y: number;
@@ -23,7 +24,7 @@ export interface TerrainOptions {
   originY: number;
   columns: number;
   rows: number;
-  /** The live client draws doors in its foreground sprite pass. */
+  /** Omit doors for isolated ground/structure studies. */
   omitDoors?: boolean;
   /** Omit raised masonry when inspecting the ground-only layer. */
   omitWalls?: boolean;
@@ -348,6 +349,7 @@ export function renderTerrain(
   if (!options.omitDecals) renderDecals(c, cells, options);
   // Bake connected 3D masonry after ground. Include offscreen anchors whose
   // raised/overhanging silhouette still enters the viewport.
+  const layer = structureLayer(c, Math.ceil(columns * 16), Math.ceil(rows * 16));
   const structures = [...cells].sort((a, b) => a.y - b.y || a.x - b.x);
   for (const cell of structures) {
     const x = (cell.x - originX) * 16,
@@ -393,11 +395,11 @@ export function renderTerrain(
         wx,
         wy,
         prop ? { kind: prop, side: front ? "front" : "side", flame } : undefined,
+        layer,
       );
     }
   }
-  // Match the live fixture pass: door frames remain readable above masonry,
-  // and mobile actors will be drawn in front of both by the client.
+  // Doors and walls share geometric depth, including crossing jambs and caps.
   if (!options.omitDoors)
     for (const cell of structures) {
       const x = (cell.x - originX) * 16,
@@ -418,8 +420,10 @@ export function renderTerrain(
         cell.terrain.orientation === "vertical",
         palettes[material % palettes.length]!,
         hash(seed, cell.x, cell.y, 10),
+        layer,
       );
     }
+  layer.paint(c);
   c.restore();
 }
 

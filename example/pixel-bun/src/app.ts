@@ -1,3 +1,4 @@
+import { actionIcon } from "./action-icons";
 import { accountApi, RunRecorder } from './account-client';
 import { reportError } from "./telemetry";
 // Public package entry points, served together by Bun under /runtime/.
@@ -1312,7 +1313,7 @@ class PixelNethack extends HTMLElement {
     }
     body.replaceChildren();
     if (this.panel === "inventory") {
-      const settings = this.button("Automatic pickup · " + (o.automaticPickup ? pickupSummary(o.automaticPickup) : "Unavailable"), () => this.openPickupSettings(), "secondary");
+      const settings = this.button("Automatic pickup · " + (o.automaticPickup ? pickupSummary(o.automaticPickup) : "Unavailable"), () => this.openPickupSettings(), "pickup-shortcut");
       settings.disabled = !this.playable() || !o.automaticPickup;
       body.append(settings);
       this.text(
@@ -1337,7 +1338,7 @@ class PixelNethack extends HTMLElement {
         row.append(b);
         const actions = document.createElement("div");
         actions.className = "inventory-actions";
-        this.appendItemActions(actions, item);
+        this.appendItemActions(actions, item, true);
         row.append(actions);
         body.append(row);
       }
@@ -1927,7 +1928,7 @@ class PixelNethack extends HTMLElement {
     );
     this.appendItemActions(this.$("#item-actions"), item);
   }
-  private appendItemActions(host: HTMLElement, item: ItemRef) {
+  private appendItemActions(host: HTMLElement, item: ItemRef, compact = false) {
     const game = this.game!, revision = game.state.revision;
     const labels: Record<string, string> = {pickup: "Pick up", eat: "Eat", equip: "Wear", remove: "Remove", apply: "Use", drink: "Drink", read: "Read", zap: "Zap", wield: "Wield", drop: "Drop"};
     for (const action of item.actions ?? []) {
@@ -1938,6 +1939,7 @@ class PixelNethack extends HTMLElement {
       button.disabled = !this.playable();
       button.dataset.operation = "";
       button.dataset.itemAction = action;
+      if (compact) { button.innerHTML = actionIcon(action); button.title = labels[action]!; }
       button.setAttribute("aria-label", labels[action] + " " + item.label);
       host.append(button);
     }

@@ -29,7 +29,58 @@ interface Face {
 }
 const WIDTH = 16 + STRUCTURE_OVERHANG;
 const HEIGHT = 16 + STRUCTURE_RISE;
-const cache = new Map<string, HTMLCanvasElement>();
+interface BakedSprite { canvas: HTMLCanvasElement; rgba: Uint32Array; depth: Float32Array }
+const cache = new Map<string, BakedSprite>();
+
+/** The projection's viewing ray is (.375, .75, 1): at a shared screen pixel,
+ * greater world Z is nearer. Keep the baked Z values across tile boundaries. */
+export class StructureLayer {
+  private canvas = document.createElement("canvas");
+  private pixels!: ImageData;
+  private depth!: Float32Array;
+  private rgba!: Uint32Array;
+  private owners!: Float64Array;
+  reset(width: number, height: number) {
+    if (this.canvas.width !== width || this.canvas.height !== height || !this.pixels) {
+      this.canvas.width = width; this.canvas.height = height;
+      this.pixels = this.canvas.getContext("2d")!.createImageData(width, height);
+      this.depth = new Float32Array(width * height);
+      this.owners = new Float64Array(width * height);
+      this.rgba = new Uint32Array(this.pixels.data.buffer);
+    }
+    this.pixels.data.fill(0); this.depth.fill(-Infinity); this.owners.fill(-Infinity);
+    return this;
+  }
+  draw(sprite: BakedSprite, x: number, y: number) {
+    const left = Math.round(x - STRUCTURE_OVERHANG), top = Math.round(y - STRUCTURE_RISE);
+    const width = this.canvas.width, height = this.canvas.height;
+    // Coplanar seams need a stable world-anchor tie break, never submission order.
+    const owner = top * (width + WIDTH * 2) + left;
+    for (let sy = Math.max(0, -top); sy < Math.min(HEIGHT, height - top); sy++)
+      for (let sx = Math.max(0, -left); sx < Math.min(WIDTH, width - left); sx++) {
+        const source = sy * WIDTH + sx, target = (top + sy) * width + left + sx;
+        const z = sprite.depth[source]!;
+        if (z === -Infinity || z < this.depth[target]! - 1e-5) continue;
+        if (Math.abs(z - this.depth[target]!) <= 1e-5 && owner < this.owners[target]!) continue;
+        this.depth[target] = z; this.owners[target] = owner;
+        this.rgba[target] = sprite.rgba[source]!;
+      }
+  }
+  paint(context: CanvasRenderingContext2D) {
+    this.canvas.getContext("2d")!.putImageData(this.pixels, 0, 0);
+    context.drawImage(this.canvas, 0, 0);
+  }
+}
+const layers = new WeakMap<CanvasRenderingContext2D, StructureLayer>();
+export function structureLayer(context: CanvasRenderingContext2D, width: number, height: number) {
+  let layer = layers.get(context);
+  if (!layer) { layer = new StructureLayer(); layers.set(context, layer); }
+  return layer.reset(width, height);
+}
+function drawSprite(context: CanvasRenderingContext2D, sprite: BakedSprite, x: number, y: number, layer?: StructureLayer) {
+  if (layer) layer.draw(sprite, x, y);
+  else context.drawImage(sprite.canvas, x - STRUCTURE_OVERHANG, y - STRUCTURE_RISE);
+}
 const mod = (n: number, d: number) => ((n % d) + d) % d;
 const hash = (x: number, y: number, z: number) =>
   (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) >>>
@@ -93,7 +144,7 @@ function bake(
   phaseX: number,
   phaseY: number,
   decoration?: WallDecoration,
-): HTMLCanvasElement {
+): BakedSprite {
   const canvas = document.createElement("canvas");
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
@@ -201,9 +252,9 @@ function bake(
         }
     }
   context.putImageData(pixels, 0, 0);
-  return canvas;
+  return { canvas, rgba: new Uint32Array(pixels.data.buffer), depth };
 }
-function sprite(key: string, build: () => HTMLCanvasElement) {
+function sprite(key: string, build: () => BakedSprite) {
   let result = cache.get(key);
   if (!result) {
     result = build();
@@ -224,6 +275,7 @@ export function drawWallSprite(
   wx: number,
   wy: number,
   decoration?: WallDecoration,
+  layer?: StructureLayer,
 ) {
   const mask =
     Number(shape.n) |
@@ -290,7 +342,7 @@ export function drawWallSprite(
       }
     return bake(faces, palette, variant, phaseX, phaseY, decoration);
   });
-  c.drawImage(image, x - STRUCTURE_OVERHANG, y - STRUCTURE_RISE);
+  drawSprite(c, image, x, y, layer);
 }
 export function drawDoorSprite(
   c: CanvasRenderingContext2D,
@@ -300,6 +352,7 @@ export function drawDoorSprite(
   vertical: boolean,
   palette: StonePalette,
   variation: number,
+  layer?: StructureLayer,
 ) {
   const key = `door:${type}:${vertical}:${palette.cap}:${variation % 4}`;
   const image = sprite(key, () => {
@@ -329,7 +382,7 @@ export function drawDoorSprite(
     }
     return bake(faces, palette, variation % 4, 0, 0);
   });
-  c.drawImage(image, x - STRUCTURE_OVERHANG, y - STRUCTURE_RISE);
+  drawSprite(c, image, x, y, layer);
 }
 
 /** Original bedrock tile: irregular perimeter and eight sloping cap facets.
@@ -338,6 +391,7 @@ export function drawDoorSprite(
 export function drawRockSprite(
   c: CanvasRenderingContext2D, x: number, y: number, shape: WallShape,
   height: number, palette: StonePalette, variation: number, wx: number, wy: number,
+  _decoration?: WallDecoration, layer?: StructureLayer,
 ) {
   const key = `rock:${JSON.stringify([shape,height,palette,variation,wx,wy])}`;
   const image = sprite(key, () => {
@@ -357,5 +411,5 @@ export function drawRockSprite(
     }
     return bake(faces,palette,variation%17,wx*16,wy*16);
   });
-  c.drawImage(image,x-STRUCTURE_OVERHANG,y-STRUCTURE_RISE);
+  drawSprite(c, image, x, y, layer);
 }

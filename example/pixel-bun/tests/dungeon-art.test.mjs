@@ -70,7 +70,7 @@ test(
       receipt.outputSha256,
     );
     assert.equal(JSON.parse(first.stdout).outputSha256, receipt.outputSha256);
-    assert.equal(receipt.rendererVersion, "terrain-3d-9");
+    assert.equal(receipt.rendererVersion, "terrain-3d-10");
     assert.equal(receipt.layouts.length, 2);
     assert.deepEqual(receipt.checks, [
       "repeatability",
@@ -90,7 +90,7 @@ test(
   },
 );
 
-test("observed raised doors share live/workshop anchors and bounded sprite footprints", async (t) => {
+test("observed raised doors retain order-independent scene anchors and bounded sprite footprints", async (t) => {
   const { chromium } = await import("playwright-core");
   const { mkdir } = await import("node:fs/promises");
   const { stdout: javascript } = await run(
@@ -165,14 +165,10 @@ test("observed raised doors share live/workshop anchors and bounded sprite footp
           live = canvas(),
           isolated = canvas();
         renderTerrain(full.getContext("2d"), cells, options);
-        renderTerrain(live.getContext("2d"), cells, {
-          ...options,
-          omitDoors: true,
-        });
-        renderDoor(live.getContext("2d"), cell, cells, 42, 16, 16);
+        renderTerrain(live.getContext("2d"), [...cells].reverse(), options);
         assert(
           full.toDataURL() === live.toDataURL(),
-          `${label} ${type}: live/workshop mismatch`,
+          `${label} ${type}: scene depends on observation order`,
         );
         const cropped = canvas();
         cropped.height = 16;
