@@ -1,4 +1,6 @@
 import * as client from '../../../lib/neonethack/typescript/client';
+import * as low from '../../../lib/neonethack/typescript/low';
+import * as high from '../../../lib/neonethack/typescript/high';
 import { Neonethack, Game } from '../../../lib/neonethack/typescript/client';
 // Bundled as a classic worker, launched only inside the opaque sandbox.
 self.onmessage = async (event: MessageEvent) => {
@@ -28,9 +30,11 @@ self.onmessage = async (event: MessageEvent) => {
   const modules = new Map<string,{exports:any}>();
   function requireModule(name:string, from='') : any {
     if(name === 'neonethack') return {...client,default:Neonethack};
+    if(name === 'neonethack/low') return low;
+    if(name === 'neonethack/high') return high;
     if(from && !name.startsWith('./')) throw Error('Only relative project imports and neonethack are supported');
     let path = name.replace(/^\.\//,'');
-    if(!Object.hasOwn(files,path)) path = [path+'.ts',path+'.js'].find(p=>Object.hasOwn(files,p)) ?? '';
+    if(!Object.hasOwn(files,path)) path = [path+'.js'].find(p=>Object.hasOwn(files,p)) ?? '';
     if(!path) throw Error(`Module not found: ${name}`);
     if(modules.has(path)) return modules.get(path)!.exports;
     const module = {exports:{}}; modules.set(path,module);
@@ -38,7 +42,7 @@ self.onmessage = async (event: MessageEvent) => {
     return module.exports;
   }
   try {
-    const main = requireModule('main.ts');
+    const main = requireModule('main.js');
     const bot = client.defineBot(main.default);
     port.postMessage({ready:{name:bot.name,autoloot:bot.autoloot}});
     await started;

@@ -8,8 +8,8 @@ export { tools, instructions } from "./tool-data.js";
 export { compactResponseSchema } from "./protocol-data.js";
 
 export const toolMethods = new Map(
-  tools.map((tool, index) => [
+  tools.map((tool) => [
     tool.name,
-    catalog.methods[index]!.name as Method,
+    catalog.methods.find(method => method.name.replaceAll('.', '_') === tool.name)!.name as Method,
   ]),
 );

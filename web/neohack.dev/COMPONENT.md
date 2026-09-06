@@ -99,7 +99,7 @@ provides a source viewer and download alongside the read-only replay.
 
 ## Workshop
 
-`/bots` uses CodeMirror (MIT) and TypeScript (Apache-2.0). The named entrypoint is `main.ts`, exporting `defineBot({ name: "My bot", autoloot: rules, initialize({ hero, game, log }) { ... } })`. It registers observation listeners and a single awaited `turn` listener. The two-file imp starter demonstrates exploration, retreat, eating and new equipment. The name is required; optional construction `autoloot` uses the engine’s `AutomaticPickup` schema and is applied through a journaled, zero-turn configuration before initialization. Containers remain explicit.
+`/bots` uses CodeMirror (MIT) and TypeScript (Apache-2.0). The named entrypoint is `main.js`. Export `const bot = defineBot({ name: "My bot", autoloot: rules })` and register `bot.on("turn", async ({ hero }) => { ... })` at the top level. Plain event payloads include hero, game and log; `start` runs setup before observations. The single-file imp starter remembers visited squares and attempts nearby paths and stairs; it stops for hunger, enemies or a pending decision. The name is required; optional construction `autoloot` uses the engine’s `AutomaticPickup` schema and is applied through a journaled, zero-turn configuration before initialization. Containers remain explicit.
 TypeScript provides live cross-file completions, hover docs and advisory diagnostics; Test transpiles the project. The `neonethack` import exposes Hero, direction and entity enums alongside the same
 client classes; arbitrary package imports are unavailable.
 

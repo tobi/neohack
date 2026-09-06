@@ -71,7 +71,7 @@ test("public art contains exactly 29 selected runtime PNGs, without metadata sid
 
 test("art sources retain portable recipes, not raw templates or retired studies", async () => {
   assert.deepEqual(await files(`${root}/art`), [
-    "ATTRIBUTION.md", "LimeZu-LICENSE.txt", "README.md", "classes.json",
+    "ATTRIBUTION.md", "LimeZu-LICENSE.txt", "README.md", "classes.json", "errors/README.md", "errors/style.css",
     "layout-types/README.md", "layout-types/defaults/profile.json", "layout-types/dungeon/profile.json", "layout-types/cave/profile.json", "layout-types/dungeon-damp/profile.json", "layout-types/cave/README.md",
     "layouts/cavern.txt", "layouts/geometry.txt", "layouts/rooms.txt", "layouts/waterworks.txt",
     "recipe.json", "social/README.md", "social/composition.html",

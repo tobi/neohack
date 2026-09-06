@@ -97,6 +97,7 @@ make -C lib/neonethack wasm
 npm run --prefix lib/neonethack test:wasm
 npm run --prefix lib/neonethack test:browser
 node lib/neonethack/scripts/generate.ts --check
+npm run --prefix lib/neonethack check:tools
 ```
 
 For pixel UX changes, also run `bun run --cwd web/neohack.dev test`. For cloud

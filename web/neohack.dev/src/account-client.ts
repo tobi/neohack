@@ -23,7 +23,7 @@ export async function accountApi(path = '', body?: unknown, method = 'POST') {
 }
 export interface BotSource {
   version: 1;
-  entrypoint: 'main.ts';
+  entrypoint: 'main.js';
   files: Record<string,string>;
   compiledFiles: Record<string,string>;
   compiler: { name: 'typescript'; version: string };

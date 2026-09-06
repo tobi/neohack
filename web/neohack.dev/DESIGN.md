@@ -930,7 +930,7 @@ history records observed branch locations, experience level and recorded frames;
 label browser-reported data and partial recordings honestly. Frame recordings are
 separate from the authoritative engine journals and never resume games.
 
-`/bots` is the Ascender workshop: CodeMirror, multiple JS/TS files, random class
+`/bots` is the Ascender workshop: CodeMirror, multiple JavaScript files, random class
 and random seed by default, named private projects, a read-only world and bounded output.
 Bot execution belongs in a worker inside an opaque sandbox with network blocked.
 Use the public Game API, sequential calls, a fixed 1,000-call/five-minute limit and Stop.
@@ -959,11 +959,18 @@ file is needed. Entity handles are revision-bound; sensing only selects disclose
 visible creatures and Enemy requires a known hostile attitude. Inventory name
 queries resolve in the engine, with ambiguity preserved.
 
-The workshop now starts with Curious imp, a two-file event-driven bot. One
-initialize callback registers read-only observation events and one awaited turn
-listener coordinates actions. The editable strategy biases toward unknown areas,
-flees disclosed enemies, eats eligible food, attempts newly observed equipment,
-and seeks downward stairs. Eligibility and movement facts originate in C; policy
+The workshop starts with a chooser: create a script, try Curious imp or First steps,
+or open an account script. Examples remain immutable; first Save creates a private
+account copy and a `/bots?script=<id>` URL, while later saves update that copy.
+Opening an example clears the saved identity. URLs require the owning account.
+Workshop files are always JavaScript, with `main.js` as entrypoint and a Format
+button using Prettier. Define the bot at the top, then use `bot.on()` with plain
+payloads and live hero/game/log context. `start` configures controls; read-only
+observation handlers and one awaited `turn` listener coordinate the script.
+Curious imp is a short, single-file teaching example: remember visits, prefer
+less-visited paths, and descend at stairs. Stop for hunger, a visible enemy, a
+pending decision, no offered path, or a step that makes no progress. Keep equipment, retry machinery, custom
+controls and weighted scoring out of the starter. Eligibility and movement facts originate in C; policy
 remains in the example. Never present a sighting event as a hidden spawn/death.
 
 ## Backpack action strip and shared structure depth
