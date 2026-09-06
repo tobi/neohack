@@ -8,7 +8,6 @@ export const slotLabels: Record<EquipmentSlot, string> = {
   weapon:'Main hand', offhand:'Off hand', alternateWeapon:'Alternate weapon',
   quiver:'Quiver', skin:'Merged skin', ball:'Attached ball', chain:'Attached chain',
 };
-const worn: EquipmentSlot[] = ['helmet','eyewear','amulet','cloak','bodyArmor','shirt','gloves','leftRing','rightRing','boots','shield','skin'];
 const ready: EquipmentSlot[] = ['weapon','offhand','alternateWeapon','quiver','ball','chain'];
 export function equipmentDescription(item: ItemRef) {
   return item.equipmentSlots?.length ? item.equipmentSlots.map(slot=>slotLabels[slot]).join(' · ') : item.equipmentSlots ? 'Carried' : 'Assignment unknown';
@@ -19,66 +18,81 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: strin
 }
 
 export function renderCharacterSheet(o: Observation, options: {
-  name:string; role:string; portrait:string; view:'equipment'|'bag';
-  selectView(view:'equipment'|'bag'):void;
+  name:string; role:string; portrait:string;
+  equip(item:ItemRef, action:'equip'|'wield'|'quiver'):void;
   inspect(item:ItemRef):void; actions(host:HTMLElement,item:ItemRef):void;
 }) {
-  const root=element('div','character-sheet');root.dataset.sheetView=options.view;
+  const root=element('div','character-sheet');
   const banner=element('header','sheet-hero');
   const portrait=element('img','sheet-portrait');portrait.src=options.portrait;portrait.alt='';
   const identity=element('div','sheet-identity');identity.append(element('p','sheet-eyebrow',options.role),element('h3','',options.name));
   const conditions=[o.vitals.hungerLabel,o.vitals.burdenLabel,...(Array.isArray(o.vitals.condition)?o.vitals.condition:[o.vitals.condition])].filter(Boolean).join(' · ');
-  identity.append(element('p','sheet-condition',conditions || o.location.depthLabel));banner.append(portrait,identity);
+  identity.append(element('p','sheet-depth','lvl: '+o.location.depthLabel.replace(/^Dlvl:/,'')));
+  if(conditions)identity.append(element('p','sheet-condition',conditions));banner.append(portrait,identity);
   const stats=element('dl','sheet-stats');
   for(const [label,value] of [['Health',`${o.vitals.health??'?'} / ${o.vitals.maxHealth??'?'}`],['Energy',`${o.vitals.energy??'?'} / ${o.vitals.maxEnergy??'?'}`],['Armor class',o.vitals.armor??'?'],['Level',o.vitals.level??'?'],['Strength',o.vitals.strength??'?'],['Gold',o.vitals.gold??'?']]) {
     const stat=element('div','');stat.append(element('dt','',String(label)),element('dd','',String(value)));stats.append(stat);
   }
-  root.append(banner,stats);
+  identity.append(stats);root.append(banner);
   const attributes=element('details','sheet-attributes');attributes.append(element('summary','','Attributes & alignment'));
   const values=element('dl','sheet-stats');
   for(const [key,label] of [['strength','Strength'],['dexterity','Dexterity'],['constitution','Constitution'],['intelligence','Intelligence'],['wisdom','Wisdom'],['charisma','Charisma']] as const) {
     const value=element('div','');value.append(element('dt','',label),element('dd','',String(o.vitals[key]??'?')));values.append(value);
   }
   attributes.append(values,element('p','sheet-condition','Alignment · '+String(o.vitals.alignment??'Unknown')));root.append(attributes);
-  const tabs=element('nav','sheet-tabs');tabs.setAttribute('aria-label','Character sheet sections');
-  for(const [view,label] of [['equipment','Equipment'],['bag','Backpack']] as const) {
-    const b=element('button','',label);b.type='button';b.setAttribute('aria-pressed',String(options.view===view));b.setAttribute('aria-controls',`sheet-${view}`);
-    b.onclick=()=>{root.dataset.sheetView=view;options.selectView(view);for(const button of tabs.querySelectorAll('button'))button.setAttribute('aria-pressed',String(button===b));};tabs.append(b);
-  }
-  root.append(tabs);
   const layout=element('div','sheet-columns');root.append(layout);
   const equipment=element('section','sheet-equipment');equipment.id='sheet-equipment';equipment.setAttribute('aria-label','Equipped and ready');
   const bag=element('section','sheet-bag');bag.id='sheet-bag';bag.setAttribute('aria-label','Backpack contents');layout.append(equipment,bag);
   const equipped=o.inventory.filter(i=>i.equipmentSlots?.length);
-  const carried=o.inventory.filter(i=>!i.equipmentSlots?.length);
   const complete=o.inventoryKnown&&o.perception.inventory==='current'&&o.perception.equipment==='current'&&o.inventory.every(i=>i.equipmentSlots!==undefined);
   if(!complete)root.insertBefore(element('p','sheet-notice',o.perception.equipment==='lastKnown'?'Last known equipment. These assignments may have changed.':'Equipment assignments are not fully known.'),layout);
   if(o.perception.inventory!=='current')bag.append(element('p','sheet-notice',o.perception.inventory==='lastKnown'?'Last known possessions. Current contents are unavailable.':'Your possessions are not currently known.'));
   function row(item:ItemRef) {
-    const entry=element('div','inventory-entry');entry.dataset.itemId=item.id;
-    const button=element('button','item-row');button.type='button';button.onclick=()=>options.inspect(item);
-    const icon=element('span','item-icon');icon.setAttribute('aria-hidden','true');const image=element('img','');image.src=inventoryArt(item);image.alt='';icon.append(image);
+    const entry=element('div','inventory-entry');entry.dataset.itemId=item.id;entry.draggable=complete;
+    entry.ondragstart=event=>{if(!complete||!event.dataTransfer){event.preventDefault();return;}event.dataTransfer.setData('application/x-neohack-item',item.id);event.dataTransfer.effectAllowed='move';root.classList.add('sheet-dragging');};
+    entry.ondragend=()=>root.classList.remove('sheet-dragging');
+    const button=element('button','item-row');button.type='button';button.draggable=complete;button.ondragstart=entry.ondragstart;button.onclick=()=>options.inspect(item);
+    const icon=element('span','item-icon');icon.setAttribute('aria-hidden','true');const image=element('img','');image.src=inventoryArt(item);image.alt='';image.draggable=false;icon.append(image);
     const copy=element('span','item-copy');copy.append(element('small','equipment-assignment',equipmentDescription(item)),element('span','',item.label));
     if(item.known?.beatitude==='cursed')copy.append(element('small','known-curse','Known cursed'));
     const quantity=element('span','item-quantity',item.quantity>1?String(item.quantity):'');
     button.append(icon,copy,quantity);entry.append(button);
     const actions=element('div','inventory-actions');options.actions(actions,item);entry.append(actions);return entry;
   }
-  const shown=new Set<string>();
-  for(const [label,slots] of [['Worn',worn],['In hand & ready',ready]] as const) {
-    const section=element('div','equipment-group');section.append(element('h4','sheet-section-heading',label));
-    const items=equipped.filter(item=>!shown.has(item.id)&&item.equipmentSlots!.some(slot=>slots.includes(slot))).sort((a,b)=>Math.min(...a.equipmentSlots!.map(s=>slots.indexOf(s)).filter(n=>n>=0))-Math.min(...b.equipmentSlots!.map(s=>slots.indexOf(s)).filter(n=>n>=0)));
-    for(const item of items){shown.add(item.id);section.append(row(item));}
-    if(!items.length)section.append(element('p','sheet-empty',complete?'Nothing assigned':'No assignments known'));
-    equipment.append(section);
+  equipment.append(element('h4','sheet-section-heading','Equipment'));
+  const board=element('div','equipment-board');
+  const figure=element('img','equipment-figure');figure.src=options.portrait;figure.alt='';board.append(figure);
+  const slots:EquipmentSlot[]=['helmet','amulet','eyewear','cloak','bodyArmor','shirt','weapon','gloves','shield','leftRing','boots','rightRing','offhand','alternateWeapon','quiver'];
+  const feedback=element('p','sheet-equip-feedback','Drag an item onto equipment to wear or wield it. You can also use its action buttons.');feedback.setAttribute('role','status');
+  for(const slot of slots) {
+    const tile=element('div','equipment-slot');tile.dataset.slot=slot;
+    const assigned=equipped.filter(item=>item.equipmentSlots!.includes(slot));
+    tile.append(element('span','slot-label',slotLabels[slot]));
+    for(const item of assigned) {
+      const button=element('button','slot-item');button.type='button';button.title=item.label;button.setAttribute('aria-label',slotLabels[slot]+': '+item.label);button.onclick=()=>options.inspect(item);
+      const icon=element('img','');icon.src=inventoryArt(item);icon.alt='';button.append(icon,element('span','slot-item-name',item.label));tile.append(button);
+    }
+    if(!assigned.length)tile.append(element('span','slot-empty',complete?'—':'?'));
+    const operation=slot==='weapon'?'wield':slot==='quiver'?'quiver':ready.includes(slot)?null:'equip';
+    tile.ondragover=event=>{if(complete&&operation&&event.dataTransfer?.types.includes('application/x-neohack-item')){event.preventDefault();event.dataTransfer.dropEffect='move';tile.classList.add('drop-target');}};
+    tile.ondragleave=()=>tile.classList.remove('drop-target');
+    tile.ondrop=event=>{
+      event.preventDefault();tile.classList.remove('drop-target');root.classList.remove('sheet-dragging');
+      const item=o.inventory.find(item=>item.id===event.dataTransfer?.getData('application/x-neohack-item'));
+      if(!complete||!operation||!item)return;
+      if(!item.actions?.includes(operation)){feedback.textContent='That item cannot use this equipment action right now.';return;}
+      // Slots display actual assignments. The public equip operation owns the
+      // destination and any ring-side/occupied-layer decision; never infer it.
+      feedback.textContent='Requesting '+(operation==='equip'?'Wear':operation==='wield'?'Wield':'Ready')+' · '+item.label;
+      options.equip(item,operation);
+    };
+    board.append(tile);
   }
-  const vacant=Object.keys(slotLabels).filter(slot=>!['skin','ball','chain'].includes(slot)&&!equipped.some(i=>i.equipmentSlots!.includes(slot as EquipmentSlot)));
-  if(vacant.length) {
-    const details=element('details','sheet-vacancies');details.append(element('summary','',complete?`${vacant.length} unoccupied slots`:'Other slots · unknown'));
-    const list=element('ul','');for(const slot of vacant)list.append(element('li','',slotLabels[slot as EquipmentSlot]));details.append(list);equipment.append(details);
-  }
-  bag.append(element('h4','sheet-section-heading',`Carried items${o.inventoryKnown?' · '+carried.length:''}`));
-  for(const item of carried)bag.append(row(item));
-  if(!carried.length)bag.append(element('p','sheet-empty',complete?(o.inventory.length?'Everything you carry is assigned above.':'Your backpack is empty.'):'No unassigned possessions known.'));
+  equipment.append(board,feedback);
+  const attached=equipped.filter(item=>item.equipmentSlots!.some(slot=>['skin','ball','chain'].includes(slot)));
+  for(const item of attached)equipment.append(element('p','sheet-condition',equipmentDescription(item)+' · '+item.label));
+  bag.append(element('h4','sheet-section-heading',`Backpack${o.inventoryKnown?' · '+o.inventory.length:''}`));
+  for(const item of o.inventory)bag.append(row(item));
+  if(!o.inventory.length)bag.append(element('p','sheet-empty',complete?'Your backpack is empty.':'Your possessions are not currently known.'));
   return root;
 }

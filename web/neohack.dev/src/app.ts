@@ -111,7 +111,6 @@ class PixelNethack extends HTMLElement {
   private map!: DungeonMap;
   private tilePanel: HTMLElement | null = null;
   private panel = "inventory";
-  private sheetView: "equipment" | "bag" = "equipment";
   private prayerExplained = (() => {
     try { return localStorage.getItem("neonethack-prayer-explained") === "yes"; } catch { return false; }
   })();
@@ -308,7 +307,7 @@ class PixelNethack extends HTMLElement {
         <a id="creator-link" class="creator-link" href="https://x.com/tobi" target="_blank" rel="noopener noreferrer" aria-label="@tobi on X (opens in a new tab)">@tobi</a>
         <section class="hero-hud" aria-label="Adventurer" hidden>
           <img id="portrait" src="/art/${heroArt("ranger")}.png" alt="">
-          <div class="hero-identity"><strong id="hero-name"></strong><span id="hero-role"></span></div>
+          <div class="hero-identity"><strong id="hero-name"></strong><span id="hero-role"></span></div><div id="hero-level" class="hero-level"></div>
           <div id="character-stats" class="character-stats" hidden></div>
         </section>
         <div class="world-hud">
@@ -836,6 +835,8 @@ class PixelNethack extends HTMLElement {
       void this.run(() => this.game!.quit());
     };
     this.$("#text-map-button").onclick = () => {
+      this.panel = "surroundings";
+      this.renderPanel();
       this.querySelector<HTMLDetailsElement>(".hud-menu")!.open = false;
       this.showPanel();
       this.querySelector<HTMLDetailsElement>("#accessible-map")!.open = true;
@@ -1245,9 +1246,11 @@ class PixelNethack extends HTMLElement {
       }
       const weapons = o.inventory.filter(item => item.equipmentSlots?.includes("weapon") || item.equipmentSlots?.includes("offhand"));
       const weapon = o.perception.equipment === "current" && o.perception.inventory === "current" && o.inventoryKnown && o.inventory.every(item=>item.equipmentSlots!==undefined) ? weapons.map(item => item.label).join(" · ") || "Empty hands" : "Equipment unknown";
-      const conditions = [v.hunger !== "not_hungry" ? v.hungerLabel : "", v.burden !== "unencumbered" ? v.burdenLabel : "", ...(Array.isArray(v.condition) ? v.condition : [v.condition])].filter(Boolean).join(" · ");
+      this.$("#hero-level").innerHTML = `<small>LEVEL</small><strong>${escape(v.level ?? "?")}</strong>`;
+      const weaponIcons = weapon !== "Equipment unknown" ? weapons.map(item => `<img src="${inventoryArt(item)}" alt="">`).join("") : "";
+      const conditions = [v.hunger !== "not_hungry" ? v.hungerLabel : "", v.burden !== "unencumbered" ? v.burdenLabel : "", ...(Array.isArray(v.condition) ? v.condition : [v.condition])].filter(value => value && value !== "not_hungry" && value !== "unencumbered").join(" · ");
       this.$("#character-stats").innerHTML =
-        `<div class="health-label"><span>Health</span><strong>${escape(v.health ?? "?")} <span>/ ${escape(v.maxHealth ?? "?")}</span></strong></div><progress aria-label="Health" max="100" value="${Number.isFinite(fraction) ? Math.max(0, Math.min(100, fraction * 100)) : 0}"></progress><div class="stats-row"><div><small>ARMOR</small><strong>${escape(v.armor ?? "?")}</strong></div><div><small>GOLD</small><strong>${escape(v.gold ?? "?")}</strong></div><div class="hero-level"><small>LEVEL</small><strong>${escape(v.level ?? "?")}</strong></div></div><p class="weapon-line"><small>IN HAND</small> ${escape(weapon)}</p><p class="condition" ${conditions ? "" : "hidden"}>${escape(conditions)}</p>`;
+        `<div class="health-label"><span>Health</span><strong>${escape(v.health ?? "?")} <span>/ ${escape(v.maxHealth ?? "?")}</span></strong></div><progress aria-label="Health" max="100" value="${Number.isFinite(fraction) ? Math.max(0, Math.min(100, fraction * 100)) : 0}"></progress><div class="stats-row"><div><small>ARMOR</small><strong>${escape(v.armor ?? "?")}</strong></div><div><small>GOLD</small><strong>${escape(v.gold ?? "?")}</strong></div></div><p class="weapon-line" title="${escape(weapon)}">${weaponIcons}<span>${escape(weapon)}</span></p><p class="condition" ${conditions ? "" : "hidden"}>${escape(conditions)}</p>`;
       this.text(
         "#inventory-count",
         o.inventoryKnown ? o.inventory.length : "?",
@@ -1412,6 +1415,7 @@ class PixelNethack extends HTMLElement {
     this.$(".rightbar").setAttribute("aria-label", this.panel === "inventory" ? "Character sheet" : "Field notes");
     const body = this.$("#panel-body");
     const o = this.game?.observation;
+    this.show("#accessible-map", !!o && this.panel === "surroundings");
     this.text(
       "#panel-heading",
       {
@@ -1448,11 +1452,12 @@ class PixelNethack extends HTMLElement {
         "#panel-count",
         o.inventoryKnown ? `${o.inventory.length} ITEMS` : "UNKNOWN",
       );
+      const sheetGame=this.game!, sheetRevision=sheetGame.state.revision;
       body.append(renderCharacterSheet(o, {
         name: this.current?.name ?? 'Adventurer',
         role: roles.find(r=>r.id===this.current?.role)?.title.replace('The ','') ?? 'Adventurer',
         portrait: '/art/'+heroArt(this.current?.role)+'.png',
-        view: this.sheetView, selectView: view=>{this.sheetView=view;},
+        equip: (item,action)=>{if(this.game===sheetGame && sheetGame.state.revision===sheetRevision && this.playable())this.action(action,item);},
         inspect: item=>this.itemDetails(item),
         actions: (host,item)=>this.appendItemActions(host,item,true),
       }));

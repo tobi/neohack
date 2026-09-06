@@ -2918,7 +2918,6 @@ test('backpack actions use current engine item IDs and show wielded equipment', 
   assert.equal((await snapshot(page)).revision, before.revision);
   await page.setViewportSize({width: 390, height: 844});
   await page.screenshot({path: root + '/test-results/character-sheet-mobile.png'});
-  await page.getByRole('button', {name:'Backpack',exact:true}).click();
   for (const button of await page.locator('.inventory-actions button:visible').all()) {
     assert.equal(await button.locator('svg[aria-hidden="true"]').count(), 1);
     assert.equal(await button.textContent(), '');
@@ -3350,11 +3349,10 @@ test('character sheet follows actual equipment changes and distinguishes unknown
     app.game.current=frame;app.renderPanel();
   });
   assert.match(await page.locator('.character-sheet').textContent(),/Last known equipment/);
-  assert.equal(await page.locator('#sheet-equipment .inventory-entry').count(),2);
+  assert.equal(await page.locator('#sheet-equipment .slot-item').count(),5);
   assert.ok(await page.getByText('Left ring · Right ring',{exact:true}).count());
   assert.ok(await page.getByText('Cloak · Body armor · Underlayer',{exact:true}).count());
   await page.setViewportSize({width:390,height:844});
-  await page.getByRole('button',{name:'Backpack',exact:true}).click();
   assert.equal(await page.getByText('Last known equipment. These assignments may have changed.',{exact:true}).isVisible(),true,'the backpack tab also explains stale assignments');
   await page.evaluate(()=>{
     const app=document.querySelector('pixel-nethack');const frame=structuredClone(app.game.state);
@@ -3418,4 +3416,23 @@ test('a suspended cloud store does not block a fresh local adventure or erase it
   await page.reload();await page.waitForFunction(()=>!!document.querySelector('pixel-nethack').snapshot);await ready(page);
   assert.equal((await snapshot(page)).sessionId,first.sessionId);
   assert.equal((await snapshot(page)).revision,first.revision);
+});
+
+test('equipment drag uses a real candidate and leaves rejected items untouched',async t=>{
+ const {page}=await fixture(t);await create(page);await page.getByRole('button',{name:/Backpack/}).click();
+ assert.equal(await page.locator('#accessible-map').isVisible(),false);
+ assert.match(await page.locator('.sheet-depth').textContent(),/^lvl: /);
+ const initial=await snapshot(page);const shield=initial.observation.inventory.find(i=>i.equipmentSlots?.includes('shield'));
+ await page.getByRole('button',{name:'Remove '+shield.label,exact:true}).click();await ready(page);
+ const before=await snapshot(page);
+ const food=before.observation.inventory.find(i=>i.category==='food');
+ await page.locator('[data-item-id="'+food.id+'"] .item-row').dragTo(page.locator('[data-slot=helmet]'));
+ assert.equal((await snapshot(page)).revision,before.revision);
+ assert.match(await page.locator('.sheet-equip-feedback').textContent(),/cannot use/);
+ await page.locator('[data-item-id="'+shield.id+'"] .item-row').dragTo(page.locator('[data-slot=shield]'));await ready(page);
+ const equipped=await snapshot(page);assert.ok(equipped.observation.inventory.find(i=>i.id===shield.id).equipmentSlots.includes('shield'));
+ assert.ok(equipped.observation.turn>before.observation.turn);
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await page.locator('#sheet-equipment').isVisible(),true);assert.equal(await page.locator('#sheet-bag').isVisible(),true);
+ await page.screenshot({path:root+'/test-results/equipment-drag-mobile.png'});
 });

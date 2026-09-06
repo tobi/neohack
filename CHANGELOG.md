@@ -4,6 +4,10 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- A redesigned character sheet puts stats beside the portrait, equipment in a
+  paper-doll layout, and item icons/actions in a compact list below. Drag equipment
+  to request Wear or Wield; normal engine decisions still apply.
+
 - Clearer phone HUD and journal spacing, a full-height character sheet, readable
   status labels, and steadier workshop navigation and replay loading feedback.
 

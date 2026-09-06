@@ -964,7 +964,7 @@ file is needed. Entity handles are revision-bound; sensing only selects disclose
 visible creatures and Enemy requires a known hostile attitude. Inventory name
 queries resolve in the engine, with ambiguity preserved.
 
-The workshop starts with a chooser: create a script, try Curious imp or First steps,
+The workshop starts with a chooser: create a script, try Curious imp, Cartographer, Steady fighter or First steps,
 or open an account script. Examples remain immutable; first Save creates a private
 account copy and a `/bots?script=<id>` URL, while later saves update that copy.
 Opening an example clears the saved identity. URLs require the owning account.
@@ -972,11 +972,19 @@ Workshop files are always JavaScript, with `main.js` as entrypoint and a Format
 button using Prettier. Define the bot at the top, then use `bot.on()` with plain
 payloads and live hero/game/log context. `start` configures controls; read-only
 observation handlers and one awaited `turn` listener coordinate the script.
-Curious imp is a short, single-file teaching example: remember visits, prefer
-less-visited paths, and descend at stairs. Stop for hunger, a visible enemy, a
-pending decision, no offered path, or a step that makes no progress. Keep equipment, retry machinery, custom
-controls and weighted scoring out of the starter. Eligibility and movement facts originate in C; policy
-remains in the example. Never present a sighting event as a hidden spawn/death.
+Curious imp keeps a short main.js policy with readable explore.js and care.js helpers.
+Plan routes over the disclosed map, open doors, remember failed edges, search a
+bounded number of times and try identified rations. Retreat from nearby enemies;
+stop when no retreat remains or a decision requires another strategy. Cartographer
+stays on one level; Steady fighter adds an explicit combat policy. First steps
+remains a one-action teaching example. Eligibility and movement facts originate in
+C; policy remains in the examples. Never present a sighting event as a hidden spawn/death.
+
+One source catalog supplies the chooser and the Node test runner in examples/workshop.
+Each account copy includes all of its helpers. Keep the chooser's mark/copy/action
+structure for every card. The Node runner executes those exact JavaScript files
+against a fresh native engine with call/time limits and diagnostic summaries;
+it is trusted local Node code, separate from the browser sandbox.
 
 ## Backpack action strip and shared structure depth
 
@@ -1109,8 +1117,8 @@ its palette/shading with observed graves; no new runtime PNG or vendor asset.
 
 The Backpack entry opens a wider character sheet: the existing hero portrait,
 name and class, canonical health/energy/armor/level/strength/gold, then actual
-worn equipment and in-hand/readied items alongside carried possessions. On narrow
-screens, Equipment and Backpack buttons switch sections without taking a turn.
+worn equipment in a paper-doll board above a complete carried-item list. Both
+sections remain in the same scrolling panel on narrow screens.
 Keep the close button visible while scrolling; use the available screen height.
 
 Assignments come exclusively from `equipmentSlots`, with explicit left/right
@@ -1125,7 +1133,8 @@ Item rows use shared perceived-appearance silhouettes and keep their full engine
 labels. Quick actions prioritize the ordinary category action (or removal for
 worn equipment) plus Drop, intersected with the engine's candidates. Selecting an
 item opens all named candidate actions. All actions retain opaque IDs, revision
-checks and real standing decisions; no drag-to-equip or automatic confirmation.
+checks and real standing decisions. Dragging requests the public equipment action;
+there is no automatic replacement or confirmation.
 No new art pack, PNGs or generated character sprites were introduced.
 
 Journal scroll links require at least four non-empty source lines. Short combat
@@ -1149,7 +1158,7 @@ label. An amber Errors encountered summary links to aggregate report details;
 these reports must not be presented as errors attributable to individual runs.
 
 The workshop chooser uses a bounded editorial layout: a serif invitation beside
-a small selectable code preview, two example cards, then private saved scripts.
+a small selectable code preview, example cards, then private saved scripts.
 The chooser scrolls normally at every viewport; only the open IDE uses a fixed
 height. Keep its heading inside the viewport, with muted account context, full
 touch targets and explicit empty saved-script guidance. No new art is required.
@@ -1160,3 +1169,7 @@ below the measured HUD height. Sheets start directly below the site rail and
 hide the underlying HUD. Workshop navigation resets page scrolling and stacks
 mobile run buttons. Replay loading/error messages survive artwork and role redraws;
 loading is never presented as an empty recording.
+
+Hero HUD: level sits at the top right of the identity row; health numbers sit beside Health. Suppress normal hunger/burden labels. Keep the equipped weapon on one line with its existing perceived-appearance icon, ellipsis and full-label tooltip.
+
+Character sheet redesign: portrait and canonical stats share the header; dungeon depth reads `lvl: N`. A paper-doll equipment board shows actual typed assignments; the complete item list and inline action icons follow below on desktop and phone. Dragging a current item requests the named Equip/Wield/Quiver operation using its opaque ID and captured revision. Engine-owned destination choices and warnings remain explicit; no automatic removal or replacement. Touch and keyboard users retain item action buttons. The perceived text map belongs only to Surroundings.
