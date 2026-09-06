@@ -11,3 +11,19 @@
 #replay-lightbox p { margin:10px 0 0;font-size:13px; }
 #embed-code { width:100%;min-height:100px;background:#17201c;color:#eee8d0; }
 #ledger-error { padding: 18px; border: 1px solid #b99968; background: #342d24; color: #f0d5ac; font-size: 17px; }
+
+/* Dense ledger rows; names remain text and playback is an explicit action. */
+#runs td { padding: 7px 10px; vertical-align: middle; font-size: 13px; }
+#runs td small { margin-top: 2px; font-size: 11px; }
+#runs td:first-child { min-width: 120px; }
+.replay-cell { width: 110px; white-space: nowrap; }
+.run-replay { min-height: 36px; padding: 6px 10px; font-size: 12px; }
+.replay-cell > span { color: #8d9b92; }
+.error-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: -16px 0 28px; padding: 16px 18px; border: 1px solid #d09560; border-left: 4px solid #e5a36b; background: #382b26; color: #f5d6b3; text-decoration: none; min-height: 52px; }
+.error-summary[hidden] { display: none; }
+.error-summary strong { font-size: 17px; }
+.error-summary span { font-size: 13px; }
+.error-summary span:last-child { margin-left: auto; text-decoration: underline; text-underline-offset: 3px; }
+#dungeon-health { scroll-margin-top: 76px; }
+#dungeon-health h2 { color: #efbd91; }
+@media(max-width:700px) { .run-replay { min-height: 44px; } .error-summary { margin-top: 0; } }

@@ -1142,3 +1142,8 @@ The ledger offers playback only when a committed public recording exists. Runs
 without frames keep their statistics and a plain “No public recording” label.
 “With replay” ranks recorded runs across the whole ledger, not just the current
 top 100. Private account recordings are never exposed by this filter.
+
+Ledger rows are compact: name/class, progress, outcome and an explicit Show replay
+button in its own column. Missing recordings use a quiet dash with an accessible
+label. An amber Errors encountered summary links to aggregate report details;
+these reports must not be presented as errors attributable to individual runs.

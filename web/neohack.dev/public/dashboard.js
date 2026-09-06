@@ -30,12 +30,13 @@ function renderRuns() {
   const runs=candidates.filter(run=>filter==="all" || filter==="recorded" || filter==="living" && !run.ended || filter==="ended" && run.ended || filter==="ascended" && run.endKind==="ascended");
   $("#runs").replaceChildren(...runs.map(run=>{
     const row=document.createElement("tr"), name=element("td",run.name);
-    if(run.replayAvailable===true){
-      const replay=element("button",run.name);replay.className="run-replay";replay.setAttribute("aria-label","Replay "+run.name);replay.onclick=()=>openReplay(run);name.replaceChildren(replay);
-    }
-    name.append(element("small",run.role),element("small",run.replayAvailable===true?'Watch replay':'No public recording'));row.append(name);
+    name.append(element("small",run.role));row.append(name);
     for(const value of [run.maxLevel || "—",format(run.turn),run.depthLabel || "—",run.ended ? run.endKind || "Ended" : "Adventuring"]) row.append(element("td",value));
-    return row;
+    const playback=element('td','');playback.className='replay-cell';
+    if(run.replayAvailable===true){
+      const replay=element('button','Show replay');replay.className='run-replay';replay.setAttribute('aria-label','Show replay for '+run.name);replay.onclick=()=>openReplay(run);playback.append(replay);
+    }else{const missing=element('span','—');missing.title='No public recording';missing.setAttribute('aria-label','No public recording');playback.append(missing);}
+    row.append(playback);return row;
   }));
   $("#empty").hidden=runs.length>0;
 }
@@ -55,6 +56,9 @@ async function refresh() {
       const node=element("div","");node.className="role";const label=element("label",role.role);label.append(element("span",format(role.count)));
       const bar=element("div","");bar.className="bar";const fill=element("i","");fill.style.width=(100*role.count/Math.max(1,data.totals.runs))+"%";bar.append(fill);node.append(label,bar);return node;
     }));
+    const reportCount=data.errors.reduce((sum,error)=>sum+error.count,0);
+    $('#error-summary').hidden=reportCount===0;
+    $('#error-summary-count').textContent=format(reportCount)+' reports in the displayed groups · last 14 days';
     $("#errors").replaceChildren(...data.errors.map(error=>{
       const row=document.createElement("tr");for(const value of [error.day,error.code.replaceAll("_"," "),format(error.count),error.build ? error.build.slice(0,12) : "Unavailable"]) row.append(element("td",value));return row;
     }));

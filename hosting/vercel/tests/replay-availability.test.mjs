@@ -6,7 +6,7 @@ import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/in
 test('ledger replay availability comes from public recordings and reaches outside the top 100',async t=>{
  const store=new MemoryStorage();
  const runs=Array.from({length:102},(_,i)=>({id:'run-'+i,name:'Hero '+i,role:'wizard',turn:200-i,maxLevel:1,ended:false,updatedAt:100,replayAvailable:true}));
- await store.write('board/index.json',{runs,errors:[]});
+ await store.write('board/index.json',{runs,errors:[{day:new Date().toISOString().slice(0,10),code:'engine',count:7,last:Date.now(),build:''}]});
  await store.write('replays/run-101.json',{frames:['objects/frame.json'],revision:1});
  await store.write('accounts/private-recording.json',{runId:'run-0',frames:['private']});
  let listings=0;const list=store.list.bind(store);store.list=async prefix=>{listings++;return list(prefix);};
@@ -20,9 +20,12 @@ test('ledger replay availability comes from public recordings and reaches outsid
  const page=await browser.newPage();await page.goto(new URL('/dashboard',url).href);
  await page.waitForFunction(()=>document.querySelectorAll('#runs tr').length===100);
  assert.equal(await page.locator('#runs .run-replay').count(),0);
- assert.match(await page.locator('#runs').textContent(),/No public recording/);
+ assert.equal(await page.locator('#runs [aria-label="No public recording"]').count(),100);
+ assert.equal(await page.locator('#error-summary').isVisible(),true);
+ assert.match(await page.locator('#error-summary').textContent(),/Errors encountered.*7 reports/);
+ const row=await page.locator('#runs tr').first().boundingBox();assert.ok(row.height<65,'rows stay compact');
  await page.getByLabel('Show',{exact:false}).selectOption('recorded');
  assert.equal(await page.locator('#runs tr').count(),1);
- assert.equal(await page.getByRole('button',{name:'Replay Hero 101',exact:true}).count(),1);
+ assert.equal(await page.getByRole('button',{name:'Show replay for Hero 101',exact:true}).count(),1);
  assert.match(await page.locator('#leaders-description').textContent(),/public replay frames/);
 });

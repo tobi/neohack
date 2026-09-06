@@ -4,8 +4,8 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
-- The ledger marks runs without public recordings and offers a “With replay”
-  view that finds playable recordings across all adventures.
+- A compact ledger provides explicit Show replay buttons and a “With replay”
+  view. Missing recordings stay clearly marked; error reports have a prominent summary.
 
 - New adventures suggest editable, rerollable names instead of always using Ada.
 - Short journal notices stay inline; readable scrolls require at least four lines.
