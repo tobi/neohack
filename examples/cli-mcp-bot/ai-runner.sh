@@ -4,6 +4,7 @@
 # State directory (conversation, doctrine, advisor, logs) via NEONETHACK_BOT_STATE.
 cd "$(dirname "$0")"
 STATE_DIR="${NEONETHACK_BOT_STATE:-$(pwd)/state}"
+export NEONETHACK_BOT_STATE="$STATE_DIR"
 mkdir -p "$STATE_DIR/logs"
 echo "ai-runner started $(date -Is) (state: $STATE_DIR)" >> "$STATE_DIR/logs/runner.log"
 while true; do

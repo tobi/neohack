@@ -19,7 +19,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { generateText, stepCountIs, dynamicTool, jsonSchema } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
-import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { homedir } from 'os';
 import { dirname, resolve, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -43,7 +43,7 @@ const ENGINE = process.env.NEONETHACK_ENGINE ?? join(LIB, 'engine/playground/net
 const DATA = process.env.NEONETHACK_DATA ?? join(LIB, 'engine/playground');
 const EXECUTABLE = process.env.NEONETHACK_EXECUTABLE ?? join(LIB, 'build/native/neonethack');
 const SESSIONS = process.env.NEONETHACK_SESSIONS ?? join(BOT_DIR, 'sessions');
-const STEP_BUDGET = parseInt(process.env.STEP_BUDGET ?? '1000', 10);
+const STEP_BUDGET = parseInt(process.env.STEP_BUDGET ?? process.argv[2] ?? '1000', 10);
 const BASE_URL = process.env.OPENAI_API_BASE ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1';
 const API_KEY = process.env.OPENAI_API_KEY ?? 'dummy';
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-5.6-luna';
@@ -66,6 +66,30 @@ const LASTRUN_F = `${STATE_DIR}/last-run.json`;
 const LOG = `${LOG_DIR}/agent.log`;
 
 for (const d of [STATE_DIR, LOG_DIR, SESSIONS]) mkdirSync(d, { recursive: true });
+
+// A second agent pointed at the same state/session causes an MCP sessionBusy
+// loop. Refuse concurrent ownership instead of wasting model calls.
+const LOCK_DIR = join(STATE_DIR, 'agent.lock');
+try {
+  mkdirSync(LOCK_DIR);
+} catch (e) {
+  let owner = 'unknown';
+  try { owner = readFileSync(join(LOCK_DIR, 'pid'), 'utf8').trim(); } catch {}
+  let live = false;
+  try { process.kill(Number(owner), 0); live = true; } catch {}
+  if (live) {
+    console.error(`Another agent (pid ${owner}) already owns state directory ${STATE_DIR}`);
+    process.exit(2);
+  }
+  rmSync(LOCK_DIR, { recursive: true, force: true });
+  mkdirSync(LOCK_DIR);
+}
+writeFileSync(join(LOCK_DIR, 'pid'), String(process.pid));
+const releaseLock = () => rmSync(LOCK_DIR, { recursive: true, force: true });
+process.once('exit', releaseLock);
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.once(signal, () => { releaseLock(); process.exit(128 + (signal === 'SIGINT' ? 2 : 15)); });
+}
 
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
@@ -100,9 +124,17 @@ await client.connect(transport);
 
 async function callBridge(tool, params) {
   const r = await client.callTool({ name: tool, arguments: params });
-  let text = r?.content?.map(c => c.text ?? '').join('') ?? '';
-  if (!text && r?.structuredContent) text = JSON.stringify(r.structuredContent);
-  return { text, isError: r?.isError === true };
+  const structuredContent = r?.structuredContent ?? null;
+  const contentText = r?.content?.map(c => c.text ?? '').join('') ?? '';
+  // structuredContent is authoritative. Text content can be empty, prose, or
+  // a compatibility rendering and must not be regex-parsed as protocol data.
+  const text = structuredContent ? JSON.stringify(structuredContent) : contentText;
+  return {
+    text,
+    structuredContent,
+    isError: r?.isError === true || Boolean(structuredContent?.error),
+    error: structuredContent?.error ?? null,
+  };
 }
 
 // The server exposes the same 27 game tools natively (session_create,
@@ -114,6 +146,30 @@ let mcpTools = [];
 }
 log(`tools discovered: ${mcpTools.length}`);
 
+// A new MCP server has no in-memory active session. Load the saved recording
+// before asking the model to act. Stale IDs are cleared; contention is fatal.
+if (lastSessionId) {
+  const resumed = await callBridge('session_resume', { sessionId: lastSessionId });
+  if (resumed.isError) {
+    const code = resumed.error?.code ?? 'unknownError';
+    const message = resumed.error?.message ?? resumed.text.slice(0, 300);
+    if (code === 'sessionBusy') {
+      log(`startup failed: ${code}: ${message}`);
+      await client.close();
+      process.exitCode = 2;
+      throw new Error(`Session ${lastSessionId} is busy; stop the other agent before retrying`);
+    }
+    log(`saved session ${lastSessionId} unavailable (${code}: ${message}); starting a new adventure`);
+    lastSessionId = null;
+    state.gameId = null;
+    saveJson(STATE_F, state);
+    saveJson(CONV_F, []);
+  } else {
+    const turn = resumed.structuredContent?.observation?.turn ?? '?';
+    log(`session resumed: ${lastSessionId} turn=${turn}`);
+  }
+}
+
 let opCount = 0;
 const tools = {};
 for (const t of mcpTools) {
@@ -123,11 +179,18 @@ for (const t of mcpTools) {
     execute: async (args) => {
       opCount++;
       try {
-        const { text, isError: bridgeIsError } = await callBridge(t.name, args ?? {});
-        const turn = text.match(/"turn"\s*:\s*(\d+)/)?.[1];
-        const depth = text.match(/"depth"\s*:\s*("?\s*\d+)|(\d+)/)?.[0];
-        // capture session id from game-tool results (full id shape only, skip error envelopes)
-        const sid = !bridgeIsError ? text.match(/"sessionId"\s*:\s*"(g-[A-Za-z0-9]+-[A-Za-z0-9]+-\d+-[A-Za-z0-9]+)"/)?.[1] : undefined;
+        let { text, structuredContent, isError: bridgeIsError, error: bridgeError } = await callBridge(t.name, args ?? {});
+        const turn = structuredContent?.observation?.turn;
+        const depth = structuredContent?.observation?.vitals?.depth;
+        if (bridgeIsError) {
+          const code = bridgeError?.code ?? 'toolError';
+          const message = bridgeError?.message ?? text.slice(0, 300);
+          log(`op#${opCount} ${t.name} ERROR ${code}: ${message}`);
+          return `MCP error ${code}: ${message}`;
+        }
+        // Capture only a successful, structurally valid session id.
+        const candidateSid = structuredContent?.sessionId;
+        const sid = /^g-[A-Za-z0-9]+-[A-Za-z0-9]+-\d+-[A-Za-z0-9]+$/.test(candidateSid ?? '') ? candidateSid : undefined;
         if (sid && sid !== lastSessionId) {
           lastSessionId = sid;
           state.gameId = sid;
@@ -165,16 +228,20 @@ for (const t of mcpTools) {
           saveJson(DEATH_F, { cause, turn: turn ?? null, depth: depth ?? null, at: new Date().toISOString() });
           log(`op#${opCount} ${t.name} turn=${turn ?? '?'} <<DEATH>> ${cause}`);
           deathSeen = true;
+        } else if (turn !== undefined) {
+          log(`op#${opCount} ${t.name} turn=${turn} depth=${depth ?? '?'}`);
         } else {
-          log(`op#${opCount} ${t.name} turn=${turn ?? '?'} depth=${depth ?? '?'}`);
+          log(`op#${opCount} ${t.name} ok revision=${structuredContent?.revision ?? '?'}`);
         }
-        // skill guard 1: interactions without game-turn advancement
-        if (t.name.startsWith('game_') || t.name.startsWith('session_')) {
-          const turnNum = parseInt(turn ?? 'NaN');
-          if (Number.isNaN(turnNum) || turnNum === lastTurnSeen) stalledOps++;
+        // Skill guard 1: only observation-bearing game interactions can prove
+        // turn progress. Metadata tools such as session_actions are successful
+        // without an observation and must not count as stalls.
+        if ((t.name.startsWith('game_') || t.name.startsWith('session_')) && turn !== undefined) {
+          const turnNum = Number(turn);
+          if (turnNum === lastTurnSeen) stalledOps++;
           else { stalledOps = 0; lastTurnSeen = turnNum; }
           if (stalledOps >= 10) {
-            saveJson(DEATH_F, { cause: 'skills: 10 interactions without advancing the game', turn: turnNum ?? null, depth: depth ?? null, at: new Date().toISOString() });
+            saveJson(DEATH_F, { cause: 'skills: 10 interactions without advancing the game', turn: turnNum, depth: depth ?? null, at: new Date().toISOString() });
             log(`op#${opCount} ${t.name} <<SKILL-DEATH>> 10 interactions without advancing`);
             deathSeen = true;
           }
