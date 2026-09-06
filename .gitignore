@@ -18,13 +18,9 @@
 # Local release notes
 /lib/neonethack/PLAN.md
 /examples/wasm/neonethack.js
-/hosting/cloudflare/site/
-/hosting/cloudflare/node_modules/
-/hosting/cloudflare/.wrangler/
-/hosting/vercel/public/
 /hosting/vercel/node_modules/
+/hosting/vercel/public/
 /hosting/vercel/.vercel/
-/.wrangler/
 *.o
 *.a
 *.so
@@ -34,4 +30,4 @@
 .DS_Store
 
 # Verified deployment runtime staging cache
-hosting/cloudflare/.runtime-cache/
+hosting/vercel/.runtime-cache/

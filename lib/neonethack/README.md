@@ -16,8 +16,13 @@ Start with the [first-five-minutes guide](docs/QUICKSTART.md) for runnable
 source, browser and installed-preview paths.
 
 WebMCP and stdio MCP return [compact observation deltas](docs/PROTOCOL.md#mcp-observation-presentation).
-The native build includes a [C stdio MCP server](docs/QUICKSTART.md#native-stdio-mcp-no-node-runtime),
+The [native C MCP CLI](docs/TYPESCRIPT.md#streamable-http) also supports concurrent
+game processes and `--http PORT` for MCP 2026-07-28 Streamable HTTP, using the same
+tool schemas and independent observation snapshots.
+The native build includes a [C MCP server](docs/QUICKSTART.md#native-stdio-mcp-no-node-runtime),
 `neonethack-mcp ENGINE DATA SESSIONS`, with no JavaScript runtime requirement.
+`make bundle` also builds a [single-file Linux executable](docs/QUICKSTART.md#single-file-linux-mcp)
+with the engine, data and static dependencies included: `neohack-mcp [--http PORT] [SESSIONS]`.
 
 Try the [live pixel client](https://neohack.dev) or follow the
 [agent-browser/WebMCP walkthrough](docs/AGENT_BROWSER.md) without a local build.
@@ -57,7 +62,7 @@ blocks new operations until uncertainty is addressed.
 
 ## Build native
 
-Requirements: C99 compiler, CMake ≥3.20, Make, Ninja (or CMake's Unix Makefiles
+Requirements: C99 compiler, CMake ≥3.20, pkg-config, libevent ≥2.1 development files, Make, Ninja (or CMake's Unix Makefiles
 generator), `flock` (util-linux), Lua 5.4 headers/static library, ncurses and UUID
 development files. The tested native build platform is Linux.
 The library alone has no Lua or Node dependency; these are engine/tooling needs.

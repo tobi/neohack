@@ -110,10 +110,43 @@ library path. Configure an MCP client with absolute paths:
 }
 ```
 
-The native executable implements newline-delimited JSON-RPC initialization,
-ping, tools/list, and tools/call. Stdout contains only protocol frames; diagnostics
-use stderr. Calls execute serially through `nnh_dispatch`, preserving the native
-filesystem ownership, pins, reservations, and receipts. MCP notifications never
-execute game inputs. Transport cancellation cannot undo already submitted input.
-The Node MCP wrapper remains available for embedding a custom TypeScript transport.
-Both return [compact observation updates](PROTOCOL.md#mcp-observation-presentation).
+The native executable implements stdio MCP and `--http PORT` for MCP 2026-07-28
+Streamable HTTP. It uses a libevent event loop and one C worker/engine per game;
+calls serialize within each game and run concurrently across games. Each create
+has its own persistent `SESSIONS/<sessionId>/` directory. Tool schemas are unchanged.
+MCP notifications never execute game inputs, and transport cancellation cannot
+undo submitted input. See [MCP usage](TYPESCRIPT.md#native-mcp) for HTTP headers,
+process lifecycle and uncertainty handling. Stdio returns compact observation
+updates; HTTP uses independent snapshots. No Node server adapter is required or
+provided.
+
+### Single-file Linux MCP
+
+With Podman installed, `make -C lib/neonethack bundle` builds
+`lib/neonethack/build/bundle/neohack-mcp` in an isolated Alpine/musl container.
+The executable embeds the engine, Lua, game data and dependency notices; both
+MCP and engine link statically. Copy that one file to `~/.local/bin/neohack-mcp`.
+No Node, shared libraries, separate engine installation or external unpacker is
+needed at runtime. Build tools and downloaded dependencies stay in the builder.
+
+```sh
+neohack-mcp                        # stdio, default persistent session store
+neohack-mcp --http 8080            # HTTP at 127.0.0.1:8080/mcp
+neohack-mcp /private/game-sessions # explicit session root
+```
+
+The default store is `$XDG_STATE_HOME/neohack/sessions`, or
+`~/.local/state/neohack/sessions`. Each game owns a dedicated subdirectory.
+On first launch, the executable atomically extracts its embedded runtime under
+`$XDG_CACHE_HOME/neohack/runtimes/<content-hash>`, or
+`~/.cache/neohack/runtimes/<content-hash>`. XDG paths must be absolute. Concurrent
+launches share this immutable runtime cache; sessions retain their own engine
+and data pins. Later launches verify cached bytes and reject corruption without
+repairing it. New binaries select their bundled runtime for new games; resuming
+an existing game continues to use its recorded pins. Cache ancestors must not be
+symlinks, and the runtime cache must be owned by the user and private.
+
+The three-path form `neohack-mcp ENGINE DATA SESSIONS` remains available for
+explicit custom runtimes. All forms expose the same tools and schemas.
+Run the release checks with `node --test lib/neonethack/tests/mcp-bundle.check.mjs`
+after building the bundle and the TypeScript test dependencies.

@@ -107,7 +107,7 @@ background work; local pre-input transactions remain awaited. Use
 `onReplicaStatus` reports `queued` during the five-second inactivity debounce,
 `pending` during upload, `saved` after acknowledgement, and `error` on failure.
 Repeated identical statuses are suppressed. Explicit close flushes immediately.
-The pixel client supplies the Durable Object implementation.
+The pixel client supplies the Vercel Blob implementation.
 
 ## Build identity and resume
 

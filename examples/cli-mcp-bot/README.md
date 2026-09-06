@@ -1,9 +1,8 @@
-# cli-mcp-bot — an LLM plays NetHack through the neonethack MCP stdio server
+# cli-mcp-bot — an LLM plays NetHack through native MCP HTTP
 
-An autonomous bot that plays NetHack using the neonethack C engine directly:
-a Vercel AI SDK agent drives the engine through the neonethack **MCP stdio
-server** (`lib/neonethack/dist/mcp/cli.js`) — no browser involved. Ops are
-native-speed (~0.02s).
+An autonomous bot that plays NetHack using the neonethack C engine directly.
+A Vercel AI SDK agent drives the installed native MCP HTTP target
+(`~/.local/bin/neohack-mcp --http`) — no browser or stdio bridge involved.
 
 ```
 ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
@@ -17,14 +16,15 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
 
 ## Setup
 
-1. Build the library (engine + native bridge + MCP dist) from the repository
-   root — see `lib/neonethack/docs/QUICKSTART.md`:
+1. Build the engine and install the native `neohack-mcp` executable at
+   `~/.local/bin/neohack-mcp`. The bot starts it as:
 
    ```sh
-   npm ci --prefix lib/neonethack
-   make -C lib/neonethack native
-   npm run --prefix lib/neonethack build
+   ~/.local/bin/neohack-mcp --http 18765 ENGINE DATA SESSIONS
    ```
+
+   Override `NEONETHACK_MCP`, `NEONETHACK_MCP_HTTP_PORT`, or point
+   `NEONETHACK_MCP_HTTP_URL` at an already-running server.
 
 2. Configure the model endpoint:
 
@@ -40,15 +40,16 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
 
    ```sh
    npm install
-   npm start            # one session (STEP_BUDGET model steps, default 1000)
-   npm run runner       # continuous: session -> retro -> session ...
+   npm start            # start a NEW game (default)
+   npm run continue     # resume the saved game (`node agent.mjs -c`)
+   npm run runner       # continuously resume: session -> retro -> session ...
    ```
 
 ## Files
 
 | Path | Purpose |
 | --- | --- |
-| `agent.mjs` | AI driver: MCP client, advisor augmentation, continuous conversation |
+| `agent.mjs` | AI driver: native MCP HTTP client, advisor augmentation, continuous conversation |
 | `advisor.mjs` | Standalone heuristic decision tree (run: `node advisor.mjs state/last-obs.json`) |
 | `retro.mjs` | Post-session LLM self-review; improves doctrine + advisor, commits |
 | `system-prompt.md` | Committed default doctrine (seed for the state dir) |
@@ -59,9 +60,16 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
 
 ## Notes
 
-- Sessions persist in `sessions/` and are resumable: `state/game-state.json`
-  tracks the active `sessionId` across restarts. Delete it to start a fresh
-  adventure.
+- The agent manages a local HTTP MCP child by default and shuts it down at the
+  end of each run. Setting `NEONETHACK_MCP_HTTP_URL` uses an externally managed
+  HTTP target instead.
+- A normal `node agent.mjs` invocation starts a new game. Pass `-c` or
+  `--continue` to resume the session tracked by `state/game-state.json`.
+- Per-model-turn input/output/cache token counts are appended to
+  `state/logs/token-usage.jsonl`; `state/last-run.json` contains cumulative
+  output-token and cache-miss totals.
+- Observation snapshots and deltas are merged into `state/last-obs.json`, so
+  the advisor retains its world cache while the model receives compact deltas.
 - Death detection resets the conversation; the model then starts a new game
   itself (new session ids are captured automatically).
 - The state directory (default `./state`, override with `NEONETHACK_BOT_STATE`)

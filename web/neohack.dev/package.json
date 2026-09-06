@@ -1,0 +1,27 @@
+{
+  "name": "neohack-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "start": "bun server.ts",
+    "art:render": "bun scripts/render-dungeon.ts",
+    "test": "bun run build && node --test tests/*.test.mjs",
+    "art:characters": "node scripts/build-characters.mjs"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.9",
+    "typescript": "5.9.3",
+    "playwright-core": "1.63.0"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/lint": "^6.9.7",
+    "@lezer/highlight": "^1.2.3",
+    "@simplewebauthn/browser": "^14.0.0",
+    "codemirror": "^6.0.2"
+  }
+}

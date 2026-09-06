@@ -1,0 +1,7 @@
+License sources for the static Linux build:
+Libevent 2.1.13: https://github.com/libevent/libevent/blob/release-2.1.13-stable/LICENSE
+musl 1.2.5: https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT?h=v1.2.5
+ncurses 6.5-20251123: https://github.com/ThomasDickey/ncurses-snapshots/blob/v6_5_20251123/COPYING
+libuuid 2.41.6: https://github.com/util-linux/util-linux/blob/v2.41.6/libuuid/src/gen_uuid.c
+Lua 5.4.9: license extracted from the hash-verified source archive's lua.h.
+NetHack: engine/dat/license; project attribution: NOTICE.md.

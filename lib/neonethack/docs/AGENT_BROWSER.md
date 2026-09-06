@@ -209,7 +209,7 @@ CLI flags, and [WebMCP](WEBMCP.md) for the adapter and storage contract.
 
 ## Run a local development copy
 
-For development, [build and start the pixel client](../../../example/pixel-bun/README.md#run-locally)
+For development, [build and start the pixel client](../../../web/neohack.dev/README.md#run-locally)
 and replace `https://neohack.dev` in the commands with `http://127.0.0.1:3333`.
 Local and live sites have separate browser storage and saves.
 

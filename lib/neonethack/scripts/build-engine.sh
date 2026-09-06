@@ -45,6 +45,7 @@ for FILE in "$UP"/sys/unix/Makefile.* "$UP/sys/unix/setup.sh" "$UP/sys/unix/hint
 done
 if [ "$NEEDS_SETUP" = 1 ]; then (cd "$UP" && sh sys/unix/setup.sh sys/unix/hints/headless.500); fi
 set -- "CC=${CC:-cc}" "LUA_MISE=$LUA_HOME" "LUAHEADERS=$HEAD" "LUATESTTARGET=$HEAD/lua.h" LUAHPREFIX= "LUATOPLIB=$LIB" LUALIB= LUALIBBUILT= "LUALIBS=$LIB -lm -ldl" "LUACFLAGS=-I$HEAD" "HACKDIR=$PLAY" "INSTDIR=$PLAY" "VARDIR=$PLAY" SHELLDIR= CHOWN=true CHGRP=true "NEONETHACK_CFLAGS=-ffile-prefix-map=$HERE=. ${NEONETHACK_CFLAGS:-}"
+if [ -n "${NEONETHACK_LDFLAGS:-}" ]; then set -- "$@" "LFLAGS=$NEONETHACK_LDFLAGS"; fi
 signature=$( { printf '%s\n' "$@"; "${CC:-cc}" --version; cksum "$UP/src/Makefile" "$UP/util/Makefile"; } | cksum)
 previous=''
 if [ -f "$HERE/build/engine.signature" ]; then IFS= read -r previous < "$HERE/build/engine.signature" || true; fi

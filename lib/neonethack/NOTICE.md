@@ -15,14 +15,19 @@ license alongside the engine license. Native installation extracts that notice
 from the actual Lua header used to build the engine. WASM staging includes Lua,
 Emscripten, musl, compiler-rt and LLVM libc notices from the selected toolchain.
 
-The MCP adapter uses `@modelcontextprotocol/sdk` under its MIT license. The
-TypeScript client itself does not import that SDK. Development tools are not
-bundled into browser clients.
+Native MCP uses libevent under its BSD license. The single-file Linux build
+statically links its native dependencies and embeds their notices from
+`scripts/bundle-licenses/`, alongside the NetHack and Lua notices. They are
+extracted into the versioned runtime cache on launch.
+
+MCP development tests use `@modelcontextprotocol/sdk` under its MIT license.
+The TypeScript client itself does not import that SDK. Development tools are
+not bundled into browser clients.
 
 ## Project code
 
 A license has not yet been selected for independently owned project code and
 original artwork. NetHack-derived code remains subject to its original terms.
 Pixel-client asset attribution and separate terms are in
-`example/pixel-bun/art/ATTRIBUTION.md` in the repository;
+`web/neohack.dev/art/ATTRIBUTION.md` in the repository;
 the pixel client is not included in the library archives.

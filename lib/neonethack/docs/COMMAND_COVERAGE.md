@@ -47,7 +47,7 @@ counted as passing. Native and WASM use the same shared scenario contracts.
 | `npm run --prefix lib/neonethack test:wasm` | 85 tests passed |
 | `npm run --prefix lib/neonethack test:browser` | 20 sandboxed browser tests passed |
 | `npm run --prefix lib/neonethack test:install` | 4 static/shared install and consumer checks passed |
-| `bun run --cwd example/pixel-bun test` | Typecheck/build and 73 tests passed |
+| `bun run --cwd web/neohack.dev test` | Typecheck/build and 73 tests passed |
 | `node lib/neonethack/scripts/generate.ts --check` | No generated drift |
 | `git diff --check` | Passed |
 

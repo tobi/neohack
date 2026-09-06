@@ -22,8 +22,8 @@ of its semantics in each client:
 | `lib/neonethack/wasm/` | The same C driver and engine in browser workers, with explicit storage ownership and durability guarantees. Worker plumbing does not own game rules. |
 | `lib/neonethack/mcp/`, `typescript/webmcp.ts` | MCP and browser WebMCP adapters. Named tools expose the same operations and perceived results. Compact presentations must preserve their meaning. |
 | `examples/` | Small public-API consumers and runnable integration examples. Keep sample clients correct and their command-coverage limits explicit. |
-| `example/pixel-bun/` | The developing web UX: character creation, dungeon map, local views, inventory, settings, accessible controls and agent interaction. Read its [AGENTS.md](example/pixel-bun/AGENTS.md) and [DESIGN.md](example/pixel-bun/DESIGN.md) before UX work. |
-| `hosting/cloudflare/` | Website/runtime delivery, durable cloud storage and supporting web services. Browser gameplay runs in WASM; hosting does not duplicate game rules or provide a separate HTTP gameplay engine. |
+| `web/neohack.dev/` | The developing web UX: character creation, dungeon map, local views, inventory, settings, accessible controls and agent interaction. Read its [AGENTS.md](web/neohack.dev/AGENTS.md) and [DESIGN.md](web/neohack.dev/DESIGN.md) before UX work. |
+| `hosting/vercel/` | Website/runtime delivery, durable cloud storage and supporting web services. Browser gameplay runs in WASM; hosting does not duplicate game rules or provide a separate HTTP gameplay engine. |
 
 The flow is **client intent → named semantic operation → C driver → NetHack →
 perceived observation, actual outcome and any standing decision → client**.
@@ -34,8 +34,8 @@ public `act` tool, raw-key escape hatch or JS semantic adapter.
 
 ## Perceptual parity and UX
 
-Before any UX work, read [example/pixel-bun/AGENTS.md](example/pixel-bun/AGENTS.md)
-and [example/pixel-bun/DESIGN.md](example/pixel-bun/DESIGN.md). Follow the established
+Before any UX work, read [web/neohack.dev/AGENTS.md](web/neohack.dev/AGENTS.md)
+and [web/neohack.dev/DESIGN.md](web/neohack.dev/DESIGN.md). Follow the established
 interaction and visual decisions, and update DESIGN.md when those decisions change.
 
 - Human, accessible and agent interfaces should receive compatible descriptions
@@ -99,9 +99,9 @@ npm run --prefix lib/neonethack test:browser
 node lib/neonethack/scripts/generate.ts --check
 ```
 
-For pixel UX changes, also run `bun run --cwd example/pixel-bun test`. For cloud
+For pixel UX changes, also run `bun run --cwd web/neohack.dev test`. For cloud
 storage, runtime delivery or dashboard changes, run
-`npm test --prefix hosting/cloudflare` after building the library and pixel client.
+`npm test --prefix hosting/vercel` after building the library and pixel client.
 See each area's README for prerequisites and narrower test entry points.
 
 Use actual engine/browser scenarios, including native/WASM and presentation

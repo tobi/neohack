@@ -54,8 +54,8 @@ skipped scenario is not a passing result. Describe host/toolchain blockers.
 For pixel-client changes, also run:
 
 ```sh
-bun install --frozen-lockfile --cwd example/pixel-bun
-bun run --cwd example/pixel-bun test
+bun install --frozen-lockfile --cwd web/neohack.dev
+bun run --cwd web/neohack.dev test
 ```
 
 For distribution changes, run the complete

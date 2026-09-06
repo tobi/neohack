@@ -14,7 +14,7 @@ while true; do
   fi
   BUDGET=$(cat "$STATE_DIR/step-budget" 2>/dev/null || echo 1000)
   echo "ai-runner: starting agent (budget $BUDGET) $(date -Is)" >> "$STATE_DIR/logs/runner.log"
-  node agent.mjs "$BUDGET" >> "$STATE_DIR/logs/runner.log" 2>&1
+  node agent.mjs -c "$BUDGET" >> "$STATE_DIR/logs/runner.log" 2>&1
   echo "ai-runner: agent exited code=$? $(date -Is)" >> "$STATE_DIR/logs/runner.log"
   echo "ai-runner: running retro $(date -Is)" >> "$STATE_DIR/logs/runner.log"
   node retro.mjs >> "$STATE_DIR/logs/runner.log" 2>&1
