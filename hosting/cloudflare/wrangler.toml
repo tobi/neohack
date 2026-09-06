@@ -4,6 +4,13 @@ compatibility_date = "2026-09-01"
 account_id = "6d0618991601f4e2c2aa7c4e35e23d08"
 workers_dev = true
 
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+
 [assets]
 directory = "./site"
 binding = "ASSETS"

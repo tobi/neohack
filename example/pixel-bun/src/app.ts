@@ -1,3 +1,4 @@
+import { reportError } from "./telemetry";
 // Public package entry points, served together by Bun under /runtime/.
 import type {
   Neonethack,
@@ -52,6 +53,9 @@ type Adventure = {
   seed?: number;
   turn: number;
   ended: boolean;
+  maxLevel?: number;
+  depthLabel?: string;
+  endKind?: string;
   pending?: Request;
 };
 const escape = (text: unknown) =>
@@ -255,7 +259,7 @@ class PixelNethack extends HTMLElement {
           <details class="hud-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
             <button id="adventures-button">Your adventures</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button>
             <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
-            <button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p>
+            <button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p>
           </div></details>
         </div>
         <div class="notices"><div class="notice error" id="error" role="alert" hidden></div>
@@ -512,6 +516,9 @@ class PixelNethack extends HTMLElement {
             if (request.method !== "session.close") {
               save.turn = latest.observation.turn;
               save.ended = latest.ended;
+              save.maxLevel = Math.max(save.maxLevel ?? 0, Number(latest.observation.vitals.level) || 0);
+              save.depthLabel = latest.observation.location.depthLabel;
+              save.endKind = latest.end?.kind;
             }
             if (request.method === "session.close" && !response.error) {
               if (this.game?.id === response.sessionId) {
@@ -689,6 +696,7 @@ class PixelNethack extends HTMLElement {
     this.$(selector).hidden = !visible;
   }
   private error(error: unknown) {
+    reportError(error, this.runtimeBuildId);
     const message = error instanceof Error ? error.message : String(error);
     this.text("#error", message.includes("Another worker or tab owns this WASM store")
       ? "This game is open in another tab. Close that tab, or choose Save & return to doorway there, then try again here. Your save has not been changed."
@@ -951,6 +959,9 @@ class PixelNethack extends HTMLElement {
       if (this.game && this.current) {
         this.current.turn = this.game.observation.turn;
         this.current.ended = this.game.state.ended;
+        this.current.maxLevel = Math.max(this.current.maxLevel ?? 0, Number(this.game.observation.vitals.level) || 0);
+        this.current.depthLabel = this.game.observation.location.depthLabel;
+        this.current.endKind = this.game.state.end?.kind;
         if (this.game.pendingRequest)
           this.current.pending = this.game.pendingRequest;
         try {

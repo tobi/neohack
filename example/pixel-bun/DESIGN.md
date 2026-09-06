@@ -573,3 +573,10 @@ disclosure preserves the full engine help. Gameplay shortcuts stay suspended.
 New runs select current runtime metadata and record the immutable package hash.
 Resuming a bookmark loads its recorded package, independent of the current release.
 Title warmup preloads content-addressed URLs without owning a store.
+
+The Adventure ledger opens from the game menu in a separate tab. It ranks public
+run summaries by ascension, peak observed experience level, then turns; dungeon
+location is descriptive, not a cross-branch depth score. Clearly label browser
+reports and missing older data. Error telemetry sends only a bounded category and
+engine package, asynchronously and once per category/package/page visit. Never
+send bookmarks, vault IDs, raw messages, stacks or journals to the public ledger.

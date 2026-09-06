@@ -155,3 +155,42 @@ test('cloud saving waits five idle seconds, resets on play, and flushes on close
   assert.equal(uploads.length, 2);
   await page.close();
 });
+
+test('ledger ranks all runs, preserves progress, bounds diagnostics and renders safely on mobile', {timeout:30000}, async t => {
+  const {url,browser}=await fixture(t);
+  const post=(path,body)=>fetch(url+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+  const winner={id:'g-winning-run',name:'<img src=x onerror=alert(1)>',role:'valkyrie',turn:5000,maxLevel:20,ended:true,endKind:'ascended',vault:'PRIVATE',pending:{secret:'PRIVATE'}};
+  assert.equal((await post('/api/runs',{runs:[winner]})).status,200);
+  for(let batch=0;batch<5;batch++) assert.equal((await post('/api/runs',{runs:Array.from({length:50},(_,n)=>({id:`g-${batch}-${n}`,name:'Ada',role:'wizard',turn:10,maxLevel:1,ended:false}))})).status,200);
+  await post('/api/runs',{runs:[{...winner,turn:1,ended:false,maxLevel:1}]});
+  let stats=await (await fetch(url+'/api/stats')).json();
+  assert.equal(stats.totals.runs,251);assert.equal(stats.totals.ascended,1);assert.equal(stats.totals.living,250);
+  assert.equal(stats.best[0].id,winner.id);assert.equal(stats.best[0].turn,5000);
+  assert.ok(!JSON.stringify(stats).includes('PRIVATE'));
+  assert.equal((await post('/api/errors',{code:'module_load',message:'PRIVATE',url:'PRIVATE'})).status,204);
+  assert.equal((await post('/api/errors',{code:'raw private message'})).status,400);
+  const page=await browser.newPage({viewport:{width:390,height:844}});
+  await page.goto(url+'/dashboard');
+  assert.equal(new URL(page.url()).pathname, '/dashboard');
+  await page.waitForFunction(()=>document.querySelector('#runs').children.length===100);
+  assert.ok((await page.locator('#runs tr').first().textContent()).includes(winner.name));
+  assert.equal(await page.locator('#runs img').count(),0);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.selectOption('#status','ascended');assert.equal(await page.locator('#runs tr').count(),1);
+  await page.goto(url);
+  await page.waitForFunction(()=>!document.querySelector('#new-adventure').disabled);
+  await page.evaluate(()=>{
+    const error=new Error("Unexpected keyword 'with'. PRIVATE #vault=secret");
+    for(let i=0;i<3;i++) window.dispatchEvent(new ErrorEvent('error',{error,message:error.message}));
+  });
+  await page.waitForFunction(async () => {
+    const stats=await (await fetch('/api/stats')).json();
+    return stats.errors.some(row=>row.code==='module_load' && row.count===2);
+  });
+  stats=await (await fetch(url+'/api/stats')).json();
+  assert.equal(stats.errors.find(row=>row.code==='module_load').count,2,'one browser report per category despite repeat errors');
+  assert.ok(!JSON.stringify(stats).includes('PRIVATE'));
+  await page.goto(url+'/dashboard');
+  await page.waitForFunction(()=>document.querySelector('#runs').children.length>0);
+  await page.screenshot({path:'/tmp/neohack-ledger-mobile.png',fullPage:true});
+});

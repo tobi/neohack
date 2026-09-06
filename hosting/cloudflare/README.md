@@ -49,3 +49,20 @@ first deployment bootstraps an empty registry.
 
 After local builds, `npm run deploy` also restores the published registry before
 staging, so a manual deployment retains the same immutable packages as CI.
+
+### Adventure ledger and errors
+
+`/dashboard` reads `/api/stats`: all-run totals, top 100 runs ordered by
+ascension / peak experience level / turns, class counts, and 14 UTC days of error
+category counts. The run board is browser-reported, not a verified competitive
+score. The legacy `/api/runs` read remains the latest 200 summaries. No historic
+journal scanning or replay is performed; old runs acquire richer summaries when
+played again. Terminal status and larger turn counts cannot regress on stale posts.
+
+Worker observability records server exceptions and diagnostic categories. The
+client additionally POSTs `/api/errors` in the background, once per category and
+package per page visit (maximum 10 reports). Only allowlisted categories and a
+package hash survive ingestion; raw messages, stacks, names, save links and vault
+IDs are excluded. Offline/unloaded clients cannot report; counts are reports,
+not unique affected users. The public dashboard refreshes every minute. Error
+aggregates expire after 14 days; run summaries remain until explicitly removed.

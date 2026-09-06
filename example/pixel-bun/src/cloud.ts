@@ -27,6 +27,9 @@ export type CloudAdventure = {
   seed?: number;
   turn: number;
   ended: boolean;
+  maxLevel?: number;
+  depthLabel?: string;
+  endKind?: string;
 };
 
 export function playerId() {
@@ -73,7 +76,8 @@ async function writeCloud(saves: CloudAdventure[], vault: string) {
   const serialized = JSON.stringify(saves);
   if (published.get(vault) === serialized) return;
   const headers = { "content-type": "application/json" };
-  const publicRuns = saves.map(({ id, name, role, turn, ended }) => ({
+  const publicRuns = saves.map(({ id, name, role, turn, ended, maxLevel, depthLabel, endKind, buildId }) => ({
+    maxLevel, depthLabel, endKind, buildId,
     id,
     name,
     role,
