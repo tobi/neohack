@@ -17,6 +17,7 @@
 
 import { generateText, stepCountIs, dynamicTool, jsonSchema } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
+import { createMCPClient } from '@ai-sdk/mcp';
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { homedir } from 'os';
 import { dirname, resolve, join } from 'path';
@@ -40,10 +41,14 @@ const LIB = join(ROOT, 'lib/neonethack');
 const ENGINE = process.env.NEONETHACK_ENGINE ?? join(LIB, 'engine/playground/nethack');
 const DATA = process.env.NEONETHACK_DATA ?? join(LIB, 'engine/playground');
 const SESSIONS = process.env.NEONETHACK_SESSIONS ?? join(BOT_DIR, 'sessions');
-const STEP_BUDGET = parseInt(process.env.STEP_BUDGET ?? process.argv[2] ?? '1000', 10);
+const CONTINUE_SESSION = process.argv.slice(2).some(arg => arg === '-c' || arg === '--continue');
+const budgetArg = process.argv.slice(2).find(arg => /^\d+$/.test(arg));
+const STEP_BUDGET = parseInt(process.env.STEP_BUDGET ?? budgetArg ?? '1000', 10);
 const BASE_URL = process.env.OPENAI_API_BASE ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1';
 const API_KEY = process.env.OPENAI_API_KEY ?? 'dummy';
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-5.6-luna';
+const MAX_OUTPUT_TOKENS = parseInt(process.env.MAX_OUTPUT_TOKENS ?? '256', 10);
+const PROMPT_CACHE_KEY = process.env.PROMPT_CACHE_KEY ?? 'neohack-cli-bot-v1';
 
 // State directory: everything the bot iterates on lives here — conversation,
 // game state, observations, logs, the LLM-improved system-prompt.md and
@@ -60,6 +65,7 @@ const CONV_F = `${STATE_DIR}/conversation.json`;
 const OBS_F = `${STATE_DIR}/last-obs.json`;
 const DEATH_F = `${STATE_DIR}/last-death.json`;
 const LASTRUN_F = `${STATE_DIR}/last-run.json`;
+const TOKEN_LOG = `${LOG_DIR}/token-usage.jsonl`;
 const LOG = `${LOG_DIR}/agent.log`;
 
 for (const d of [STATE_DIR, LOG_DIR, SESSIONS]) mkdirSync(d, { recursive: true });
@@ -102,26 +108,40 @@ function loadJson(f, d) { try { return JSON.parse(readFileSync(f, 'utf8')); } ca
 function saveJson(f, v) { writeFileSync(f, JSON.stringify(v, null, 2)); }
 
 const state = loadJson(STATE_F, { gameId: null, reqSeq: 0 });
-let lastSessionId = state.gameId;
+// Starting fresh is the default. -c/--continue opts into the saved game.
+let lastSessionId = CONTINUE_SESSION ? state.gameId : null;
+let latestRevision = null;
 let deathSeen = false;
 // skill guards: the bot "dies" when it stops making progress
 let stalledOps = 0;   // consecutive interactions without game-turn advancement
 let lastTurnSeen = null;
 let toollessSteps = 0; // consecutive model steps without any tool call
+let observationCache = loadJson(OBS_F, null)?.observation ?? null;
+
+function mergeObservation(previous, incoming) {
+  const update = incoming?.update;
+  if (!previous || !update || update.kind === 'snapshot') return incoming;
+  if (update.kind !== 'delta' || previous.update?.id !== update.base) return null;
+
+  const merged = { ...previous, ...incoming };
+  for (const field of update.remove ?? []) delete merged[field];
+
+  if (Array.isArray(previous.world) || Array.isArray(incoming.world)) {
+    const cells = new Map();
+    for (const cell of previous.world ?? []) cells.set(`${cell.x},${cell.y}`, cell);
+    for (const removed of update.worldRemoved ?? []) cells.delete(`${removed.x},${removed.y}`);
+    for (const cell of incoming.world ?? []) cells.set(`${cell.x},${cell.y}`, cell);
+    merged.world = [...cells.values()];
+  }
+  return merged;
+}
 
 // ---- MCP HTTP 2026-07-28 -------------------------------------------------
-// The installed native target is stateless HTTP, not legacy stdio MCP. It
-// uses server/discover and request metadata headers that SDK 1.x does not yet
-// send, so use its small wire protocol directly.
+// @ai-sdk/mcp 2.0.41 negotiates server/discover and modern stateless HTTP.
 const MCP_BIN = process.env.NEONETHACK_MCP ?? join(homedir(), '.local/bin/neohack-mcp');
 const MCP_HTTP_PORT = parseInt(process.env.NEONETHACK_MCP_HTTP_PORT ?? '18765', 10);
 const externalMcpUrl = process.env.NEONETHACK_MCP_HTTP_URL;
 const MCP_HTTP_URL = externalMcpUrl ?? `http://127.0.0.1:${MCP_HTTP_PORT}/mcp`;
-const MCP_PROTOCOL_VERSION = '2026-07-28';
-const MCP_META = {
-  'io.modelcontextprotocol/protocolVersion': MCP_PROTOCOL_VERSION,
-  'io.modelcontextprotocol/clientCapabilities': {},
-};
 let mcpServerError = '';
 
 if (!externalMcpUrl) {
@@ -143,33 +163,31 @@ if (!externalMcpUrl) {
   }
 }
 
-let rpcId = 0;
-async function mcpRpc(method, params = {}, name = null) {
-  const body = {
-    jsonrpc: '2.0',
-    id: ++rpcId,
-    method,
-    params: { ...params, _meta: { ...MCP_META, ...(params._meta ?? {}) } },
-  };
-  const headers = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json, text/event-stream',
-    'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
-    'Mcp-Method': method,
-  };
-  if (name) headers['Mcp-Name'] = name;
-  const response = await fetch(MCP_HTTP_URL, { method: 'POST', headers, body: JSON.stringify(body) });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.error) {
-    const error = payload?.error ?? { code: `http${response.status}`, message: response.statusText };
-    throw new Error(`${error.code}: ${error.message}`);
-  }
-  return payload.result;
-}
+const mcpClient = await createMCPClient({
+  transport: { type: 'http', url: MCP_HTTP_URL },
+  protocolVersionDiscovery: true,
+  clientName: 'neohack-cli-bot',
+  version: '1.0.0',
+});
 
 async function callBridge(tool, params) {
-  const r = await mcpRpc('tools/call', { name: tool, arguments: params }, tool);
+  let effectiveParams = params ?? {};
+  // The wrapper owns operation identity. Letting the model invent request IDs
+  // caused collisions and wasted full model turns; revision is protocol state,
+  // not a strategic choice.
+  if (/^(game_|decision_)/.test(tool) && lastSessionId && latestRevision !== null) {
+    state.reqSeq = (state.reqSeq ?? 0) + 1;
+    effectiveParams = {
+      ...effectiveParams,
+      sessionId: lastSessionId,
+      requestId: `bot-${process.pid}-${state.reqSeq}`,
+      expectedRevision: latestRevision,
+    };
+    saveJson(STATE_F, state);
+  }
+  const r = await mcpClient.callTool({ name: tool, arguments: effectiveParams });
   const structuredContent = r?.structuredContent ?? null;
+  if (!r?.isError && structuredContent?.revision !== undefined) latestRevision = structuredContent.revision;
   const contentText = r?.content?.map(c => c.text ?? '').join('') ?? '';
   const text = structuredContent ? JSON.stringify(structuredContent) : contentText;
   return {
@@ -180,12 +198,8 @@ async function callBridge(tool, params) {
   };
 }
 
-const discovery = await mcpRpc('server/discover');
-if (!discovery?.supportedVersions?.includes(MCP_PROTOCOL_VERSION)) {
-  throw new Error(`MCP target does not support ${MCP_PROTOCOL_VERSION}`);
-}
-const { tools: mcpTools = [] } = await mcpRpc('tools/list');
-log(`connected MCP HTTP ${MCP_PROTOCOL_VERSION} at ${MCP_HTTP_URL}; tools discovered: ${mcpTools.length}`);
+const { tools: mcpTools = [] } = await mcpClient.listTools();
+log(`connected MCP HTTP ${mcpClient.initializeResult.protocolVersion} at ${MCP_HTTP_URL}; tools discovered: ${mcpTools.length}`);
 
 // A new MCP server has no in-memory active session. Load the saved recording
 // before asking the model to act. Stale IDs are cleared; contention is fatal.
@@ -196,6 +210,7 @@ if (lastSessionId) {
     const message = resumed.error?.message ?? resumed.text.slice(0, 300);
     if (code === 'sessionBusy') {
       log(`startup failed: ${code}: ${message}`);
+      await mcpClient.close();
       if (mcpServer) mcpServer.kill('SIGTERM');
       process.exitCode = 2;
       throw new Error(`Session ${lastSessionId} is busy; stop the other agent before retrying`);
@@ -206,8 +221,9 @@ if (lastSessionId) {
     saveJson(STATE_F, state);
     saveJson(CONV_F, []);
   } else {
+    latestRevision = resumed.structuredContent?.revision ?? null;
     const turn = resumed.structuredContent?.observation?.turn ?? '?';
-    log(`session resumed: ${lastSessionId} turn=${turn}`);
+    log(`session resumed: ${lastSessionId} turn=${turn} revision=${latestRevision ?? '?'}`);
   }
 }
 
@@ -244,7 +260,14 @@ for (const t of mcpTools) {
           const j = JSON.parse(text);
           const sc = j?.data?.output?.structuredContent ?? j;
           if (sc?.observation) {
-            saveJson(OBS_F, { sessionId: sc.sessionId ?? lastSessionId, revision: sc.revision, decision: sc.decision ?? null, observation: sc.observation });
+            const merged = mergeObservation(observationCache, sc.observation);
+            if (merged) {
+              observationCache = merged;
+              saveJson(OBS_F, { sessionId: sc.sessionId ?? lastSessionId, revision: sc.revision, decision: sc.decision ?? null, observation: merged });
+            } else {
+              log(`observation cache miss: delta base=${sc.observation.update?.base} local=${observationCache?.update?.id}; advisor using current delta only`);
+              saveJson(OBS_F, { sessionId: sc.sessionId ?? lastSessionId, revision: sc.revision, decision: sc.decision ?? null, observation: sc.observation });
+            }
             try {
               const advisorSrc = existsSync(ADVISOR_F) ? ADVISOR_F : BUNDLED_ADVISOR;
               const out = execFileSync('node', [advisorSrc, OBS_F], { timeout: 5000, encoding: 'utf8' });
@@ -302,16 +325,18 @@ const model = openai.chat(MODEL);
 // system prompt: LLM-editable doctrine in system-prompt.md + fixed session line
 let doctrine = '';
 try { doctrine = readFileSync(DOCTRINE_F, 'utf8'); } catch { doctrine = readFileSync(BUNDLED_DOCTRINE, 'utf8'); }
-const system = `${doctrine}
+const sessionInstruction = lastSessionId
+  ? `SESSION: resumed session "${lastSessionId}". Begin with session_observe {"sessionId":"${lastSessionId}"}.`
+  : 'SESSION: start a NEW adventure. Your first action must be session_create {"name":"Ada","role":"valkyrie"}.';
+const system = `${doctrine}\n\n${sessionInstruction}`;
 
-SESSION: active session "${lastSessionId ?? 'UNKNOWN'}". Your first action: session_observe {"sessionId":"${lastSessionId ?? 'UNKNOWN'}"} to see the world. If it errors, try session_resume {"sessionId":"${lastSessionId ?? 'UNKNOWN'}"}.`;
-
-const initialPrompt = state.gameId
-  ? `Continue the active adventure (sessionId ${state.gameId}). Observe, then play turn after turn. Descend as deep as you can.`
+const initialPrompt = lastSessionId
+  ? `Continue the resumed adventure (sessionId ${lastSessionId}). Observe, then play turn after turn. Descend as deep as you can.`
   : 'Start a fresh adventure: session_create {"name":"Ada","role":"valkyrie"}, then play. Descend as deep as you can.';
 
-// persistent conversation: survives process restarts, reset on death
-let messages = loadJson(CONV_F, null);
+// Persistent conversation is resumed only with -c. A default invocation starts
+// both a new game and a fresh model conversation.
+let messages = CONTINUE_SESSION ? loadJson(CONV_F, null) : null;
 if (Array.isArray(messages) && messages.length) {
   // sanitize: deep-truncate oversized strings (tool results can be large)
   const deepTrunc = (o, cap = 6000) => {
@@ -330,6 +355,34 @@ if (Array.isArray(messages) && messages.length) {
 function resetConversation() { saveJson(CONV_F, []); }
 
 let totalSteps = 0;
+const tokenTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, noCache: 0, turns: 0, cacheMisses: 0, cacheUnreported: 0 };
+
+function recordTokenUsage(usage, modelTurn) {
+  const input = usage?.inputTokens ?? 0;
+  const output = usage?.outputTokens ?? 0;
+  const cacheRead = usage?.inputTokenDetails?.cacheReadTokens;
+  const cacheWrite = usage?.inputTokenDetails?.cacheWriteTokens;
+  const noCache = usage?.inputTokenDetails?.noCacheTokens;
+  const cacheReported = cacheRead !== undefined;
+  const cacheMiss = modelTurn > 1 && input > 0 && cacheReported && cacheRead === 0;
+  tokenTotals.input += input;
+  tokenTotals.output += output;
+  tokenTotals.cacheRead += cacheRead ?? 0;
+  tokenTotals.cacheWrite += cacheWrite ?? 0;
+  tokenTotals.noCache += noCache ?? 0;
+  tokenTotals.turns++;
+  if (cacheMiss) tokenTotals.cacheMisses++;
+  if (!cacheReported) tokenTotals.cacheUnreported++;
+  const entry = {
+    at: new Date().toISOString(), modelTurn, input, output,
+    cacheRead: cacheRead ?? null, cacheWrite: cacheWrite ?? null,
+    noCache: noCache ?? null, cacheReported, cacheMiss,
+    cumulativeOutput: tokenTotals.output,
+  };
+  appendFileSync(TOKEN_LOG, JSON.stringify(entry) + '\n');
+  const shown = value => value === undefined ? 'unreported' : value;
+  log(`tokens turn=${modelTurn} input=${input} output=${output} cacheRead=${shown(cacheRead)} cacheWrite=${shown(cacheWrite)} uncached=${shown(noCache)} cumulativeOutput=${tokenTotals.output}${cacheMiss ? ' <<CACHE-MISS>>' : ''}`);
+}
 
 try {
   while (totalSteps < STEP_BUDGET) {
@@ -341,8 +394,20 @@ try {
       messages,
       tools,
       stopWhen: stepCountIs(Math.min(60, STEP_BUDGET - totalSteps)),
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+      providerOptions: {
+        openai: {
+          reasoningEffort: 'minimal',
+          textVerbosity: 'low',
+          promptCacheKey: PROMPT_CACHE_KEY,
+          promptCacheOptions: { mode: 'implicit', ttl: '30m' },
+        },
+      },
     });
     log(`model turn done in ${((Date.now() - t0) / 1000).toFixed(1)}s (+${res.response.messages.length} msgs)`);
+    // generateText can perform many model turns internally while resolving
+    // tools. Preserve per-turn usage so aggregate totals cannot hide cache misses.
+    for (const step of res.steps ?? []) recordTokenUsage(step.usage, tokenTotals.turns + 1);
     for (const m of res.response.messages) {
       messages.push(m);
       totalSteps++;
@@ -360,16 +425,17 @@ try {
       messages = [messages[0], ...messages.slice(-58)];
     }
     saveJson(CONV_F, messages);
-    saveJson(LASTRUN_F, { finishedAt: new Date().toISOString(), totalSteps, deathSeen });
+    saveJson(LASTRUN_F, { finishedAt: new Date().toISOString(), totalSteps, deathSeen, tokenUsage: tokenTotals });
     if (deathSeen) { log('death detected — ending run (conversation reset)'); saveJson(CONV_F, []); break; }
     if (res.text) log(`model: ${res.text.slice(0, 300)}`);
   }
 } catch (e) {
   log(`agent error: ${String(e.stack ?? e).slice(0, 800)}`);
 } finally {
-  log(`run complete: ${totalSteps} steps, session=${lastSessionId}`);
+  log(`run complete: ${totalSteps} steps, session=${lastSessionId}, outputTokens=${tokenTotals.output}, cacheMisses=${tokenTotals.cacheMisses}/${tokenTotals.turns}`);
   state.gameId = lastSessionId;
   saveJson(STATE_F, state);
+  try { await mcpClient.close(); } catch {}
   if (mcpServer && mcpServer.exitCode === null) {
     mcpServer.kill('SIGTERM');
     await new Promise(resolve => {

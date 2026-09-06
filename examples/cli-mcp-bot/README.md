@@ -40,8 +40,9 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
 
    ```sh
    npm install
-   npm start            # one session (STEP_BUDGET model steps, default 1000)
-   npm run runner       # continuous: session -> retro -> session ...
+   npm start            # start a NEW game (default)
+   npm run continue     # resume the saved game (`node agent.mjs -c`)
+   npm run runner       # continuously resume: session -> retro -> session ...
    ```
 
 ## Files
@@ -62,9 +63,13 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
 - The agent manages a local HTTP MCP child by default and shuts it down at the
   end of each run. Setting `NEONETHACK_MCP_HTTP_URL` uses an externally managed
   HTTP target instead.
-- Sessions persist in `sessions/` and are resumable: `state/game-state.json`
-  tracks the active `sessionId` across restarts. Delete it to start a fresh
-  adventure.
+- A normal `node agent.mjs` invocation starts a new game. Pass `-c` or
+  `--continue` to resume the session tracked by `state/game-state.json`.
+- Per-model-turn input/output/cache token counts are appended to
+  `state/logs/token-usage.jsonl`; `state/last-run.json` contains cumulative
+  output-token and cache-miss totals.
+- Observation snapshots and deltas are merged into `state/last-obs.json`, so
+  the advisor retains its world cache while the model receives compact deltas.
 - Death detection resets the conversation; the model then starts a new game
   itself (new session ids are captured automatically).
 - The state directory (default `./state`, override with `NEONETHACK_BOT_STATE`)
