@@ -13,8 +13,11 @@ export const item = { oneOf: [text(127), object({ id: text(64), quantity: intege
 export const automaticPickup = object({
   enabled: { type: "boolean" },
   itemTypes: { type: "array", maxItems: 15, uniqueItems: true, items: enumeration("gold", "food", "potions", "scrolls", "weapons", "armor", "rings", "amulets", "tools", "spellbooks", "wands", "gems", "rocks", "balls", "chains") },
+  review: { type: "boolean", description: "Pause automatic pickup at a review decision before transferring anything. Explicit selection or cancellation required." },
+  lootPatterns: { type: "array", maxItems: 16, items: text(64), description: "Case-insensitive literal substrings of the perceived singular item name. Add to category and arrow inclusions; never match hidden identity." },
+  ignorePatterns: { type: "array", maxItems: 16, items: text(64), description: "Case-insensitive literal substrings of the perceived singular item name. Override every inclusion." },
   arrows: { type: "boolean" }, leaveCorpses: { type: "boolean" }, leaveKnownCursed: { type: "boolean" },
-});
+}, ["enabled", "itemTypes", "arrows", "leaveCorpses", "leaveKnownCursed"]);
 export const position = { oneOf: [object({ x: integer(1, 79), y: integer(0, 20) }), enumeration(...compass.enum, "finish", "help")] };
 export const answer = { oneOf: [
   object({ kind: { const: "position" }, position }),
@@ -80,7 +83,7 @@ game("chat", "Attempt deliberate conversation in a compass direction. Dialogue, 
 for (const action of ["dip", "rub", "invoke", "quiver"]) game(action, "Attempt the distinct engine " + action + " command on a carried object. Omit the item to select it; subsequent item, confirmation, target and text choices remain separate decisions. Applicability is an attempt, not a safety prediction.", {item});
 for (const action of ["attack", "moveWithoutAttack"]) game(action, action === "attack" ? "Force one attack toward an adjacent square, including apparently empty squares. The engine determines contact and costs." : "Attempt one step without fighting or automatic pickup using the engine movement prefix. No creature is attacked automatically.", {direction: compass}, ["direction"]);
 game("loot", "Open perceived containers underfoot. Multiple containers require selection. Unknown contents require explicit inspection, then one combined choice stages take and put stacks. Takes execute before puts through engine rules; warnings and interruptions remain decisions, with no rollback or automatic retry. Does not pick up the container or interact with adjacent creatures.");
-game("configurePickup", "Replace automatic ground-pickup settings at a free command boundary without spending a turn. Read actual settings from observation.automaticPickup. Exclusions override categories and arrow inclusion; thrown, stolen and dropped items follow the same rules. Empty types means only enabled arrow inclusion, never all. No container interaction or auto-confirmation. Settings are journaled and restored with the session.", { automaticPickup }, ["automaticPickup"]);
+game("configurePickup", "Replace automatic ground-pickup settings at a free command boundary without spending a turn. Read actual settings from observation.automaticPickup. Ignore patterns and leave rules override category, arrow and loot-pattern inclusion; thrown, stolen and dropped items follow the same rules. Empty types means only enabled arrow inclusion, never all. No container interaction or auto-confirmation. Settings are journaled and restored with the session.", { automaticPickup }, ["automaticPickup"]);
 game("quit", "Abandon this run through the engine. Presents the genuine quit confirmation; only an explicit affirmative answer ends the adventure. Retains its journal.");
 game("pray", "Begin a prayer. Always preserve genuine confirmation; the API does not reveal divine favor or prayer cooldown or decide whether prayer is safe.");
 add("decision.answer", "Continue exactly the standing decisionId with one typed answer. Use returned item refs and integer choice IDs unchanged. confirm:false declines; it is not cancellation. A wrong answer or stale ID does not advance the world. May lead to another decision. Retry the same requestId and payload after uncertainty, never the initiating game operation.", object({ ...guard, decisionId: text(64), answer }), "act", { idempotent: true });

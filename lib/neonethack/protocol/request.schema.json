@@ -123,6 +123,34 @@
                     ]
                   }
                 },
+                "review": {
+                  "type": "boolean",
+                  "description": "Pause automatic pickup at a review decision before transferring anything. Explicit selection or cancellation required."
+                },
+                "lootPatterns": {
+                  "type": "array",
+                  "maxItems": 16,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "x-maxBytes": 64,
+                    "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                  },
+                  "description": "Case-insensitive literal substrings of the perceived singular item name. Add to category and arrow inclusions; never match hidden identity."
+                },
+                "ignorePatterns": {
+                  "type": "array",
+                  "maxItems": 16,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "x-maxBytes": 64,
+                    "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                  },
+                  "description": "Case-insensitive literal substrings of the perceived singular item name. Override every inclusion."
+                },
                 "arrows": {
                   "type": "boolean"
                 },
@@ -2845,6 +2873,34 @@
                       "chains"
                     ]
                   }
+                },
+                "review": {
+                  "type": "boolean",
+                  "description": "Pause automatic pickup at a review decision before transferring anything. Explicit selection or cancellation required."
+                },
+                "lootPatterns": {
+                  "type": "array",
+                  "maxItems": 16,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "x-maxBytes": 64,
+                    "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                  },
+                  "description": "Case-insensitive literal substrings of the perceived singular item name. Add to category and arrow inclusions; never match hidden identity."
+                },
+                "ignorePatterns": {
+                  "type": "array",
+                  "maxItems": 16,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "x-maxBytes": 64,
+                    "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                  },
+                  "description": "Case-insensitive literal substrings of the perceived singular item name. Override every inclusion."
                 },
                 "arrows": {
                   "type": "boolean"

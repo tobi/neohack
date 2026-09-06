@@ -190,3 +190,5 @@ export { Hero, Entity, Inventory, InventoryItem, defineBot, runBot, direction, e
 export type { BotContext, BotDefinition, Step } from './hero.js';
 
 export type { HeroEvent, HeroEventName, HeroEventDetails, HeroListener, BotResult, StopReason, CellChange, ItemSighting } from './hero-events.js';
+
+export type { ScriptState, ScriptValue, ScriptResult, ScriptHost, ScriptControl, ScriptJournalEntry } from './script.js';

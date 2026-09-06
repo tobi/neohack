@@ -77,7 +77,17 @@ headers, binaries, playgrounds, saves and optional submodule checkouts are absen
   disappearance. Shared C projection now uses these perceived display facts
   consistently; monster behavior, hidden knowledge and action costs are unchanged.
 
+## 2026-09-06 — literal pickup patterns
+
+- `win/headless/pickup-settings.inc`, `src/pickup.c`, `include/extern.h`: bounded loot/ignore substring rules against perceived singular item names; ignore and existing leave rules override inclusion. No hidden identity matching or automatic container interaction.
+
 - Mark the optional type-naming prompt reached after an inconclusive potion drink
   with explicit headless text context. The shared driver exposes this as an
   optional text-decision purpose; potion effects, identification, consumption and
   cancellation remain the original engine operations.
+
+- `src/pickup.c`, `win/headless/winheadless.c`, `win/headless/pickup-settings.inc`,
+  and `include/extern.h`: optional explicit automatic-pickup review uses a real
+  pre-transfer choice with filter suggestions. Successful transfers report exact
+  acquired quantity and post-merge stack identity; inspected containers report
+  their disclosed contents. Existing warnings, traps, burden and shop rules remain.

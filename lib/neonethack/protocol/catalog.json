@@ -105,6 +105,34 @@
                   ]
                 }
               },
+              "review": {
+                "type": "boolean",
+                "description": "Pause automatic pickup at a review decision before transferring anything. Explicit selection or cancellation required."
+              },
+              "lootPatterns": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "x-maxBytes": 64,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                "description": "Case-insensitive literal substrings of the perceived singular item name. Add to category and arrow inclusions; never match hidden identity."
+              },
+              "ignorePatterns": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "x-maxBytes": 64,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                "description": "Case-insensitive literal substrings of the perceived singular item name. Override every inclusion."
+              },
               "arrows": {
                 "type": "boolean"
               },
@@ -2302,7 +2330,7 @@
     },
     {
       "name": "game.configurePickup",
-      "description": "Replace automatic ground-pickup settings at a free command boundary without spending a turn. Read actual settings from observation.automaticPickup. Exclusions override categories and arrow inclusion; thrown, stolen and dropped items follow the same rules. Empty types means only enabled arrow inclusion, never all. No container interaction or auto-confirmation. Settings are journaled and restored with the session. Answer returned decisions separately.",
+      "description": "Replace automatic ground-pickup settings at a free command boundary without spending a turn. Read actual settings from observation.automaticPickup. Ignore patterns and leave rules override category, arrow and loot-pattern inclusion; thrown, stolen and dropped items follow the same rules. Empty types means only enabled arrow inclusion, never all. No container interaction or auto-confirmation. Settings are journaled and restored with the session. Answer returned decisions separately.",
       "schema": {
         "type": "object",
         "properties": {
@@ -2358,6 +2386,34 @@
                     "chains"
                   ]
                 }
+              },
+              "review": {
+                "type": "boolean",
+                "description": "Pause automatic pickup at a review decision before transferring anything. Explicit selection or cancellation required."
+              },
+              "lootPatterns": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "x-maxBytes": 64,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                "description": "Case-insensitive literal substrings of the perceived singular item name. Add to category and arrow inclusions; never match hidden identity."
+              },
+              "ignorePatterns": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "x-maxBytes": 64,
+                  "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                },
+                "description": "Case-insensitive literal substrings of the perceived singular item name. Override every inclusion."
               },
               "arrows": {
                 "type": "boolean"

@@ -36,6 +36,9 @@ typedef struct {
     int enabled, arrows, leave_corpses, leave_known_cursed; /* exactly 0 or 1 */
     const char *const *item_types; /* public names; empty array means no categories */
     size_t item_type_count;
+    const char *const *loot_patterns, *const *ignore_patterns; /* literal perceived-name substrings */
+    int review; /* 0 automatic, 1 explicit pickup review */
+    size_t loot_pattern_count, ignore_pattern_count; /* each <= 16; strings 1..64 UTF-8 bytes */
 } nnh_automatic_pickup;
 typedef struct {
     const char *name, *role, *race, *gender, *align; /* NULL: generated name / engine-selected identity */

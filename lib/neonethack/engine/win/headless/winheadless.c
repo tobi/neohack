@@ -575,6 +575,76 @@ headless_action_result(const char *action, const char *status)
     jb_free(&jb);
 }
 
+/* Transfer witnesses are emitted only after addinv succeeds, including merges. */
+static void
+hl_loot_object(JBuf *jb, struct obj *obj)
+{
+    jb_begin_obj(jb);
+    jb_key(jb, "objectId"); jb_int(jb, obj->o_id);
+    jb_key(jb, "label"); jb_str(jb, doname(obj));
+    jb_key(jb, "quantity"); jb_int(jb, obj->quan);
+    jb_key(jb, "carried"); jb_bool(jb, carried(obj));
+    jb_end_obj(jb);
+}
+
+void
+headless_item_looted(struct obj *obj, long quantity, const char *source,
+                     struct obj *container)
+{
+    JBuf jb;
+    if (windowprocs.wp_id != wp_headless || !obj || quantity <= 0) return;
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "item"); hl_loot_object(&jb, obj);
+    jb_key(&jb, "quantity"); jb_int(&jb, quantity);
+    jb_key(&jb, "source"); jb_str(&jb, source);
+    if (container) { jb_key(&jb, "container"); hl_loot_object(&jb, container); }
+    jb_key(&jb, "turn"); jb_int(&jb, svm.moves);
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("item_looted", jb.buf);
+    jb_free(&jb);
+}
+
+void
+headless_container_opened(struct obj *container)
+{
+    JBuf jb; struct obj *obj;
+    if (windowprocs.wp_id != wp_headless || !container || !container->cknown) return;
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "container"); hl_loot_object(&jb, container);
+    jb_key(&jb, "contents"); jb_begin_arr(&jb);
+    for (obj = container->cobj; obj; obj = obj->nobj) { jb_sep(&jb); hl_loot_object(&jb, obj); }
+    jb_end_arr(&jb);
+    jb_key(&jb, "turn"); jb_int(&jb, svm.moves);
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("container_opened", jb.buf);
+    jb_free(&jb);
+}
+
+void
+headless_pickup_menu(winid window)
+{
+    JBuf jb;
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "window"); jb_int(&jb, window);
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("pickup_menu", jb.buf);
+    jb_free(&jb);
+}
+
+void
+headless_pickup_suggestion(winid window, boolean suggested)
+{
+    JBuf jb;
+    if (window <= 0 || window >= HL_MAXWIN || !hl_wins[window].used || !hl_wins[window].nitems) return;
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "window"); jb_int(&jb, window);
+    jb_key(&jb, "index"); jb_int(&jb, hl_wins[window].nitems - 1);
+    jb_key(&jb, "suggested"); jb_bool(&jb, suggested);
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("pickup_suggestion", jb.buf);
+    jb_free(&jb);
+}
+
 /* Called only beside an existing player-facing disclosure, never by a query. */
 void
 headless_door_witness(coordxy x, coordxy y, const char *fact)

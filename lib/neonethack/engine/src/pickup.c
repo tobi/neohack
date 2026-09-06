@@ -958,11 +958,18 @@ autopick_testobj(struct obj *otmp, boolean calc_costly)
     /* check for pickup_types */
     pickit = (!*otypes || strchr(otypes, otmp->oclass));
 
+#ifdef HEADLESS_GRAPHICS
+    if (!strcmp(windowprocs.name, "headless") && headless_pickup_matches(otmp, FALSE))
+        pickit = TRUE;
+#endif
     /* check for autopickup exceptions */
     ape = check_autopickup_exceptions(otmp);
     if (ape)
         pickit = ape->grab;
-
+#ifdef HEADLESS_GRAPHICS
+    if (!strcmp(windowprocs.name, "headless") && headless_pickup_matches(otmp, TRUE))
+        pickit = FALSE;
+#endif
     return pickit;
 }
 
@@ -991,6 +998,28 @@ autopick(
         check_costly = FALSE; /* only need to check once per autopickup */
     }
 
+#ifdef HEADLESS_GRAPHICS
+    if (n && !strcmp(windowprocs.name, "headless") && headless_pickup_review()) {
+        winid win = create_nhwindow(NHW_MENU);
+        anything any;
+        start_menu(win, MENU_BEHAVE_STANDARD);
+        headless_pickup_menu(win);
+        for (curr = olist; curr; curr = FOLLOW(curr, follow)) {
+            if (curr == uchain) continue;
+            any = cg.zeroany; any.a_obj = curr;
+            add_menu(win, &nul_glyphinfo, &any, 0, 0, ATR_NONE, NO_COLOR,
+                     doname(curr), MENU_ITEMFLAGS_NONE);
+            headless_menu_object(win, curr);
+            headless_pickup_suggestion(win, autopick_testobj(curr, FALSE));
+        }
+        end_menu(win, "Review ground pickup. Choose items or cancel before collecting.");
+        n = select_menu(win, PICK_ANY, pick_list);
+        destroy_nhwindow(win);
+        for (int k = 0; k < n; k++) if ((*pick_list)[k].count < 0)
+            (*pick_list)[k].count = (*pick_list)[k].item.a_obj->quan;
+        return n;
+    }
+#endif
     if (n) {
         *pick_list = pi = (menu_item *) alloc(sizeof (menu_item) * n);
         for (n = 0, curr = olist; curr; curr = FOLLOW(curr, follow)) {
@@ -1910,6 +1939,7 @@ pick_obj(struct obj *otmp)
     struct obj *result;
     coordxy ox, oy;
     boolean robshop, fromfloor = otmp->where == OBJ_FLOOR;
+    long transferred = otmp->quan;
 
     /* otmp is either on the floor or in an engulfer's inventory; for the
        latter, its <ox,oy> probably won't be set */
@@ -1949,6 +1979,9 @@ pick_obj(struct obj *otmp)
     if (robshop)
         remote_burglary(ox, oy);
 
+#ifdef HEADLESS_GRAPHICS
+    headless_item_looted(result, transferred, fromfloor ? "floor" : "engulfer", (struct obj *) 0);
+#endif
     return result;
 }
 
@@ -2783,6 +2816,9 @@ out_container(struct obj *obj)
 
     otmp = addinv(obj);
     pickup_prinv(otmp, count, "removing");
+#ifdef HEADLESS_GRAPHICS
+    headless_item_looted(otmp, count, "container", gc.current_container);
+#endif
 
     if (is_gold) {
         bot(); /* update character's gold piece count immediately */
@@ -3018,6 +3054,7 @@ headless_container_transfer(void)
 
     win = create_nhwindow(NHW_MENU);
     start_menu(win, MENU_BEHAVE_STANDARD);
+    headless_container_opened(gc.current_container);
     headless_container_menu(win, "transfer");
     for (pass = 0; pass < 2; pass++) {
         for (obj = pass ? gi.invent : gc.current_container->cobj;

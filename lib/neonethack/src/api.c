@@ -207,12 +207,21 @@ static void put_pickup(mj_Buf *b, const nnh_automatic_pickup *p)
     mj_key(b, "arrows"); if (p->arrows != 0 && p->arrows != 1) mj_nullv(b); else mj_boolv(b, p->arrows);
     mj_key(b, "leaveCorpses"); if (p->leave_corpses != 0 && p->leave_corpses != 1) mj_nullv(b); else mj_boolv(b, p->leave_corpses);
     mj_key(b, "leaveKnownCursed"); if (p->leave_known_cursed != 0 && p->leave_known_cursed != 1) mj_nullv(b); else mj_boolv(b, p->leave_known_cursed);
+    if (p->review) { mj_key(b, "review"); if (p->review != 1) mj_nullv(b); else mj_boolv(b, 1); }
     mj_key(b, "itemTypes");
     if (p->item_type_count > 15 || (p->item_type_count && !p->item_types)) mj_nullv(b);
     else {
         mj_arr(b);
         for (i = 0; i < p->item_type_count; i++) mj_strv(b, p->item_types[i]);
         mj_endarr(b);
+    }
+    for (i = 0; i < 2; i++) {
+        size_t k, count = i ? p->ignore_pattern_count : p->loot_pattern_count;
+        const char *const *patterns = i ? p->ignore_patterns : p->loot_patterns;
+        if (!count && !patterns) continue;
+        mj_key(b, i ? "ignorePatterns" : "lootPatterns");
+        if (count > 16 || (count && !patterns)) mj_nullv(b);
+        else { mj_arr(b); for (k = 0; k < count; k++) mj_strv(b, patterns[k]); mj_endarr(b); }
     }
     mj_endobj(b);
 }

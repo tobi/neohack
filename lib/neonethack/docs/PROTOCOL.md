@@ -412,7 +412,7 @@ replaces the complete configuration at a free command boundary. TypeScript uses
 Types are gold, food, potions, scrolls, weapons, armor, rings, amulets, tools,
 spellbooks, wands, gems, rocks, balls and chains. Deliberately select all names
 for all categories. An empty array means no categories; C maps it to NetHack's
-nonempty venom sentinel, so only an enabled arrow inclusion can collect items.
+nonempty venom sentinel, so only an enabled arrow or loot-pattern inclusion can collect items.
 Off preserves the configured filters. The pixel client defaults to enabled
 Gold + arrows; omitted library creation settings leave automatic pickup off,
 with gold/arrow filters ready to enable. No client defaults are injected on resume.
@@ -432,7 +432,32 @@ curse wording, never hidden object flags. Recovery overrides `pickup_thrown`,
 `pickup_stolen`, and `nopick_dropped` are deliberately disabled: recovered,
 thrown and dropped items follow these same filters. Shop exclusions, weight rules,
 engine warnings, and explicit manual pickup remain intact. These settings never
-open or transfer a container and offer no arbitrary options or pattern console.
+open or transfer a container.
+
+Optional `lootPatterns` and `ignorePatterns` arrays each accept up to 16 nonblank
+literal substrings (1–64 UTF-8 bytes, no control characters). Matching uses
+NetHack's case-insensitive substring search against the singular perceived item
+name, including disclosed modifiers and user-assigned names. It does not interpret
+regex or wildcard syntax, nor match undiscovered true identities. Loot matches add
+to category/arrow inclusion; ignore matches and leave rules override all inclusions.
+Omitting either list clears it when replacing settings. Patterns are retained in
+observations, creation inputs, configuration receipts and replay. For example:
+`lootPatterns: ["ration", "dagger"], ignorePatterns: ["corpse", "cursed"]`.
+Clear `itemTypes` and disable `arrows` to select using loot patterns alone.
+
+Optional `review: true` pauses matching automatic pickup at a real choice before
+transfer. `decision.pickupReview` marks that menu and each option carries a
+`suggested` boolean from the configured filters. No choice is preselected.
+The caller can override suggestions or cancel before issuing a different action.
+Omitted review resets it to false on replacement; configuration and pending review
+are retained through the existing journal and exact receipt machinery.
+
+Public `itemLooted` events witness actual acquisition, including transferred
+quantity, resulting inventory stack ID/size, floor/container/engulfer source and
+container when present. `containerOpened` describes an actually inspected
+container and its disclosed contents, never a failed locked/trapped attempt.
+These witnessed outcomes cannot be vetoed; the standing transfer decision can.
+They are exposed identically through native, WASM, TypeScript, MCP and WebMCP.
 
 ## MCP observation presentation
 

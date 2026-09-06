@@ -10,6 +10,7 @@ const array = (items: Schema): Schema => ({ type: "array", items });
 const nullable = (s: Schema): Schema => ({ anyOf: [s, { type: "null" }] });
 const selection = object({ min: integer, max: integer });
 const item = object({ id: string, label: string, location: enumeration("inventory", "here"), quantity: integer, category: string, actions: array(enumeration("eat", "equip", "remove", "apply", "drink", "read", "zap", "wield", "drop", "throw", "offer", "dip", "rub", "invoke", "quiver", "pickup")), usage: array(enumeration("worn", "wielded", "offhand", "alternate", "quivered", "attached")) }, ["id", "label", "location", "quantity"]);
+const lootItem = object({id: string, label: string, quantity: integer});
 const knownProperties = object({identity: string, beatitude: enumeration("blessed", "uncursed", "cursed"), charges: integer, recharges: integer, enchantment: integer, erosionProof: boolean}, []);
 item.properties.known = knownProperties;
 const knowledge = object({
@@ -23,7 +24,7 @@ const knowledge = object({
 const end = object({ score: integer, kind: enumeration("death", "ascended", "escaped", "quit", "disconnected", "engineError", "unknown"), cause: string, turn: integer }, ["kind", "turn"]);
 const base = { id: string, action: string, about: string, cancellable: boolean };
 const decision = (kind: string, properties: Record<string, Schema> = {}, optional: string[] = []) => object({ ...base, kind: { const: kind }, ...properties }, ["id", "action", "kind", "cancellable", ...Object.keys(properties).filter(k => !optional.includes(k))]);
-const event = (type: string, properties: Record<string, Schema>) => object({ type: { const: type }, ...properties });
+const event = (type: string, properties: Record<string, Schema>, optional: string[] = []) => object({ type: { const: type }, ...properties }, ["type", ...Object.keys(properties).filter(k => !optional.includes(k))]);
 const closed = (properties: Record<string, Schema>, required = Object.keys(properties)): Schema => ({ ...object(properties, required), additionalProperties: false });
 const basis = closed({ revision: integer, levelId: string, origin: closed({ x: integer, y: integer }) });
 const inputGate = { oneOf: [closed({ state: enumeration("ready", "recoveryRequired", "ended", "unavailable") }), closed({ state: { const: "decision" }, decisionId: string })] };
@@ -86,11 +87,13 @@ export const responseSchema: Schema = {
       decision("item", { options: array(item), selection, counted: boolean }, ["counted"]),
       decision("target", { allowedTargets: array(enumeration("self", "direction")), allowedDirections: array(enumeration(...compass.enum, "up", "down")) }, ["allowedDirections"]),
       decision("confirmation", { context: object({ action: string, direction: enumeration("north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest", "up", "down"), itemId: string }, ["action"]) }, ["context"]),
-      decision("choice", { options: array(object({ id: integer, label: string, transfer: enumeration("take", "put") }, ["id", "label"])), selection, containerPhase: enumeration("inspect", "transfer") }, ["selection", "containerPhase"]),
+      decision("choice", { options: array(object({ id: integer, label: string, transfer: enumeration("take", "put"), suggested: boolean }, ["id", "label"])), selection, containerPhase: enumeration("inspect", "transfer"), pickupReview: boolean }, ["selection", "containerPhase", "pickupReview"]),
       decision("text", { purpose: enumeration("consumedPotionNickname") }, ["purpose"]),
       decision("position", { cursor: closed({ x: integer, y: integer }), mode: enumeration("browse", "select") }),
     ] }),
     events: array({ oneOf: [
+      event("itemLooted", {item: lootItem, quantity: integer, source: enumeration("floor", "container", "engulfer"), container: lootItem, turn: integer}, ["container"]),
+      event("containerOpened", {container: lootItem, contents: array(lootItem), turn: integer}),
       event("doorWitness", { levelId: string, x: integer, y: integer, fact: enumeration("locked", "unlocked", "opened", "closed", "resisted", "notClosed"), turn: integer }),
       event("saw", { x: integer, y: integer, kind: string, mark: string, color: integer }),
       event("felt", { sense: string, value: string }), event("heard", { text: string }),

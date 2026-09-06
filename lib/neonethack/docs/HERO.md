@@ -8,6 +8,8 @@ TypeScript, including event names and their payloads.
 import { defineBot, direction, entities } from 'neonethack';
 
 export default defineBot({
+  name: 'Curious imp',
+  autoloot: { enabled: true, itemTypes: ['gold', 'food', 'armor', 'weapons'], arrows: false, leaveCorpses: true, leaveKnownCursed: true, lootPatterns: ['ration', 'dagger'], ignorePatterns: ['corpse'] },
   initialize({ hero, game, log }) {
     hero.addEventListener('enterLevel', ({ detail }) => {
       log('Entered', detail.to.depthLabel);
@@ -36,7 +38,7 @@ These exports are also available from the browser client and
 Initialization registers listeners and local strategy state. The lifecycle first
 publishes the initial observations, then calls the single `turn` listener.
 Callbacks are awaited in registration order. Observation callbacks are read-only;
-input belongs in `turn`. All operations there must be awaited. Multiple awaited
+input belongs in `turn`, `beforeLoot`, or a queued control callback. All operations there must be awaited. Multiple awaited
 operations are allowed: every intermediate snapshot is queued and published in
 order before the next turn callback. Notification payloads belong to their
 `detail.snapshot`; always re-sense current handles when selecting an action.
@@ -46,11 +48,11 @@ may use zero or several engine turns. Standing decisions also reach this callbac
 and must be answered or cancelled explicitly. An idle callback ends the run; it
 does not implicitly wait or poll. `hero.stop()` stops the bot after the current
 callback without quitting the game. The returned `BotResult` gives the reason:
-`stopped`, `idle`, `ended`, `decision`, `uncertain`, or `noTurnListener`.
+`stopped`, `idle`, `ended`, `decision`, `uncertain`, `noTurnListener`, or `yielded`.
 
 | Event | `detail` payload beyond `snapshot` |
 | --- | --- |
-| `stateChange` | `previous` snapshot, or null initially |
+| `snapshotChange` | `previous` snapshot, or null initially |
 | `enterLevel` | `from` location (null initially), `to` location |
 | `mapChange` | `changes`: immutable before/after cell pairs |
 | `entitySeen` | A revision-bound `entity` sighting |
@@ -101,7 +103,7 @@ rules apply. `hero.attack(entity)` requires an adjacent, known hostile creature.
 It never force-attacks or confirms warnings. Handles are bound to their Game,
 level and revision, including across queued operations; re-sense after acting.
 
-`hero.position`, `location`, `map`, `vitals`, `state`, `decision` and `ended`
+`hero.position`, `location`, `map`, `vitals`, `snapshot`, `decision` and `ended`
 expose public observations. `hero.steps` lists adjacent squares with the C
 driver's movement facts, actions and a typed direction. `canDescend()` reads the
 engine's current downward climb offer, or returns undefined if unavailable.
@@ -143,3 +145,103 @@ These preferences live in the example bot, not the library or WASM adapter.
 Autocomplete (Ctrl+Space), hover documentation and advisory type diagnostics use
 the actual built declarations across all project files. Test transpiles JS/TS;
 relative imports and `neonethack` are supported, without npm or network access.
+
+Every bot definition requires a nonempty `name` (up to 60 characters). This is
+its executable identity; a workshop project's editable label can differ.
+`autoloot` accepts the protocol's `AutomaticPickup` rules at construction.
+`runBot` applies them through `game.configurePickup` before `initialize`: a
+journaled configuration operation that spends no turn. Engine errors propagate;
+containers and standing decisions remain explicit. Omit `autoloot` to retain
+an existing game's settings. Use `game.configurePickup` to change them later.
+
+Signed-in workshop tests archive the exact original files, compiled files,
+compiler version and construction autoloot before initialization. Account history
+marks these runs as automated and exposes their private source independently of
+later project edits. This is browser-reported provenance, not execution attestation.
+Anonymous tests are temporary; `runBot` used outside the workshop does not upload
+or infer its caller's source.
+
+## Script state, composition and player control
+
+Every Hero starts with `hero.state === 'run'`. This is script strategy state;
+`hero.snapshot` remains the complete public engine snapshot. State is a string,
+a frozen JSON object, or null. It never replaces engine facts.
+
+Initialization, every event listener and control callback may return a state name,
+`null`, or `{state: {mode: 'explore', target: [3, 4]}}`. Returning nothing or
+a boolean leaves state unchanged (false vetoes inside stateChange). Snapshot action results remain snapshots,
+so `() => hero.wait()` does not change script state. Compose ordinary functions
+inside the single turn listener; returning their result forwards their state change.
+An action-free turn still stops as idle, even if it changes strategy state.
+
+`await hero.setState(next)` proposes a transition. Before committing it, the
+`stateChange` event supplies `detail.from`, `detail.to`, and `detail.deny()`.
+Returning false also vetoes; returning a state replaces the proposal for subsequent
+listeners. Return replacements rather than recursively calling setState there.
+A veto cannot undo a game action that already happened.
+
+```ts
+hero.addEventListener('stateChange', ({detail}) => {
+  if (detail.to === 'explore' && hero.isHungry()) return false;
+});
+hero.controls.checkbox({id:'flee', label:'Flee enemies', checked:true,
+  onChange: checked => ({state: {mode:'run', flee:checked}})});
+hero.controls.button({id:'pause', label:'Yield control', onClick: () => null});
+hero.journal.log('Looking for downstairs');
+```
+
+Once state becomes null, **no further script callbacks fire**, including later
+listeners of that event, observations, state transitions, controls, stop or error.
+The lifecycle returns `reason: 'yielded'` and releases its Game. Already submitted
+engine input settles; it is never undone. Journal writes and control registration
+are inactive while null. Hero action conveniences reject input while suspended.
+
+A trusted host receives `runBot(game, bot, log, {ready, state, controls, journal})`
+notifications and retains Hero from `ready(hero)`. It invokes controls through
+`hero.controls.invoke(id, checked?)`; callbacks queue behind active input and
+must await all their operations. Never await invoke from a script callback itself.
+A player override uses `hero.setState(value, {force:true})`, bypassing script
+vetoes and superseding results from an older awaited callback. To resume a yielded
+script, force a non-null state and call `hero.resume()`. Inputs made by the human
+while null are not replayed as script events; the current scene is published on resume.
+
+The workshop exposes the controls and player state override. Yield ends its test;
+its world component stays read-only. Attaching scripts to a live human game is a
+separate host integration. The full `game` API remains available: the SDK is a
+cooperative lifecycle, while the workshop sandbox enforces termination externally.
+
+## Loot witnesses and explicit review
+
+Autoloot construction accepts `review: true`. When automatic pickup finds a
+matching item, the engine pauses **before transfer** with a real choice decision.
+Options carry `suggested` flags from the configured loot/ignore rules; nothing
+is silently selected. `beforeLoot` can explicitly select offered IDs or cancel:
+
+```ts
+hero.addEventListener('beforeLoot', async ({detail}) => {
+  const wanted = detail.decision.options.filter(option => option.suggested);
+  if (detail.source === 'pickup') await detail.select(wanted.map(option => option.id));
+  else await detail.cancel(); // container transfer policy belongs to this script
+});
+hero.addEventListener('itemLooted', ({detail:{loot}}) => {
+  hero.journal.log('Acquired', loot.quantity, loot.item.label, 'from', loot.source);
+});
+```
+
+Cancel a standing choice before calling `hero.inventory.byId(id)?.drop()`.
+Re-read inventory after cancellation because item handles are revision-bound.
+The hook also receives explicit container transfer menus, including take/put offers;
+use their disclosed intent and quantity data instead of assuming all are pickup.
+
+`itemLooted` is an engine witness: acquired quantity, resulting inventory ID and
+stack size, source (floor/container/engulfer), and container when applicable.
+`containerOpened` discloses the inspected container and its observed contents;
+it does not fire merely because a locked or trapped attempt was made. These events
+report outcomes, and cannot veto them. Only the standing before-transfer choice
+can change what is taken. IDs in event payloads describe that receipt, so obtain
+fresh action handles before acting.
+
+Script notes are labeled with author and turn, and stored separately from engine
+messages, input journals and receipts. Signed-in workshop recordings retain their
+script journal privately alongside the captured source and replay. Anonymous tests
+retain notes only for the current page; neither makes script claims into engine facts.

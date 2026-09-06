@@ -108,12 +108,12 @@ request_choices(mj_val v)
 static int
 request_pickup_settings(mj_val value)
 {
-    static const char *const fields[] = {"enabled", "itemTypes", "arrows", "leaveCorpses", "leaveKnownCursed", NULL};
+    static const char *const fields[] = {"enabled", "itemTypes", "arrows", "leaveCorpses", "leaveKnownCursed", "lootPatterns", "ignorePatterns", "review", NULL};
     static const char *const types[] = {"gold", "food", "potions", "scrolls", "weapons", "armor", "rings", "amulets", "tools", "spellbooks", "wands", "gems", "rocks", "balls", "chains", NULL};
     mj_val v, element; mj_arr_it it = {0}; unsigned seen = 0;
     size_t i; int flag; char name[32];
     if (!request_fields(value.p, fields)) return 0;
-    for (i = 0; fields[i]; i++) if (i != 1)
+    for (i = 0; i < 5; i++) if (i != 1)
         if (!mj_find(value.p, fields[i], &v) || !mj_bool(v, &flag)) return 0;
     if (!mj_find(value.p, "itemTypes", &v) || *v.p != '[') return 0;
     it.first = 1;
@@ -122,6 +122,15 @@ request_pickup_settings(mj_val value)
         for (i = 0; types[i] && strcmp(types[i], name); i++) ;
         if (!types[i] || (seen & (1U << i))) return 0;
         seen |= 1U << i;
+    }
+    if (mj_find(value.p, "review", &v) && !mj_bool(v, &flag)) return 0;
+    for (i = 5; i < 7; i++) {
+        int count = 0;
+        if (!mj_find(value.p, fields[i], &v)) continue;
+        if (*v.p != '[') return 0;
+        memset(&it, 0, sizeof it); it.first = 1;
+        while (mj_arr_next(v.p, &it, &element))
+            if (++count > 16 || !request_string(element, 1, 64, NULL)) return 0;
     }
     return 1;
 }

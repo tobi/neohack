@@ -1,20 +1,35 @@
+import { ScriptControls, ScriptJournal, copyState, returnedState, type ScriptState, type ScriptResult, type ScriptHost } from './script.js';
 import { attachController } from './lifecycle.js';
 import { HeroEventListeners, type HeroEventName, type HeroListener, type BotResult, type StopReason, type CellChange } from './hero-events.js';
 import type { Game } from './client.js';
-import type { CellActions, Cell, Item, ItemRef, Snapshot } from './types.js';
+import type { AutomaticPickup, CellActions, Cell, Item, ItemRef, Snapshot } from './types.js';
 import { direction, entities } from './vocabulary.js';
 export { direction, entities } from './vocabulary.js';
 
 /** Context supplied to a workshop bot. Actions must be awaited. */
 export interface BotContext { hero: Hero; game: Game; log: (...values: unknown[]) => void }
-export interface BotDefinition { initialize(context: BotContext): void | Promise<void> }
+export interface BotDefinition {
+  readonly name: string;
+  /** Engine automatic ground-pickup rules, applied before initialize. Containers remain explicit. */
+  readonly autoloot?: AutomaticPickup;
+  initialize(context: BotContext): ScriptResult | Promise<ScriptResult>;
+}
 /** One initialization callback, with contextual types in JS and TS. Register your turn listener here. */
-export function defineBot(bot: BotDefinition): BotDefinition { return bot; }
+export function defineBot(bot: BotDefinition): BotDefinition {
+  if (!bot || typeof bot.name !== 'string' || !bot.name.trim() || bot.name.length > 60 || /[\u0000-\u001f\u007f]/.test(bot.name))
+    throw Error('A bot needs a name of 1–60 characters without control characters.');
+  if (typeof bot.initialize !== 'function') throw Error('A bot needs an initialize function.');
+  const autoloot = bot.autoloot === undefined ? undefined : structuredClone(bot.autoloot);
+  if (autoloot) { Object.freeze(autoloot.itemTypes); Object.freeze(autoloot.lootPatterns); Object.freeze(autoloot.ignorePatterns); Object.freeze(autoloot); }
+  return Object.freeze({ ...bot, name: bot.name.trim(), ...(autoloot === undefined ? {} : { autoloot }) });
+}
 /** Host a bot on an existing game; no game creation, implicit input, or retries. */
-export async function runBot(game: Game, bot: BotDefinition, log: BotContext['log'] = () => {}): Promise<BotResult> {
-  if (!bot || typeof bot.initialize !== 'function') throw Error('Export defineBot({ initialize({ hero, log }) { ... } }) from main.ts.');
-  const hero = new Hero(game);
-  return hero.initialize(() => bot.initialize({ hero, game, log }));
+export async function runBot(game: Game, bot: BotDefinition, log: BotContext['log'] = () => {}, host:ScriptHost = {}): Promise<BotResult> {
+  bot = defineBot(bot);
+  // A named, journaled, zero-turn operation; failures and standing decisions propagate.
+  if (bot.autoloot !== undefined) await game.configurePickup(bot.autoloot);
+  const hero = new Hero(game,{name:bot.name,host:{...host,journal:entry=>{log(entry.text);host.journal?.(entry);}}});
+  return hero.initialize(() => bot.initialize({ hero, game, log:(...values)=>hero.journal.log(...values) }));
 }
 
 type Basis = { game: Game; revision: number; level: string };
@@ -61,39 +76,39 @@ export class InventoryItem {
   canEat(): boolean | undefined { return this.info?.actions?.includes('eat'); }
   /** An unworn equipment candidate; fit, curses and warnings still belong to the engine. */
   canEquip(): boolean | undefined { return this.info?.usage === undefined ? undefined : this.info.actions?.includes('equip'); }
-  pickup(): Promise<Snapshot> { return this.#game.pickup(this.#item, current(this, this.#game)); }
+  pickup(): Promise<Snapshot> { this.active(); return this.#game.pickup(this.#item, current(this, this.#game)); }
   readonly info: Readonly<ItemRef> | undefined;
   readonly #game: Game;
   readonly #item: Item;
   /** @internal Use hero.inventory.find() or hero.inventory.items. */
-  constructor(game: Game, item: Item, info?: ItemRef) {
+  constructor(game: Game, item: Item, info?: ItemRef, private readonly active:()=>void=()=>{}) {
     this.#game = game; this.#item = typeof item === 'string' ? item : Object.freeze({ ...item });
     this.info = info; bind(this, game); Object.freeze(this);
   }
   /** Attempt eating; warnings and choices remain in hero.decision. Does not promise food is safe. */
-  eat(): Promise<Snapshot> { return this.#game.eat(this.#item, current(this, this.#game)); }
-  drink(): Promise<Snapshot> { return this.#game.drink(this.#item, current(this, this.#game)); }
-  wield(): Promise<Snapshot> { return this.#game.wield(this.#item, current(this, this.#game)); }
-  equip(): Promise<Snapshot> { return this.#game.equip(this.#item, current(this, this.#game)); }
-  remove(): Promise<Snapshot> { return this.#game.remove(this.#item, current(this, this.#game)); }
-  read(): Promise<Snapshot> { return this.#game.read(this.#item, current(this, this.#game)); }
-  apply(): Promise<Snapshot> { return this.#game.apply(this.#item, current(this, this.#game)); }
-  drop(): Promise<Snapshot> { return this.#game.drop(this.#item, current(this, this.#game)); }
+  eat(): Promise<Snapshot> { this.active(); return this.#game.eat(this.#item, current(this, this.#game)); }
+  drink(): Promise<Snapshot> { this.active(); return this.#game.drink(this.#item, current(this, this.#game)); }
+  wield(): Promise<Snapshot> { this.active(); return this.#game.wield(this.#item, current(this, this.#game)); }
+  equip(): Promise<Snapshot> { this.active(); return this.#game.equip(this.#item, current(this, this.#game)); }
+  remove(): Promise<Snapshot> { this.active(); return this.#game.remove(this.#item, current(this, this.#game)); }
+  read(): Promise<Snapshot> { this.active(); return this.#game.read(this.#item, current(this, this.#game)); }
+  apply(): Promise<Snapshot> { this.active(); return this.#game.apply(this.#item, current(this, this.#game)); }
+  drop(): Promise<Snapshot> { this.active(); return this.#game.drop(this.#item, current(this, this.#game)); }
 }
 export class Inventory {
-  constructor(private readonly game: Game) {}
+  constructor(private readonly game: Game, private readonly active:()=>void=()=>{}) {}
   /** Unknown inventory is distinct from an empty inventory. */
   get freshness() { return this.game.observation.perception.inventory; }
   get items(): readonly InventoryItem[] {
     if (this.freshness !== 'current') throw Error('Inventory is not current.');
-    return this.game.observation.inventory.map(item => new InventoryItem(this.game, { id: item.id }, item));
+    return this.game.observation.inventory.map(item => new InventoryItem(this.game, { id: item.id }, item, this.active));
   }
   /** Lazy perceived-name query, not a substring match. Resolves in C at action time;
    * missing or ambiguous names throw WorldError with the engine's blocked response, without choosing an item. */
   find(name: string): InventoryItem {
     if (!name.trim()) throw Error('An item name is required.');
     if (this.freshness !== 'current') throw Error('Inventory is not current.');
-    return new InventoryItem(this.game, name);
+    return new InventoryItem(this.game, name, undefined, this.active);
   }
   /** Select an exact disclosed inventory ID, never a slot or inferred label identity. */
   byId(id: string): InventoryItem | undefined { return this.items.find(item => item.info?.id === id); }
@@ -110,6 +125,47 @@ export class Hero {
   private readonly listeners = new HeroEventListeners();
   private initialized = false;
   private stopped = false;
+  private running = false;
+  private scriptState:ScriptState = 'run';
+  private scriptRevision = 0;
+  private transitioning = false;
+  private readonly controlQueue:{callback:()=>unknown|Promise<unknown>;resolve:(ran:boolean)=>void;reject:(error:unknown)=>void}[]=[];
+  readonly controls:ScriptControls;
+  readonly journal:ScriptJournal;
+  private readonly host:ScriptHost;
+  /** Script state. Read the actual game through snapshot; null means suspended. */
+  get state():ScriptState { return this.scriptState; }
+  /** @internal Guards an awaited callback against a newer host decision. */
+  get stateRevision():number { return this.scriptRevision; }
+  /** Player-forced changes bypass vetoes. No callbacks run while suspended. */
+  async setState(next:ScriptState, options:{force?:boolean}={}):Promise<boolean> {
+    let proposed=copyState(next);
+    if(options.force){this.scriptState=proposed;this.scriptRevision++;this.host.state?.(proposed);return true;}
+    if(this.scriptState===null)return false;
+    if(JSON.stringify(proposed)===JSON.stringify(this.scriptState))return true;
+    if(this.transitioning)throw Error('Return a replacement state from stateChange instead of recursively setting state.');
+    const from=this.scriptState, revision=this.scriptRevision;
+    let denied=false;this.transitioning=true;
+    try {
+      await this.listeners.emit(this,'stateChange',{from,get to(){return proposed;},deny:()=>{denied=true;}},()=>this.scriptRevision===revision,async value=>{
+        if(value===false)denied=true;
+        else {const change=returnedState(value);if(change)proposed=copyState(change.state);}
+      });
+      if(denied || this.scriptRevision!==revision)return false;
+      this.scriptState=proposed;this.scriptRevision++;this.host.state?.(proposed);return true;
+    } finally {this.transitioning=false;}
+  }
+  /** @internal Event results change strategy state, never engine snapshots. */
+  async applyEventResult(value:unknown):Promise<void> {
+    if(this.scriptState===null)return;
+    const change=returnedState(value);if(change)await this.setState(change.state);
+  }
+  private assertActive():void {if(this.scriptState===null)throw Error('Script is suspended. The player owns control.');}
+  /** Resume an initialized script after the host explicitly forces a non-null state. */
+  resume():Promise<BotResult> {
+    if(!this.initialized)throw Error('Initialize the script first.');
+    return this.execute(undefined,false);
+  }
   /** Register before initialize completes. Notifications are read-only; await input in turn. */
   addEventListener<K extends HeroEventName>(type: K, listener: HeroListener<K>, options: { once?: boolean } = {}): void { this.listeners.add(type, listener, options); }
   removeEventListener<K extends HeroEventName>(type: K, listener: HeroListener<K>): void { this.listeners.remove(type, listener); }
@@ -117,19 +173,26 @@ export class Hero {
   stop(): void { this.stopped = true; }
   /** Initialize once, publish observations, then await one turn callback at a time.
    * No action means an idle stop, never an implicit wait or polling loop. */
-  async initialize(setup: (hero: Hero) => void | Promise<void>): Promise<BotResult> {
+  async initialize(setup: (hero: Hero) => ScriptResult | Promise<ScriptResult>): Promise<BotResult> {
     if (this.initialized) throw Error('Hero.initialize can only be called once.');
     this.initialized = true;
+    return this.execute(setup,true);
+  }
+  private async execute(setup:((hero:Hero)=>ScriptResult|Promise<ScriptResult>)|undefined, initial:boolean):Promise<BotResult> {
+    if(this.running)throw Error('This script is already running.');
+    if(this.scriptState===null)return Object.freeze({reason:'yielded',snapshot:this.snapshot});
+    this.stopped=false;
     let phase: 'initialize' | 'notify' | 'turn' = 'initialize';
-    const frames: Snapshot[] = [this.state];
+    const frames: Snapshot[] = [initial ? this.snapshot : {...this.snapshot,events:[]}];
     const pending = new Set<Promise<unknown>>();
     const detach = attachController(this.game, {
       beforeInput: () => {
-        if (phase !== 'turn' || this.stopped) throw Error('Game input belongs in the turn listener. Await each operation.');
+        if (phase !== 'turn' || this.stopped || this.scriptState===null || this.transitioning) throw Error('Game input belongs in the turn listener or beforeLoot review hook. Await each operation.');
       },
       accepted: frame => { frames.push(frame); },
       scheduled: promise => { pending.add(promise); promise.then(() => pending.delete(promise), () => pending.delete(promise)); },
     });
+    this.running=true;
     let previous: Snapshot | null = null, fingerprint = '';
     const drain = async () => {
       phase = 'notify';
@@ -144,39 +207,65 @@ export class Hero {
     };
     const finish = async (reason: StopReason): Promise<BotResult> => {
       phase = 'notify';
-      const result = Object.freeze({ reason, snapshot: this.state });
-      await this.listeners.emit(this, 'stop', result); return result;
+      const result = Object.freeze({ reason, snapshot: this.snapshot });
+      await this.listeners.emit(this, 'stop', result); return this.scriptState===null ? Object.freeze({reason:'yielded',snapshot:this.snapshot}) : result;
     };
     try {
-      await setup(this);
+      if(setup){const revision=this.scriptRevision;const result=await setup(this);if(revision===this.scriptRevision)await this.applyEventResult(result);}
       if (pending.size) { await Promise.allSettled([...pending]); throw Error('Await every game query in initialize.'); }
       while (true) {
+        if(this.scriptState===null)return Object.freeze({reason:'yielded',snapshot:this.snapshot});
         await drain();
-        if (this.game.pendingRequest || this.state.outcome.status === 'unknown' || [this.state.storage, this.state.recording].some(d => d && d.status !== 'ok')) return await finish('uncertain');
+        if(this.scriptState===null)return Object.freeze({reason:'yielded',snapshot:this.snapshot});
+        phase='turn';
+        while(this.controlQueue.length && this.scriptState!==null && !this.stopped) {
+          const control=this.controlQueue.shift()!;
+          try {const revision=this.scriptRevision;const result=await control.callback();if(revision===this.scriptRevision)await this.applyEventResult(result);control.resolve(true);}
+          catch(error){control.reject(error);throw error;}
+          if(pending.size){await Promise.allSettled([...pending]);throw Error('Await every game operation in control callbacks.');}
+          await drain();phase='turn';
+        }
+        if(this.scriptState===null)return Object.freeze({reason:'yielded',snapshot:this.snapshot});
+        if (this.game.pendingRequest || this.snapshot.outcome.status === 'unknown' || [this.snapshot.storage, this.snapshot.recording].some(d => d && d.status !== 'ok')) return await finish('uncertain');
         if (this.ended) return await finish('ended');
         if (this.stopped) return await finish('stopped');
+        const review = this.decision;
+        if (review?.kind === 'choice' && (review.pickupReview || review.containerPhase === 'transfer') && this.listeners.has('beforeLoot')) {
+          const frame = this.snapshot, revision = frame.revision;
+          const options = {expectedRevision:revision};
+          phase = 'turn';
+          await this.listeners.emit(this, 'beforeLoot', {
+            snapshot:frame, source:review.pickupReview ? 'pickup' : 'container', decision:review,
+            select: ids => ids.length ? this.game.answer(review.id, {kind:'choice', choose:[...ids]}, options) : this.game.cancel(review.id, options),
+            cancel: () => this.game.cancel(review.id, options),
+          }, () => this.snapshot.revision === revision && !this.stopped);
+          if (pending.size) { await Promise.allSettled([...pending]); throw Error('Await every game operation in beforeLoot.'); }
+          if (this.snapshot.revision !== revision || this.stopped || this.game.pendingRequest || this.game.state.outcome.status === 'unknown' || [this.snapshot.storage,this.snapshot.recording].some(d=>d && d.status!=='ok')) continue;
+        }
+        if(this.scriptState===null)return Object.freeze({reason:'yielded',snapshot:this.snapshot});
         if (!this.listeners.has('turn')) return await finish(this.decision ? 'decision' : 'noTurnListener');
-        const revision = this.state.revision;
+        const revision = this.snapshot.revision;
         phase = 'turn';
-        await this.listeners.emit(this, 'turn', { snapshot: this.state });
+        await this.listeners.emit(this, 'turn', { snapshot: this.snapshot });
         if (pending.size) { await Promise.allSettled([...pending]); throw Error('Await every game operation in the turn listener.'); }
         await drain();
-        if (this.state.revision === revision && !this.stopped && !this.ended && !this.game.pendingRequest && ![this.state.storage, this.state.recording].some(d => d && d.status !== 'ok'))
+        if(this.scriptState===null)return Object.freeze({reason:'yielded',snapshot:this.snapshot});
+        if (this.snapshot.revision === revision && !this.stopped && !this.ended && !this.game.pendingRequest && ![this.snapshot.storage, this.snapshot.recording].some(d => d && d.status !== 'ok'))
           return await finish(this.decision ? 'decision' : 'idle');
       }
     } catch (error) {
       await Promise.allSettled([...pending]);
       phase = 'notify';
       await drain();
-      await this.listeners.emit(this, 'error', { snapshot: this.state, error });
+      await this.listeners.emit(this, 'error', { snapshot: this.snapshot, error });
       throw error;
-    } finally { detach(); }
+    } finally { detach(); this.running=false; for(const control of this.controlQueue.splice(0))control.resolve(false); }
   }
   private async publish(frame: Snapshot, previous: Snapshot | null) {
     const emit = this.listeners.emit.bind(this.listeners, this);
     const now = frame.observation, old = previous?.observation;
     const levelChanged = !old || old.location.id !== now.location.id;
-    await emit('stateChange', { snapshot: frame, previous });
+    await emit('snapshotChange', { snapshot: frame, previous });
     if (levelChanged) await emit('enterLevel', { snapshot: frame, from: old?.location ?? null, to: now.location });
     const beforeCells = new Map((levelChanged ? [] : old!.world).map(cell => [cell.x + ',' + cell.y, cell]));
     const afterCells = new Map(now.world.map(cell => [cell.x + ',' + cell.y, cell]));
@@ -208,13 +297,26 @@ export class Hero {
     }
     if (JSON.stringify(old?.vitals) !== JSON.stringify(now.vitals)) await emit('vitalsChange', { snapshot: frame, before: old?.vitals ?? null, after: now.vitals });
     if (JSON.stringify(previous?.decision ?? null) !== JSON.stringify(frame.decision)) await emit('decision', { snapshot: frame, decision: frame.decision });
-    for (const event of frame.events) if (event.type === 'heard') await emit('message', { snapshot: frame, text: event.text });
+    for (const event of frame.events) {
+      if (event.type === 'heard') await emit('message', { snapshot: frame, text: event.text });
+      if (event.type === 'itemLooted') await emit('itemLooted', { snapshot: frame, loot:event });
+      if (event.type === 'containerOpened') await emit('containerOpened', { snapshot: frame, container:event });
+    }
     if (previous) await emit('actionResult', { snapshot: frame, outcome: frame.outcome });
     if (frame.ended && !previous?.ended) await emit('end', { snapshot: frame, end: frame.end });
   }
   readonly inventory: Inventory;
-  constructor(readonly game: Game) { this.inventory = new Inventory(game); }
-  get state() { return this.game.state; }
+  constructor(readonly game: Game, options:{name?:string;host?:ScriptHost}={}) {
+    this.inventory = new Inventory(game,()=>this.assertActive());this.host=options.host ?? {};
+    this.journal=new ScriptJournal(options.name ?? 'Script',()=>this.snapshot,()=>this.scriptState!==null,entry=>this.host.journal?.(entry));
+    this.controls=new ScriptControls(()=>this.scriptState!==null,callback=>{
+      if(!this.running || this.scriptState===null)return Promise.resolve(false);
+      if(this.controlQueue.length>=32)return Promise.resolve(false);
+      return new Promise<boolean>((resolve,reject)=>this.controlQueue.push({callback,resolve,reject}));
+    },controls=>this.host.controls?.(controls));
+    this.host.ready?.(this);this.host.state?.(this.scriptState);
+  }
+  get snapshot() { return this.game.state; }
   get decision() { return this.game.decision; }
   get ended() { return this.game.state.ended; }
   get vitals() { return this.game.observation.vitals; }
@@ -232,7 +334,7 @@ export class Hero {
   get itemsHere(): readonly InventoryItem[] | undefined {
     const observation = this.game.observation;
     if (!observation.here.known || observation.perception.here !== 'current') return undefined;
-    return observation.here.items.map(item => new InventoryItem(this.game, { id: item.id }, item));
+    return observation.here.items.map(item => new InventoryItem(this.game, { id: item.id }, item, ()=>this.assertActive()));
   }
   canDescend(): boolean | undefined {
     const n = this.game.observation.neighborhood;
@@ -267,7 +369,8 @@ export class Hero {
   /** Attempt ONE step in a direction or toward a freshly sensed entity. No pathfinding.
    * Normal engine bump behavior applies, including doors, attacks, and warnings. */
   go(target: direction | Entity): Promise<Snapshot> {
-    const options = target instanceof Entity ? current(target, this.game) : { expectedRevision: this.state.revision };
+    this.assertActive();
+    const options = target instanceof Entity ? current(target, this.game) : { expectedRevision: this.snapshot.revision };
     const heading = target instanceof Entity ? offsets.get(target.offset.map(Math.sign).join(',')) : target;
     if (!heading || !Object.values(direction).includes(heading)) throw Error('A compass direction or a distinct visible entity is required.');
     return this.game.move(heading, options);
@@ -280,7 +383,7 @@ export class Hero {
     if (target.distance !== 1) throw Error('Melee attack requires an adjacent enemy.');
     return this.go(target);
   }
-  wait(): Promise<Snapshot> { return this.game.wait({ expectedRevision: this.state.revision }); }
-  search(): Promise<Snapshot> { return this.game.search({ expectedRevision: this.state.revision }); }
-  climb(target: 'up' | 'down'): Promise<Snapshot> { return this.game.climb(target, { expectedRevision: this.state.revision }); }
+  wait(): Promise<Snapshot> { this.assertActive(); return this.game.wait({ expectedRevision: this.snapshot.revision }); }
+  search(): Promise<Snapshot> { this.assertActive(); return this.game.search({ expectedRevision: this.snapshot.revision }); }
+  climb(target: 'up' | 'down'): Promise<Snapshot> { this.assertActive(); return this.game.climb(target, { expectedRevision: this.snapshot.revision }); }
 }

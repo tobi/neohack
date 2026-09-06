@@ -1,17 +1,33 @@
+import type { ScriptState, ScriptResult } from './script.js';
 import type { Hero, Entity } from './hero.js';
-import type { Cell, ItemRef, Observation, Snapshot } from './types.js';
+import type { Cell, Decision, ItemRef, Observation, Snapshot, WorldEvent } from './types.js';
 
 export interface CellChange { readonly before: Cell | undefined; readonly after: Cell | undefined }
 export type ItemSighting =
   | { readonly source: 'inventory' | 'here'; readonly item: ItemRef }
   | { readonly source: 'map'; readonly cell: Cell };
-export type StopReason = 'stopped' | 'idle' | 'ended' | 'decision' | 'uncertain' | 'noTurnListener';
+export type StopReason = 'stopped' | 'idle' | 'ended' | 'decision' | 'uncertain' | 'noTurnListener' | 'yielded';
 export interface BotResult { readonly reason: StopReason; readonly snapshot: Snapshot }
 /** Observation notifications precede turn. All facts belong to detail.snapshot. */
 export interface HeroEventDetails {
   /** Main strategy callback. Await actions here; standing decisions are explicit. */
   turn: { readonly snapshot: Snapshot };
-  stateChange: { readonly snapshot: Snapshot; readonly previous: Snapshot | null };
+  /** Actionable, revision-bound review. Cancel before dropping; re-read items after input. */
+  beforeLoot: {
+    readonly snapshot: Snapshot;
+    readonly source: 'pickup' | 'container';
+    readonly decision: Extract<Decision, {kind:'choice'}>;
+    /** Explicitly choose offered IDs (container options include take/put). Empty selection cancels. */
+    select(ids: readonly number[]): Promise<Snapshot>;
+    cancel(): Promise<Snapshot>;
+  };
+  /** Confirmed acquisition, including partial quantities and inventory stack merges. */
+  itemLooted: { readonly snapshot: Snapshot; readonly loot: Extract<WorldEvent, {type:'itemLooted'}> };
+  /** Accessible contents were actually disclosed. A locked/trapped attempt is not this event. */
+  containerOpened: { readonly snapshot: Snapshot; readonly container: Extract<WorldEvent, {type:'containerOpened'}> };
+  snapshotChange: { readonly snapshot: Snapshot; readonly previous: Snapshot | null };
+  /** Proposed script-state change. Deny before commit; never vetoes engine facts. */
+  stateChange: { readonly from:ScriptState; readonly to:ScriptState; deny():void };
   /** Also emitted for the initial level. No map correspondence is invented across levels. */
   enterLevel: { readonly snapshot: Snapshot; readonly from: Observation['location'] | null; readonly to: Observation['location'] };
   mapChange: { readonly snapshot: Snapshot; readonly changes: readonly CellChange[] };
@@ -36,7 +52,7 @@ export interface HeroEvent<K extends HeroEventName> {
   readonly target: Hero;
   readonly detail: HeroEventDetails[K];
 }
-export type HeroListener<K extends HeroEventName> = (event: HeroEvent<K>) => void | Promise<void>;
+export type HeroListener<K extends HeroEventName> = (event: HeroEvent<K>) => ScriptResult | Snapshot | Promise<ScriptResult | Snapshot>;
 type Registration = { listener: HeroListener<any>; once: boolean };
 /** Async listeners run in registration order. One turn listener owns action selection. */
 export class HeroEventListeners {
@@ -52,12 +68,15 @@ export class HeroEventListeners {
     const index = list.findIndex(entry => entry.listener === listener); if (index >= 0) list.splice(index, 1);
   }
   has(type: HeroEventName) { return !!this.listeners.get(type)?.length; }
-  async emit<K extends HeroEventName>(hero: Hero, type: K, detail: HeroEventDetails[K]) {
+  async emit<K extends HeroEventName>(hero: Hero, type: K, detail: HeroEventDetails[K], isCurrent: () => boolean = () => true, onResult: (value:unknown)=>Promise<void> = value=>hero.applyEventResult(value)) {
     const event = Object.freeze({ type, target: hero, detail: Object.freeze(detail) });
     for (const entry of [...(this.listeners.get(type) ?? [])]) {
+      if (!isCurrent() || hero.state === null) break;
       if (!this.listeners.get(type)?.includes(entry)) continue;
       if (entry.once) this.remove(type, entry.listener);
-      await entry.listener(event);
+      const revision=hero.stateRevision;
+      const result = await entry.listener(event);
+      if (isCurrent() && hero.state !== null && hero.stateRevision===revision) await onResult(result);
     }
   }
 }

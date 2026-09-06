@@ -101,6 +101,7 @@ typedef struct {
     int selectable; /* -1 = legacy/unspecified; otherwise engine fact */
     long long object_id; /* private binding for an offered object row */
     long long quantity;
+    int suggested; /* explicit automatic-pickup proposal, not a selection */
     int transfer; /* engine-authored container side: 1 take, 2 put */
     char *text;
 } menu_item_t;
@@ -115,6 +116,7 @@ typedef struct {
     int used;
     int window;
     int container_phase; /* 1 inspect, 2 transfer */
+    int pickup_review;
     int item_selection, counted;
     char *prompt;
     menu_item_t *items;
@@ -262,7 +264,7 @@ typedef struct game {
     int final_score_known;
     char location_id[80];
     int structured_perception; /* engine perception version; zero = legacy peeks */
-    char pickup_settings[1024]; /* actual engine configuration, restored by replay */
+    char pickup_settings[16384]; /* actual engine configuration, restored by replay */
     int affordance_version, ordinary_locomotion, normal_map, door_diagonals, direction_reliable;
     int non_food_diet;
     char knowledge[65536];
@@ -1139,6 +1141,22 @@ push_event(game_t *g, const char *json)
         g->nevents--;
 }
 
+static int
+put_loot_witness(mj_Buf *b, mj_val value, const char *prefix)
+{
+    mj_val v; long long id, quantity; char *label = NULL, ref[40]; int carried = 0;
+    if (!mj_find(value.p, "objectId", &v) || !mj_int(v, &id) || id <= 0 || id > 4294967295LL ||
+        !mj_find(value.p, "quantity", &v) || !mj_int(v, &quantity) || quantity <= 0 ||
+        !mj_find(value.p, "label", &v) || !(label = mj_str(v))) return 0;
+    if (!prefix) { if (mj_find(value.p, "carried", &v)) mj_bool(v, &carried); prefix = carried ? "item" : "ground"; }
+    snprintf(ref, sizeof ref, "%s-%lld", prefix, id);
+    mj_obj(b);
+    mj_key(b, "id"); mj_strv(b, ref);
+    mj_key(b, "label"); mj_strv(b, label);
+    mj_key(b, "quantity"); mj_intv(b, quantity);
+    mj_endobj(b); free(label); return 1;
+}
+
 static void
 push_saw(game_t *g, int x, int y, int glyph, int ch, int color)
 {
@@ -1638,6 +1656,32 @@ ingest(game_t *g, const char *line)
             push_heard(g, text);
             /* Narration is not authoritative evidence of a terminal state. */
         }
+    } else if (!strcmp(method, "item_looted") || !strcmp(method, "container_opened")) {
+        mj_val v, item; mj_Buf b; long long turn, quantity; char *source = NULL;
+        if (!mj_find(params, "turn", &v) || !mj_int(v, &turn) || turn < 0) goto done;
+        mj_init(&b); mj_obj(&b);
+        mj_key(&b, "type"); mj_strv(&b, !strcmp(method, "item_looted") ? "itemLooted" : "containerOpened");
+        mj_key(&b, "turn"); mj_intv(&b, turn);
+        if (!strcmp(method, "item_looted")) {
+            if (!mj_find(params, "source", &v) || !(source = mj_str(v)) ||
+                (strcmp(source, "floor") && strcmp(source, "container") && strcmp(source, "engulfer")) ||
+                !mj_find(params, "quantity", &v) || !mj_int(v, &quantity) || quantity <= 0) b.ok = 0;
+            if (b.ok) { mj_key(&b, "source"); mj_strv(&b, source); mj_key(&b, "quantity"); mj_intv(&b, quantity); }
+            if (!mj_find(params, "item", &item)) b.ok = 0;
+            if (b.ok) { mj_key(&b, "item"); if (!put_loot_witness(&b, item, "item")) b.ok = 0; }
+        } else {
+            mj_arr_it it = {0};
+            if (!mj_find(params, "contents", &v) || *v.p != '[') b.ok = 0;
+            if (b.ok) {
+                mj_key(&b, "contents"); mj_arr(&b); it.first = 1;
+                while (mj_arr_next(v.p, &it, &item)) if (!put_loot_witness(&b, item, "content")) { b.ok = 0; break; }
+                mj_endarr(&b);
+            }
+        }
+        if (mj_find(params, "container", &item) && b.ok) {
+            mj_key(&b, "container"); if (!put_loot_witness(&b, item, NULL)) b.ok = 0;
+        } else if (!strcmp(method, "container_opened") || (source && !strcmp(source, "container"))) b.ok = 0;
+        mj_endobj(&b); if (b.ok) push_event(g, b.buf); mj_free(&b); free(source);
     } else if (!strcmp(method, "menu_start")) {
         mj_val wv;
         long long w;
@@ -1702,6 +1746,7 @@ ingest(game_t *g, const char *line)
         m->items[m->nitems].object_id = 0;
         m->items[m->nitems].quantity = 1;
         m->items[m->nitems].transfer = 0;
+        m->items[m->nitems].suggested = 0;
         if (mj_find(params, "selectable", &av))
             mj_bool(av, &m->items[m->nitems].selectable);
         m->items[m->nitems].text = text ? text : strdup("");
@@ -1719,6 +1764,12 @@ ingest(game_t *g, const char *line)
                 m->items[k].object_id = object;
                 if (mj_find(params, "quantity", &v)) mj_int(v, &m->items[k].quantity);
             }
+    } else if (!strcmp(method, "pickup_menu") || !strcmp(method, "pickup_suggestion")) {
+        mj_val v; long long w, idx; menu_t *m; size_t k; int suggested;
+        if (!mj_find(params, "window", &v) || !mj_int(v, &w) || !(m = menu_for(g, (int) w, 0))) goto done;
+        if (!strcmp(method, "pickup_menu")) m->pickup_review = 1;
+        else if (mj_find(params, "index", &v) && mj_int(v, &idx) && mj_find(params, "suggested", &v) && mj_bool(v, &suggested))
+            for (k = 0; k < m->nitems; k++) if (m->items[k].index == idx && m->items[k].object_id > 0) m->items[k].suggested = suggested;
     } else if (!strcmp(method, "item_menu")) {
         mj_val v; long long w; menu_t *m;
         if (!mj_find(params, "window", &v) || !mj_int(v, &w)) goto done;
@@ -3241,6 +3292,7 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
         }
         mj_key(b, "cancellable");
         mj_boolv(b, 1);
+        if (m->pickup_review) { mj_key(b, "pickupReview"); mj_boolv(b, 1); }
         if (m->container_phase) {
             mj_key(b, "containerPhase");
             mj_strv(b, m->container_phase == 1 ? "inspect" : "transfer");
@@ -3260,6 +3312,7 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
             mj_obj(b);
             mj_key(b, "id"); mj_intv(b, m->items[i].index);
             mj_key(b, "label"); mj_strv(b, m->items[i].text ? m->items[i].text : "");
+            if (m->pickup_review) { mj_key(b, "suggested"); mj_boolv(b, m->items[i].suggested); }
             if (m->items[i].transfer) {
                 mj_key(b, "transfer"); mj_strv(b, m->items[i].transfer == 1 ? "take" : "put");
             }

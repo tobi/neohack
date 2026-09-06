@@ -93,7 +93,7 @@ export type Decision = DecisionBase & (
   | { kind: "item"; options: Omit<ItemRef, "category" | "usage">[]; counted?: boolean; selection: { min: number; max: number } }
   | { kind: "target"; allowedTargets: ("self" | "direction")[]; allowedDirections?: Direction[] }
   | { kind: "confirmation"; context?: { action: string; direction?: Direction; itemId?: string } }
-  | { kind: "choice"; options: { id: number; label: string; transfer?: "take" | "put" }[]; selection?: { min: number; max: number }; containerPhase?: "inspect" | "transfer" }
+  | { kind: "choice"; options: { id: number; label: string; transfer?: "take" | "put"; suggested?: boolean }[]; selection?: { min: number; max: number }; containerPhase?: "inspect" | "transfer"; pickupReview?: boolean }
   | { kind: "position"; cursor: { x: number; y: number }; mode: "browse" | "select" }
   | { kind: "text"; purpose?: "consumedPotionNickname" }
 );
@@ -103,7 +103,10 @@ export interface Outcome {
   reason?: string; turnsElapsed: number; positionChanged: boolean; effects: string[];
 }
 export interface End { kind: "death" | "ascended" | "escaped" | "quit" | "disconnected" | "engineError" | "unknown"; cause?: string; turn: number; score?: number }
+export interface LootItem { id: string; label: string; quantity: number }
 export type WorldEvent =
+  | { type: "itemLooted"; item: LootItem; quantity: number; source: "floor" | "container" | "engulfer"; container?: LootItem; turn: number }
+  | { type: "containerOpened"; container: LootItem; contents: LootItem[]; turn: number }
   | { type: "doorWitness"; levelId: string; x: number; y: number; fact: "locked" | "unlocked" | "opened" | "closed" | "resisted" | "notClosed"; turn: number }
   | { type: "saw"; x: number; y: number; kind: string; mark: string; color: number }
   | { type: "felt"; sense: string; value: string }
