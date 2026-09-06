@@ -1,6 +1,5 @@
 #define _GNU_SOURCE
 #include "mcp.h"
-#include <sys/queue.h>
 #include <event2/keyvalq_struct.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -12,7 +11,7 @@ static const char *header(struct evhttp_request *req, const char *name)
 {
     struct evkeyvalq *headers = evhttp_request_get_input_headers(req);
     struct evkeyval *entry; const char *value = NULL;
-    TAILQ_FOREACH(entry,headers,next) if (!strcasecmp(entry->key,name)) {
+    for (entry = headers->tqh_first; entry; entry = entry->next.tqe_next) if (!strcasecmp(entry->key,name)) {
         if (value) return NULL; /* Do not accept ambiguous duplicate routing headers. */
         value = entry->value;
     }

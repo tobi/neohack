@@ -15,9 +15,14 @@ license alongside the engine license. Native installation extracts that notice
 from the actual Lua header used to build the engine. WASM staging includes Lua,
 Emscripten, musl, compiler-rt and LLVM libc notices from the selected toolchain.
 
-The MCP adapter uses `@modelcontextprotocol/sdk` under its MIT license. The
-TypeScript client itself does not import that SDK. Development tools are not
-bundled into browser clients.
+Native MCP uses libevent under its BSD license. The single-file Linux build
+statically links its native dependencies and embeds their notices from
+`scripts/bundle-licenses/`, alongside the NetHack and Lua notices. They are
+extracted into the versioned runtime cache on launch.
+
+MCP development tests use `@modelcontextprotocol/sdk` under its MIT license.
+The TypeScript client itself does not import that SDK. Development tools are
+not bundled into browser clients.
 
 ## Project code
 

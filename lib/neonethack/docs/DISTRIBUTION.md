@@ -111,3 +111,18 @@ or a game-history migration mechanism.
 The preview builder requires a private npm package and records
 `publicationApproved: false`. Registry publication needs a separate release
 workflow.
+
+## Local single-file MCP build
+
+`make bundle` is a separate Linux/musl build using Podman. It produces
+`build/bundle/neohack-mcp`; see the [single-file setup](QUICKSTART.md#single-file-linux-mcp).
+It embeds only the allowlisted static data, the stripped engine, project/NetHack
+notices and dependency licenses. Runtime bytes and downloaded Lua sources stay
+in ignored build outputs or the container, never in the source tree.
+
+This local installation target does not publish a release or replace the checked
+preview archive workflow above. Any distributed binary must accompany matching
+project/engine source and required notices, including the Lua and static library
+sources/notices where their licenses require them. Embedded notices are extracted
+alongside the runtime. The build recipe uses Alpine 3.23 packages; updating those
+packages changes the runtime content hash and does not upgrade existing game pins.

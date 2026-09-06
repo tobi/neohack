@@ -21,6 +21,8 @@ game processes and `--http PORT` for MCP 2026-07-28 Streamable HTTP, using the s
 tool schemas and independent observation snapshots.
 The native build includes a [C MCP server](docs/QUICKSTART.md#native-stdio-mcp-no-node-runtime),
 `neonethack-mcp ENGINE DATA SESSIONS`, with no JavaScript runtime requirement.
+`make bundle` also builds a [single-file Linux executable](docs/QUICKSTART.md#single-file-linux-mcp)
+with the engine, data and static dependencies included: `neohack-mcp [--http PORT] [SESSIONS]`.
 
 Try the [live pixel client](https://neohack.dev) or follow the
 [agent-browser/WebMCP walkthrough](docs/AGENT_BROWSER.md) without a local build.

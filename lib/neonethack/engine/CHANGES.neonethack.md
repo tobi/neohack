@@ -6,6 +6,13 @@ Original copyright, no-warranty and `dat/license` notices remain intact.
 These notes identify changes; they do not grant a new license for independently
 owned project code. The repository's publication/license review remains open.
 
+## 2026-09-06 — standalone native packaging
+
+- `src/mail.c`: handle a missing OS account entry when discovering a local
+  mailbox. Minimal containers can omit `/etc/passwd`; starting a game must not
+  dereference a null `getpwuid()` result. Existing mailbox behavior is unchanged
+  when an account or explicit mailbox is available.
+
 ## 2026-09-03 through 2026-09-05 — neonethack project
 
 - `win/headless/*`: added the private NDJSON window port, bounded JSON/RPC

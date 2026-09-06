@@ -104,8 +104,12 @@ getmailstatus(void)
     } else  {
 #ifdef AMS
         struct passwd ppasswd;
+        struct passwd *pw = getpwuid(getuid());
 
-        (void) memcpy(&ppasswd, getpwuid(getuid()), sizeof (struct passwd));
+        /* neonethack: standalone containers may have no passwd database. */
+        if (!pw)
+            return;
+        (void) memcpy(&ppasswd, pw, sizeof (struct passwd));
         if (ppasswd.pw_dir) {
             /* note: 'sizeof "LITERAL"' includes +1 for terminating '\0' */
             mailbox = (char *) alloc((unsigned) (strlen(ppasswd.pw_dir)
@@ -114,7 +118,13 @@ getmailstatus(void)
             Strcat(mailbox, AMS_MAILBOX);
         }
 #else
-        const char *pw_name = getpwuid(getuid())->pw_name;
+        struct passwd *pw = getpwuid(getuid());
+        const char *pw_name;
+
+        /* No OS account means no discoverable local mailbox. */
+        if (!pw || !pw->pw_name)
+            return;
+        pw_name = pw->pw_name;
 
         /* note: 'sizeof "LITERAL"' includes +1 for terminating '\0' */
         mailbox = (char *) alloc((unsigned) (strlen(pw_name)

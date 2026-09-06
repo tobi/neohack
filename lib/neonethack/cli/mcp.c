@@ -2,6 +2,9 @@
 #define _GNU_SOURCE
 #include "mcp.h"
 #include "mcp-tools.inc"
+#ifdef NNH_BUNDLE_MCP
+#include "mcp-bundle.h"
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -200,6 +203,13 @@ int main(int argc, char **argv)
         } else if (argv[i][0] == '-' || count == 3) goto usage;
         else paths[count++] = argv[i];
     }
+#ifdef NNH_BUNDLE_MCP
+    if (!worker && count <= 1) {
+        char *sessions = count ? paths[0] : NULL;
+        if (mcp_bundle_paths(&paths[0],&paths[1],&sessions)) return 1;
+        paths[2] = sessions; count = 3;
+    }
+#endif
     if (count != 3 || (worker && s.port)) goto usage;
     s.config.engine_path = paths[0]; s.config.data_path = paths[1]; s.config.sessions_path = paths[2];
     signal(SIGPIPE,SIG_IGN); /* Executable only; never installed by the C library. */
@@ -236,6 +246,10 @@ int main(int argc, char **argv)
     free(s.compact.previous); event_base_free(s.base);
     return s.failed;
 usage:
+#ifdef NNH_BUNDLE_MCP
+    fprintf(stderr,"usage: %s [--http PORT] [SESSIONS]\nBundled engine and data; sessions default to $XDG_STATE_HOME/neohack/sessions\n(or ~/.local/state/neohack/sessions). Runtime cache: $XDG_CACHE_HOME/neohack/runtimes\n(or ~/.cache/neohack/runtimes). Custom runtime: ENGINE DATA SESSIONS.\n",argv[0]);
+#else
     fprintf(stderr,"usage: %s [--http PORT] ENGINE DATA SESSIONS\nNative C MCP: default stdio; HTTP " MCP_HTTP_VERSION " at 127.0.0.1:PORT/mcp.\n",argv[0]);
+#endif
     return argc == 2 && (!strcmp(argv[1],"--help") || !strcmp(argv[1],"-h")) ? 0 : 2;
 }
