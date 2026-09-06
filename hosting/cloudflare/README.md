@@ -66,3 +66,18 @@ package hash survive ingestion; raw messages, stacks, names, save links and vaul
 IDs are excluded. Offline/unloaded clients cannot report; counts are reports,
 not unique affected users. The public dashboard refreshes every minute. Error
 aggregates expire after 14 days; run summaries remain until explicitly removed.
+
+### Passkey accounts, embedded worlds and bot tests
+
+`/component`, `/login` and `/bots` are part of the pixel client build. Accounts use
+an `ACCOUNTS` SQLite Durable Object binding, introduced by `v2-accounts` in
+`wrangler.toml`. This is provisioning for the new account service, not an engine
+save migration. Install the hosting dependencies using its Bun lockfile before
+building or deploying the worker. Local passkey tests must use `localhost`, not
+an IP address; production passkeys are bound to the deployed HTTPS hostname.
+
+Private observation recordings and bot source are account data; never publish
+Durable Object exports, local Wrangler persistence or authentication cookies as
+source. The existing vault and public ledger contracts remain separate. See
+[component and workshop documentation](../../example/pixel-bun/COMPONENT.md) for
+the message API, passkey flow, replay guarantees, sandbox and dependency notices.

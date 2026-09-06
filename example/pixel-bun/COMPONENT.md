@@ -1,4 +1,4 @@
-# Embedding the world
+# Embedding and the ascender workshop
 
 Build with `bun run build`. `/component/neohack.js` is a single ESM bundle with
 its selected runtime PNG artwork and shadow-root styles included. No framework,
@@ -61,3 +61,59 @@ Bridge validation failures return a JSON-RPC error and never retry a request.
 `registerWebMcp(context?)` registers only the current connection's allowed tools;
 retain its returned registration and call `dispose()` before replacing a connection
 or removing its host. It reports unsupported browsers without installing a shim.
+
+## Accounts and recordings
+
+The full account API runs in the Cloudflare worker (`Accounts` Durable Object).
+The local Bun server serves static files only; use Wrangler for account testing.
+Passkeys need HTTPS in production or a `localhost` hostname for local development.
+WebAuthn verification uses SimpleWebAuthn (MIT), with discoverable credentials,
+required user verification, one-use five-minute challenges, credential counters,
+unique case-insensitive handles and HttpOnly SameSite=Strict sessions. Cross-origin
+writes are rejected. The browser controls the phone/QR ceremony; the site never
+manufactures its own authentication QR code. See the [SimpleWebAuthn documentation](https://simplewebauthn.dev/docs/packages/server/).
+
+Signed-in live games and tests upload a separate private observation recording.
+These records are browser reports, not authoritative scores or resumable engine
+journals. Replays do not load WASM. Optional `observation.neighborhood` action-query
+expansions are omitted from the presentation recording; world cells, vitals,
+inventory, decisions and events remain. Frames are appended with an exact index,
+increasing revision, session identity and immutable engine package ID. Failed or
+uncertain uploads stop this recorder visibly; they never cause new engine input.
+A resumed game starts a new partial recording. Existing anonymous journals are not
+silently claimed or converted. Signing in from the shared top rail updates the current page without navigation.
+Changing accounts stops an active replay recorder before it can upload to a new account.
+
+## Workshop
+
+`/bots` uses CodeMirror (MIT) and TypeScript (Apache-2.0). The named entrypoint is `main.ts`, exporting `defineBot({ initialize({ hero, game, log }) { ... } })`. It registers observation listeners and a single awaited `turn` listener. The two-file imp starter demonstrates exploration, retreat, eating and new equipment.
+TypeScript provides live cross-file completions, hover docs and advisory diagnostics; Test transpiles the project. The `neonethack` import exposes Hero, direction and entity enums alongside the same
+client classes; arbitrary package imports are unavailable.
+
+The parent owns a fresh volatile engine and validates every brokered request against
+its one session. Source executes in a dedicated worker inside an opaque sandboxed
+iframe, with network connections disallowed by CSP. Only the sandbox permits dynamic
+code compilation. A private MessagePort carries requests and bounded logs. Tests
+stop after 1,000 calls or five minutes. Stop removes the sandbox immediately,
+then settles submitted engine work and queued recordings before closing the engine.
+No receipt failure authorizes replacement input. These are local experiments, not
+a server-side compute or verified competition service.
+
+Run actual passkey, isolated-script, engine and replay integration checks with:
+
+```sh
+bun run --cwd example/pixel-bun build
+node hosting/cloudflare/scripts/stage.mjs
+node --test hosting/cloudflare/tests/studio.test.mjs
+```
+
+The workshop defaults to random class and seed, sampled once when starting a test.
+Choose a specific class or fixed seed to reproduce a setup. Saved projects retain
+the selected mode; replay records retain the actual class and seed. The desktop IDE
+has a file explorer, tabs, a keyboard-resizable divider and output panel. Ctrl/⌘ S
+saves; Ctrl/⌘ Enter runs. The API budget is fixed at 1,000 and has no form control.
+The workshop requires Web Crypto (HTTPS or localhost) to verify runtime assets.
+An insecure address is explained before any runtime is loaded.
+
+See the [typed Hero API](../../lib/neonethack/docs/HERO.md) for sensing, movement,
+melee and inventory conveniences. Its declarations drive the workshop editor.

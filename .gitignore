@@ -21,6 +21,7 @@
 /hosting/cloudflare/site/
 /hosting/cloudflare/node_modules/
 /hosting/cloudflare/.wrangler/
+/.wrangler/
 *.o
 *.a
 *.so

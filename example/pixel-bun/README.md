@@ -192,3 +192,10 @@ Unidentified appearances retain the category fallback. The example includes orig
 newt, jackal, lichen, goblin, kobold and rat sprites in `src/symbol-art.ts`.
 Ground loot renders below actors and appears in a free-to-read, clickable list at
 the right. Pickup uses explicit item IDs and the displayed revision.
+
+## Component, passkeys and bot workshop
+
+The build also produces `/component` and its single-file `/component/neohack.js`
+viewer, `/login` for passkey accounts and private replays, and `/bots` for local
+JS/TS ascender experiments. See [the integration guide](COMPONENT.md). Account
+features require the Cloudflare worker; Bun's static server cannot authenticate.

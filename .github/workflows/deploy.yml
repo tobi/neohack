@@ -50,6 +50,7 @@ jobs:
         run: |
           bun install --frozen-lockfile --cwd example/pixel-bun
           bun run --cwd example/pixel-bun build
+      - run: bun install --frozen-lockfile --cwd hosting/cloudflare
       - run: node hosting/cloudflare/scripts/stage.mjs
       - uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         with:

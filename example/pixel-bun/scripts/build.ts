@@ -35,6 +35,13 @@ const program = ts.createProgram(
   [
     `${root}/src/app.ts`,
     `${root}/src/component.ts`,
+    `${root}/src/login.ts`,
+    `${root}/src/bots.ts`,
+    `${root}/src/rail.ts`,
+    `${root}/src/bot-worker.ts`,
+    `${root}/bots/imp/main.ts`,
+    `${root}/bots/imp/strategy.ts`,
+    `${root}/src/bot-language.ts`,
     `${root}/server.ts`,
     `${root}/scripts/render-dungeon.ts`,
   ],
@@ -53,10 +60,13 @@ if (diagnostics.length) {
 }
 const embeddedArt: Record<string,string> = {};
 for (const file of new Bun.Glob('*.png').scanSync(root+'/public/art')) embeddedArt[file.replace(/\.png$/, '')] = 'data:image/png;base64,' + Buffer.from(await Bun.file(root+'/public/art/'+file).arrayBuffer()).toString('base64');
-const defines = { __NEOHACK_ART__: JSON.stringify(embeddedArt) };
+const botTypes: Record<string, string> = {};
+for (const name of ['client', 'types', 'requests', 'hero', 'vocabulary', 'hero-events', 'lifecycle']) botTypes['/types/' + name + '.d.ts'] = await Bun.file(library + '/dist/typescript/' + name + '.d.ts').text();
+for (const name of new Bun.Glob('lib.*.d.ts').scanSync(root + '/node_modules/typescript/lib')) botTypes['/lib/' + name] = await Bun.file(root + '/node_modules/typescript/lib/' + name).text();
+const defines = { __NEOHACK_ART__: JSON.stringify(embeddedArt), __BOT_TYPES__: JSON.stringify(botTypes), __IMP_MAIN__: JSON.stringify(await Bun.file(root+'/bots/imp/main.ts').text()), __IMP_STRATEGY__: JSON.stringify(await Bun.file(root+'/bots/imp/strategy.ts').text()) };
 const result = await Bun.build({
-  entrypoints: [`${root}/src/app.ts`],
   define: defines,
+  entrypoints: [`${root}/src/app.ts`, `${root}/src/login.ts`, `${root}/src/bots.ts`, `${root}/src/rail.ts`],
   outdir: `${root}/public/build`,
   target: "browser",
   minify: true,
@@ -70,6 +80,9 @@ console.log(
 
 for (const [entry, target, format] of [
   ['component', 'component/neohack.js', 'esm'],
+  ['bot-language', 'build/bot-language.js', 'esm'],
+  ['bot-worker', 'build/bot-worker.js', 'iife'],
+  ['bot-sandbox', 'build/bot-sandbox.js', 'iife'],
 ] as const) {
   const built = await Bun.build({entrypoints:[root+'/src/'+entry+'.ts'],target:'browser',format,minify:true,define:defines});
   if(!built.success) throw new AggregateError(built.logs, entry+' build failed');

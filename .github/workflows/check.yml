@@ -71,7 +71,7 @@ jobs:
         run: |
           bun install --frozen-lockfile --cwd example/pixel-bun
           bun run --cwd example/pixel-bun build
-          npm ci --ignore-scripts --prefix hosting/cloudflare
+          bun install --frozen-lockfile --cwd hosting/cloudflare
           CHROMIUM="$(command -v google-chrome)" npm test --prefix hosting/cloudflare
           CHROMIUM="$(command -v google-chrome)" bun run --cwd example/pixel-bun test
       - name: Build checked source/native/npm previews with embedded source

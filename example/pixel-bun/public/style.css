@@ -1637,3 +1637,7 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
 .pickup-creation { margin: 16px 0; }
 .pickup-editor summary, .pickup-creation > summary { min-height: 44px; padding: 10px 0; cursor: pointer; }
 #pickup-settings-form > .dialog-actions { position: sticky; bottom: -28px; background: #202d29; padding: 12px 0; }
+
+/* Site account rail stays above the game without covering its HUD. */
+.game-page pixel-nethack{height:calc(100dvh - 60px)}
+@media(max-width:1099px){.game-page .welcome-paths{top:calc(100dvh - 60px)}}

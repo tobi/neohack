@@ -31,3 +31,11 @@ class_name = "Board"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Vault", "Board"]
+
+[[durable_objects.bindings]]
+name = "ACCOUNTS"
+class_name = "Accounts"
+
+[[migrations]]
+tag = "v2-accounts"
+new_sqlite_classes = ["Accounts"]

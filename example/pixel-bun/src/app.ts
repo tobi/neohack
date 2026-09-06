@@ -1,3 +1,4 @@
+import { accountApi, RunRecorder } from './account-client';
 import { reportError } from "./telemetry";
 // Public package entry points, served together by Bun under /runtime/.
 import type {
@@ -205,6 +206,25 @@ class PixelNethack extends HTMLElement {
     (direction, repeated) => this.stepMove(direction, repeated),
     () => this.controls(),
   );
+  private accountUser = accountApi().catch(() => null);
+  private accountChanged = (event: Event) => { this.accountUser = Promise.resolve((event as CustomEvent).detail); this.accountSession = ''; this.accountRecorder = null; };
+  private accountRecorder: RunRecorder | null = null;
+  private accountSession = '';
+  private recordAccount() {
+    const frame = this.game?.state, current = this.current;
+    if(!frame || !current?.buildId) return;
+    void this.accountUser.then(user => {
+      if(!user) return;
+      if(this.accountSession !== frame.sessionId) {
+        this.accountSession = frame.sessionId;
+        this.accountRecorder = new RunRecorder({name:current.name,role:current.role,seed:current.seed,buildId:current.buildId!}, message => {
+          const node = document.getElementById('account-recording');
+          if(node) node.textContent = message;
+        });
+      }
+      this.accountRecorder?.record(frame);
+    });
+  }
   get snapshot(): Snapshot | null {
     return this.game?.state ?? null;
   }
@@ -262,7 +282,7 @@ class PixelNethack extends HTMLElement {
           <details class="hud-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
             <button id="adventures-button">Your adventures</button><button id="pickup-settings" data-game>Automatic pickup</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button>
             <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
-            <button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p>
+            <button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p><p id="account-recording" role="status"></p><a class="menu-github" href="/component" target="_blank" rel="noopener">Embed the world ↗</a><a class="menu-github" href="/bots" target="_blank" rel="noopener">Ascender workshop ↗</a><a class="menu-github" href="/login" target="_blank" rel="noopener">Your account & replays ↗</a>
           </div></details>
         </div>
         <div class="notices"><div class="notice error" id="error" role="alert" hidden></div>
@@ -308,6 +328,8 @@ class PixelNethack extends HTMLElement {
     document.addEventListener("keydown", this.keyHandler);
     document.addEventListener("keyup", this.keyUpHandler);
     window.addEventListener("blur", this.stopMovement);
+    window.addEventListener("account-dialog-open", this.stopMovement);
+    window.addEventListener("accountchange", this.accountChanged);
     document.addEventListener("visibilitychange", this.visibilityChanged);
     document.addEventListener("focusin", this.focusChanged);
     try {
@@ -681,6 +703,8 @@ class PixelNethack extends HTMLElement {
     document.removeEventListener("keydown", this.keyHandler);
     document.removeEventListener("keyup", this.keyUpHandler);
     window.removeEventListener("blur", this.stopMovement);
+    window.removeEventListener("account-dialog-open", this.stopMovement);
+    window.removeEventListener("accountchange", this.accountChanged);
     document.removeEventListener("visibilitychange", this.visibilityChanged);
     document.removeEventListener("focusin", this.focusChanged);
     this.stopMovement();
@@ -974,6 +998,7 @@ class PixelNethack extends HTMLElement {
         catch (error) { this.error(error); }
       }
       if (this.game && this.current) {
+        this.recordAccount();
         this.current.turn = this.game.observation.turn;
         this.current.ended = this.game.state.ended;
         this.current.maxLevel = Math.max(this.current.maxLevel ?? 0, Number(this.game.observation.vitals.level) || 0);

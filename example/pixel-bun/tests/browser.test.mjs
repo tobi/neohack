@@ -1520,7 +1520,9 @@ test("walk-in welcome teaches directions, stops on release and opens creation on
   await page.keyboard.press("Escape");
   const size = await page.locator(".map-viewport").boundingBox();
   assert.equal(size.width, 390);
-  assert.equal(size.height, 844);
+  const rail = await page.locator('neohack-rail').boundingBox();
+  assert.equal(size.y, rail.y + rail.height);
+  assert.equal(size.y + size.height, 844);
   assert.deepEqual(errors, []);
 });
 
@@ -1561,7 +1563,7 @@ test(
     assert.equal(await page.locator("#hero-name").textContent(), "Mira");
     assert.equal(
       await page.locator(".map-viewport").evaluate((el) => el.clientHeight),
-      1050,
+      1050 - (await page.locator('neohack-rail').boundingBox()).height,
     );
     await page.screenshot({
       path: `${root}/test-results/fullscreen-hud-desktop.png`,
@@ -2322,7 +2324,8 @@ test("mobile journal preview is on by default and collapses without consuming a 
   const toggle = page.locator("#toggle-journal-preview");
   assert.equal(await toggle.getAttribute("aria-expanded"), "true");
   const preview = await page.locator("#journal-preview").boundingBox();
-  assert.ok(preview.y >= 128 && preview.y + preview.height < 300);
+  const worldTop = (await page.locator('.map-viewport').boundingBox()).y;
+  assert.ok(preview.y - worldTop >= 128 && preview.y - worldTop + preview.height < 300);
   const turn = (await snapshot(page)).observation.turn;
   await toggle.tap();
   assert.equal(await page.locator("#recent-messages").isVisible(), false);
@@ -2658,7 +2661,7 @@ test('welcome renders the native example and GitHub remains available in the gam
   await snippet.scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${root}/test-results/welcome-native-example.png` });
   await page.getByLabel('Game menu', { exact: true }).click();
-  const github = page.locator('.menu-github').filter({hasText: /^GitHub/});
+  const github = page.locator('.menu-github[href="https://github.com/tobi/neohack"]');
   assert.equal(await github.isVisible(), true);
   assert.equal(await github.getAttribute('href'), 'https://github.com/tobi/neohack');
   await page.keyboard.press('Escape');

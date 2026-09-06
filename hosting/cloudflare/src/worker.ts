@@ -7,6 +7,7 @@ export interface Env {
   ASSETS: Fetcher;
   VAULTS: DurableObjectNamespace;
   BOARD: DurableObjectNamespace;
+  ACCOUNTS: DurableObjectNamespace;
 }
 
 const json = (data: unknown, status = 200) =>
@@ -130,11 +131,16 @@ export class Vault {
   }
 }
 
+export { Accounts } from "./accounts";
 export { Board } from "./board";
 
 async function api(request: Request, env: Env) {
   const url = new URL(request.url);
   const path = url.pathname;
+  if (path === "/api/account" || path.startsWith("/api/account/")) {
+    if (request.method !== 'GET' && request.headers.get('origin') !== url.origin) return json({error:'Origin rejected'},403);
+    return env.ACCOUNTS.get(env.ACCOUNTS.idFromName("accounts")).fetch(request);
+  }
   if (path === "/api/health") return json({ ok: true, webmcp: "browser-mediated" });
   if (path === "/api/errors") {
     if (request.method !== "POST") return json({error:"method not allowed"},405);
@@ -166,11 +172,11 @@ export default {
         return json({error:"server error"},500);
       }
     }
-    if (url.pathname === "/component") url.pathname = "/component/index.html";
+    if (["/component", "/login", "/bots"].includes(url.pathname)) url.pathname += "/index.html";
     const asset = await env.ASSETS.fetch(new Request(url, request));
     const headers = new Headers(asset.headers);
-    headers.set("content-security-policy", CSP);
-    if (url.pathname.startsWith("/component/")) headers.set("access-control-allow-origin", "*");
+    headers.set("content-security-policy", ["/bots/sandbox", "/bots/sandbox.html"].includes(url.pathname) ? "default-src 'none'; script-src 'self' 'unsafe-eval'; worker-src blob:; connect-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'" : CSP);
+    if (url.pathname.startsWith("/component/") || url.pathname.startsWith("/art/") || url.pathname === "/build/bot-sandbox.js") headers.set("access-control-allow-origin", "*");
     headers.set("x-content-type-options", "nosniff");
     headers.set("referrer-policy", "no-referrer");
     if (url.pathname.startsWith("/runtime/")) headers.set("cache-control", /^\/runtime\/wasm\/[a-f0-9]{64}\//.test(url.pathname) && asset.ok ? "public, max-age=31536000, immutable" : "no-cache");

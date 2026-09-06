@@ -12,6 +12,7 @@ export async function startServer(port = Number(process.env.PORT ?? 3333)) {
     hostname: "127.0.0.1",
     port,
     async fetch(request) {
+      const pathname = new URL(request.url).pathname;
       const headers = {
         "Access-Control-Allow-Origin": "*",
         "X-Content-Type-Options": "nosniff",
@@ -20,6 +21,7 @@ export async function startServer(port = Number(process.env.PORT ?? 3333)) {
         "Content-Security-Policy":
           "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; worker-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'",
       };
+      if(pathname === '/bots/sandbox.html') headers['Content-Security-Policy'] = "default-src 'none'; script-src 'self' 'unsafe-eval'; worker-src blob:; connect-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'";
       if (!["GET", "HEAD"].includes(request.method))
         return new Response("Method not allowed", {
           status: 405,
@@ -33,7 +35,7 @@ export async function startServer(port = Number(process.env.PORT ?? 3333)) {
           ? path.slice(9)
           : path === "/"
             ? "index.html"
-            : path === "/dashboard" ? "dashboard.html" : ["/component", "/component/"].includes(path) ? "component/index.html" : path.slice(1);
+            : path === "/dashboard" ? "dashboard.html" : ["/component", "/component/", "/login", "/login/", "/bots", "/bots/"].includes(path) ? path.replace(/^\//, "").replace(/\/$/, "") + "/index.html" : path.slice(1);
         if (runtime && relative === 'wasm/current.json') {
           const manifest = await Bun.file(resolve(runtimeRoot,'wasm/manifest.json')).json();
           return Response.json({version:1,buildId:manifest.buildId},{headers});

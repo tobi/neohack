@@ -915,7 +915,7 @@ The proposed flooded ruins, mines, crypts, fungal and infernal styles are not
 implemented and are not selectable. Earlier notes that live play always defaults
 to dungeon are superseded by this activation.
 
-## Embeddable component
+## Component, accounts and ascender workshop
 
 `/component` is a read-only developer landing page. Reuse the existing stonework
 and LimeZu art through a self-contained shadow-DOM `<neohack-world>` viewer;
@@ -923,3 +923,45 @@ never create a game on the showcase. Charcoal, sage and warm cream carry into
 editorial pages with large serif headlines, selectable code and responsive columns.
 The component defaults to no engine connection. An explicitly supplied transport
 controls discovery and execution; replay playback displays public frames only.
+
+`/login` uses discoverable, user-verified passkeys and unique case-insensitive
+handles. Explain the browser's phone/QR option for cross-device use. Private run
+history records observed branch locations, experience level and recorded frames;
+label browser-reported data and partial recordings honestly. Frame recordings are
+separate from the authoritative engine journals and never resume games.
+
+`/bots` is the Ascender workshop: CodeMirror, multiple JS/TS files, random class
+and random seed by default, named private projects, a read-only world and bounded output.
+Bot execution belongs in a worker inside an opaque sandbox with network blocked.
+Use the public Game API, sequential calls, a fixed 1,000-call/five-minute limit and Stop.
+Temporary test engines never acquire an existing save. A worker-hosted TypeScript
+language service supplies cross-file completion, hover documentation and advisory
+type diagnostics from the built library declarations. No npm package support is claimed. Signed-in tests save replay
+observations; offline or failed uploads must visibly stop recording.
+
+The workshop is a compact IDE surface: a project/run toolbar, file explorer, editor
+tabs, resizable editor/world split, output panel and cursor/status rail. Keep the
+workspace within the desktop viewport; stack panes on phones. Class and seed can
+be fixed explicitly, with the actual randomly chosen values shown for each run.
+Ctrl/Command-S saves and Ctrl/Command-Enter runs. No editable API budget control.
+
+Every site surface includes the shared `neohack-rail` top rail: navigation and an
+account button opening the passkey dialog in place. Signed-in users see their
+name, run-history link and sign-out. Authentication changes update the current
+page without discarding workshop code. Account dialogs suspend held game input.
+Keep the rail above, rather than covering, the game HUD. On insecure HTTP origins,
+the workshop explains HTTPS/localhost requirements before loading any engine;
+never skip cryptographic package integrity checks.
+
+The starter uses the library Hero facade and generated direction/species enums,
+with contextual entrypoint types via defineBot. No hand-written direction helper
+file is needed. Entity handles are revision-bound; sensing only selects disclosed
+visible creatures and Enemy requires a known hostile attitude. Inventory name
+queries resolve in the engine, with ambiguity preserved.
+
+The workshop now starts with Curious imp, a two-file event-driven bot. One
+initialize callback registers read-only observation events and one awaited turn
+listener coordinates actions. The editable strategy biases toward unknown areas,
+flees disclosed enemies, eats eligible food, attempts newly observed equipment,
+and seeks downward stairs. Eligibility and movement facts originate in C; policy
+remains in the example. Never present a sighting event as a hidden spawn/death.
