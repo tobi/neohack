@@ -3,8 +3,8 @@
 A lantern-lit, approachable NetHack client. The live site serves the interface; the
 neonethack WebAssembly package runs the shared C semantic driver and game engine
 in the browser. This example is a client of the public API, with no game rules or
-gameplay HTTP routes. Cloudflare Durable Objects store cloud journals; the local
-Bun server serves static files only. It lives at `example/pixel-bun/`.
+gameplay HTTP routes. Vercel Functions and private Blob storage keep cloud journals; the local
+Bun server serves static files only. It lives at `web/neohack.dev/`.
 
 ## Play online
 
@@ -21,9 +21,9 @@ npm ci --prefix lib/neonethack
 npm run --prefix lib/neonethack build
 # Activate your installed Emscripten SDK, or set EMSDK to its absolute path.
 make -C lib/neonethack wasm
-bun install --cwd example/pixel-bun
-bun run --cwd example/pixel-bun build
-bun run --cwd example/pixel-bun start
+bun install --cwd web/neohack.dev
+bun run --cwd web/neohack.dev build
+bun run --cwd web/neohack.dev start
 ```
 
 Open http://127.0.0.1:3333. `PORT` changes the port. The server binds to loopback,
@@ -52,7 +52,7 @@ The CLI and live map share the terrain renderer; the game's actual seed plus
 its public level ID drive stable surface variation.
 
 ```sh
-bun run --cwd example/pixel-bun art:render --layout art/layouts/rooms.txt --seed 42 --out test-results/art/rooms.png --scale 3
+bun run --cwd web/neohack.dev art:render --layout art/layouts/rooms.txt --seed 42 --out test-results/art/rooms.png --scale 3
 ```
 
 See [art/README.md](art/README.md) for the ASCII legend, comparison sheets and
@@ -111,7 +111,7 @@ keyboard focus, modal dialogs, reduced-motion support and narrow-screen layouts.
 
 ## Saves and uncertainty
 
-Browser IndexedDB uses the explicit store `neonethack-pixel-bun-v1`. It requires
+Browser IndexedDB uses the explicit store `neonethack-pixel-v2-${vault}`. It requires
 Web Locks and a secure context (localhost or HTTPS), with one owner per origin
 and store. Saves are committed by the library before input is acknowledged.
 There is no memory fallback. The adventure index (names, IDs, role, seed, last turn and
@@ -133,7 +133,7 @@ the underlying game journal remains owned by the library.
 ## Check
 
 ```sh
-bun run --cwd example/pixel-bun test
+bun run --cwd web/neohack.dev test
 ```
 
 Uses actual engine worlds in sandboxed Chromium (`CHROMIUM` can override its path),
@@ -160,7 +160,7 @@ preserve exact receipts and standing decisions.
 ## Bookmark and resume
 
 Once a run starts, bookmark its URL. On the live site it can restore that run
-from its Durable Object in another browser. Keep the complete URL private: its
+from private cloud storage in another browser. Keep the complete URL private: its
 vault key grants access to the saved adventures in that vault. Wait for **Saved
 online** before switching devices. **Saving online…** means newer local turns
 are still uploading. See [cloud saves](../../lib/neonethack/docs/CLOUD_SAVES.md)
@@ -198,4 +198,4 @@ the right. Pickup uses explicit item IDs and the displayed revision.
 The build also produces `/component` and its single-file `/component/neohack.js`
 viewer, `/login` for passkey accounts and private replays, and `/bots` for local
 JS/TS ascender experiments. See [the integration guide](COMPONENT.md). Account
-features require the Cloudflare worker; Bun's static server cannot authenticate.
+features require the Vercel API; Bun's static server cannot authenticate.

@@ -3,8 +3,8 @@
 **NetHack, without the terminal.** A perception-limited world API in C, with
 TypeScript, MCP and WebAssembly bindings.
 
-The library lives in [`lib/neonethack/`](lib/neonethack/); native, browser and
-pixel-art examples consume its public API. This is an alpha; build from source
+The library lives in [`lib/neonethack/`](lib/neonethack/); the native/browser examples and
+web UI consume its public API. This is an alpha; build from source
 using the guides below.
 
 ```ts
@@ -51,9 +51,9 @@ prerequisites, CMake/Ninja recipes and the public APIs.
 - `lib/neonethack/` — C core and engine, protocol, TypeScript, MCP, builds, docs.
 - `examples/wasm/` — small browser client (`index.html`, `neonethack.ts`).
 - `examples/c/` — client of the installed public C header and library.
-- [`example/pixel-bun/`](example/pixel-bun/README.md) — an approachable pixel-art
+- [`web/neohack.dev/`](web/neohack.dev/README.md) — an approachable pixel-art
   browser client, served by Bun and powered by the public WASM API. Its
-  [visual design](example/pixel-bun/DESIGN.md) covers raised walls, seeded variety,
+  [visual design](web/neohack.dev/DESIGN.md) covers raised walls, seeded variety,
   accessible controls and the boundary between decoration and game knowledge.
 
 ## Play with an agent
@@ -67,7 +67,7 @@ play from perceived observations and resume saved adventures.
 Build matching source/native/npm archives with the
 [checked preview workflow](lib/neonethack/docs/DISTRIBUTION.md).
 See [project and dependency notices](lib/neonethack/NOTICE.md) and the pixel
-client's [art attribution](example/pixel-bun/art/ATTRIBUTION.md).
+client's [art attribution](web/neohack.dev/art/ATTRIBUTION.md).
 
 ## Development
 

@@ -105,7 +105,7 @@ or a game-history migration mechanism.
 - Keep matching source, binaries, checksums and third-party notices together.
   Exclude player stores, build workspaces and audit scratch data.
 - Review the source tree and history intended for publication. Library archives
-  exclude the pixel client; its asset terms (`example/pixel-bun/art/ATTRIBUTION.md`)
+  exclude the pixel client; its asset terms (`web/neohack.dev/art/ATTRIBUTION.md`)
   apply separately to a source repository.
 
 The preview builder requires a private npm package and records

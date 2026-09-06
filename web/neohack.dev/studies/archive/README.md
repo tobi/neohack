@@ -4,7 +4,7 @@ The current recipe contains original masonry, the LimeZu rug-red, and the existi
 Ranger/dog exports. It is an offline scale/composition study, not a game observation
 or live placement algorithm. No collision or engine topology comes from it.
 
-Run from `example/pixel-bun` with `PIXEL` set to the skill's
+Run from `web/neohack.dev` with `PIXEL` set to the skill's
 `resources/tools/pixel` executable:
 
 ```sh

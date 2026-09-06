@@ -4,7 +4,7 @@ The finished compositions reuse the game's authored doorway, Ranger and dog.
 Typography and framing are editable in `composition.html`; the scene comes from
 `DungeonMap.drawWelcomeArt`, at frame zero and integer pixel scales.
 
-Run `bun example/pixel-bun/scripts/build-social.ts` from the repository root.
+Run `bun web/neohack.dev/scripts/build-social.ts` from the repository root.
 It uses sandboxed Chromium and writes these finished PNGs to `public/social/`:
 
 - `open-graph.png`: 1200 × 630, linked by the page's Open Graph and Twitter metadata.

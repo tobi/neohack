@@ -64,7 +64,7 @@ or removing its host. It reports unsupported browsers without installing a shim.
 
 ## Accounts and recordings
 
-The full account API runs in the Cloudflare worker (`Accounts` Durable Object).
+The full account API runs in the Vercel API.
 The local Bun server serves static files only; use Wrangler for account testing.
 Passkeys need HTTPS in production or a `localhost` hostname for local development.
 WebAuthn verification uses SimpleWebAuthn (MIT), with discoverable credentials,
@@ -115,9 +115,9 @@ a server-side compute or verified competition service.
 Run actual passkey, isolated-script, engine and replay integration checks with:
 
 ```sh
-bun run --cwd example/pixel-bun build
-node hosting/cloudflare/scripts/stage.mjs
-node --test hosting/cloudflare/tests/studio.test.mjs
+bun run --cwd web/neohack.dev build
+node hosting/vercel/scripts/stage.mjs
+node --test hosting/vercel/tests/studio.test.mjs
 ```
 
 The workshop defaults to random class and seed, sampled once when starting a test.

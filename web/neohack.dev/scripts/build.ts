@@ -86,6 +86,6 @@ for (const [entry, target, format] of [
 ] as const) {
   const built = await Bun.build({entrypoints:[root+'/src/'+entry+'.ts'],target:'browser',format,minify:true,define:defines});
   if(!built.success) throw new AggregateError(built.logs, entry+' build failed');
-  const notice = entry === 'component' ? '/*! NeoHack viewer. NetHack attribution and project terms: https://github.com/tobi/neohack/blob/main/lib/neonethack/NOTICE.md . Character art by LimeZu (https://limezu.itch.io/moderninteriors), licensed for project use; raw asset redistribution is restricted. See example/pixel-bun/art/ATTRIBUTION.md in the matching source. */\n' : '';
+  const notice = entry === 'component' ? '/*! NeoHack viewer. NetHack attribution and project terms: https://github.com/tobi/neohack/blob/main/lib/neonethack/NOTICE.md . Character art by LimeZu (https://limezu.itch.io/moderninteriors), licensed for project use; raw asset redistribution is restricted. See web/neohack.dev/art/ATTRIBUTION.md in the matching source. */\n' : '';
   await Bun.write(root+'/public/'+target,notice + await built.outputs[0]!.text());
 }

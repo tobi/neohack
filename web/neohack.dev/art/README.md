@@ -5,7 +5,7 @@ with 16px cells, joined wall caps, eight-pixel front faces, staggered paving,
 crevice moss and silhouettes for actual known features. There are no copied vendor
 tiles in this renderer. Character art used by the interface has separate provenance.
 
-From `example/pixel-bun/` after `bun install`:
+From `web/neohack.dev/` after `bun install`:
 
 ```sh
 bun scripts/render-dungeon.ts --layout art/layouts/rooms.txt --seed 314159 --scale 3 --out test-results/art/rooms.png --verify

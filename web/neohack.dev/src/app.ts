@@ -33,6 +33,7 @@ import {
   journalUrl,
   publishCloud,
   restoreAdventures,
+  type PlayControl,
 } from "./cloud";
 import { roles, heroArt } from "./characters";
 import { pickupEditor, pickupSummary, loadPickupPreferences, rememberPickup } from "./pickup-editor";
@@ -51,14 +52,28 @@ const directions: [Compass, string][] = [
 type Adventure = {
   id: string;
   buildId?: string;
+  vaultId?: string;
+  accountId?: string;
   name: string;
   role: string;
+  actualClass?: string;
+  randomClass?: boolean;
   seed?: number;
+  seedSpecified?: boolean;
   turn: number;
   ended: boolean;
+  heroLevel?: number;
   maxLevel?: number;
+  maxDepth?: number;
   depthLabel?: string;
+  gold?: number;
+  kills?: number;
+  experience?: number;
+  gotAmulet?: boolean;
   endKind?: string;
+  score?: number;
+  control?: PlayControl;
+  automated?: boolean;
   pending?: Request;
 };
 const escape = (text: unknown) =>
@@ -211,6 +226,7 @@ class PixelNethack extends HTMLElement {
   private accountChanged = (event: Event) => { this.accountUser = Promise.resolve((event as CustomEvent).detail); this.accountSession = ''; this.accountRecorder = null; };
   private accountRecorder: RunRecorder | null = null;
   private accountSession = '';
+  private inputSource: PlayControl = "manual";
   private recordAccount() {
     const frame = this.game?.state, current = this.current;
     if(!frame || !current?.buildId) return;
@@ -463,6 +479,11 @@ class PixelNethack extends HTMLElement {
       throw Error(
         "Finish or close the human menu first; tool was not submitted.",
       );
+    this.inputSource = "webmcp";
+    if (this.current) {
+      this.current.control = "webmcp";
+      this.current.automated = true;
+    }
     this.stopMovement();
     this.closePanel();
     const before = this.uncertain() ? null : this.game?.state;
@@ -1004,11 +1025,7 @@ class PixelNethack extends HTMLElement {
       }
       if (this.game && this.current) {
         this.recordAccount();
-        this.current.turn = this.game.observation.turn;
-        this.current.ended = this.game.state.ended;
-        this.current.maxLevel = Math.max(this.current.maxLevel ?? 0, Number(this.game.observation.vitals.level) || 0);
-        this.current.depthLabel = this.game.observation.location.depthLabel;
-        this.current.endKind = this.game.state.end?.kind;
+        this.enrich(this.current);
         if (this.game.pendingRequest)
           this.current.pending = this.game.pendingRequest;
         try {
@@ -1034,6 +1051,48 @@ class PixelNethack extends HTMLElement {
           this.inspectTile(witness.x, witness.y, true);
       }
     }
+  }
+  private enrich(save: Adventure) {
+    const game = this.game;
+    if (!game) return;
+    const o = game.observation;
+    const end = game.state.end;
+    const level = Number(o.vitals.level) || 0;
+    const gold = Number(o.vitals.gold);
+    const xp = o.vitals.experience ?? o.vitals.xp;
+    const kills = o.knowledge?.conduct?.kills;
+    const fromLabel = Number((o.location.depthLabel.match(/(\d+)/) || [])[1]) || 0;
+    const fromMemory = Math.max(0, ...(o.knowledge?.levels ?? []).map((l) => l.depth));
+    const gotAmulet =
+      end?.kind === "ascended" ||
+      (o.knowledge?.achievements ?? []).some(
+        (a) => /amulet/i.test(a.id) || /amulet/i.test(a.name),
+      );
+    const control: PlayControl =
+      save.control === "webmcp" || this.inputSource === "webmcp"
+        ? "webmcp"
+        : location.pathname.startsWith("/bots")
+          ? "playground"
+          : this.inputSource;
+    void this.accountUser.then((user) => {
+      if (user?.id && save.id === this.current?.id) save.accountId = user.id;
+    });
+    save.vaultId = this.vault;
+    save.actualClass = save.role;
+    save.turn = o.turn;
+    save.ended = game.state.ended;
+    save.heroLevel = level || save.heroLevel;
+    save.maxLevel = Math.max(save.maxLevel ?? 0, level);
+    save.maxDepth = Math.max(save.maxDepth ?? 0, fromLabel, fromMemory);
+    save.depthLabel = o.location.depthLabel;
+    if (Number.isFinite(gold)) save.gold = gold;
+    if (typeof kills === "number") save.kills = kills;
+    if (xp !== undefined && Number.isFinite(Number(xp))) save.experience = Number(xp);
+    save.gotAmulet = save.gotAmulet || gotAmulet;
+    save.endKind = end?.kind ?? save.endKind;
+    if (typeof end?.score === "number") save.score = end.score;
+    save.control = control;
+    save.automated = control !== "manual";
   }
   private persist() {
     if (!this.metadataHealthy)
@@ -1765,14 +1824,21 @@ class PixelNethack extends HTMLElement {
         const automaticPickup = pickup.value();
         this.game = await this.api!.create({ ...role.identity, name, seed, automaticPickup });
         if (!rememberPickup(automaticPickup)) this.pickupMemoryNotice();
+        this.inputSource = "manual";
         this.current = {
           id: this.game.id,
           buildId: this.runtimeBuildId,
+          vaultId: this.vault,
           name,
           role: role.id,
+          actualClass: role.id,
+          randomClass: false,
           seed,
+          seedSpecified: Boolean(inputSeed),
           turn: this.game.observation.turn,
           ended: false,
+          control: "manual",
+          automated: false,
         };
         this.saves.unshift(this.current);
         this.journal = [];

@@ -19,17 +19,32 @@ export function clearRunUrl() {
 }
 
 
+export type PlayControl = "manual" | "webmcp" | "bot" | "script" | "playground";
 export type CloudAdventure = {
   buildId?: string;
   id: string;
+  vaultId?: string;
+  accountId?: string;
   name: string;
   role: string;
+  actualClass?: string;
+  randomClass?: boolean;
   seed?: number;
+  seedSpecified?: boolean;
   turn: number;
   ended: boolean;
+  heroLevel?: number;
   maxLevel?: number;
+  maxDepth?: number;
   depthLabel?: string;
+  gold?: number;
+  kills?: number;
+  experience?: number;
+  gotAmulet?: boolean;
   endKind?: string;
+  score?: number;
+  control?: PlayControl;
+  automated?: boolean;
 };
 
 export function playerId() {
@@ -76,14 +91,10 @@ async function writeCloud(saves: CloudAdventure[], vault: string) {
   const serialized = JSON.stringify(saves);
   if (published.get(vault) === serialized) return;
   const headers = { "content-type": "application/json" };
-  const publicRuns = saves.map(({ id, name, role, turn, ended, maxLevel, depthLabel, endKind, buildId }) => ({
-    maxLevel, depthLabel, endKind, buildId,
-    id,
-    name,
-    role,
-    turn,
-    ended,
-  }));
+  const publicRuns = saves.map((save) => {
+    const { pending: _pending, ...meta } = save as CloudAdventure & { pending?: unknown };
+    return meta;
+  });
   const responses = await Promise.all([
     fetch(`/api/vaults/${vault}/adventures`, {
       method: "PUT",

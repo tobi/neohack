@@ -24,5 +24,5 @@ bundled into browser clients.
 A license has not yet been selected for independently owned project code and
 original artwork. NetHack-derived code remains subject to its original terms.
 Pixel-client asset attribution and separate terms are in
-`example/pixel-bun/art/ATTRIBUTION.md` in the repository;
+`web/neohack.dev/art/ATTRIBUTION.md` in the repository;
 the pixel client is not included in the library archives.
