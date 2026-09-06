@@ -27,7 +27,7 @@ typedef struct {
     long long revision;
     char level[80];
     int ordinary_locomotion, door_diagonals, direction_reliable;
-    int inventory_current, tools, floor_current, floor_items;
+    int inventory_current, tools, floor_current, floor_items, floor_containers;
     int item_count[NNH_ITEM_ACTIONS], item_known[NNH_ITEM_ACTIONS];
     const char *gate, *decision_id, *unavailable_reason;
     nnh_known_cell cells[NNH_NEIGHBORHOOD_CELLS];

@@ -90,18 +90,39 @@ request_target(mj_val v)
 static int
 request_choices(mj_val v)
 {
-    long long values[64], value;
+    long long values[1024], value;
     size_t n = 0, i;
     mj_arr_it it = { 0 };
     mj_val element;
     if (*v.p != '[') return request_integer(v, 0, 2147483647);
     it.first = 1;
     while (mj_arr_next(v.p, &it, &element)) {
-        if (n == 64 || !mj_int(element, &value) || value < 0 || value > 2147483647) return 0;
+        if (n == 1024 || !mj_int(element, &value) || value < 0 || value > 2147483647) return 0;
         for (i = 0; i < n; i++) if (values[i] == value) return 0;
         values[n++] = value;
     }
     return n > 0;
+}
+
+static int
+request_pickup_settings(mj_val value)
+{
+    static const char *const fields[] = {"enabled", "itemTypes", "arrows", "leaveCorpses", "leaveKnownCursed", NULL};
+    static const char *const types[] = {"gold", "food", "potions", "scrolls", "weapons", "armor", "rings", "amulets", "tools", "spellbooks", "wands", "gems", "rocks", "balls", "chains", NULL};
+    mj_val v, element; mj_arr_it it = {0}; unsigned seen = 0;
+    size_t i; int flag; char name[32];
+    if (!request_fields(value.p, fields)) return 0;
+    for (i = 0; fields[i]; i++) if (i != 1)
+        if (!mj_find(value.p, fields[i], &v) || !mj_bool(v, &flag)) return 0;
+    if (!mj_find(value.p, "itemTypes", &v) || *v.p != '[') return 0;
+    it.first = 1;
+    while (mj_arr_next(v.p, &it, &element)) {
+        if (!request_string(element, 1, 31, name)) return 0;
+        for (i = 0; types[i] && strcmp(types[i], name); i++) ;
+        if (!types[i] || (seen & (1U << i))) return 0;
+        seen |= 1U << i;
+    }
+    return 1;
 }
 
 #define REQUEST_BAD(code, message) do { *why = message; return code; } while (0)
@@ -110,8 +131,8 @@ validate_request(const char *args, const char *tool, const char **why)
 {
     static const char *const actions[] = { "tool", "sessionId", "expectedRevision", "target", NULL };
     static const char *const common[] = { "tool", "sessionId", "requestId", NULL };
-    static const char *const create[] = { "tool", "sessionId", "requestId", "seed", "name", "role", "race", "gender", "align", NULL };
-    static const char *const act[] = { "tool", "sessionId", "requestId", "expectedRevision", "action", "direction", "target", "item", "replyTo", "confirm", "choose", "text", "position", "cancel", NULL };
+    static const char *const create[] = { "tool", "sessionId", "requestId", "seed", "name", "role", "race", "gender", "align", "automaticPickup", NULL };
+    static const char *const act[] = { "tool", "sessionId", "requestId", "expectedRevision", "action", "direction", "target", "item", "replyTo", "confirm", "choose", "text", "position", "cancel", "automaticPickup", NULL };
     static const char *const answer[] = { "item", "target", "confirm", "choose", "text", "position", "cancel", NULL };
     const char *const *fields;
     mj_val v;
@@ -122,9 +143,11 @@ validate_request(const char *args, const char *tool, const char **why)
     is_act = !strcmp(tool, "act"); is_create = !strcmp(tool, "new_game");
     if (!is_act && !is_create && strcmp(tool, "get_state") && strcmp(tool, "resume") && strcmp(tool, "end_session") && strcmp(tool, "actions"))
         REQUEST_BAD("badTool", "unknown tool");
-    if (strlen(args) >= 1023) REQUEST_BAD("invalidArgument", "request exceeds the 1022-byte public request limit");
+    if (strlen(args) >= 4095) REQUEST_BAD("invalidArgument", "request exceeds the 4094-byte translated request limit");
     fields = is_act ? act : is_create ? create : !strcmp(tool, "actions") ? actions : common;
     if (!request_fields(args, fields)) REQUEST_BAD("invalidArgument", "unknown, duplicate or escaped field name");
+    if (mj_find(args, "automaticPickup", &v) && !request_pickup_settings(v))
+        REQUEST_BAD("invalidArgument", "automaticPickup requires enabled, distinct itemTypes, arrows, leaveCorpses and leaveKnownCursed");
     if (mj_find(args, "sessionId", &v) && !request_string(v, 1, 64, NULL))
         REQUEST_BAD("badSessionId", "sessionId must be a nonempty string of at most 64 bytes");
     if (mj_find(args, "requestId", &v) && !request_string(v, 1, 128, NULL))
@@ -159,12 +182,13 @@ validate_request(const char *args, const char *tool, const char **why)
         size_t count = 0;
         int boolean;
         if (mj_find(args, "direction", &v)) REQUEST_BAD("invalidAnswer", "direction answers belong in target");
+        if (mj_find(args, "automaticPickup", &v)) REQUEST_BAD("invalidAnswer", "settings cannot answer a standing decision");
         for (i = 0; answer[i]; i++) if (mj_find(args, answer[i], &v)) count++;
         if (count != 1) REQUEST_BAD("invalidAnswer", "supply exactly one answer field");
         if (mj_find(args, "confirm", &v) && !mj_bool(v, &boolean)) REQUEST_BAD("invalidAnswer", "confirm must be boolean");
         if (mj_find(args, "cancel", &v) && (!mj_bool(v, &boolean) || !boolean)) REQUEST_BAD("invalidAnswer", "cancel must be true");
         if (mj_find(args, "text", &v) && !request_string(v, 0, 128, NULL)) REQUEST_BAD("invalidAnswer", "text must be at most 128 bytes without control characters");
-        if (mj_find(args, "choose", &v) && !request_choices(v)) REQUEST_BAD("invalidAnswer", "choose must be one integer or 1..64 distinct integer option ids");
+        if (mj_find(args, "choose", &v) && !request_choices(v)) REQUEST_BAD("invalidAnswer", "choose must be one integer or 1..1024 distinct integer option ids");
         if (mj_find(args, "position", &v)) {
             char command[32]; mj_val x, y;
             static const char *const coordinates[] = {"x", "y", NULL};
@@ -177,7 +201,7 @@ validate_request(const char *args, const char *tool, const char **why)
         return NULL;
     }
     if (cmdkey_of(action) == -2 && strcmp(action, "move") && strcmp(action, "wait") &&
-        strcmp(action, "climb") && strcmp(action, "inspect") && strcmp(action, "inventory"))
+        strcmp(action, "climb") && strcmp(action, "inspect") && strcmp(action, "inventory") && strcmp(action, "configurePickup"))
         REQUEST_BAD("unsupportedAction", "this action is not bound in this build");
     /* Reject irrelevant parameters instead of quietly doing a different deed. */
     {
@@ -186,6 +210,10 @@ validate_request(const char *args, const char *tool, const char **why)
         if (!strcmp(action, "move") || !strcmp(action, "climb")) allowed[n++] = "direction";
         if (!strcmp(action, "inspect") || !strcmp(action, "kick") || !strcmp(action, "open") || !strcmp(action, "close") || !strcmp(action, "zap")) allowed[n++] = "target";
         if (action_takes_item(action)) allowed[n++] = "item";
+        if (!strcmp(action, "configurePickup")) {
+            allowed[n++] = "automaticPickup";
+            if (!mj_find(args, "automaticPickup", &v)) REQUEST_BAD("invalidArgument", "automaticPickup settings are required");
+        }
         allowed[n] = NULL;
         if (!request_fields(args, allowed)) REQUEST_BAD("invalidArgument", "field does not apply to this action; answer subsequent typed decisions separately");
     }

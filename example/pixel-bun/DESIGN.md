@@ -660,6 +660,41 @@ Hungry adventurers get a restrained Eat glow; critical trouble also highlights
 Pray, whose first use explains possible help, punishment and unknown safety before
 the engine's own confirmation. These cues never automate an action.
 
+Standing on a recognizable chest, box or bag offers “Open container”, using the
+shared driver's underfoot loot offer and revision. Unknown contents require an
+explicit Look inside action because inspection costs time. Known contents go
+straight to two lists: Inside container and Your backpack. Checkboxes stage whole
+stacks in either direction; Take everything selects all contents without engine
+input, Clear selection resets the draft, and Apply transfers submits both sides
+once. Show selection counts and disable Apply until something is selected.
+Use two columns on desktop, stacked on phones. C supplies the container phase
+and each option's take/put side; the UI never classifies labels. Engine transfer
+rules run take-first, preserving warnings and interruptions rather than promising
+rollback. Cancel discards the draft; reload restores the standing decision and
+clears unsubmitted checks. Contents use decision choice IDs, not floor IDs.
+Do not guess a container from its name or automatically select loot, unlock, trap
+warnings or a second occupation. Unknown contents stay hidden until inspected.
+
+### Automatic pickup preferences
+
+Creation offers an Automatic pickup disclosure summarized as Gold + arrows on
+first use. Reuse its accessible checkbox editor from the game menu and backpack.
+Show Gold, Food, Potions, Scrolls and Weapons first, with remaining classes under
+More item types. All types selects categories without disabling exceptions.
+Reset defaults returns to enabled, gold, arrows, leave corpses and leave known
+cursed items. Turning the master switch off keeps filters. Leave rules take
+priority; thrown, dropped and recovered objects use the same filters. Ground
+movement only: never open a container or issue follow-up pickup commands in JS.
+
+Checkboxes change a local draft. Save updates the live engine through the public
+revision-guarded method and then remembers future defaults; Cancel changes
+neither. Creation remembers after success. Use validated version 1 preferences
+under `neonethack.pixel.automatic-pickup.v1`; missing or invalid data uses the
+defaults above. Storage failures show a notice without blocking play. Browser
+preferences belong to this origin, are not cloud/account settings, and never
+replace a resumed run's journaled configuration. Mobile keeps 44px choices and
+sticky Save/Cancel controls; the active settings always come from C observation.
+
 ## Seeded room ambience pass
 
 The user requested cosmetic room history: cracks, vines, shallow damp patches,

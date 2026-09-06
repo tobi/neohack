@@ -1616,3 +1616,24 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
   #contextual-stairs button { padding: 10px 12px; font-size: 14px; }
   .weapon-line { max-width: 210px; }
 }
+
+.container-notes { flex-basis: 100%; min-width: 0; border: 1px solid #69775a; padding: 10px 14px; margin: 0 0 14px; max-height: 25vh; overflow-y: auto; background: #202d29; }
+.container-notes p { margin: 4px 0; white-space: pre-wrap; }
+.container-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.container-columns fieldset { min-width: 0; margin: 0; padding: 10px; border: 1px solid #69775a; }
+.container-columns legend { color: #e4cb8d; padding: 0 6px; font: inherit; letter-spacing: normal; }
+#decision:has(.container-transfer) { width: min(800px, calc(100% - 32px)); }
+.container-columns .menu-choice { overflow-wrap: anywhere; }
+.container-transfer > button { margin: 4px; }
+@media (max-width: 600px) { .container-columns { grid-template-columns: 1fr; } }
+.pickup-editor { margin: 14px 0; }
+.pickup-editor fieldset { border: 1px solid #69775a; margin: 12px 0; padding: 12px; }
+.pickup-editor legend { font: inherit; letter-spacing: normal; padding: 0 6px; }
+.pickup-editor legend, .container-columns legend { font-size: 14px !important; }
+.pickup-editor .pickup-toggle { display: flex; align-items: center; gap: 10px; min-height: 44px; font: inherit; letter-spacing: normal; text-transform: none; margin: 0; }
+.pickup-toggle input { width: 18px; height: 18px; flex: 0 0 18px; accent-color: var(--sage); margin: 0; }
+.pickup-types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; }
+.pickup-summary { color: var(--gold); }
+.pickup-creation { margin: 16px 0; }
+.pickup-editor summary, .pickup-creation > summary { min-height: 44px; padding: 10px 0; cursor: pointer; }
+#pickup-settings-form > .dialog-actions { position: sticky; bottom: -28px; background: #202d29; padding: 12px 0; }

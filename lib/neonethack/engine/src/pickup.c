@@ -2982,6 +2982,97 @@ stash_ok(struct obj *obj)
     return GETOBJ_SUGGEST;
 }
 
+#ifdef HEADLESS_GRAPHICS
+/* One standing decision for a reviewed transfer plan. Use the original
+ * in/out_container functions for every effect and warning. Selections bind
+ * actual objects; snapshot amounts before taking can merge inventory stacks. */
+staticfn int
+headless_container_transfer(void)
+{
+    struct obj *obj;
+    menu_item *picks = 0;
+    struct transfer_pick { unsigned id; long quantity; boolean put; } *plan;
+    winid win;
+    anything any;
+    int n, i, pass, used = ECMD_OK, res;
+    boolean split;
+    char prompt[BUFSZ];
+
+    if (!gc.current_container->cknown) {
+        win = create_nhwindow(NHW_MENU);
+        start_menu(win, MENU_BEHAVE_STANDARD);
+        headless_container_menu(win, "inspect");
+        any = cg.zeroany; any.a_int = 1;
+        add_menu(win, &nul_glyphinfo, &any, 0, 0, ATR_NONE, NO_COLOR,
+                 "Look inside", MENU_ITEMFLAGS_NONE);
+        Sprintf(prompt, "Inspect %s? Discovering its contents takes time.", yname(gc.current_container));
+        end_menu(win, prompt);
+        n = select_menu(win, PICK_ONE, &picks);
+        destroy_nhwindow(win);
+        if (picks) free((genericptr_t) picks);
+        picks = 0;
+        if (n <= 0) { ga.abort_looting = TRUE; return used; }
+        used = ECMD_TIME;
+        container_contents(gc.current_container, FALSE, FALSE, TRUE);
+    }
+
+    win = create_nhwindow(NHW_MENU);
+    start_menu(win, MENU_BEHAVE_STANDARD);
+    headless_container_menu(win, "transfer");
+    for (pass = 0; pass < 2; pass++) {
+        for (obj = pass ? gi.invent : gc.current_container->cobj;
+             obj; obj = obj->nobj) {
+            if (obj == gc.current_container) continue;
+            if (pass && (obj->owornmask & (W_ARMOR | W_ACCESSORY))) continue;
+            any = cg.zeroany; any.a_obj = obj;
+            add_menu(win, &nul_glyphinfo, &any, 0, 0, ATR_NONE, NO_COLOR,
+                     doname(obj), MENU_ITEMFLAGS_NONE);
+            headless_container_item(win, obj, pass ? "put" : "take");
+        }
+    }
+    Sprintf(prompt, "Transfer items — %s", yname(gc.current_container));
+    end_menu(win, prompt);
+    n = select_menu(win, PICK_ANY, &picks);
+    destroy_nhwindow(win);
+    if (n <= 0) {
+        if (picks) free((genericptr_t) picks);
+        ga.abort_looting = TRUE;
+        return used;
+    }
+    plan = (struct transfer_pick *) alloc((unsigned) n * sizeof *plan);
+    /* As in menu_loot, an explicit transfer attempt costs time even when
+     * an individual item is refused. Reset burden prompts for this batch. */
+    used = ECMD_TIME;
+    gp.pickup_encumbrance = 0;
+    for (i = 0; i < n; i++) {
+        obj = picks[i].item.a_obj;
+        plan[i].id = obj->o_id;
+        plan[i].quantity = obj->quan;
+        plan[i].put = (obj->where == OBJ_INVENT);
+    }
+    free((genericptr_t) picks);
+    /* Take first, then put only the originally selected inventory quantities.
+     * Stop on engine interruption/destruction; this is not a rollback transaction. */
+    for (pass = 0; pass < 2; pass++) for (i = 0; i < n; i++) {
+        if (plan[i].put != (boolean) pass) continue;
+        if (!gc.current_container || ga.abort_looting) goto transferdone;
+        for (obj = pass ? gi.invent : gc.current_container->cobj;
+             obj && obj->o_id != plan[i].id; obj = obj->nobj) ;
+        if (!obj) goto transferdone; /* never substitute a similar item */
+        split = (obj->quan > plan[i].quantity);
+        if (split)
+            obj = splitobj(obj, plan[i].quantity);
+        res = pass ? in_container(obj) : out_container(obj);
+        if (res > 0) used = ECMD_TIME;
+        if (res <= 0 && split && gc.current_container) (void) unsplitobj(obj);
+        if (res < 0 || !gc.current_container) { used = ECMD_TIME; goto transferdone; }
+    }
+ transferdone:
+    free((genericptr_t) plan);
+    return used;
+}
+#endif
+
 int
 use_container(
     struct obj **objp,
@@ -3047,6 +3138,12 @@ use_container(
         You("owe %ld %s for lost merchandise.", loss, currency(loss));
         gc.current_container->owt = weight(gc.current_container);
     }
+#ifdef HEADLESS_GRAPHICS
+    if (!strcmp(windowprocs.name, "headless")) {
+        used |= headless_container_transfer();
+        goto containerdone;
+    }
+#endif
     /* might put something in if carrying anything other than just the
        container itself (invent is not the container or has a next object) */
     inokay = (gi.invent != 0 && (gi.invent != gc.current_container

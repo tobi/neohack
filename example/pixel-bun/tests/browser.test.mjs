@@ -3065,3 +3065,137 @@ test('live map uses all seeded environment profiles and restores them on revisit
   assert.deepEqual(result,['cave','dungeon','dungeon-damp']);
   assert.deepEqual(errors,[]);
 });
+
+test('automatic pickup editor stages changes, saves live and future settings, and restores actual run settings', async t => {
+  const {page,errors} = await fixture(t);
+  await create(page);
+  const defaults = {enabled:true,itemTypes:['gold'],arrows:true,leaveCorpses:true,leaveKnownCursed:true};
+  const key = 'neonethack.pixel.automatic-pickup.v1';
+  assert.deepEqual((await snapshot(page)).observation.automaticPickup,defaults);
+  const initialPref = await page.evaluate(key=>localStorage.getItem(key),key);
+  await page.getByRole('button',{name:/^Backpack/}).click();
+  await page.getByRole('button',{name:'Automatic pickup · Gold + arrows',exact:true}).click();
+  const form = page.locator('#pickup-settings-form');
+  await form.getByRole('checkbox',{name:'Food',exact:true}).check();
+  await form.getByRole('checkbox',{name:'Also collect arrows',exact:true}).uncheck();
+  await form.getByRole('button',{name:'Cancel',exact:true}).click();
+  assert.equal(await page.evaluate(key=>localStorage.getItem(key),key),initialPref);
+  assert.deepEqual((await snapshot(page)).observation.automaticPickup,defaults);
+  await page.getByRole('button',{name:'Backpack',exact:false}).click();
+  await page.getByRole('button',{name:'Automatic pickup · Gold + arrows',exact:true}).click();
+  await page.setViewportSize({width:390,height:844});
+  await form.getByRole('checkbox',{name:'Food',exact:true}).check();
+  await form.getByRole('button',{name:'All types',exact:true}).click();
+  assert.equal(await form.getByRole('checkbox',{name:'Leave corpses',exact:true}).isChecked(),true);
+  await form.getByRole('button',{name:'Reset defaults',exact:true}).click();
+  assert.equal(await form.getByRole('checkbox',{name:'Food',exact:true}).isChecked(),false);
+  await form.getByRole('checkbox',{name:'Food',exact:true}).check();
+  await form.getByRole('checkbox',{name:'Automatic pickup',exact:true}).uncheck();
+  assert.equal(await form.getByRole('checkbox',{name:'Food',exact:true}).isChecked(),true,'Off retains filters');
+  await form.getByRole('checkbox',{name:'Automatic pickup',exact:true}).check();
+  const before = await snapshot(page);
+  await page.screenshot({path:root+'/test-results/automatic-pickup-mobile.png'});
+  await form.getByRole('button',{name:'Save settings',exact:true}).click(); await ready(page);
+  const saved = {...defaults,itemTypes:['gold','food']};
+  assert.deepEqual((await snapshot(page)).observation.automaticPickup,saved);
+  assert.equal((await snapshot(page)).observation.turn,before.observation.turn);
+  const prefs = await page.evaluate(key=>localStorage.getItem(key),key);
+  assert.deepEqual(JSON.parse(prefs),{version:1,settings:saved});
+  await page.evaluate(({key,defaults})=>localStorage.setItem(key,JSON.stringify({version:1,settings:{...defaults,enabled:false}})),{key,defaults});
+  await page.reload(); await ready(page);
+  await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation.automaticPickup);
+  assert.deepEqual((await snapshot(page)).observation.automaticPickup,saved,'resume uses journaled settings, not browser defaults');
+  await page.evaluate(({key,prefs})=>localStorage.setItem(key,prefs),{key,prefs});
+  await page.evaluate(async()=>{const app=document.querySelector('pixel-nethack');await app.run(()=>app.returnToDoorway());});
+  await create(page,'ranger');
+  assert.deepEqual((await snapshot(page)).observation.automaticPickup,saved,'second fresh run loads remembered preferences');
+  assert.deepEqual(errors,[]);
+});
+
+for (const storage of ['invalid','unavailable']) test(`automatic pickup ${storage} preferences fall back without blocking creation`, async t => {
+  const {page,errors} = await fixture(t,{setup:async page=>{
+    await page.addInitScript(storage=>{
+      const key='neonethack.pixel.automatic-pickup.v1';
+      if (storage === 'invalid') localStorage.setItem(key,JSON.stringify({version:1,settings:{enabled:true,itemTypes:[]}}));
+      else {
+        const get=Storage.prototype.getItem,set=Storage.prototype.setItem;
+        Storage.prototype.getItem=function(k){if(k===key)throw new DOMException('Unavailable','SecurityError');return get.call(this,k);};
+        Storage.prototype.setItem=function(k,v){if(k===key)throw new DOMException('Unavailable','QuotaExceededError');return set.call(this,k,v);};
+      }
+    },storage);
+  }});
+  await create(page);
+  assert.deepEqual((await snapshot(page)).observation.automaticPickup,{enabled:true,itemTypes:['gold'],arrows:true,leaveCorpses:true,leaveKnownCursed:true});
+  if(storage==='unavailable') assert.match(await page.locator('#error').textContent(),/preferences could not be remembered/);
+  assert.deepEqual(errors,[]);
+});
+
+test('underfoot chest opens a container dialog, shows contents and transfers chosen items across reload', async t => {
+  const {page, errors} = await fixture(t);
+  await create(page, 'valkyrie', 4);
+  const open = page.locator('#contextual-stairs button').filter({hasText: /^Open container$/});
+  for (const direction of ['north','north','east','east']) {
+    await page.evaluate(async direction => {
+      const app = document.querySelector('pixel-nethack');
+      await app.run(() => app.game.move(direction));
+    }, direction);
+  }
+  assert.equal(await open.count(), 0, 'a visible adjacent chest has no underfoot action');
+  await page.evaluate(async () => {
+    const app = document.querySelector('pixel-nethack');
+    await app.run(() => app.game.move('east'));
+    const stale = [...document.querySelectorAll('#contextual-stairs button')].find(b => b.textContent === 'Open container');
+    if (!stale) throw Error('Missing container action');
+    await app.run(() => app.game.move('west'));
+    const revision = app.game.state.revision;
+    stale.click();
+    if (app.busy || app.game.state.revision !== revision) throw Error('Stale container offer executed');
+    await app.run(() => app.game.move('east'));
+  });
+  const closed = await snapshot(page);
+  assert.equal(closed.observation.here.items.length, 1);
+  await open.click();
+  await page.locator('#decision[open]').waitFor();
+  assert.equal(await open.count(), 0);
+  await page.getByRole('button', {name:'Look inside', exact:true}).click();
+  await ready(page);
+  assert.match(await page.getByLabel('Container details').textContent(), /purple-red potion/);
+  assert.equal((await snapshot(page)).observation.here.items.length, 1, 'contents are not floor loot');
+  await page.screenshot({path: root + '/test-results/chest-inspect.png'});
+  const taking = await snapshot(page);
+  assert.equal(taking.decision.containerPhase, 'transfer');
+  assert.equal(await page.getByRole('button', {name:'Apply transfers', exact:true}).isDisabled(), true);
+  await page.reload();
+  await page.locator('#decision[open]').waitFor();
+  await ready(page);
+  assert.deepEqual((await snapshot(page)).decision, taking.decision);
+  assert.equal(await page.locator('.container-notes').count(), 0, 'resume narration is not container contents');
+  await page.setViewportSize({width:390, height:844});
+  await page.screenshot({path: root + '/test-results/chest-contents-mobile.png'});
+  const beforeDraft = await snapshot(page);
+  await page.getByRole('button', {name:'Take everything', exact:true}).click();
+  await page.getByRole('group', {name:'Your backpack', exact:true}).getByLabel(/food ration/).check();
+  assert.deepEqual(await snapshot(page), beforeDraft, 'drafting both directions sends no engine input');
+  await page.getByRole('button', {name:'Clear selection', exact:true}).click();
+  assert.equal(await page.getByRole('button', {name:'Apply transfers', exact:true}).isDisabled(), true);
+  await page.getByRole('button', {name:'Take everything', exact:true}).click();
+  await page.getByRole('group', {name:'Your backpack', exact:true}).getByLabel(/food ration/).check();
+  await page.getByRole('button', {name:'Apply transfers', exact:true}).click();
+  await ready(page);
+  const taken = await snapshot(page);
+  assert.equal(taken.decision, null);
+  const potion = taken.observation.inventory.find(i => i.label === 'a purple-red potion');
+  assert.ok(potion);
+  assert.equal(taken.observation.inventory.some(i=>/food ration/.test(i.label)), false);
+  assert.equal(taken.observation.here.items[0].id, closed.observation.here.items[0].id);
+  await open.click();
+  await ready(page);
+  assert.equal((await snapshot(page)).decision.containerPhase, 'transfer');
+  assert.equal(await page.getByRole('button', {name:'Look inside', exact:true}).count(), 0);
+  await page.getByLabel(potion.label, {exact:true}).check();
+  await page.getByRole('button', {name:'Apply transfers', exact:true}).click();
+  await ready(page);
+  assert.equal((await snapshot(page)).observation.inventory.some(i => i.id === potion.id), false);
+  assert.equal((await snapshot(page)).observation.here.items.length, 1);
+  assert.deepEqual(errors, []);
+});

@@ -1,5 +1,5 @@
-import type { ActionTarget, ActionsResponse, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
-export type { ActionTarget, ActionsResponse, ActionOffer, ActionBasis, CellActions, Neighborhood, InputGate, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
+import type { AutomaticPickup, ActionTarget, ActionsResponse, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
+export type { AutomaticPickup, ActionTarget, ActionsResponse, ActionOffer, ActionBasis, CellActions, Neighborhood, InputGate, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
 
 /** A transport owns its runtime, not game semantics. It must not retry input. */
 export interface Transport {
@@ -145,6 +145,8 @@ export class Game {
   climb(direction: "up" | "down", options: RevisionOptions = {}) { return this.operation("game.climb", { direction }, options); }
   search(options: RevisionOptions = {}) { return this.operation("game.search", {}, options); }
   quit(options: RevisionOptions = {}) { return this.operation("game.quit", {}, options); }
+  loot(options: RevisionOptions = {}) { return this.operation("game.loot", {}, options); }
+  configurePickup(automaticPickup: AutomaticPickup, options: RevisionOptions = {}) { return this.operation("game.configurePickup", { automaticPickup }, options); }
   pray(options: RevisionOptions = {}) { return this.operation("game.pray", {}, options); }
   kick(direction?: Compass, options: RevisionOptions = {}) { return this.operation("game.kick", direction ? { target: { direction } } : {}, options); }
   open(direction?: Compass, options: RevisionOptions = {}) { return this.operation("game.open", direction ? { target: { direction } } : {}, options); }

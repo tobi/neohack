@@ -65,6 +65,7 @@ typedef struct {
     int glyph;
     int selectable; /* -1 = legacy/unspecified; otherwise engine fact */
     long long object_id; /* private binding for an offered object row */
+    int transfer; /* engine-authored container side: 1 take, 2 put */
     char *text;
 } menu_item_t;
 
@@ -77,6 +78,7 @@ menu_selectable(const menu_item_t *item)
 typedef struct {
     int used;
     int window;
+    int container_phase; /* 1 inspect, 2 transfer */
     char *prompt;
     menu_item_t *items;
     size_t nitems, cap;
@@ -154,7 +156,7 @@ static const char *const USAGE_NAMES[] = { "worn", "wielded", "offhand", "altern
 typedef struct {
     int waiting_answer;     /* engine prompt outstanding */
     char action[32];
-    char args_json[1024];   /* supplied arguments (truncated ok) */
+    char args_json[4096];   /* validated supplied arguments; never truncate */
     char phase[32];
     char decision_id[40];
     char dec_kind[16];      /* kind of the offered decision */
@@ -179,6 +181,7 @@ typedef struct {
     char category[24];
     int quantity;
     long long object_id;   /* engine-issued identity from perception */
+    int container;         /* disclosed appearance, never contents/lock/trap */
 } floor_item_t;
 
 typedef struct req_entry {
@@ -212,6 +215,7 @@ typedef struct game {
     long long terminal_turn;
     char location_id[80];
     int structured_perception; /* engine perception version; zero = legacy peeks */
+    char pickup_settings[1024]; /* actual engine configuration, restored by replay */
     int affordance_version, ordinary_locomotion, normal_map, door_diagonals, direction_reliable;
     long long knowledge_epoch;
     door_fact_t *door_facts;
@@ -1303,6 +1307,12 @@ ingest_belongings(game_t *g, const char *params)
         remember_door_orientation(&g->cells[g->you_y][g->you_x], (int) n);
     }
     g->structured_perception = 1;
+    if (mj_find(params, "automaticPickup", &v)) {
+        size_t len; const char *raw = mj_raw(v, &len);
+        if (len < sizeof g->pickup_settings) {
+            memcpy(g->pickup_settings, raw, len); g->pickup_settings[len] = 0;
+        }
+    }
     if (mj_find(params, "perceptionVersion", &v) && mj_int(v, &n) && n >= 1 && n <= 16)
         g->structured_perception = (int) n;
     g->perception_fresh = 1;
@@ -1340,6 +1350,7 @@ ingest_belongings(game_t *g, const char *params)
                     item->label = name; name = NULL;
                     item->quantity = (int) quantity;
                     item->object_id = id;
+                    if (mj_find(obj, "container", &v)) mj_bool(v, &item->container);
                 }
             } else {
                 inv_item_t *items = realloc(g->inv, (g->ninv + 1) * sizeof *items);
@@ -1609,6 +1620,7 @@ ingest(game_t *g, const char *line)
         m->items[m->nitems].glyph = (int) glyph;
         m->items[m->nitems].selectable = -1;
         m->items[m->nitems].object_id = 0;
+        m->items[m->nitems].transfer = 0;
         if (mj_find(params, "selectable", &av))
             mj_bool(av, &m->items[m->nitems].selectable);
         m->items[m->nitems].text = text ? text : strdup("");
@@ -1624,6 +1636,25 @@ ingest(game_t *g, const char *line)
         if (m) for (k = 0; k < m->nitems; k++)
             if (m->items[k].index == idx && menu_selectable(&m->items[k]))
                 m->items[k].object_id = object;
+    } else if (!strcmp(method, "container_menu") || !strcmp(method, "container_item")) {
+        mj_val v; long long w, idx; size_t k;
+        menu_t *m; char *value;
+        if (!mj_find(params, "window", &v) || !mj_int(v, &w)) goto done;
+        m = menu_for(g, (int) w, 0);
+        if (!m) goto done;
+        if (!strcmp(method, "container_menu")) {
+            if (!mj_find(params, "phase", &v)) goto done;
+            value = mj_str(v);
+            if (value) m->container_phase = !strcmp(value, "inspect") ? 1 : !strcmp(value, "transfer") ? 2 : 0;
+        } else {
+            if (!mj_find(params, "index", &v) || !mj_int(v, &idx) ||
+                !mj_find(params, "transfer", &v)) goto done;
+            value = mj_str(v);
+            if (value) for (k = 0; k < m->nitems; k++)
+                if (m->items[k].index == idx && m->items[k].object_id > 0)
+                    m->items[k].transfer = !strcmp(value, "take") ? 1 : !strcmp(value, "put") ? 2 : 0;
+        }
+        free(value);
     } else if (!strcmp(method, "menu_end")) {
         mj_val wv, pv;
         long long w;
@@ -2569,6 +2600,7 @@ tracked_clear(game_t *g)
     memset(g->door_index, -1, sizeof g->door_index);
     g->affordance_version = 0; g->knowledge_epoch = 0;
     g->structured_perception = 0;
+    g->pickup_settings[0] = 0;
     g->perception_fresh = 0;
     for (i = 0; i < MAX_MENU_WINDOWS; i++)
         if (g->menus[i].used) {
@@ -2948,6 +2980,7 @@ build_knowledge(game_t *g, nnh_knowledge *k, int recovery)
     for (j = 0; j < g->ninv; j++) if (!strcmp(g->inv[j].category, "tool")) k->tools++;
     k->floor_current = g->floor_valid && g->perception_fresh;
     k->floor_items = g->nfloor > 0;
+    for (j = 0; j < g->nfloor; j++) if (g->floor[j].container) k->floor_containers++;
     item_knowledge(g, k);
     for (i = 0; i < NNH_NEIGHBORHOOD_CELLS; i++) {
         int x = k->origin_x + i % 9 - 4, y = k->origin_y + i / 9 - 4, d;
@@ -2981,6 +3014,7 @@ emit_observation(game_t *g, mj_Buf *b, int recovery)
 {
     mj_key(b, "observation");
     mj_obj(b);
+    if (g->pickup_settings[0]) { mj_key(b, "automaticPickup"); mj_rawv(b, g->pickup_settings); }
     mj_key(b, "turn"); mj_intv(b, turn_of(g));
     emit_location(g, b);
     mj_key(b, "you");
@@ -3120,6 +3154,10 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
         }
         mj_key(b, "cancellable");
         mj_boolv(b, 1);
+        if (m->container_phase) {
+            mj_key(b, "containerPhase");
+            mj_strv(b, m->container_phase == 1 ? "inspect" : "transfer");
+        }
         if (g->pending.how == 2) {
             mj_key(b, "selection");
             mj_obj(b);
@@ -3135,6 +3173,9 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
             mj_obj(b);
             mj_key(b, "id"); mj_intv(b, m->items[i].index);
             mj_key(b, "label"); mj_strv(b, m->items[i].text ? m->items[i].text : "");
+            if (m->items[i].transfer) {
+                mj_key(b, "transfer"); mj_strv(b, m->items[i].transfer == 1 ? "take" : "put");
+            }
             mj_endobj(b);
         }
         mj_endarr(b);
@@ -3377,7 +3418,7 @@ translate_reply(game_t *g, const char *dec_kind, const char *args,
                 const char **err)
 {
     mj_val v;
-    char line[1024];
+    char line[16384];
     char *s;
     if (mj_find(args, "cancel", &v)) {
         int c = 0;
@@ -3447,7 +3488,7 @@ translate_reply(game_t *g, const char *dec_kind, const char *args,
     }
     if (!strcmp(dec_kind, "choice") || !strcmp(dec_kind, "item")) {
         /* {choose: index | [indices]} over the listed option ids */
-        long long idx[64];
+        long long idx[1024];
         size_t nidx = 0;
         if (mj_find(args, "choose", &v)) {
             size_t len;
@@ -3461,7 +3502,7 @@ translate_reply(game_t *g, const char *dec_kind, const char *args,
                     cpy[len] = '\0';
                     memset(&it, 0, sizeof it);
                     it.first = 1;
-                    while (mj_arr_next(cpy, &it, &elt) && nidx < 64) {
+                    while (mj_arr_next(cpy, &it, &elt) && nidx < 1024) {
                         long long n;
                         if (mj_int(elt, &n))
                             idx[nidx++] = n;
@@ -4346,7 +4387,7 @@ cmdkey_of(const char *action)
         return 100;
     if (!strcmp(action, "zap"))
         return 122;
-    if (!strcmp(action, "pray") || !strcmp(action, "quit"))
+    if (!strcmp(action, "pray") || !strcmp(action, "quit") || !strcmp(action, "loot"))
         return 35;
     return -2;                  /* not scripted */
 }
@@ -4795,6 +4836,9 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
                                 cancelled);
         }
         if (!strcmp(g->pending.kind, "menu")) {
+            menu_t *container_menu = menu_for(g, g->pending.window, 0);
+            if (container_menu && container_menu->container_phase)
+                return drive_suspend(g, req_id, turn0, you0_x, you0_y, had_you, ev_from);
             if (!strcmp(action, "pickup") &&
                 g->operation.floor_index >= 0) {
                 int picked = drive_pickup_menu(g);
@@ -4934,7 +4978,7 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
                                  had_you, ev_from);
         }
         if (!strcmp(g->pending.kind, "extcmd")) {
-            if (!strcmp(action, "pray") || !strcmp(action, "quit")) {
+            if (!strcmp(action, "pray") || !strcmp(action, "quit") || !strcmp(action, "loot")) {
                 size_t i;
                 long found = -1;
                 for (i = 0; i < g->pending.ncommands; i++)
@@ -5420,6 +5464,11 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
         mj_key(&pb, "align");
         mj_intv(&pb, align);
     }
+    if (mj_find(args, "automaticPickup", &v)) {
+        char *settings = mj_canonical(v);
+        mj_key(&pb, "automaticPickup"); mj_rawv(&pb, settings);
+        free(settings);
+    }
     mj_endobj(&pb);
     snprintf(line, sizeof line,
              "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"new_game\",\"params\":%s}",
@@ -5777,7 +5826,28 @@ run_scripted(nhx_t *x, game_t *g, const char *action, const char *args,
         snprintf(g->operation.args_json, sizeof g->operation.args_json,
                  "%s", args);
     else
-        snprintf(g->operation.args_json, sizeof g->operation.args_json, "{}");
+        return envelope_error(g, req_id, action, "invalidArgument", "operation arguments exceed the journaled argument limit");
+    if (!strcmp(action, "configurePickup")) {
+        mj_Buf reply; int r;
+        if (!g->pickup_settings[0] || !g->pending.waiting)
+            return envelope_error(g, req_id, action, "settingsUnavailable", "automatic pickup settings require a supported command boundary");
+        mj_find(args, "automaticPickup", &v);
+        mj_init(&reply); mj_obj(&reply);
+        mj_key(&reply, "jsonrpc"); mj_strv(&reply, "2.0");
+        mj_key(&reply, "id"); mj_intv(&reply, g->pending.id);
+        mj_key(&reply, "result"); mj_obj(&reply);
+        { char *settings = mj_canonical(v);
+          mj_key(&reply, "automaticPickup"); mj_rawv(&reply, settings); free(settings); }
+        mj_endobj(&reply); mj_endobj(&reply);
+        r = reply.ok ? send_engine(g, reply.buf) : -1;
+        mj_free(&reply);
+        if (r < 0) return envelope_error(g, req_id, action, "engineError", "cannot write settings input");
+        pending_clear(g); bump_once(g, &bumped);
+        if (await_prompt(g, ACT_TIMEOUT_MS) != 1)
+            return envelope_error(g, req_id, action, "engineTimeout", "settings update did not return to a command boundary");
+        g->have_operation = 0;
+        return envelope(g, req_id, action, "completed", NULL, 0, 0, NULL, 0, ev_from, 0, 0, NULL, NULL);
+    }
     if (!strcmp(action, "inventory")) {
         if (!ensure_inventory(x, g))
             return envelope_error(g, req_id, action, "inventoryUnknown",
@@ -5884,7 +5954,17 @@ run_scripted(nhx_t *x, game_t *g, const char *action, const char *args,
         return drive_loop(x, g, req_id, turn0, you0_x, you0_y, had_you,
                           ev_from, &bumped, 0);
     }
-    if (!strcmp(action, "pray") || !strcmp(action, "quit") || !strcmp(action, "search"))
+    if (!strcmp(action, "loot")) {
+        size_t i; int containers = 0;
+        if (!g->floor_valid || !g->perception_fresh)
+            return envelope_synth(g, req_id, action, "blocked", ev_from, 0,
+                                  "containerKnowledgeUnavailable", "current floor perception is required to open a container");
+        for (i = 0; i < g->nfloor; i++) if (g->floor[i].container) containers++;
+        if (!containers)
+            return envelope_synth(g, req_id, action, "blocked", ev_from, 0,
+                                  "noPerceivedContainers", "no perceived container is underfoot");
+    }
+    if (!strcmp(action, "pray") || !strcmp(action, "quit") || !strcmp(action, "loot") || !strcmp(action, "search"))
         return drive_loop(x, g, req_id, turn0, you0_x, you0_y, had_you,
                           ev_from, &bumped, 0);
     if (!strcmp(action, "cast"))
@@ -6135,8 +6215,9 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
             goto remember;
         }
         /* fresh deeds need a free prompt */
-        if (g->pending.waiting && (g->pending.position_mode || (strcmp(g->pending.kind, "key") &&
-            strcmp(g->pending.kind, "poskey")))) {
+        if ((!strcmp(action, "configurePickup") && g->have_operation && g->operation.decision_id[0]) ||
+            (g->pending.waiting && (g->pending.position_mode || (strcmp(g->pending.kind, "key") &&
+            strcmp(g->pending.kind, "poskey"))))) {
             out = envelope_error(g, req_id, action, "pendingDecision",
                                  "answer or cancel the standing decision first");
             goto remember;
@@ -6174,13 +6255,13 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
             !strcmp(action, "wear") || !strcmp(action, "remove") ||
             !strcmp(action, "takeoff") || !strcmp(action, "read") ||
             !strcmp(action, "apply") || !strcmp(action, "drop") ||
-            !strcmp(action, "zap") || !strcmp(action, "pray") || !strcmp(action, "quit") ||
-            !strcmp(action, "inventory") || !strcmp(action, "inspect")) {
+            !strcmp(action, "zap") || !strcmp(action, "pray") || !strcmp(action, "quit") || !strcmp(action, "loot") ||
+            !strcmp(action, "inventory") || !strcmp(action, "inspect") || !strcmp(action, "configurePickup")) {
             out = run_scripted(x, g, action, args, req_dup ? req_dup : req_id);
             goto remember;
         }
         out = envelope_error(g, req_id, action, "unsupportedAction",
-                             "this build moves, waits, climbs, kicks, opens, picks up, eats, drinks, wields, wears, reads, applies, drops, zaps, prays, searches, inspects, and answers; spellcasting and engraving are not bound yet");
+                             "this build moves, waits, climbs, kicks, opens, picks up, loots containers, eats, drinks, wields, wears, reads, applies, drops, zaps, prays, searches, inspects, and answers; spellcasting and engraving are not bound yet");
     remember:
         if (req_dup && out) {
             mj_Buf kb;

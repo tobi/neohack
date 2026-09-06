@@ -1,4 +1,4 @@
-import { catalog, compass, type Schema } from "./catalog.ts";
+import { catalog, compass, automaticPickup, type Schema } from "./catalog.ts";
 const string = { type: "string" };
 const integer = { type: "integer" };
 const boolean = { type: "boolean" };
@@ -15,7 +15,7 @@ const event = (type: string, properties: Record<string, Schema>) => object({ typ
 const closed = (properties: Record<string, Schema>, required = Object.keys(properties)): Schema => ({ ...object(properties, required), additionalProperties: false });
 const basis = closed({ revision: integer, levelId: string, origin: closed({ x: integer, y: integer }) });
 const inputGate = { oneOf: [closed({ state: enumeration("ready", "recoveryRequired", "ended", "unavailable") }), closed({ state: { const: "decision" }, decisionId: string })] };
-const offerMethods = ["move", "open", "close", "kick", "apply", "search", "wait", "pickup", "climb", "eat", "drink", "wield", "equip", "remove", "read", "drop", "zap"];
+const offerMethods = ["move", "open", "close", "kick", "apply", "search", "wait", "pickup", "climb", "eat", "drink", "wield", "equip", "remove", "read", "drop", "zap", "loot"];
 const actionOffer = { oneOf: offerMethods.flatMap(action => {
   const method = catalog.methods.find(m => m.name === 'game.' + action)!;
   const properties = Object.fromEntries(Object.entries(method.schema.properties).filter(([k]) => !["sessionId", "requestId", "expectedRevision"].includes(k))) as Record<string, Schema>;
@@ -42,6 +42,7 @@ const neighborhood = { oneOf: [
   closed({ version: { const: 1 }, status: { const: "unavailable" }, reason: enumeration("unknownPosition", "unsupportedPerception", "recoveryRequired") }),
 ] };
 const observation = object({
+  automaticPickup,
   neighborhood,
   turn: integer, location: object({ id: string, depthLabel: string }),
   you: nullable(object({ x: integer, y: integer })),
@@ -70,7 +71,7 @@ export const responseSchema: Schema = {
       decision("item", { options: array(item), selection }),
       decision("target", { allowedTargets: array(enumeration("self", "direction")) }),
       decision("confirmation"),
-      decision("choice", { options: array(object({ id: integer, label: string })), selection }, ["selection"]),
+      decision("choice", { options: array(object({ id: integer, label: string, transfer: enumeration("take", "put") }, ["id", "label"])), selection, containerPhase: enumeration("inspect", "transfer") }, ["selection", "containerPhase"]),
       decision("text"),
       decision("position", { cursor: closed({ x: integer, y: integer }), mode: enumeration("browse", "select") }),
     ] }),

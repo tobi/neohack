@@ -3,6 +3,7 @@
 #define INPUT_MAX_BYTES (128LL * 1024 * 1024)
 #define INPUT_MAX_LINES 1000000
 #define INPUT_MAX_LINE 65536
+static int request_pickup_settings(mj_val);
 
 static int
 stored_string(mj_val v, size_t min, size_t max)
@@ -25,6 +26,10 @@ input_result_shape(const char *result)
     static const char *const fields[] = { "key", "x", "y", "mod", "answer", "line", "index", "picks", "counts", "cancelled", NULL };
     mj_val v;
     size_t i;
+    if (mj_find(result, "automaticPickup", &v)) {
+        static const char *const settings[] = { "automaticPickup", NULL };
+        return request_fields(result, settings) && request_pickup_settings(v);
+    }
     if (!request_fields(result, fields)) return 0;
     for (i = 0; fields[i]; i++) {
         if (!mj_find(result, fields[i], &v)) continue;
@@ -73,7 +78,7 @@ input_validate_range(char **lines, size_t count, size_t start)
     static const char *const header[] = { "jsonrpc", "id", "method", "params", NULL };
     static const char *const reply[] = { "jsonrpc", "id", "result", NULL };
     static const char *const init[] = { "protocolVersion", "runtimeProfile", "calendarEpoch", NULL };
-    static const char *const game[] = { "role", "race", "gender", "align", "name", "seed", NULL };
+    static const char *const game[] = { "role", "race", "gender", "align", "name", "seed", "automaticPickup", NULL };
     size_t i;
     if (count > INPUT_MAX_LINES || start > INPUT_MAX_LINES - count) return "unsupported input count";
     for (i = 0; i < count; i++) {
@@ -113,6 +118,7 @@ input_validate_range(char **lines, size_t count, size_t start)
                 size_t k;
                 if (!mj_find(params.p, "seed", &v) || !stored_integer(v, -9007199254740991LL, 9007199254740991LL)) return "history requires an explicit safe integer seed";
                 if (mj_find(params.p, "name", &v) && !stored_string(v, 0, 255)) return "invalid recorded name";
+                if (mj_find(params.p, "automaticPickup", &v) && !request_pickup_settings(v)) return "invalid recorded pickup settings";
                 for (k = 0; identity[k]; k++)
                     if (mj_find(params.p, identity[k], &v) && !stored_integer(v, -1, maximum[k])) return "invalid recorded identity";
             }
@@ -137,7 +143,13 @@ input_matches_prompt(game_t *g, const char *line)
         !mj_find(line, "result", &v) || *v.p != '{') return 0;
     if (!strcmp(g->pending.kind, "ack")) return request_fields(v.p, empty);
     if (!strcmp(g->pending.kind, "msgmenu")) return request_fields(v.p, empty) || (request_fields(v.p, answer) && mj_find(v.p, "answer", &value));
-    if (!strcmp(g->pending.kind, "key") || !strcmp(g->pending.kind, "poskey")) return request_fields(v.p, key) && mj_find(v.p, "key", &value);
+    if (!strcmp(g->pending.kind, "key") || !strcmp(g->pending.kind, "poskey")) {
+        if (mj_find(v.p, "automaticPickup", &value)) {
+            static const char *const settings[] = { "automaticPickup", NULL };
+            return !g->pending.position_mode && request_fields(v.p, settings) && request_pickup_settings(value);
+        }
+        return request_fields(v.p, key) && mj_find(v.p, "key", &value);
+    }
     if (!strcmp(g->pending.kind, "yn")) {
         char *selected; int offered;
         if (!request_fields(v.p, answer) || !mj_find(v.p, "answer", &value)) return 0;

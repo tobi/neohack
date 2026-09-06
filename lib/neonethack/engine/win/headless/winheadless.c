@@ -18,6 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "pickup-settings.inc"
+
 /* ---------- local window/menu bookkeeping ---------- */
 #define HL_MAXWIN 64
 #define HL_MSGLOG 256
@@ -376,6 +378,8 @@ hl_answer_new_game(long long id, const char *params)
         svp.plname[sizeof svp.plname - 1] = '\0';
     }
     hl_have_game = 1;
+    if (!hl_pickup_configure(j_find_key(params ? params : "{}", "automaticPickup")))
+        panic("invalid automatic pickup creation settings");
     if (hl_have_seed) {
         /* init_random() already ran during initoptions() (before this
          * handshake) on OS entropy, and nothing consumes game RNG between
@@ -888,6 +892,37 @@ headless_menu_object(winid window, const struct obj *obj)
     jb_free(&jb);
 }
 
+/* Structured presentation context, never inferred from a label or accelerator. */
+void
+headless_container_menu(winid window, const char *phase)
+{
+    JBuf jb;
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "window"); jb_int(&jb, window);
+    jb_key(&jb, "phase"); jb_str(&jb, phase);
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("container_menu", jb.buf);
+    jb_free(&jb);
+}
+
+void
+headless_container_item(winid window, const struct obj *obj, const char *transfer)
+{
+    JBuf jb;
+    headless_menu_object(window, obj);
+    if (window <= 0 || window >= HL_MAXWIN || !hl_wins[window].used
+        || !hl_wins[window].nitems
+        || hl_wins[window].items[hl_wins[window].nitems - 1].id.a_obj != obj)
+        return;
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "window"); jb_int(&jb, window);
+    jb_key(&jb, "index"); jb_int(&jb, hl_wins[window].nitems - 1);
+    jb_key(&jb, "transfer"); jb_str(&jb, transfer);
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("container_item", jb.buf);
+    jb_free(&jb);
+}
+
 static void
 headless_end_menu(winid window, const char *prompt)
 {
@@ -1162,6 +1197,9 @@ hl_perceived_object(JBuf *jb, struct obj *o, boolean carried)
     jb_key(jb, "label"); jb_str(jb, doname(o));
     jb_key(jb, "class"); jb_str(jb, hl_object_class(o->oclass));
     jb_key(jb, "quantity"); jb_int(jb, o->quan);
+    /* Apparent container shape only: all bags qualify, without revealing their
+     * type, contents, lock, trap or curse. Hallucination cannot identify one. */
+    jb_key(jb, "container"); jb_bool(jb, !Hallucination && o->dknown && Is_container(o));
     if (carried) {
         if (o->oclass == ARMOR_CLASS) {
             /* Visible physical layering/embedding only, not curse state or
@@ -1197,6 +1235,7 @@ hl_perception(void)
     jb_init(&jb);
     jb_begin_obj(&jb);
     jb_key(&jb, "perceptionVersion"); jb_int(&jb, 3);
+    hl_emit_pickup(&jb);
     jb_key(&jb, "affordanceVersion"); jb_int(&jb, 1);
     jb_key(&jb, "knowledgeEpoch"); jb_int(&jb, ++hl_knowledge_epoch);
     jb_key(&jb, "normalMap"); jb_bool(&jb, !u.uswallow);
@@ -1241,9 +1280,20 @@ hl_perception(void)
 static char *
 hl_input(const char *kind, const char *params)
 {
-    headless_flush();
-    hl_perception();
-    return rpc_input(kind, params);
+    char *reply;
+    const char *settings;
+    for (;;) {
+        headless_flush();
+        hl_perception();
+        reply = rpc_input(kind, params);
+        if (!reply || (strcmp(kind, "key") && strcmp(kind, "poskey"))
+            || gg.getposx > 0 || !(settings = j_find_key(reply, "automaticPickup")))
+            return reply;
+        /* A settings response is a journaled, zero-turn command-boundary
+         * change. It never becomes a movement key or answers another prompt. */
+        if (!hl_pickup_configure(settings)) panic("invalid automatic pickup update");
+        free(reply);
+    }
 }
 
 static int

@@ -5393,6 +5393,261 @@
                   "reason"
                 ],
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "method": {
+                    "const": "game.loot"
+                  },
+                  "cost": {
+                    "const": "variable"
+                  },
+                  "cautions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "mayInjure",
+                        "mayMakeNoise",
+                        "mayDamageProperty"
+                      ]
+                    }
+                  },
+                  "context": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "door"
+                      },
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "availability": {
+                    "type": "string",
+                    "enum": [
+                      "attemptable",
+                      "uncertain"
+                    ]
+                  },
+                  "arguments": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "nextInput": {
+                    "type": "string",
+                    "enum": [
+                      "item"
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "method",
+                  "cost",
+                  "availability",
+                  "arguments"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "method": {
+                    "const": "game.loot"
+                  },
+                  "cost": {
+                    "const": "variable"
+                  },
+                  "cautions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "mayInjure",
+                        "mayMakeNoise",
+                        "mayDamageProperty"
+                      ]
+                    }
+                  },
+                  "context": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "door"
+                      },
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "availability": {
+                    "const": "needsSelection"
+                  },
+                  "arguments": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "nextInput": {
+                    "type": "string",
+                    "enum": [
+                      "item"
+                    ]
+                  }
+                },
+                "required": [
+                  "key",
+                  "method",
+                  "cost",
+                  "availability",
+                  "arguments",
+                  "nextInput"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "method": {
+                    "const": "game.loot"
+                  },
+                  "cost": {
+                    "const": "variable"
+                  },
+                  "cautions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "mayInjure",
+                        "mayMakeNoise",
+                        "mayDamageProperty"
+                      ]
+                    }
+                  },
+                  "context": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "door"
+                      },
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "availability": {
+                    "const": "outOfReach"
+                  }
+                },
+                "required": [
+                  "key",
+                  "method",
+                  "cost",
+                  "availability"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "method": {
+                    "const": "game.loot"
+                  },
+                  "cost": {
+                    "const": "variable"
+                  },
+                  "cautions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "mayInjure",
+                        "mayMakeNoise",
+                        "mayDamageProperty"
+                      ]
+                    }
+                  },
+                  "context": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "door"
+                      },
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "availability": {
+                    "const": "knownBlocked"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "method",
+                  "cost",
+                  "availability",
+                  "reason"
+                ],
+                "additionalProperties": false
               }
             ]
           },
@@ -5474,6 +5729,56 @@
     "observation": {
       "type": "object",
       "properties": {
+        "automaticPickup": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "itemTypes": {
+              "type": "array",
+              "maxItems": 15,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "gold",
+                  "food",
+                  "potions",
+                  "scrolls",
+                  "weapons",
+                  "armor",
+                  "rings",
+                  "amulets",
+                  "tools",
+                  "spellbooks",
+                  "wands",
+                  "gems",
+                  "rocks",
+                  "balls",
+                  "chains"
+                ]
+              }
+            },
+            "arrows": {
+              "type": "boolean"
+            },
+            "leaveCorpses": {
+              "type": "boolean"
+            },
+            "leaveKnownCursed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled",
+            "itemTypes",
+            "arrows",
+            "leaveCorpses",
+            "leaveKnownCursed"
+          ],
+          "additionalProperties": false
+        },
         "neighborhood": {
           "oneOf": [
             {
@@ -10877,6 +11182,261 @@
                                 "reason"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                },
+                                "method": {
+                                  "const": "game.loot"
+                                },
+                                "cost": {
+                                  "const": "variable"
+                                },
+                                "cautions": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "mayInjure",
+                                      "mayMakeNoise",
+                                      "mayDamageProperty"
+                                    ]
+                                  }
+                                },
+                                "context": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "const": "door"
+                                    },
+                                    "x": {
+                                      "type": "integer"
+                                    },
+                                    "y": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "x",
+                                    "y"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "availability": {
+                                  "type": "string",
+                                  "enum": [
+                                    "attemptable",
+                                    "uncertain"
+                                  ]
+                                },
+                                "arguments": {
+                                  "type": "object",
+                                  "properties": {},
+                                  "required": [],
+                                  "additionalProperties": false
+                                },
+                                "nextInput": {
+                                  "type": "string",
+                                  "enum": [
+                                    "item"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "method",
+                                "cost",
+                                "availability",
+                                "arguments"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                },
+                                "method": {
+                                  "const": "game.loot"
+                                },
+                                "cost": {
+                                  "const": "variable"
+                                },
+                                "cautions": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "mayInjure",
+                                      "mayMakeNoise",
+                                      "mayDamageProperty"
+                                    ]
+                                  }
+                                },
+                                "context": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "const": "door"
+                                    },
+                                    "x": {
+                                      "type": "integer"
+                                    },
+                                    "y": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "x",
+                                    "y"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "availability": {
+                                  "const": "needsSelection"
+                                },
+                                "arguments": {
+                                  "type": "object",
+                                  "properties": {},
+                                  "required": [],
+                                  "additionalProperties": false
+                                },
+                                "nextInput": {
+                                  "type": "string",
+                                  "enum": [
+                                    "item"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "method",
+                                "cost",
+                                "availability",
+                                "arguments",
+                                "nextInput"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                },
+                                "method": {
+                                  "const": "game.loot"
+                                },
+                                "cost": {
+                                  "const": "variable"
+                                },
+                                "cautions": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "mayInjure",
+                                      "mayMakeNoise",
+                                      "mayDamageProperty"
+                                    ]
+                                  }
+                                },
+                                "context": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "const": "door"
+                                    },
+                                    "x": {
+                                      "type": "integer"
+                                    },
+                                    "y": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "x",
+                                    "y"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "availability": {
+                                  "const": "outOfReach"
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "method",
+                                "cost",
+                                "availability"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                },
+                                "method": {
+                                  "const": "game.loot"
+                                },
+                                "cost": {
+                                  "const": "variable"
+                                },
+                                "cautions": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "mayInjure",
+                                      "mayMakeNoise",
+                                      "mayDamageProperty"
+                                    ]
+                                  }
+                                },
+                                "context": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "const": "door"
+                                    },
+                                    "x": {
+                                      "type": "integer"
+                                    },
+                                    "y": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "x",
+                                    "y"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "availability": {
+                                  "const": "knownBlocked"
+                                },
+                                "reason": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "method",
+                                "cost",
+                                "availability",
+                                "reason"
+                              ],
+                              "additionalProperties": false
                             }
                           ]
                         },
@@ -11489,6 +12049,13 @@
                       },
                       "label": {
                         "type": "string"
+                      },
+                      "transfer": {
+                        "type": "string",
+                        "enum": [
+                          "take",
+                          "put"
+                        ]
                       }
                     },
                     "required": [
@@ -11510,6 +12077,13 @@
                   "required": [
                     "min",
                     "max"
+                  ]
+                },
+                "containerPhase": {
+                  "type": "string",
+                  "enum": [
+                    "inspect",
+                    "transfer"
                   ]
                 }
               },

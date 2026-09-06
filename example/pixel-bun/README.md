@@ -75,6 +75,18 @@ decisions, uncertainty, menus and focus loss stop walking. Other actions remain
 one-shot: holding search, wait or an occupation does not repeat it.
 The Field guide lists shortcuts, diagonals, free inspection and map panning.
 Use the backpack or action buttons; each selected item is sent by its public ID.
+Standing on a recognizable chest, box or bag offers **Open container**. NetHack's
+container dialog offers explicit inspection of unknown contents, then two lists:
+contents to take and backpack stacks to put in. **Take everything** stages the
+contents; **Apply transfers** submits both lists once. Selection itself is free.
+Known contents open directly, and warnings still require an answer. Reload
+restores the standing engine decision and clears unsubmitted selections.
+**Automatic pickup** starts with Gold + arrows in character creation. Edit types
+and exclusions there, from the game menu, or from Backpack. Save applies to the
+current adventure without a turn and remembers defaults for new runs in this
+browser; Cancel changes neither. Resuming uses the run's actual settings.
+Unknown curses are not used, and thrown/stolen/dropped objects follow the same
+filters. Automatic pickup never opens containers. Preferences are not synced.
 Directions, warnings, item choices, single/multiple choices and text are explicit
 decisions. Escape cancels only when the API says the decision is cancellable.
 Unknown decisions fail closed. No warnings are confirmed and no occupations

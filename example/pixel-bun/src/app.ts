@@ -33,6 +33,7 @@ import {
   restoreAdventures,
 } from "./cloud";
 import { roles, heroArt } from "./characters";
+import { pickupEditor, pickupSummary, loadPickupPreferences, rememberPickup } from "./pickup-editor";
 
 const STORE = "neonethack-pixel-v2";
 const directions: [Compass, string][] = [
@@ -259,7 +260,7 @@ class PixelNethack extends HTMLElement {
         <div class="world-hud">
           <div class="location-hud"><span id="location-heading"></span><span id="turn-pill"></span><span id="cloud-status" role="status"></span></div>
           <details class="hud-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
-            <button id="adventures-button">Your adventures</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button>
+            <button id="adventures-button">Your adventures</button><button id="pickup-settings" data-game>Automatic pickup</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button>
             <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
             <button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p>
           </div></details>
@@ -785,6 +786,7 @@ class PixelNethack extends HTMLElement {
     this.querySelectorAll<HTMLElement>("[data-guide]").forEach(
       (b) => (b.onclick = () => this.guide()),
     );
+    this.$("#pickup-settings").onclick = () => this.openPickupSettings();
     this.$("#toggle-journal-preview").onclick = () => {
       const button = this.$("#toggle-journal-preview");
       const expanded = button.getAttribute("aria-expanded") !== "true";
@@ -1016,6 +1018,7 @@ class PixelNethack extends HTMLElement {
 
   }
   private controls() {
+    this.$("#pickup-settings").hidden = !this.game;
     (this.$("#text-map-button") as HTMLButtonElement).disabled = !this.game;
     this.querySelectorAll<HTMLButtonElement>("[data-intro]").forEach(
       (b) => (b.disabled = !this.introAvailable()),
@@ -1033,7 +1036,7 @@ class PixelNethack extends HTMLElement {
       button.title = reason;
     });
     this.querySelectorAll<HTMLButtonElement>("[data-choice]").forEach(
-      (b) => (b.disabled = this.busy || this.uncertain()),
+      (b) => (b.disabled = this.busy || this.uncertain() || b.dataset.emptySelection === "true"),
     );
     for (const id of [
       "new-adventure",
@@ -1284,6 +1287,9 @@ class PixelNethack extends HTMLElement {
     }
     body.replaceChildren();
     if (this.panel === "inventory") {
+      const settings = this.button("Automatic pickup · " + (o.automaticPickup ? pickupSummary(o.automaticPickup) : "Unavailable"), () => this.openPickupSettings(), "secondary");
+      settings.disabled = !this.playable() || !o.automaticPickup;
+      body.append(settings);
       this.text(
         "#panel-count",
         o.inventoryKnown ? `${o.inventory.length} ITEMS` : "UNKNOWN",
@@ -1388,9 +1394,9 @@ class PixelNethack extends HTMLElement {
     const here = n.cells.find(cell => cell.movement.relation === "here");
     for (const offer of here?.actions ?? []) {
       const water = here?.terrain?.freshness === "current" && ["fountain", "sink"].includes(here.terrain.type);
-      if (offer.availability !== "attemptable" || (offer.method !== "game.climb" && !(water && offer.method === "game.drink"))) continue;
+      if (offer.availability !== "attemptable" || (offer.method !== "game.climb" && offer.method !== "game.loot" && !(water && offer.method === "game.drink"))) continue;
       const revision = n.basis.revision;
-      const button = this.button(offer.method === "game.climb" ? this.climbLabel(offer.arguments.direction) : `Drink from ${here!.terrain!.type}`, () => {
+      const button = this.button(offer.method === "game.climb" ? this.climbLabel(offer.arguments.direction) : offer.method === "game.loot" ? "Open container" : `Drink from ${here!.terrain!.type}`, () => {
         if (this.game !== game || !this.playable() || game.state.revision !== revision) return;
         this.stopMovement();
         void this.run(() => this.executeOffer(game, offer, revision));
@@ -1523,6 +1529,7 @@ class PixelNethack extends HTMLElement {
       wait: "Wait",
       pickup: "Pick up…",
       climb: "Take the stairs",
+      loot: "Open container",
       eat: "Eat…", drink: "Drink…", wield: "Wield…", equip: "Wear…", remove: "Remove…", read: "Read…", drop: "Drop…", zap: "Zap…",
     };
     const offers = obstruction
@@ -1576,6 +1583,8 @@ class PixelNethack extends HTMLElement {
     this.map.context = offer.context ?? null;
     const options = { expectedRevision: revision };
     switch (offer.method) {
+      case "game.loot":
+        return game.loot(options);
       case "game.move":
         return game.move(offer.arguments.direction, options);
       case "game.open":
@@ -1612,6 +1621,33 @@ class PixelNethack extends HTMLElement {
         return game.climb(offer.arguments.direction, options);
     }
   }
+  private pickupMemoryNotice() {
+    this.text("#error", "Automatic pickup is configured for this adventure, but preferences could not be remembered for future runs.");
+    this.show("#error", true);
+  }
+  private openPickupSettings() {
+    const game = this.game;
+    if (!game?.observation.automaticPickup || !this.playable()) return;
+    const revision = game.state.revision;
+    const editor = pickupEditor(game.observation.automaticPickup, loadPickupPreferences().rememberable);
+    this.openMenu('<h2 id="menu-title">Automatic pickup</h2><form id="pickup-settings-form"></form>');
+    const form = this.querySelector<HTMLFormElement>("#pickup-settings-form")!;
+    const footer = document.createElement("footer"); footer.className = "dialog-actions";
+    const save = document.createElement("button"); save.type = "submit"; save.className = "primary";
+    save.textContent = "Save settings"; save.dataset.game = "";
+    const cancel = this.button("Cancel", () => this.closeMenu(), "secondary"); cancel.type = "button";
+    footer.append(save, cancel); form.append(editor.element, footer);
+    form.onsubmit = e => {
+      e.preventDefault();
+      if (this.game !== game || this.busy) return;
+      const settings = editor.value();
+      void this.run(async () => {
+        await game.configurePickup(settings, {expectedRevision:revision});
+        this.closeMenu();
+        if (!rememberPickup(settings)) this.pickupMemoryNotice();
+      });
+    };
+  }
   private openMenu(html: string) {
     this.closeTile();
     this.stopMovement();
@@ -1630,6 +1666,14 @@ class PixelNethack extends HTMLElement {
       `<h2 id="menu-title">Every story needs an adventurer.</h2><p class="subtle">Choose a starting path. The rest is up to you.</p><form id="create-form"><div class="create-fields"><label class="field-label" for="adventurer-name">YOUR NAME</label><input id="adventurer-name" name="name" required maxlength="24" autocomplete="off" placeholder="What should we call you?" value="Ada"><fieldset class="class-picker"><legend>YOUR STARTING PATH · ${roles.length} CLASSES</legend>${roles.map((r, i) => `<label class="role-card"><input type="radio" name="role" value="${r.id}" ${i === 0 ? "checked" : ""}><img src="/art/${r.art}.png" alt=""><span><strong>${r.title}${i === 0 ? "<small>FIRST ADVENTURE PICK</small>" : ""}</strong><span>${r.description}</span></span></label>`).join("")}</fieldset><details class="seed-details"><summary>Choose a world seed (optional)</summary><label for="world-seed">A number for a repeatable starting world</label><input id="world-seed" name="seed" type="number" min="0" max="4294967295" step="1" placeholder="Surprise me"></details><p class="save-explanation">Progress is saved on this browser and address. Clearing site data deletes it. Each life is an adventure of its own.</p></div><footer class="create-footer"><button data-operation class="primary" type="submit">Enter the dungeon →</button></footer></form>`,
     );
     const form = this.querySelector<HTMLFormElement>("#create-form")!;
+    const preferences = loadPickupPreferences();
+    const pickup = pickupEditor(preferences.settings, preferences.rememberable);
+    const details = document.createElement("details"); details.className = "pickup-creation";
+    const summary = document.createElement("summary");
+    const updateSummary = () => { summary.textContent = "Automatic pickup · " + pickupSummary(pickup.value()); };
+    details.append(summary, pickup.element); updateSummary();
+    details.addEventListener("change", updateSummary); details.addEventListener("click", () => queueMicrotask(updateSummary));
+    form.querySelector(".seed-details")!.before(details);
     form.onsubmit = (e) => {
       e.preventDefault();
       if (!form.reportValidity() || this.busy || !this.metadataHealthy) return;
@@ -1656,7 +1700,9 @@ class PixelNethack extends HTMLElement {
         this.current = null;
         await this.preparation;
         await this.connectRuntime();
-        this.game = await this.api!.create({ ...role.identity, name, seed });
+        const automaticPickup = pickup.value();
+        this.game = await this.api!.create({ ...role.identity, name, seed, automaticPickup });
+        if (!rememberPickup(automaticPickup)) this.pickupMemoryNotice();
         this.current = {
           id: this.game.id,
           buildId: this.runtimeBuildId,
@@ -1778,7 +1824,7 @@ class PixelNethack extends HTMLElement {
     if (n?.status !== "available" || n.basis.revision !== this.game?.state.revision) return "";
     const offer = n.cells.find(cell => cell.dx === 0 && cell.dy === 0)?.actions.find(offer => offer.key === name);
     if (offer?.availability !== "knownBlocked") return "";
-    return offer.reason === "noPerceivedItems" ? "No eligible items available" : offer.reason === "noKnownTools" ? "No tools in your pack" : "Unavailable here";
+    return offer.reason === "noPerceivedContainers" ? "No container underfoot" : offer.reason === "noPerceivedItems" ? "No eligible items available" : offer.reason === "noKnownTools" ? "No tools in your pack" : "Unavailable here";
   }
   private explainPrayer() {
     this.openMenu('<h2 id="menu-title">Prayer is a plea for help.</h2><p>Your deity may help with serious trouble, including hunger or low health. Prayer takes time, and help is not guaranteed.</p><p>Praying too often or displeasing your deity can bring punishment. This interface cannot tell whether prayer is safe. A glow means you are in trouble, not that your deity is ready.</p><p class="subtle">Continue to the dungeon’s own confirmation, or return without taking a turn.</p><div class="more-grid" id="prayer-actions"></div>');
@@ -1807,6 +1853,7 @@ class PixelNethack extends HTMLElement {
       up: () => g.climb("up"),
       down: () => g.climb("down"),
       pray: () => g.pray(),
+      loot: () => g.loot(options),
       read: () => g.read(ref, options),
       apply: () => g.apply(ref, options),
       wield: () => g.wield(ref, options),
@@ -1836,6 +1883,7 @@ class PixelNethack extends HTMLElement {
       close: "Close a door",
       kick: "Kick",
       open: "Open a door",
+      loot: "Open container",
       pray: "Pray",
     })) {
       const b = this.button(label, () => this.action(action));
@@ -1954,6 +2002,26 @@ class PixelNethack extends HTMLElement {
       body.append(b);
       return b;
     };
+    if (d.action === "loot") {
+      this.text("#decision-title", "At the container");
+      const state = this.game!.state;
+      const narration = state.outcome.action === "loot"
+        ? state.events.filter(event => event.type === "heard" && event.text.trim()) : [];
+      if (narration.length) {
+        const notes = document.createElement("details");
+        notes.className = "container-notes";
+        notes.setAttribute("aria-label", "Container details");
+        const summary = document.createElement("summary");
+        summary.textContent = "Inspection messages"; notes.append(summary);
+        for (const event of narration) {
+          if (event.type !== "heard") continue;
+          const line = document.createElement("p");
+          line.textContent = event.text;
+          notes.append(line);
+        }
+        body.append(notes);
+      }
+    }
     if (d.kind === "confirmation") {
       add(
         "No, not now",
@@ -1985,6 +2053,70 @@ class PixelNethack extends HTMLElement {
         add("Myself", () =>
           this.game!.answer(d.id, { kind: "target", target: "self" }),
         );
+    } else if (d.kind === "choice" && d.containerPhase === "transfer") {
+      this.text("#decision-title", "Container & backpack");
+      const form = document.createElement("form");
+      form.className = "container-transfer";
+      const help = document.createElement("p");
+      help.className = "subtle";
+      help.textContent = "Choose what to take and put in, then apply. Items are taken out first; the game may ask you about individual transfers.";
+      form.append(help);
+      const columns = document.createElement("div");
+      columns.className = "container-columns";
+      const inputs: { input: HTMLInputElement; id: number; transfer: "take" | "put" }[] = [];
+      const summary = document.createElement("p");
+      summary.setAttribute("aria-live", "polite");
+      const submit = document.createElement("button");
+      submit.type = "submit"; submit.className = "primary";
+      submit.textContent = "Apply transfers"; submit.dataset.choice = "";
+      const update = () => {
+        const take = inputs.filter(v => v.input.checked && v.transfer === "take").length;
+        const put = inputs.filter(v => v.input.checked && v.transfer === "put").length;
+        summary.textContent = `${take} stack${take === 1 ? "" : "s"} to take · ${put} to put in`;
+        submit.dataset.emptySelection = String(take + put === 0);
+        submit.disabled = take + put === 0;
+      };
+      for (const transfer of ["take", "put"] as const) {
+        const section = document.createElement("fieldset");
+        const legend = document.createElement("legend");
+        legend.textContent = transfer === "take" ? "Inside container" : "Your backpack";
+        section.append(legend);
+        const options = d.options.filter(o => o.transfer === transfer);
+        if (transfer === "take" && options.length) {
+          const all = this.button("Take everything", () => {
+            inputs.filter(v => v.transfer === "take").forEach(v => { v.input.checked = true; });
+            update();
+          }, "secondary");
+          all.type = "button"; section.append(all);
+        }
+        if (!options.length) {
+          const empty = document.createElement("p"); empty.className = "subtle";
+          empty.textContent = transfer === "take" ? "The container is empty." : "Nothing available to put in.";
+          section.append(empty);
+        }
+        for (const option of options) {
+          const label = document.createElement("label"); label.className = "menu-choice";
+          const input = document.createElement("input"); input.type = "checkbox";
+          input.onchange = update;
+          label.append(input, document.createTextNode(option.label)); section.append(label);
+          inputs.push({input, id:option.id, transfer});
+        }
+        columns.append(section);
+      }
+      const clear = this.button("Clear selection", () => {
+        inputs.forEach(v => { v.input.checked = false; }); update();
+      }, "secondary");
+      clear.type = "button";
+      form.append(columns, summary, clear, submit); body.append(form); update();
+      form.onsubmit = e => {
+        e.preventDefault();
+        const choose = inputs.filter(v => v.input.checked).map(v => v.id);
+        if (!choose.length) return;
+        void this.run(() => this.game!.answer(d.id, {kind:"choice", choose}));
+      };
+    } else if (d.kind === "choice" && (d.containerPhase === "inspect" || (d.action === "loot" && !d.selection))) {
+      for (const option of d.options) add(option.label, () =>
+        this.game!.answer(d.id, { kind: "choice", choose: [option.id] }), "choice-row");
     } else if (d.kind === "choice") {
       const min = d.selection?.min ?? 1,
         max = d.selection?.max ?? 1;

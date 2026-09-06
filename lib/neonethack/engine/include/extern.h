@@ -1021,6 +1021,8 @@ extern void headless_study_stopped(void);
 extern void headless_meal_stopped(void);
 extern void headless_lifesaved(int, long);
 extern void headless_menu_object(winid, const struct obj *);
+extern void headless_container_menu(winid, const char *);
+extern void headless_container_item(winid, const struct obj *, const char *);
 #endif
 extern void container_contents(struct obj *, boolean, boolean, boolean);
 ATTRNORETURN extern void nh_terminate(int) NORETURN;

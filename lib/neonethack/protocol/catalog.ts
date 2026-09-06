@@ -10,13 +10,18 @@ export const compass = enumeration("north", "northeast", "east", "southeast", "s
 const direction = enumeration(...compass.enum, "up", "down");
 export const target = { oneOf: [enumeration("self"), object({ direction })] };
 export const item = { oneOf: [text(127), object({ id: text(64) })] };
+export const automaticPickup = object({
+  enabled: { type: "boolean" },
+  itemTypes: { type: "array", maxItems: 15, uniqueItems: true, items: enumeration("gold", "food", "potions", "scrolls", "weapons", "armor", "rings", "amulets", "tools", "spellbooks", "wands", "gems", "rocks", "balls", "chains") },
+  arrows: { type: "boolean" }, leaveCorpses: { type: "boolean" }, leaveKnownCursed: { type: "boolean" },
+});
 export const position = { oneOf: [object({ x: integer(1, 79), y: integer(0, 20) }), enumeration(...compass.enum, "finish", "help")] };
 export const answer = { oneOf: [
   object({ kind: { const: "position" }, position }),
   object({ kind: { const: "item" }, item }),
   object({ kind: { const: "target" }, target }),
   object({ kind: { const: "confirmation" }, confirm: { type: "boolean" } }),
-  object({ kind: { const: "choice" }, choose: { type: "array", minItems: 1, maxItems: 64, uniqueItems: true, items: integer(0, 2147483647) } }),
+  object({ kind: { const: "choice" }, choose: { type: "array", minItems: 1, maxItems: 1024, uniqueItems: true, items: integer(0, 2147483647) } }),
   object({ kind: { const: "text" }, text: text(128, 0) }),
 ] };
 const sid = { ...text(64), pattern: "^[A-Za-z0-9_-]+$", description: "Opaque session identifier returned by create or resume." };
@@ -33,6 +38,7 @@ add("session.create", "Create one new game. Returns its sessionId, revision, ful
   name: text(31), seed: integer(-Number.MAX_SAFE_INTEGER),
   role: enumeration("archeologist", "barbarian", "caveman", "healer", "knight", "monk", "priest", "rogue", "ranger", "samurai", "tourist", "valkyrie", "wizard"),
   race: enumeration("human", "elf", "dwarf", "gnome", "orc"), gender: enumeration("male", "female"), align: enumeration("lawful", "neutral", "chaotic"),
+  automaticPickup,
 }, []), "new_game");
 add("session.observe", "Read the currently loaded session's full observation and standing decision. No engine input, game turn, revision change or event consumption. Does not resume an unloaded session. A cached receipt is historical; observe for current state.", object({ sessionId: sid }), "get_state", { readOnly: true, idempotent: true });
 add("session.actions", "Read revision-bound attempts for here or an adjacent square using only perceived knowledge. No engine input, event consumption, receipt or automatic resume. Offers do not promise safety or success.", object({ sessionId: sid, expectedRevision: integer(), target: { oneOf: [enumeration("here"), object({ direction: compass })] } }), "actions", { readOnly: true, idempotent: true });
@@ -59,6 +65,8 @@ const descriptions: Record<string, string> = {
   zap: "Zap a selected perceived wand. Target may be self or a compass/vertical direction; here is not a target. Unknown powers and charges remain unknown.",
 };
 for (const [action, description] of Object.entries(descriptions)) game(action, description + " Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision (drink may instead prompt for a fountain or sink underfoot). Ambiguity never selects the first match.", { item, ...(action === "zap" ? { target } : {}) });
+game("loot", "Open perceived containers underfoot. Multiple containers require selection. Unknown contents require explicit inspection, then one combined choice stages take and put stacks. Takes execute before puts through engine rules; warnings and interruptions remain decisions, with no rollback or automatic retry. Does not pick up the container or interact with adjacent creatures.");
+game("configurePickup", "Replace automatic ground-pickup settings at a free command boundary without spending a turn. Read actual settings from observation.automaticPickup. Exclusions override categories and arrow inclusion; thrown, stolen and dropped items follow the same rules. Empty types means only enabled arrow inclusion, never all. No container interaction or auto-confirmation. Settings are journaled and restored with the session.", { automaticPickup }, ["automaticPickup"]);
 game("quit", "Abandon this run through the engine. Presents the genuine quit confirmation; only an explicit affirmative answer ends the adventure. Retains its journal.");
 game("pray", "Begin a prayer. Always preserve genuine confirmation; the API does not reveal divine favor or prayer cooldown or decide whether prayer is safe.");
 add("decision.answer", "Continue exactly the standing decisionId with one typed answer. Use returned item refs and integer choice IDs unchanged. confirm:false declines; it is not cancellation. A wrong answer or stale ID does not advance the world. May lead to another decision. Retry the same requestId and payload after uncertainty, never the initiating game operation.", object({ ...guard, decisionId: text(64), answer }), "act", { idempotent: true });

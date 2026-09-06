@@ -23,9 +23,11 @@ pending_signature(game_t *g, char out[32])
         menu_t *m = &g->menus[i];
         if (!m->used || m->window != g->pending.window) continue;
         mj_strv(&b, m->prompt ? m->prompt : "");
+        if (m->container_phase) { mj_strv(&b, "containerV1"); mj_intv(&b, m->container_phase); }
         for (k = 0; k < m->nitems; k++) {
             mj_intv(&b, m->items[k].index); mj_intv(&b, m->items[k].accel); mj_intv(&b, m->items[k].glyph);
             mj_strv(&b, m->items[k].text ? m->items[k].text : "");
+            if (m->items[k].transfer) { mj_strv(&b, "transferV1"); mj_intv(&b, m->items[k].transfer); }
             if (m->items[k].selectable >= 0 || m->items[k].object_id > 0) {
                 mj_strv(&b, "menuBindingV1");
                 mj_intv(&b, m->items[k].selectable); mj_intv(&b, m->items[k].object_id);
@@ -123,7 +125,7 @@ sidecar_validate(game_t *g, const char *text)
         mj_raw(field, &size); if (size >= sizeof g->operation.args_json) return "operation arguments exceed limit";
         mj_find(v.p, "action", &field); action = mj_str(field);
         if (!action) return "invalid operation action";
-        if (cmdkey_of(action) < 0 && strcmp(action, "move") && strcmp(action, "wait") && strcmp(action, "climb") && strcmp(action, "inspect") && strcmp(action, "inventory") && strcmp(action, "new_game")) {
+        if (cmdkey_of(action) < 0 && strcmp(action, "move") && strcmp(action, "wait") && strcmp(action, "climb") && strcmp(action, "inspect") && strcmp(action, "inventory") && strcmp(action, "new_game") && strcmp(action, "configurePickup")) {
             free(action); return "unbound operation action";
         }
         if (mj_find(v.p, "cmdkey", &field)) mj_int(field, &command);

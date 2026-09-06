@@ -50,3 +50,22 @@ On 2026-09-05 the port's seed prototype was centralized, a shadowing local was
 renamed and an unused status callback removed. These are compile hygiene changes,
 not new game rules. `SOURCES.json` is the source-package inventory; generated
 headers, binaries, playgrounds, saves and optional submodule checkouts are absent.
+
+- Container interaction: the headless object perception now reports recognizable
+  container shape (including every bag type) without disclosing contents, locks,
+  traps, or curses. Hallucination suppresses this affordance. The shared semantic
+  driver uses it to offer NetHack's existing loot command underfoot.
+- On 2026-09-06, `pickup.c` replaces the headless container mode/category menus
+  with explicit unknown-content inspection and a combined take/put object menu.
+  `winheadless.c` emits structured container phase and transfer-side metadata.
+  Original `in_container`/`out_container` retain warnings, effects, capacity,
+  billing and interruption. Selected object IDs and initial quantities are
+  snapshotted before take-first execution, preventing merged inventory stacks
+  from enlarging an approved put. Native and WASM use this same implementation.
+- `win/headless/pickup-settings.inc` adds structured ground-pickup configuration
+  before game creation and via zero-turn command-boundary responses. It sets
+  explicit object classes (venom sentinel for none), installs POSIX exception
+  patterns with exclusion precedence, and neutralizes thrown/stolen/dropped
+  early overrides so the advertised filters apply consistently. Active settings
+  are emitted with perception and recovered by the existing input journal.
+  Original shop, burden, warning and manual pickup rules are retained.

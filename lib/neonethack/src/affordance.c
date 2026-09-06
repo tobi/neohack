@@ -92,6 +92,7 @@ void nnh_resolve_cell(const nnh_knowledge *k, int index, nnh_cell_actions *out)
                   !water && k->item_known[i] && !k->item_count[i] ? "noPerceivedItems" : NULL,
                   !water && (!k->item_known[i] || k->item_count[i]) ? "item" : NULL, 0);
         }
+        offer(out, "loot", "game.loot", !k->floor_current ? "uncertain" : k->floor_containers ? "attemptable" : "knownBlocked", -1, k->floor_current && !k->floor_containers ? "noPerceivedContainers" : NULL, NULL, 0);
         if (terrain == T_STAIRS_UP || terrain == T_STAIRS_DOWN)
             offer(out, "climb", "game.climb", "attemptable", terrain == T_STAIRS_UP ? 8 : 9, NULL, NULL, 0);
         if (!door) tool_offer(k, out, 0, 0);

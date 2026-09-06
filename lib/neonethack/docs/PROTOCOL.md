@@ -35,6 +35,8 @@ protocol continues to use dotted method names.
 | Movement | `game.move`, `game.wait`, `game.climb` |
 | Environment | `game.search`, `game.kick`, `game.open`, `game.close`, `game.pray`, `game.quit` |
 | Items | `game.pickup`, `game.eat`, `game.drink`, `game.wield`, `game.equip`, `game.remove`, `game.read`, `game.apply`, `game.drop`, `game.zap` |
+| Containers | `game.loot` |
+| Automatic ground pickup | `game.configurePickup`; read `observation.automaticPickup` |
 | Continuation | `decision.answer`, `decision.cancel` |
 
 There is deliberately no generic `act`, raw key, travel-until-success, or menu
@@ -195,7 +197,7 @@ No automatic retry occurs at the transport layer.
 
 Public request frames are capped at 4096 bytes; responses include full
 observations and can be larger. The current private semantic operation
-storage imposes an additional **1022-byte translated-request limit**; the C core
+storage imposes an additional **4094-byte translated-request limit**; the C core
 rejects larger combinations explicitly. Individual limits are in the schemas:
 64-byte session/item/decision IDs, 128-byte request IDs/text answers, 127-byte item-name queries,
 31-byte identity strings, 64 distinct choice IDs, JavaScript-safe integer guards.
@@ -293,6 +295,65 @@ class and equipment accessibility as explicit operations. The list is omitted fo
 stale perception. It is eligibility, not a safety guarantee or an input gate; clients
 must still respect decisions, recovery and the observation revision, and send the
 opaque item ID unchanged. No hidden curse, potion effect or corpse safety is exposed.
+
+`game.loot()` opens perceived containers on the current square through NetHack's
+loot command. It requires current floor perception and a recognizable container;
+it never substitutes an adjacent creature interaction or picks up the container.
+Multiple containers, inspection, transfer selection and warnings remain engine
+decisions. The neighborhood offers `game.loot` only underfoot;
+container appearance does not disclose contents, locks, traps, or magical powers.
+Contents become available only through the engine's explicit container choices,
+not the ground inventory. Answer those choice IDs, rather than starting a second
+operation or reusing ground item IDs for contents.
+
+Container choices carry `containerPhase: "inspect" | "transfer"`. Inspection of
+unknown contents is explicit and costs time; known contents open directly into
+the transfer decision. Transfer options carry `transfer: "take" | "put"`, authored
+by C from the actual object binding. Clients may stage both groups locally and
+submit their choice IDs together, including selecting all take options. Each
+selection moves the offered whole stack. Taking happens before putting; putting
+uses the originally offered amount even if a taken stack merged into it. Original
+engine transfer rules, capacity/shop confirmations and interruption apply. This
+is one reviewed plan, not an atomic rollback transaction. Cancellation does not
+undo inspection or transfers already performed. Unsubmitted UI drafts are not
+engine state; resume restores the exact standing decision with no selected items.
+
+### Automatic ground pickup
+
+Creation accepts `automaticPickup`; `game.configurePickup({automaticPickup})`
+replaces the complete configuration at a free command boundary. TypeScript uses
+`game.configurePickup(settings)`. The C convenience API uses
+`nnh_automatic_pickup`, `nnh_identity.automatic_pickup`, and
+`nnh_game_configure_pickup`. The object has five required fields:
+
+```json
+{"enabled":true,"itemTypes":["gold"],"arrows":true,"leaveCorpses":true,"leaveKnownCursed":true}
+```
+
+Types are gold, food, potions, scrolls, weapons, armor, rings, amulets, tools,
+spellbooks, wands, gems, rocks, balls and chains. Deliberately select all names
+for all categories. An empty array means no categories; C maps it to NetHack's
+nonempty venom sentinel, so only an enabled arrow inclusion can collect items.
+Off preserves the configured filters. The pixel client defaults to enabled
+Gold + arrows; omitted library creation settings leave automatic pickup off,
+with gold/arrow filters ready to enable. No client defaults are injected on resume.
+
+The settings arrive before engine game creation and initial pickup. Updates spend
+zero turns but advance revision. Both use the input journal, pre-input reservation,
+and durable receipts. Read actual active settings from the observation, including
+after resume. An outstanding decision must be answered/cancelled before updating.
+Never retry an uncertain update with a fresh request ID.
+
+Both native and WASM use POSIX extended regex matching against NetHack's singular
+perceived description. Arrow inclusion uses `(^| )arrow( named .*)?$`, corpse
+exclusion uses ` corpse( named .*)?$`, and known-curse exclusion uses
+`^(an? |the |[0-9]+ )?cursed `. Exclusions are inserted last because the engine
+prepends rules and uses the first match. The curse rule only matches disclosed
+curse wording, never hidden object flags. Recovery overrides `pickup_thrown`,
+`pickup_stolen`, and `nopick_dropped` are deliberately disabled: recovered,
+thrown and dropped items follow these same filters. Shop exclusions, weight rules,
+engine warnings, and explicit manual pickup remain intact. These settings never
+open or transfer a container and offer no arbitrary options or pattern console.
 
 ## MCP observation presentation
 

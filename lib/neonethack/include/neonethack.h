@@ -33,9 +33,15 @@ typedef struct {
 } nnh_guard;
 
 typedef struct {
+    int enabled, arrows, leave_corpses, leave_known_cursed; /* exactly 0 or 1 */
+    const char *const *item_types; /* public names; empty array means no categories */
+    size_t item_type_count;
+} nnh_automatic_pickup;
+typedef struct {
     const char *name, *role, *race, *gender, *align; /* NULL: generated name / engine-selected identity */
     int has_seed;
     int64_t seed;
+    const nnh_automatic_pickup *automatic_pickup; /* NULL: off, gold + arrow filters */
 } nnh_identity;
 
 typedef enum {
@@ -88,8 +94,11 @@ nnh_status nnh_session_close(nnh_context *, const char *session, nnh_result **);
 nnh_status nnh_game_move(nnh_context *, const char *, const nnh_guard *, nnh_direction, nnh_result **);
 nnh_status nnh_game_climb(nnh_context *, const char *, const nnh_guard *, nnh_direction, nnh_result **);
 nnh_status nnh_game_wait(nnh_context *, const char *, const nnh_guard *, nnh_result **);
+nnh_status nnh_game_configure_pickup(nnh_context *, const char *, const nnh_guard *, const nnh_automatic_pickup *, nnh_result **);
 nnh_status nnh_game_search(nnh_context *, const char *, const nnh_guard *, nnh_result **);
 nnh_status nnh_game_quit(nnh_context *, const char *, const nnh_guard *, nnh_result **);
+/* Open perceived floor containers; engine choices retain their decision IDs. */
+nnh_status nnh_game_loot(nnh_context *, const char *, const nnh_guard *, nnh_result **);
 nnh_status nnh_game_pray(nnh_context *, const char *, const nnh_guard *, nnh_result **);
 /* NULL target asks for a genuine target decision. */
 nnh_status nnh_game_kick(nnh_context *, const char *, const nnh_guard *, const nnh_target *, nnh_result **);

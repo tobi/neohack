@@ -1,6 +1,7 @@
 import type { MethodParams } from "./requests.js";
 export type { Method, MethodParams, Request } from "./requests.js";
 export type Identity = MethodParams["session.create"];
+export type AutomaticPickup = NonNullable<Identity["automaticPickup"]>;
 export type Compass = MethodParams["game.move"]["direction"];
 export type Direction = Compass | "up" | "down";
 export type Item = NonNullable<MethodParams["game.eat"]["item"]>;
@@ -9,7 +10,7 @@ export type Answer = MethodParams["decision.answer"]["answer"];
 export type ActionTarget = MethodParams["session.actions"]["target"];
 export interface ActionBasis { revision: number; levelId: string; origin: { x: number; y: number } }
 export type InputGate = { state: "ready" | "recoveryRequired" | "ended" | "unavailable" } | { state: "decision"; decisionId: string };
-type OfferMethod = "game.move" | "game.open" | "game.close" | "game.kick" | "game.apply" | "game.search" | "game.wait" | "game.pickup" | "game.climb" | "game.eat" | "game.drink" | "game.wield" | "game.equip" | "game.remove" | "game.read" | "game.drop" | "game.zap";
+type OfferMethod = "game.loot" | "game.move" | "game.open" | "game.close" | "game.kick" | "game.apply" | "game.search" | "game.wait" | "game.pickup" | "game.climb" | "game.eat" | "game.drink" | "game.wield" | "game.equip" | "game.remove" | "game.read" | "game.drop" | "game.zap";
 type OfferArguments<M extends OfferMethod> = Omit<MethodParams[M], "sessionId" | "requestId" | "expectedRevision">;
 export type ActionOffer = { [M in OfferMethod]: {
   key: string; method: M; cost: "variable";
@@ -54,6 +55,7 @@ export interface Cell {
 }
 /** Omitted facts are unknown; empty known lists really are empty. */
 export interface Observation {
+  automaticPickup?: AutomaticPickup;
   turn: number;
   location: { id: string; depthLabel: string };
   you: { x: number; y: number } | null;
@@ -76,7 +78,7 @@ export type Decision = DecisionBase & (
   | { kind: "item"; options: Omit<ItemRef, "category" | "usage">[]; selection: { min: number; max: number } }
   | { kind: "target"; allowedTargets: ("self" | "direction")[] }
   | { kind: "confirmation" }
-  | { kind: "choice"; options: { id: number; label: string }[]; selection?: { min: number; max: number } }
+  | { kind: "choice"; options: { id: number; label: string; transfer?: "take" | "put" }[]; selection?: { min: number; max: number }; containerPhase?: "inspect" | "transfer" }
   | { kind: "position"; cursor: { x: number; y: number }; mode: "browse" | "select" }
   | { kind: "text" }
 );
