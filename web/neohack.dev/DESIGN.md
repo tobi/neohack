@@ -1137,3 +1137,8 @@ New-character forms suggest a random, editable adventurer name with an explicit
 reroll button. Suggestions use browser randomness independently of the world
 seed. The chosen name is stored with the run and never regenerated on resume.
 Workshop runs omit an explicit name and use the engine's existing name generator.
+
+The ledger offers playback only when a committed public recording exists. Runs
+without frames keep their statistics and a plain “No public recording” label.
+“With replay” ranks recorded runs across the whole ledger, not just the current
+top 100. Private account recordings are never exposed by this filter.

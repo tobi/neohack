@@ -1,0 +1,28 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createTestHarness,MemoryStorage} from './server.mjs';
+import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
+
+test('ledger replay availability comes from public recordings and reaches outside the top 100',async t=>{
+ const store=new MemoryStorage();
+ const runs=Array.from({length:102},(_,i)=>({id:'run-'+i,name:'Hero '+i,role:'wizard',turn:200-i,maxLevel:1,ended:false,updatedAt:100,replayAvailable:true}));
+ await store.write('board/index.json',{runs,errors:[]});
+ await store.write('replays/run-101.json',{frames:['objects/frame.json'],revision:1});
+ await store.write('accounts/private-recording.json',{runId:'run-0',frames:['private']});
+ let listings=0;const list=store.list.bind(store);store.list=async prefix=>{listings++;return list(prefix);};
+ const server=createTestHarness({store});const{url}=await server.listen();t.after(()=>server.close());
+ const stats=await(await fetch(new URL('/api/stats',url))).json();
+ assert.equal(stats.totals.runs,102);assert.equal(stats.best.length,100);
+ assert.ok(stats.best.every(r=>r.replayAvailable===false),'client-provided claims and private recordings do not enable public playback');
+ assert.deepEqual(stats.recorded.map(r=>r.id),['run-101']);assert.equal(stats.recorded[0].replayAvailable,true);
+ await fetch(new URL('/api/stats',url));assert.equal(listings,1,'repeated refreshes reuse the short public index cache');
+ const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());
+ const page=await browser.newPage();await page.goto(new URL('/dashboard',url).href);
+ await page.waitForFunction(()=>document.querySelectorAll('#runs tr').length===100);
+ assert.equal(await page.locator('#runs .run-replay').count(),0);
+ assert.match(await page.locator('#runs').textContent(),/No public recording/);
+ await page.getByLabel('Show',{exact:false}).selectOption('recorded');
+ assert.equal(await page.locator('#runs tr').count(),1);
+ assert.equal(await page.getByRole('button',{name:'Replay Hero 101',exact:true}).count(),1);
+ assert.match(await page.locator('#leaders-description').textContent(),/public replay frames/);
+});

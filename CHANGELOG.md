@@ -4,6 +4,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- The ledger marks runs without public recordings and offers a “With replay”
+  view that finds playable recordings across all adventures.
+
 - New adventures suggest editable, rerollable names instead of always using Ada.
 - Short journal notices stay inline; readable scrolls require at least four lines.
 

@@ -1,5 +1,17 @@
 import { createHash } from 'node:crypto';
-import { read, update, immutable } from './storage.ts';
+import { read, update, immutable, storage, type Storage } from './storage.ts';
+
+const availability = new WeakMap<Storage, {expires:number; ids:Promise<Set<string>>}>();
+/** Only committed public recordings count; private account recordings stay private. */
+export async function publicReplayIds() {
+  const backend=storage(), cached=availability.get(backend);
+  if(cached && cached.expires>Date.now())return cached.ids;
+  const ids=backend.list('replays/').then(paths=>new Set(paths.flatMap(path=>{
+    const match=path.match(/^replays\/([\w-]{1,64})\.json$/);return match?[match[1]]:[];
+  })));
+  const entry={expires:Date.now()+60000,ids};availability.set(backend,entry);
+  try{return await ids;}catch(error){if(availability.get(backend)===entry)availability.delete(backend);throw error;}
+}
 
 /** Public presentation recordings are separate from private resumable journals. */
 export async function replay(request: Request, id: string) {
@@ -31,11 +43,13 @@ export async function replay(request: Request, id: string) {
   const observation={...f.observation};delete observation.neighborhood;
   const frame={version:1,sessionId:id,requestId:f.requestId,revision:f.revision,ended:f.ended,observation,outcome:f.outcome,events:f.events,decision:f.decision,end:f.end};
   const owner=createHash('sha256').update(vault).digest('hex');
-  return update<any,Response>(key,()=>({owner,frames:[],revision:-1,role:run.role,seed:run.seed,buildId:run.buildId,partial:f.observation.turn>1}),async doc=>{
+  const result=await update<any,Response>(key,()=>({owner,frames:[],revision:-1,role:run.role,seed:run.seed,buildId:run.buildId,partial:f.observation.turn>1}),async doc=>{
     if(doc.owner!==owner)return json({error:'Recording owner differs'},403);
     if(doc.buildId!==run.buildId)return json({error:'Recording package differs'},409);
     if(body.index!==doc.frames.length || f.revision<=doc.revision)return json({error:'Recording sequence differs'},409);
     doc.frames.push(await immutable(frame));doc.revision=f.revision;
     return json({count:doc.frames.length});
   });
+  if(result.ok && body.index===0)availability.delete(storage());
+  return result;
 }

@@ -10,6 +10,7 @@ test('real cloud run records public scenes, embeds after death and shares a ledg
   t.after(async()=>{await browser.close();await server.close();});
   const context=await browser.newContext({permissions:['clipboard-read','clipboard-write']});const page=await context.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+  await fetch(new URL("/api/stats",url)); // Prime an empty availability cache before recording.
   await page.goto(String(url));
   await page.waitForFunction(()=>!document.querySelector('#new-adventure').disabled);
   await page.getByRole('button',{name:'Begin your adventure',exact:true}).click();
@@ -26,6 +27,8 @@ test('real cloud run records public scenes, embeds after death and shares a ledg
   const endpoint=new URL('/api/runs/'+state.sessionId+'/replay',url);
   let response=await fetch(endpoint);assert.equal(response.status,200);
   const first=await response.json();assert.equal(first.frames.length,25);assert.equal(first.next,25);
+  const ledger=await (await fetch(new URL("/api/stats",url))).json();
+  assert.equal(ledger.recorded.find(run=>run.id===state.sessionId)?.replayAvailable,true,"a first committed frame invalidates the empty availability cache");
   assert.equal(response.headers.get('access-control-allow-origin'),'*');
   const second=await (await fetch(new URL('?offset=25',endpoint))).json();
   const expected=structuredClone(state.observation);delete expected.neighborhood;

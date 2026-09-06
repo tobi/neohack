@@ -1,4 +1,5 @@
 import { read, update } from "./storage.ts";
+import { publicReplayIds } from './replays.ts';
 
 const RUN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const CONTROLS = new Set(["manual", "webmcp", "bot", "script", "playground"]);
@@ -112,6 +113,11 @@ export async function board(request: Request) {
     const doc =
       (await read<ReturnType<typeof empty>>("board/index.json")) ?? empty();
     if (path === "/api/stats") {
+      const recordedIds=await publicReplayIds();
+      const ranked=[...doc.runs].sort((a,b)=>
+        Number(b.endKind==='ascended')-Number(a.endKind==='ascended') ||
+        (b.maxLevel??0)-(a.maxLevel??0) || b.turn-a.turn || a.id.localeCompare(b.id));
+      const withReplay=(run:Run)=>({...run,replayAvailable:recordedIds.has(run.id)});
       const runs: Run[] = doc.runs,
         roles: Record<string, number> = {};
       for (const run of runs) roles[run.role] = (roles[run.role] ?? 0) + 1;
@@ -126,16 +132,8 @@ export async function board(request: Request) {
           ascended: runs.filter((r) => r.endKind === "ascended").length,
           longest: Math.max(0, ...runs.map((r) => r.turn)),
         },
-        best: [...runs]
-          .sort(
-            (a, b) =>
-              Number(b.endKind === "ascended") -
-                Number(a.endKind === "ascended") ||
-              (b.maxLevel ?? 0) - (a.maxLevel ?? 0) ||
-              b.turn - a.turn ||
-              a.id.localeCompare(b.id),
-          )
-          .slice(0, 100),
+        best: ranked.slice(0,100).map(withReplay),
+        recorded: ranked.filter(run=>recordedIds.has(run.id)).slice(0,100).map(withReplay),
         roles: Object.entries(roles)
           .map(([role, count]) => ({ role, count }))
           .sort((a, b) => b.count - a.count),

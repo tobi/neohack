@@ -25,10 +25,15 @@ $('#copy-replay').onclick=async()=>{
 };
 function renderRuns() {
   const filter=$("#status").value;
-  const runs=data.best.filter(run=>filter==="all" || filter==="living" && !run.ended || filter==="ended" && run.ended || filter==="ascended" && run.endKind==="ascended");
+  $('#leaders-description').textContent=filter==='recorded' ? 'Top 100 adventures with public replay frames, ranked by level and turns.' : 'Top 100 across all recorded runs: ascensions first, then highest experience level, then turns survived.';
+  const candidates=filter==='recorded' ? data.recorded??[] : data.best;
+  const runs=candidates.filter(run=>filter==="all" || filter==="recorded" || filter==="living" && !run.ended || filter==="ended" && run.ended || filter==="ascended" && run.endKind==="ascended");
   $("#runs").replaceChildren(...runs.map(run=>{
     const row=document.createElement("tr"), name=element("td",run.name);
-    const replay=element("button",run.name);replay.className="run-replay";replay.setAttribute("aria-label","Replay "+run.name);replay.onclick=()=>openReplay(run);name.replaceChildren(replay);name.append(element("small",run.role)); row.append(name);
+    if(run.replayAvailable===true){
+      const replay=element("button",run.name);replay.className="run-replay";replay.setAttribute("aria-label","Replay "+run.name);replay.onclick=()=>openReplay(run);name.replaceChildren(replay);
+    }
+    name.append(element("small",run.role),element("small",run.replayAvailable===true?'Watch replay':'No public recording'));row.append(name);
     for(const value of [run.maxLevel || "—",format(run.turn),run.depthLabel || "—",run.ended ? run.endKind || "Ended" : "Adventuring"]) row.append(element("td",value));
     return row;
   }));
