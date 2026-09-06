@@ -4,10 +4,13 @@
 TypeScript, MCP and WebAssembly bindings.
 
 The library lives in [`lib/neonethack/`](lib/neonethack/); native, browser and
-pixel-art examples consume its public API. This is an unpublished alpha, not a
-stable release or an available npm installation.
+pixel-art examples consume its public API. This is an alpha; build from source
+using the guides below.
 
 ```ts
+import Nethack from 'neonethack';
+
+const nethack = new Nethack();
 const game = await nethack.create({ name: 'Ada', seed: 42 });
 const result = await game.move('south');
 console.log(result.outcome, result.observation);
@@ -16,11 +19,17 @@ console.log(result.outcome, result.observation);
 if (result.decision?.kind === 'confirmation') {
   await game.answer(result.decision.id, { kind: 'confirmation', confirm: false });
 }
+await nethack.close();
 ```
 
 No keys, inventory letters, modal terminal prompts or hidden-state queries.
 Named operations have individual schemas. Every accepted operation returns the
 full perceived world; genuine decisions remain the caller's responsibility.
+
+Try the [live game](https://neohack.dev), [play with an agent](lib/neonethack/docs/AGENT_BROWSER.md),
+or build your own interface, learning environment, or model evaluation on the same
+JSON protocol. NetHack’s C engine handles the world; your application chooses how
+to experience it.
 
 ## Build
 
@@ -47,7 +56,7 @@ prerequisites, CMake/Ninja recipes and the public APIs.
 
 ## Play with an agent
 
-The pixel client exposes game tools through browser-native WebMCP. Follow the
+The [live game at neohack.dev](https://neohack.dev) exposes game tools through browser-native WebMCP. Follow the
 [agent-browser walkthrough](lib/neonethack/docs/AGENT_BROWSER.md) to create a game,
 play from perceived observations and resume saved adventures.
 

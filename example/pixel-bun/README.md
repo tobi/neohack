@@ -1,11 +1,18 @@
 # Pixel NetHack
 
-A lantern-lit, approachable NetHack client. Bun serves the interface; the existing
+A lantern-lit, approachable NetHack client. The live site serves the interface; the
 neonethack WebAssembly package runs the shared C semantic driver and game engine
 in the browser. This example is a client of the public API, with no game rules or
-gameplay HTTP routes. It lives at `example/pixel-bun/` as a standalone example.
+gameplay HTTP routes. Cloudflare Durable Objects store cloud journals; the local
+Bun server serves static files only. It lives at `example/pixel-bun/`.
 
-## Run
+## Play online
+
+Open **[neohack.dev](https://neohack.dev)** to play. For an agent, follow the
+[agent-browser and WebMCP guide](../../lib/neonethack/docs/AGENT_BROWSER.md).
+The welcome page also introduces the library and ways to build on it.
+
+## Run locally
 
 From the repository root, build the library once:
 
@@ -58,7 +65,8 @@ Begin button. Then choose a name and one of all thirteen NetHack starting classe
 All thirteen classes use the same native 16×32 character scale. Valkyrie, Wizard
 and Ranger use their default character selections.
 The courtyard is a separate tutorial: it creates no engine session or turns. An optional seed
-is available. Tap an arrow key or direction button for one step; hold to walk.
+is available. Tap WASD, an arrow key or a direction button for one step; hold to walk.
+Search uses F, leaving S available for south.
 The first step is immediate, repetition starts after 240 ms and continues at up
 to ten steps per second, awaiting each durable engine result. Rapid deliberate
 taps keep at most one extra step buffered; held repeats never build a queue.
@@ -137,11 +145,21 @@ clear browser site data if the old save index is no longer useful. Storage schem
 upgrades replace the old database contents outright. Current-format reloads still
 preserve exact receipts and standing decisions.
 
+## Bookmark and resume
+
+Once a run starts, bookmark its URL. On the live site it can restore that run
+from its Durable Object in another browser. Keep the complete URL private: its
+vault key grants access to the saved adventures in that vault. Wait for **Saved
+online** before switching devices. **Saving online…** means newer local turns
+are still uploading. See [cloud saves](../../lib/neonethack/docs/CLOUD_SAVES.md)
+for conflict handling and package identity requirements.
+
 ## Fullscreen HUD and browser agents
 
 The map fills the viewport. Health and conditions remain visible; backpack,
 surroundings and journal open on demand. The corner menu holds saved adventures,
-help, map controls, the text map, fullscreen mode and credits.
+help, map controls, the text map, fullscreen mode, credits and an always-available
+GitHub link. The welcome page includes a highlighted native library example.
 
 For a runnable agent walkthrough, see [Play with agent-browser and WebMCP](../../lib/neonethack/docs/AGENT_BROWSER.md).
 
@@ -151,7 +169,7 @@ library [WebMCP guide](../../lib/neonethack/docs/WEBMCP.md) for capability detec
 receipt semantics, package pins and native browser verification.
 
 The title courtyard loads its art independently, imports the public libraries in
-background, and warms the current (and latest saved) engine package in the browser
+background, and warms the current engine package in the browser
 cache. It does not open IndexedDB or create an engine until starting/resuming or an
 explicit WebMCP call. Returning to the doorway releases ownership. Two active game
 tabs still cannot write the same store; close the other game tab before resuming.

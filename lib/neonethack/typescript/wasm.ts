@@ -12,6 +12,8 @@ export interface WasmOptions {
   workerUrl?: URL;
   timeoutMs?: number;
   onDiagnostic?: (message: string) => void;
+  /** Remote replication is asynchronous; local durability remains awaited. */
+  onReplicaStatus?: (status: { state: "pending" | "saved" | "error"; message: string }) => void;
 }
 /** The worker boundary is private. All gameplay uses the same C ABI as native. */
 export class WasmTransport implements Transport {
@@ -28,6 +30,7 @@ export class WasmTransport implements Transport {
     this.timeoutMs = options.timeoutMs ?? 150_000;
     if (!Number.isFinite(this.timeoutMs) || this.timeoutMs <= 0) throw Error("timeoutMs must be positive");
     this.worker = worker(options.workerUrl ?? new URL("../wasm/core-worker.mjs", import.meta.url), message => {
+      if (message.type === "replica") { options.onReplicaStatus?.({ state: message.state, message: message.message }); return; }
       if (message.type === "diagnostic") { options.onDiagnostic?.(message.text); return; }
       if (message.type === "fatal") { this.fail(Error(message.message)); return; }
       const pending = this.pending.get(message.id);

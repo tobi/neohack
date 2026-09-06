@@ -1,16 +1,30 @@
-# neohack.dev
+# Website hosting
 
-Static pixel client + Cloudflare Worker. The engine still runs in the browser
-(WASM). Durable Objects only store opaque journals and public run summaries.
+The [live game](https://neohack.dev) serves the pixel client and the library’s WASM
+package. NetHack and its semantic driver execute in the browser. Cloudflare
+Durable Objects store opaque journals and run summaries; they do not execute
+game rules or expose an HTTP gameplay API.
 
-WebMCP stays browser-mediated. Agent tools use the same WASM journal as human
-input; after each local fsync the worker replicas that journal to a Vault DO.
-There is no HTTP MCP that executes game rules.
+WebMCP uses the same C engine and durable local journal as keyboard and touch
+input. Cloud replication runs in the background. See the
+[cloud journal design](../../lib/neonethack/docs/CLOUD_SAVES.md).
 
-Push to `main` deploys via `.github/workflows/deploy.yml`.
+## Development
+
+Build the library and [pixel client](../../example/pixel-bun/README.md#run-locally),
+then run from this directory:
 
 ```sh
-set -a && source /home/tobi/src/homelan/.env && set +a
-npm install
-npm run deploy
+bun install --frozen-lockfile
+node scripts/stage.mjs
+bunx wrangler dev --local
 ```
+
+After building the library and pixel client, run `npm test` here to exercise
+real local Durable Objects and sandboxed Chromium with temporary stores.
+
+## Deployment
+
+The repository’s deployment workflow builds from source on pushes to `main`.
+Configure Cloudflare credentials through GitHub Actions secrets, and update the
+account and domain in `wrangler.toml` for your own deployment. Never commit tokens.

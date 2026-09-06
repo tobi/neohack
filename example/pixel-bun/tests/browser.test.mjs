@@ -377,7 +377,7 @@ test("held walking stops after a committed move whose response is lost", async (
   );
   const pending = await page.evaluate(
     () =>
-      JSON.parse(localStorage.getItem("neonethack-pixel-bun-v1:adventures"))[0]
+      JSON.parse(localStorage.getItem(document.querySelector("pixel-nethack").indexKey))[0]
         .pending,
   );
   assert.equal(pending.method, "game.move");
@@ -739,7 +739,8 @@ test(
       fullPage: true,
     });
     // Abrupt page loss, without sending a close/answer action.
-    await page.reload();
+    // Revisit the doorway; opening the bookmarked run URL resumes automatically.
+    await page.goto(new URL("/", page.url()).href);
     await page.waitForFunction(
       () => !document.querySelector("#new-adventure").disabled,
     );
@@ -886,12 +887,13 @@ test(
     const pending = await page.evaluate(
       () =>
         JSON.parse(
-          localStorage.getItem("neonethack-pixel-bun-v1:adventures"),
+          localStorage.getItem(document.querySelector("pixel-nethack").indexKey),
         )[0].pending,
     );
     assert.equal(pending.method, "game.wait");
     assert.equal(pending.params.sessionId, first.sessionId);
-    await page.reload();
+    // Revisit the doorway; opening the bookmarked run URL resumes automatically.
+    await page.goto(new URL("/", page.url()).href);
     await page.waitForFunction(
       () => !document.querySelector("#new-adventure").disabled,
     );
@@ -941,16 +943,19 @@ test(
   { timeout: 30000 },
   async (t) => {
     const { page } = await fixture(t);
-    await page.evaluate(() =>
-      localStorage.setItem("neonethack-pixel-bun-v1:adventures", "{damaged"),
-    );
-    await page.reload();
+    await page.evaluate(() => {
+      const app = document.querySelector("pixel-nethack");
+      localStorage.setItem("neohack-player", app.vault);
+      localStorage.setItem(app.indexKey, "{damaged");
+    });
+    // Revisit the doorway; opening the bookmarked run URL resumes automatically.
+    await page.goto(new URL("/", page.url()).href);
     await ready(page);
     assert.ok(await page.locator("#error").isVisible());
     assert.equal(await page.locator("#new-adventure").isDisabled(), true);
     assert.equal(
       await page.evaluate(() =>
-        localStorage.getItem("neonethack-pixel-bun-v1:adventures"),
+        localStorage.getItem(document.querySelector("pixel-nethack").indexKey),
       ),
       "{damaged",
     );
@@ -1139,7 +1144,8 @@ test(
         .count(),
       1,
     );
-    await page.reload();
+    // Revisit the doorway; opening the bookmarked run URL resumes automatically.
+    await page.goto(new URL("/", page.url()).href);
     await ready(page);
     await page
       .getByRole("button", { name: /^Continue previous run/ })
@@ -1319,7 +1325,8 @@ test("held locked-door bump opens a targeted panel once; touch inspection and lo
   await page.screenshot({
     path: `${root}/test-results/locked-door-mobile.png`,
   });
-  await page.reload();
+  // Revisit the doorway; opening the bookmarked run URL resumes automatically.
+    await page.goto(new URL("/", page.url()).href);
   await page
     .getByRole("button", { name: /Continue/ })
     .first()
@@ -1361,7 +1368,7 @@ test("walk-in welcome teaches directions, stops on release and opens creation on
   assert.equal(await page.locator("#menu").getAttribute("open"), null);
   assert.equal(
     await page.evaluate(() =>
-      localStorage.getItem("neonethack-pixel-bun-v1:adventures"),
+      localStorage.getItem(document.querySelector("pixel-nethack").indexKey),
     ),
     null,
   );
@@ -1709,7 +1716,7 @@ test(
     await page.close();
     await create(waiting, "wizard", 21);
     const saves = await waiting.evaluate(() =>
-      JSON.parse(localStorage.getItem("neonethack-pixel-bun-v1:adventures")),
+      JSON.parse(localStorage.getItem(document.querySelector("pixel-nethack").indexKey)),
     );
     assert.equal(saves.length, 2);
     assert.ok(saves.some((save) => save.id === first));
@@ -2368,7 +2375,8 @@ test("dungeon loading scene covers creation and previous-run resume without extr
   const first = await snapshot(page);
   assert.equal(first.observation.turn, 1);
   assert.equal(await loading.isVisible(), false);
-  await page.reload();
+  // Revisit the doorway; opening the bookmarked run URL resumes automatically.
+    await page.goto(new URL("/", page.url()).href);
   await page.locator("#continue-adventure").waitFor();
   assert.match(await page.locator("#continue-adventure").innerText(), /Continue previous run\s+Ada · Turn 1/);
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -2487,7 +2495,7 @@ test("idle WebMCP discovery and closed adventures release storage for another ta
   const call = (method, args = {}) => page.evaluate(async ({ method, args }) =>
     JSON.parse(await navigator.modelContextTesting.executeTool(
       `neonethack_${method.replaceAll(".", "_")}`, JSON.stringify(args))), { method, args });
-  const owned = () => page.evaluate(async () => (await navigator.locks.query()).held.some(lock => lock.name === "neonethack:v1:neonethack-pixel-bun-v1"));
+  const owned = () => page.evaluate(async () => (await navigator.locks.query()).held.some(lock => lock.name === `neonethack:v1:${document.querySelector("pixel-nethack").storeName}`));
   assert.equal((await call("protocol.describe")).isError, false);
   assert.equal(await owned(), false, "discovery must not leave a title worker owning the store");
   // Exercise the C rejection through the client transport directly: the native
@@ -2577,4 +2585,74 @@ test("welcome explains all three paths on desktop and mobile", { timeout: 60000 
   await create(page);
   assert.equal(await paths.isVisible(), false);
   assert.deepEqual(errors, []);
+});
+
+test('welcome renders the native example and GitHub remains available in the game menu', async t => {
+  const { page, errors } = await fixture(t);
+  const snippet = page.locator('.welcome-code code');
+  assert.match(await snippet.innerText(), /import Nethack from 'neonethack';/);
+  assert.match(await snippet.innerText(), /new Nethack\(\)/);
+  assert.ok(await snippet.locator('.code-keyword').count() > 3);
+  await snippet.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${root}/test-results/welcome-native-example.png` });
+  await page.getByLabel('Game menu', { exact: true }).click();
+  const github = page.locator('.menu-github');
+  assert.equal(await github.isVisible(), true);
+  assert.equal(await github.getAttribute('href'), 'https://github.com/tobi/neohack');
+  await page.keyboard.press('Escape');
+  await create(page);
+  await page.getByLabel('Game menu', { exact: true }).click();
+  assert.equal(await github.isVisible(), true);
+  assert.equal(await page.locator('#welcome-paths').isVisible(), false);
+  assert.deepEqual(errors, []);
+});
+
+test("creation keeps its submit action visible while all thirteen classes scroll", async (t) => {
+  const { page } = await fixture(t);
+  for (const viewport of [{ width: 762, height: 1086 }, { width: 390, height: 640 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(viewport);
+    await page.getByRole("button", { name: "Begin your adventure" }).click();
+    const submit = page.locator("#create-form button[type=submit]");
+    const visible = async () => {
+      await submit.waitFor({ state: "visible" });
+      const box = await submit.boundingBox();
+      assert.ok(box && box.y >= 0 && box.y + box.height <= viewport.height);
+      assert.equal(await submit.evaluate(el => {
+        const r = el.getBoundingClientRect();
+        return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+      }), true);
+    };
+    await visible();
+    await page.locator('input[name="role"]').last().check();
+    await page.locator('.seed-details summary').click();
+    await page.locator('#world-seed').fill('42');
+    await visible();
+    await page.locator('.create-fields').evaluate(el => { el.scrollTop = 0; });
+    await visible();
+    await page.screenshot({ path: resolve(root, `test-results/create-${viewport.width}.png`) });
+    await page.locator('#menu .close-dialog').click();
+  }
+});
+
+test("WASD moves in four directions and F searches", async (t) => {
+  const { page } = await fixture(t);
+  await create(page);
+  await page.evaluate(async () => {
+    const { WasmTransport } = await import('/runtime/typescript/wasm.js');
+    const original = WasmTransport.prototype.send;
+    window.keyRequests = [];
+    WasmTransport.prototype.send = function(request) {
+      window.keyRequests.push(request);
+      return original.call(this, request);
+    };
+  });
+  for (const [key, direction] of [['w','north'],['a','west'],['s','south'],['d','east']]) {
+    await page.keyboard.press(key);
+    await ready(page);
+    const requests = await page.evaluate(() => window.keyRequests.splice(0));
+    assert.ok(requests.some(r => r.method === 'game.move' && r.params.direction === direction), JSON.stringify(requests));
+  }
+  await page.keyboard.press('f');
+  await ready(page);
+  assert.ok((await page.evaluate(() => window.keyRequests)).some(r => r.method === 'game.search'));
 });

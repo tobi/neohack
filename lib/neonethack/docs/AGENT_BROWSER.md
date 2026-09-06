@@ -1,13 +1,11 @@
 # Play with agent-browser and WebMCP
 
-agent-browser can discover and invoke the pixel client's game tools directly.
+Use agent-browser to play [NetHack at neohack.dev](https://neohack.dev) through
+its WebMCP tools. You do not need to clone this repository or run a game server.
 The game runs in the browser, and each tool result updates the same visible HUD
 and durable save used by keyboard and touch input.
 
-## Start the client and browser
-
-Build and start the [pixel client](../../../example/pixel-bun/README.md#run).
-The default address is `http://127.0.0.1:3333`; remote access requires HTTPS.
+## Open the live game
 
 Install [agent-browser](https://github.com/vercel-labs/agent-browser#installation)
 and its Chrome for Testing browser:
@@ -28,7 +26,7 @@ session and a persistent profile outside the repository:
 ```sh
 export AGENT_BROWSER_SESSION=neonethack
 export AGENT_BROWSER_PROFILE="$HOME/.neonethack-agent-profile"
-agent-browser open http://127.0.0.1:3333
+agent-browser open https://neohack.dev
 agent-browser wait 'pixel-nethack[data-webmcp="ready"]'
 agent-browser webmcp list
 agent-browser webmcp invoke neonethack_protocol_describe --params '{}'
@@ -172,6 +170,11 @@ agent-browser webmcp invoke neonethack_session_close \
 agent-browser close
 ```
 
+While the run is open, bookmark its full page URL. On the live site, wait for
+**Saved online** before switching browsers. Keep the URL private: it includes
+the key to the saved vault. Opening that bookmark resumes the selected run
+through the C engine. See [cloud saves](CLOUD_SAVES.md) for details.
+
 Keep `GAME_ID` for the next visit. Reopen the same origin/profile/package and use
 `neonethack_session_resume` with `{"sessionId":"YOUR_SAVED_GAME_ID"}`, or choose
 **Continue previous run** in the UI. Closing is not an in-game quit.
@@ -193,10 +196,16 @@ To expose agent-browser's browser and WebMCP commands through stdio MCP:
 
 A useful instruction for the agent:
 
-> Open the pixel client and discover its WebMCP tools. Start one new Valkyrie
+> Open https://neohack.dev and discover its WebMCP tools. Start one new Valkyrie
 > game, or use the adventure I selected. Play one input at a time from returned
 > observations. Keep request IDs and revisions, answer decisions explicitly, and
 > stop on uncertainty or game over. Never infer hidden map cells or item identity.
 
 See the [agent-browser command reference](https://agent-browser.dev/commands) for
 CLI flags, and [WebMCP](WEBMCP.md) for the adapter and storage contract.
+
+## Run a local development copy
+
+For development, [build and start the pixel client](../../../example/pixel-bun/README.md#run-locally)
+and replace `https://neohack.dev` in the commands with `http://127.0.0.1:3333`.
+Local and live sites have separate browser storage and saves.

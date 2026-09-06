@@ -15,17 +15,16 @@ calendar and isolated user options. Incompatible historical worlds are refused.
 Start with the [first-five-minutes guide](docs/QUICKSTART.md) for runnable
 source, browser and installed-preview paths.
 
+Try the [live pixel client](https://neohack.dev) or follow the
+[agent-browser/WebMCP walkthrough](docs/AGENT_BROWSER.md) without a local build.
+The rest of this guide covers using the library in your own application.
+
 ## Shape of the API
 
 ```ts
-import { createNative } from 'neonethack/native';
+import Nethack from 'neonethack';
 
-const nethack = createNative({
-  executable: './lib/neonethack/build/native/neonethack',
-  enginePath: './lib/neonethack/engine/playground/nethack',
-  dataPath: './lib/neonethack/engine/playground',
-  sessionsPath: './sessions',
-});
+const nethack = new Nethack();
 try {
   const game = await nethack.create({ name: 'Ada', role: 'valkyrie', seed: 42 });
   const step = await game.move('south');
@@ -41,6 +40,11 @@ try {
   await nethack.close();
 }
 ```
+
+`Nethack` is the native Node.js entry point. After building the library, its defaults
+locate the CLI and engine relative to the package, and save runs under `./sessions`.
+Pass `executable`, `enginePath`, `dataPath` or `sessionsPath` to use an installed
+native distribution or another storage directory. Use `neonethack/wasm` in browsers.
 
 The client serializes operations, supplies revision guards and request IDs,
 and returns immutable full frames. It never confirms, retries, walks, or resumes

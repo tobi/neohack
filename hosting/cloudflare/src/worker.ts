@@ -21,32 +21,50 @@ const json = (data: unknown, status = 200) =>
 export class Vault {
   constructor(private readonly ctx: DurableObjectState) {}
   async fetch(request: Request) {
-    this.ctx.storage.sql.exec(
-      "CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
-    );
-    const url = new URL(request.url);
-    const adventures = url.pathname.endsWith("/adventures");
-    const key = adventures ? "adventures" : "snapshot";
-    if (request.method === "GET") {
-      const row = this.ctx.storage.sql
-        .exec("SELECT v FROM kv WHERE k = ?", key)
-        .toArray()[0];
-      if (!row) return new Response("Not found", { status: 404 });
-      return new Response(String(row.v), {
-        headers: { "content-type": "application/json", "cache-control": "no-store" },
+    const sql = this.ctx.storage.sql;
+    sql.exec("CREATE TABLE IF NOT EXISTS journal_files (path TEXT PRIMARY KEY, json TEXT NOT NULL)");
+    sql.exec("CREATE TABLE IF NOT EXISTS journal_blocks (id TEXT PRIMARY KEY, json TEXT NOT NULL)");
+    sql.exec("CREATE TABLE IF NOT EXISTS journal_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)");
+    const get = (key: string) => sql.exec("SELECT v FROM journal_meta WHERE k = ?", key).toArray()[0]?.v as string | undefined;
+    const put = (key: string, value: string) => sql.exec("INSERT INTO journal_meta VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", key, value);
+    if (new URL(request.url).pathname.endsWith('/adventures')) {
+      if (request.method === 'GET') return get('adventures') ? new Response(get('adventures'), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }) : json([], 404);
+      if (request.method !== 'PUT') return json({ error: 'method not allowed' }, 405);
+      const body = await request.text();
+      if (body.length > 256 * 1024 || !Array.isArray(JSON.parse(body))) return json({ error: 'invalid adventures' }, 400);
+      put('adventures', body); return new Response(null, { status: 204 });
+    }
+    if (request.method === 'GET') {
+      const revision = get('revision');
+      if (!revision) return json({ error: 'not found' }, 404);
+      return json({ version: 1, revision,
+        files: sql.exec('SELECT path, json FROM journal_files ORDER BY path').toArray().map(row => [row.path, JSON.parse(String(row.json))]),
+        blocks: sql.exec('SELECT id, json FROM journal_blocks ORDER BY id').toArray().map(row => [row.id, JSON.parse(String(row.json))]),
       });
     }
-    if (request.method === "PUT") {
-      const body = await request.text();
-      JSON.parse(body);
-      this.ctx.storage.sql.exec(
-        "INSERT INTO kv (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
-        key,
-        body,
-      );
-      return new Response(null, { status: 204 });
-    }
-    return new Response("Method not allowed", { status: 405 });
+    if (request.method !== 'PUT') return json({ error: 'method not allowed' }, 405);
+    const body = await request.text();
+    if (body.length > 16 * 1024 * 1024) return json({ error: 'commit too large' }, 413);
+    const data = JSON.parse(body) as { version: number; base: string | null; commit: string; files: Array<[string, { blocks: string[] }]>; blocks: Array<[string, unknown]> };
+    if (data.version !== 1 || !UUID.test(data.commit) || (data.base !== null && !UUID.test(data.base)) || !Array.isArray(data.files) || !Array.isArray(data.blocks)) return json({ error: 'invalid commit' }, 400);
+    const validHash = (id: unknown): id is string => typeof id === 'string' && /^[a-f0-9]{64}$/.test(id);
+    if (data.files.length > 10000 || data.blocks.length > 10000 || data.files.some(entry => !Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string' || !entry[0].startsWith('/neonethack/') || !entry[1] || !Array.isArray(entry[1].blocks) || !entry[1].blocks.every(validHash)) || data.blocks.some(entry => !Array.isArray(entry) || entry.length !== 2 || !validHash(entry[0]) || JSON.stringify(entry[1]).length > 100000)) return json({ error: 'invalid journal data' }, 400);
+    if (new Set(data.files.map(([path]) => path)).size !== data.files.length || new Set(data.blocks.map(([id]) => id)).size !== data.blocks.length) return json({ error: 'duplicate journal entry' }, 400);
+    const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))), byte => byte.toString(16).padStart(2, '0')).join('');
+    return this.ctx.storage.transactionSync(() => {
+      const revision = get('revision') ?? null;
+      if (revision === data.commit) return get('digest') === digest ? json({ revision }) : json({ error: 'commit differs' }, 409);
+      if (revision !== data.base) return json({ error: 'cloud progress changed' }, 409);
+      const supplied = new Map(data.blocks);
+      const referenced = new Set(data.files.flatMap(([, file]) => file.blocks));
+      for (const id of referenced) if (!supplied.has(id) && !sql.exec('SELECT id FROM journal_blocks WHERE id = ?', id).toArray().length) return json({ error: 'missing block' }, 400);
+      for (const [id, block] of supplied) if (referenced.has(id)) sql.exec('INSERT INTO journal_blocks VALUES (?, ?) ON CONFLICT(id) DO NOTHING', id, JSON.stringify(block));
+      sql.exec('DELETE FROM journal_files');
+      for (const [path, file] of data.files) sql.exec('INSERT INTO journal_files VALUES (?, ?)', path, JSON.stringify(file));
+      for (const row of sql.exec('SELECT id FROM journal_blocks').toArray()) if (!referenced.has(String(row.id))) sql.exec('DELETE FROM journal_blocks WHERE id = ?', String(row.id));
+      put('revision', data.commit); put('digest', digest);
+      return json({ revision: data.commit });
+    });
   }
 }
 

@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "stage": "node scripts/stage.mjs",
-    "deploy": "node scripts/stage.mjs && wrangler deploy"
+    "deploy": "node scripts/stage.mjs && wrangler deploy",
+    "test": "node scripts/stage.mjs && node --test tests/*.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.127.1"

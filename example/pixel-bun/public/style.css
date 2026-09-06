@@ -1512,3 +1512,36 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
 .paths-jump { display: none; }
 @media (min-width: 1100px) { .welcome-paths { top: 70px; } }
 @media (max-width: 1099px) { .paths-jump { display: inline-block; pointer-events: auto; color: #dbc995; margin-top: 12px; font-size: 11px; text-underline-offset: 4px; } }
+
+.welcome-code { margin: 26px 0 20px; }
+.welcome-code pre { margin: 14px 0; padding: 16px 12px; background: #111b20; border: 1px solid #394743; overflow: auto; font: 11px/1.7 ui-monospace, monospace; color: #d4d9c9; tab-size: 2; }
+.welcome-code pre:focus-visible { outline: none; filter: brightness(1.12); }
+.code-keyword { color: #dab17d; } .code-string { color: #a8c78b; } .code-number { color: #90c5ce; }
+.hud-menu-body .menu-github { display: block; padding: 12px; color: #dbc995; text-underline-offset: 4px; }
+#cloud-status { font-size: 10px; color: #a8b99a; }
+
+/* Creation has one scrolling content region and an always-visible action. */
+#menu[open]:has(#create-form) {
+  display: flex;
+  flex-direction: column;
+  height: min(820px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+  padding: 20px;
+}
+#menu:has(#create-form) .dialog-top { flex-shrink: 0; margin-bottom: 8px; }
+#menu:has(#create-form) #menu-content { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+#menu:has(#create-form) h2 { font-size: clamp(22px, 4vw, 30px); margin-bottom: 8px; }
+#menu:has(#create-form) .subtle { margin: 0 0 16px; }
+#create-form { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.create-fields { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 8px; scrollbar-width: thin; }
+#create-form .class-picker { max-height: none; overflow: visible; }
+.create-footer { flex-shrink: 0; padding-top: 14px; border-top: 1px solid #46523f; background: #222c28; }
+.create-footer .primary { width: 100%; min-height: 48px; }
+#create-form .role-card { padding: 9px 12px; }
+#create-form .save-explanation { margin-bottom: 0; }
+@media (max-height: 500px) {
+  #menu:has(#create-form) .dialog-top { margin-bottom: 0; }
+  #menu:has(#create-form) h2 { font-size: 20px; }
+  #menu:has(#create-form) .subtle { display: none; }
+}

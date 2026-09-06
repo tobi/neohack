@@ -505,3 +505,14 @@ Include a prominent GitHub link, NetHack history and sprite attribution. Show th
 existing background package download status without constructing a game worker or
 claiming offline/service-worker support. On narrow screens, stack the cards below
 the courtyard with a visible jump link. Hide this content during gameplay.
+
+The welcome page includes a syntax-highlighted, selectable TypeScript example
+using `import Nethack from 'neonethack'` and `new Nethack()`. The hamburger menu
+always includes GitHub, including during play. Active runs replace the page URL
+with their session ID and private vault key; opening the bookmark resumes through
+C. Show pending/acknowledged/failed cloud saving honestly. Remote uploads must not
+block turns; local pre-input durability and uncertain-request guarantees remain.
+
+Creation uses a bounded dialog with a single scrolling field region and a fixed
+submit footer, including short landscape screens. WASD joins arrows and vi keys
+for movement; F searches. Direction prompts and tile inspection also accept WASD.

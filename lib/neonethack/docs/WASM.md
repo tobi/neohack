@@ -88,7 +88,7 @@ only duplicate sidecar responses whose exact bytes have reached the authoritativ
 perception journal. Reservations and complete historical receipts remain intact,
 including receipts older than the in-memory cache.
 
-The block format uses the database `/neonethack/<name>` (schema version 22)
+The block format uses the database `/neonethack/<name>` (schema version 23)
 and exclusive `neonethack:v1:<name>` Web Lock. A schema upgrade deletes old
 stores and creates empty current-format stores. Development saves are disposable;
 there is no migration, legacy decoder or parallel legacy database.
@@ -98,6 +98,14 @@ guarantee against browser eviction, storage clearing, device failure or every
 power-loss case. Quota/transaction failures must not be "fixed" by repeating the
 action with another request ID. Keep durable backups for important worlds;
 export/import tooling is not yet part of the public v1 API.
+
+## Optional cloud replication
+
+Set `replicaUrl` on an IndexedDB storage configuration to use an opaque journal
+endpoint implementing the [cloud commit protocol](CLOUD_SAVES.md). Uploads are
+background work; local pre-input transactions remain awaited. Use
+`onReplicaStatus` to distinguish pending, acknowledged and failed cloud saves.
+The pixel client supplies the Durable Object implementation.
 
 ## Build identity and resume
 

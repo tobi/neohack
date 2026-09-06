@@ -4,20 +4,57 @@
   "description": "NetHack as a perception-limited C, WebAssembly, TypeScript and MCP library",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.18" },
-  "repository": { "type": "git", "url": "https://github.com/tobi/neonethack.git", "directory": "lib/neonethack" },
-  "exports": {
-    ".": { "types": "./dist/typescript/client.d.ts", "import": "./dist/typescript/client.js" },
-    "./types": { "types": "./dist/typescript/types.d.ts", "import": "./dist/typescript/types.js" },
-    "./native": { "types": "./dist/typescript/native.d.ts", "import": "./dist/typescript/native.js" },
-    "./mcp": { "types": "./dist/mcp/server.d.ts", "import": "./dist/mcp/server.js" },
-    "./wasm": { "types": "./dist/typescript/wasm.d.ts", "import": "./dist/typescript/wasm.js" },
-    "./protocol": "./protocol/catalog.json",
-    "./webmcp": { "types": "./dist/typescript/webmcp.d.ts", "import": "./dist/typescript/webmcp.js" },
-    "./mcp/tools": { "types": "./dist/mcp/tools.d.ts", "import": "./dist/mcp/tools.js" }
+  "engines": {
+    "node": ">=22.18"
   },
-  "bin": { "neonethack-mcp": "./dist/mcp/cli.js" },
-  "files": ["dist/", "include/", "protocol/*.json", "README.md", "docs/", "NOTICE.md"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tobi/neohack.git",
+    "directory": "lib/neonethack"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/typescript/index.d.ts",
+      "node": "./dist/typescript/index.js",
+      "default": "./dist/typescript/client.js"
+    },
+    "./types": {
+      "types": "./dist/typescript/types.d.ts",
+      "import": "./dist/typescript/types.js"
+    },
+    "./native": {
+      "types": "./dist/typescript/native.d.ts",
+      "import": "./dist/typescript/native.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/server.d.ts",
+      "import": "./dist/mcp/server.js"
+    },
+    "./wasm": {
+      "types": "./dist/typescript/wasm.d.ts",
+      "import": "./dist/typescript/wasm.js"
+    },
+    "./protocol": "./protocol/catalog.json",
+    "./webmcp": {
+      "types": "./dist/typescript/webmcp.d.ts",
+      "import": "./dist/typescript/webmcp.js"
+    },
+    "./mcp/tools": {
+      "types": "./dist/mcp/tools.d.ts",
+      "import": "./dist/mcp/tools.js"
+    }
+  },
+  "bin": {
+    "neonethack-mcp": "./dist/mcp/cli.js"
+  },
+  "files": [
+    "dist/",
+    "include/",
+    "protocol/*.json",
+    "README.md",
+    "docs/",
+    "NOTICE.md"
+  ],
   "scripts": {
     "generate": "node scripts/generate.ts",
     "sources:update": "node scripts/update-engine-sources.mjs",
@@ -34,6 +71,13 @@
     "test:wasm": "npm run build && node --test tests/wasm/runtime.test.mjs",
     "test:browser": "npm run build:example && node --test tests/wasm/browser.test.mjs"
   },
-  "dependencies": { "@modelcontextprotocol/sdk": "1.30.0" },
-  "devDependencies": { "@types/node": "24.10.1", "typescript": "5.9.3", "ajv": "8.20.0", "playwright-core": "1.63.0" }
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "typescript": "5.9.3",
+    "ajv": "8.20.0",
+    "playwright-core": "1.63.0"
+  }
 }

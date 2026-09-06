@@ -26,14 +26,14 @@ import type { WebMcpRegistration } from "/runtime/typescript/webmcp.js";
 import { loadRuntime, warmPackage } from "./runtime-loader";
 import {
   cloudReady,
+  playerId, rememberPlayer, requestedRun, showRunUrl, clearRunUrl,
   journalUrl,
   publishCloud,
   restoreAdventures,
 } from "./cloud";
 import { roles, heroArt } from "./characters";
 
-const STORE = "neonethack-pixel-bun-v1";
-const INDEX = `${STORE}:adventures`;
+const STORE = "neonethack-pixel-v2";
 const directions: [Compass, string][] = [
   ["northwest", "↖"],
   ["north", "↑"],
@@ -63,6 +63,9 @@ const escape = (text: unknown) =>
   );
 class PixelNethack extends HTMLElement {
   private api: Neonethack | null = null;
+  private vault = "";
+  private storeName = "";
+  private indexKey = "";
   private runtime!: Awaited<ReturnType<typeof loadRuntime>>;
   private preparation!: Promise<void>;
   private titleReady = false;
@@ -71,6 +74,9 @@ class PixelNethack extends HTMLElement {
   private webMcp: WebMcpRegistration | null = null;
   private game: Game | null = null;
   private busy = false;
+  private cloudStatusGeneration = 0;
+  private cloudEnabled = false;
+  private cloudMetadataTimer: ReturnType<typeof setTimeout> | undefined;
   private saves: Adventure[] = [];
   private metadataHealthy = true;
   private current: Adventure | null = null;
@@ -216,6 +222,24 @@ class PixelNethack extends HTMLElement {
           <article><span class="path-number">01 · ADVENTURE</span><h2>Play the classic</h2><p>A deep dungeon. A loyal companion. A thousand ways to learn the hard way. Walk through the doorway and discover NetHack, one turn at a time.</p><a href="#welcome-actions">Enter the dungeon ↓</a></article>
           <article><span class="path-number">02 · BRING YOUR AGENT</span><h2>Play with WebMCP</h2><p>Let your agent explore the same world through the browser’s WebMCP tools. You watch the adventure unfold; your agent makes the moves.</p><a href="https://github.com/tobi/neohack/blob/main/lib/neonethack/docs/AGENT_BROWSER.md" target="_blank" rel="noopener noreferrer">Agent-browser walkthrough ↗</a></article>
           <article><span class="path-number">03 · MAKE SOMETHING NEW</span><h2>It’s time for NetHack itself to ascend.</h2><p>The brain of NetHack, separated from its interface and exposed as a JSON protocol. Build a completely new UX, a reinforcement learning environment for small models, an evaluation for frontier models—or whatever comes next.</p><a href="https://github.com/tobi/neohack/tree/main/lib/neonethack" target="_blank" rel="noopener noreferrer">Explore the library ↗</a></article>
+          <section class="welcome-code" aria-labelledby="code-heading"><span class="path-number">THE LIBRARY · TYPESCRIPT</span><h2 id="code-heading">Your interface. NetHack’s brain.</h2><pre tabindex="0" aria-label="Native NetHack example"><code><span class="code-keyword">import</span> Nethack <span class="code-keyword">from</span> <span class="code-string">'neonethack'</span>;
+
+<span class="code-keyword">const</span> nethack = <span class="code-keyword">new</span> Nethack();
+<span class="code-keyword">try</span> {
+  <span class="code-keyword">const</span> game = <span class="code-keyword">await</span> nethack.create({
+    name: <span class="code-string">'Ada'</span>, role: <span class="code-string">'valkyrie'</span>, seed: <span class="code-number">42</span>,
+  });
+  <span class="code-keyword">const</span> step = <span class="code-keyword">await</span> game.move(<span class="code-string">'south'</span>);
+  console.log(step.outcome, step.observation);
+
+  <span class="code-keyword">const</span> food = <span class="code-keyword">await</span> game.eat();
+  <span class="code-keyword">if</span> (food.decision?.kind === <span class="code-string">'item'</span>) {
+    <span class="code-keyword">await</span> game.cancel(food.decision.id);
+  }
+  <span class="code-keyword">await</span> game.close();
+} <span class="code-keyword">finally</span> {
+  <span class="code-keyword">await</span> nethack.close();
+}</code></pre><p>Build the native library, then create your first world. <a href="https://github.com/tobi/neohack/blob/main/lib/neonethack/docs/QUICKSTART.md" target="_blank" rel="noopener noreferrer">Get started ↗</a></p></section>
           <footer><p>A living dungeon since 1987. Decades of the NetHack DevTeam’s imagination, surprising interactions, and player discoveries live underneath this new doorway. <a href="https://www.nethack.org/common/info.html" target="_blank" rel="noopener noreferrer">Meet NetHack ↗</a></p><p>Character sprites: <a href="https://limezu.itch.io/" target="_blank" rel="noopener noreferrer">LimeZu</a>.</p></footer>
         </aside>
         <a id="creator-link" class="creator-link" href="https://x.com/tobi" target="_blank" rel="noopener noreferrer" aria-label="@tobi on X (opens in a new tab)">@tobi</a>
@@ -225,11 +249,11 @@ class PixelNethack extends HTMLElement {
           <div id="character-stats" class="character-stats" hidden></div>
         </section>
         <div class="world-hud">
-          <div class="location-hud"><span id="location-heading"></span><span id="turn-pill"></span></div>
+          <div class="location-hud"><span id="location-heading"></span><span id="turn-pill"></span><span id="cloud-status" role="status"></span></div>
           <details class="hud-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
             <button id="adventures-button">Your adventures</button><button data-guide>Field guide <kbd>?</kbd></button>
             <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
-            <button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p>
+            <button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p>
           </div></details>
         </div>
         <div class="notices"><div class="notice error" id="error" role="alert" hidden></div>
@@ -252,7 +276,7 @@ class PixelNethack extends HTMLElement {
                 `<button data-move="${d}" data-game aria-label="Move ${d}">${g}</button>`,
             )
             .join("")}</div>
-          <div class="action-dock"><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><button data-action="pickup" data-game>Pick up<kbd>g</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="open" data-game>Open door<kbd>o</kbd></button><button data-action="down" data-game>Go downstairs<kbd>&gt;</kbd></button><button id="more-actions" data-game>More actions</button></div>
+          <div class="action-dock"><div class="action-grid"><button data-action="search" data-game>Search<kbd>f</kbd></button><button data-action="pickup" data-game>Pick up<kbd>g</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="open" data-game>Open door<kbd>o</kbd></button><button data-action="down" data-game>Go downstairs<kbd>&gt;</kbd></button><button id="more-actions" data-game>More actions</button></div>
           <nav class="side-nav" aria-label="Adventure views"><button data-view="inventory">Backpack <span id="inventory-count"></span><kbd>i</kbd></button><button data-view="surroundings">Surroundings</button><button data-view="journal">Journal</button></nav></div>
         </section>
         <aside class="ground-loot" id="ground-loot" aria-label="On the ground" hidden><h2>On the ground</h2><p>At your feet · choose what to take</p><div id="ground-items"></div></aside>
@@ -275,6 +299,9 @@ class PixelNethack extends HTMLElement {
     document.addEventListener("visibilitychange", this.visibilityChanged);
     document.addEventListener("focusin", this.focusChanged);
     try {
+      this.vault = window.isSecureContext ? playerId() : "unavailable";
+      this.storeName = `${STORE}-${this.vault}`;
+      this.indexKey = `${this.storeName}:adventures`;
       this.readSaves();
     } catch (e) {
       this.metadataHealthy = false;
@@ -291,11 +318,25 @@ class PixelNethack extends HTMLElement {
       })
       .catch((error) => this.error(error));
     this.preparation = this.prepareRuntime();
-    void this.preparation.catch((error) => this.error(error));
+    void this.preparation.then(() => this.openLinkedRun()).catch((error) => this.error(error));
     this.controls();
   }
+  private async openLinkedRun() {
+    const linked = requestedRun();
+    if (!linked) return;
+    await this.run(async () => {
+      await this.connectRuntime();
+      this.game = await this.api!.resume(linked.id);
+      const save = this.saves.find(s => s.id === linked.id) ?? { id: linked.id, name: "Saved adventurer", role: "ranger", turn: this.game.observation.turn, ended: this.game.state.ended };
+      if (!this.saves.some(s => s.id === save.id)) this.saves.unshift(save);
+      this.current = save;
+      this.journal = [];
+      this.lastFrame = "";
+      this.map.center();
+    }, { name: "Your adventurer", role: "ranger", resume: true });
+  }
   private readSaves() {
-    const raw = localStorage.getItem(INDEX);
+    const raw = localStorage.getItem(this.indexKey);
     if (raw) {
       const data: unknown = JSON.parse(raw);
       if (
@@ -369,7 +410,7 @@ class PixelNethack extends HTMLElement {
         this.text(
           "#save-status",
           ok
-            ? "Ready · saves replica to neohack.dev (human + WebMCP)"
+            ? "Ready · online saves available"
             : "Ready · saves stay in this browser",
         );
     });
@@ -514,14 +555,33 @@ class PixelNethack extends HTMLElement {
   private async connectRuntime() {
     this.assertConnected();
     if (this.api) return;
+    this.vault = playerId();
+    this.storeName = `${STORE}-${this.vault}`;
+    this.indexKey = `${this.storeName}:adventures`;
+    rememberPlayer(this.vault);
     await this.warm();
     this.assertConnected();
-    const replica = (await cloudReady()) ? journalUrl() : undefined;
+    ++this.cloudStatusGeneration;
+    this.cloudEnabled = await cloudReady();
+    this.text("#cloud-status", this.cloudEnabled ? "Connecting online save…" : "Saved in this browser");
+    const replica = this.cloudEnabled ? journalUrl(this.vault) : undefined;
+    if (requestedRun() && !replica && !this.saves.some(save => save.id === requestedRun()!.id)) throw Error("The cloud save could not be reached. Retry this bookmark when connected; no new game was started.");
     const wasm = await this.runtime.wasm.createWasm({
       storage: replica
-        ? { kind: "indexeddb", name: STORE, replicaUrl: replica }
-        : { kind: "indexeddb", name: STORE },
+        ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica }
+        : { kind: "indexeddb", name: this.storeName },
       workerUrl: new URL("/runtime/wasm/core-worker.mjs", location.href),
+      onReplicaStatus: async ({ state, message }) => {
+        if (!this.isConnected) return;
+        const generation = ++this.cloudStatusGeneration;
+        if (state === "saved") {
+          try { await publishCloud(this.saves, this.vault); }
+          catch { this.text("#cloud-status", "Saved here · online save pending"); return; }
+        }
+        if (generation !== this.cloudStatusGeneration) return;
+        this.text("#cloud-status", state === "saved" ? "Saved online" : state === "pending" ? "Saving online…" : "Saved here · cloud sync paused");
+        if (state === "error") this.error(Error(message));
+      },
     });
     // Opening may finish after this element has been removed. Never adopt that
     // late worker/store owner, even if the same element was reattached meanwhile.
@@ -532,7 +592,7 @@ class PixelNethack extends HTMLElement {
     try {
       this.readSaves();
       if (!this.saves.length) {
-        const remote = await restoreAdventures();
+        const remote = await restoreAdventures(this.vault);
         if (remote?.length) this.saves = remote;
       }
     } catch (error) {
@@ -896,8 +956,14 @@ class PixelNethack extends HTMLElement {
       throw Error(
         "Adventure metadata is unavailable; the stored list has not been overwritten.",
       );
-    localStorage.setItem(INDEX, JSON.stringify(this.saves));
-    void publishCloud(this.saves).catch(() => {});
+    localStorage.setItem(this.indexKey, JSON.stringify(this.saves));
+    if (this.cloudEnabled) {
+      clearTimeout(this.cloudMetadataTimer);
+      this.cloudMetadataTimer = setTimeout(() => {
+        void publishCloud(this.saves, this.vault).catch(() => {});
+      }, 250);
+    }
+
   }
   private controls() {
     (this.$("#text-map-button") as HTMLButtonElement).disabled = !this.game;
@@ -937,6 +1003,7 @@ class PixelNethack extends HTMLElement {
     this.show("#welcome-copy", !state);
     this.show("#welcome-actions", !state);
     this.show("#welcome-paths", !state);
+    this.show("#bookmark-hint", !!state);
     this.show("#creator-link", !state);
     this.show("#play-controls", !!state);
     this.show(".hero-hud", !!state);
@@ -957,6 +1024,7 @@ class PixelNethack extends HTMLElement {
         v = o.vitals;
       this.dataset.turn = String(o.turn);
       this.dataset.sessionId = state.sessionId;
+      showRunUrl(state.sessionId, this.vault);
       this.dataset.revision = String(state.revision);
       this.dataset.decision = state.decision?.kind ?? "none";
       this.text("#hero-name", this.current?.name ?? "Adventurer");
@@ -1437,7 +1505,7 @@ class PixelNethack extends HTMLElement {
   }
   private newAdventure() {
     this.openMenu(
-      `<h2 id="menu-title">Every story needs an adventurer.</h2><p class="subtle">Choose a starting path. The rest is up to you.</p><form id="create-form"><label class="field-label" for="adventurer-name">YOUR NAME</label><input id="adventurer-name" name="name" required maxlength="24" autocomplete="off" placeholder="What should we call you?" value="Ada"><fieldset class="class-picker"><legend>YOUR STARTING PATH · ${roles.length} CLASSES</legend>${roles.map((r, i) => `<label class="role-card"><input type="radio" name="role" value="${r.id}" ${i === 0 ? "checked" : ""}><img src="/art/${r.art}.png" alt=""><span><strong>${r.title}${i === 0 ? "<small>FIRST ADVENTURE PICK</small>" : ""}</strong><span>${r.description}</span></span></label>`).join("")}</fieldset><details class="seed-details"><summary>Choose a world seed (optional)</summary><label for="world-seed">A number for a repeatable starting world</label><input id="world-seed" name="seed" type="number" min="0" max="4294967295" step="1" placeholder="Surprise me"></details><p class="save-explanation">Progress is saved on this browser and address. Clearing site data deletes it. Each life is an adventure of its own.</p><button data-operation class="primary" type="submit">Enter the dungeon →</button></form>`,
+      `<h2 id="menu-title">Every story needs an adventurer.</h2><p class="subtle">Choose a starting path. The rest is up to you.</p><form id="create-form"><div class="create-fields"><label class="field-label" for="adventurer-name">YOUR NAME</label><input id="adventurer-name" name="name" required maxlength="24" autocomplete="off" placeholder="What should we call you?" value="Ada"><fieldset class="class-picker"><legend>YOUR STARTING PATH · ${roles.length} CLASSES</legend>${roles.map((r, i) => `<label class="role-card"><input type="radio" name="role" value="${r.id}" ${i === 0 ? "checked" : ""}><img src="/art/${r.art}.png" alt=""><span><strong>${r.title}${i === 0 ? "<small>FIRST ADVENTURE PICK</small>" : ""}</strong><span>${r.description}</span></span></label>`).join("")}</fieldset><details class="seed-details"><summary>Choose a world seed (optional)</summary><label for="world-seed">A number for a repeatable starting world</label><input id="world-seed" name="seed" type="number" min="0" max="4294967295" step="1" placeholder="Surprise me"></details><p class="save-explanation">Progress is saved on this browser and address. Clearing site data deletes it. Each life is an adventure of its own.</p></div><footer class="create-footer"><button data-operation class="primary" type="submit">Enter the dungeon →</button></footer></form>`,
     );
     const form = this.querySelector<HTMLFormElement>("#create-form")!;
     form.onsubmit = (e) => {
@@ -1487,6 +1555,7 @@ class PixelNethack extends HTMLElement {
   }
   private resume(save: Adventure) {
     if (!save) return;
+    showRunUrl(save.id, this.vault);
     this.closeMenu();
     void this.run(async () => {
       if (this.game) await this.game.close();
@@ -1509,6 +1578,7 @@ class PixelNethack extends HTMLElement {
     this.current = null;
     await this.api?.close();
     this.api = null;
+    clearRunUrl();
   }
   private adventures() {
     this.openMenu(
@@ -1853,7 +1923,7 @@ class PixelNethack extends HTMLElement {
         if (e.key === "Escape") { e.preventDefault(); menu.open = false; }
         return;
       }
-      const keys: Record<string, string> = { ArrowUp: "north", ArrowDown: "south", ArrowLeft: "west", ArrowRight: "east", h: "west", j: "south", k: "north", l: "east", y: "northwest", u: "northeast", b: "southwest", n: "southeast", "<": "up", ">": "down" };
+      const keys: Record<string, string> = { ArrowUp: "north", ArrowDown: "south", ArrowLeft: "west", ArrowRight: "east", w: "north", a: "west", s: "south", d: "east", h: "west", j: "south", k: "north", l: "east", y: "northwest", u: "northeast", b: "southwest", n: "southeast", "<": "up", ">": "down" };
       if (keys[e.key] || e.key === "Escape") {
         e.preventDefault();
         const d = this.game?.decision;
@@ -1879,6 +1949,7 @@ class PixelNethack extends HTMLElement {
       this.introAvailable()
     ) {
       const introKeys: Record<string, Compass> = {
+        w: "north", a: "west", s: "south", d: "east",
         ArrowUp: "north",
         ArrowDown: "south",
         ArrowLeft: "west",
@@ -1907,6 +1978,7 @@ class PixelNethack extends HTMLElement {
         return;
       }
       const delta: Record<string, [number, number]> = {
+        w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0],
         ArrowUp: [0, -1],
         ArrowDown: [0, 1],
         ArrowLeft: [-1, 0],
@@ -1934,7 +2006,7 @@ class PixelNethack extends HTMLElement {
           'input,textarea,select,[contenteditable="true"]',
         ) &&
         (e.key.startsWith("Arrow") ||
-          "hjklyubn".includes(e.key) ||
+          "wasdhjklyubn".includes(e.key) ||
           (e.target as HTMLElement).closest("[data-move]"))
       )
         e.preventDefault();
@@ -1970,7 +2042,8 @@ class PixelNethack extends HTMLElement {
       return;
     }
     const move: Record<string, Compass> = {
-      ArrowUp: "north",
+      w: "north", a: "west", s: "south", d: "east",
+        ArrowUp: "north",
       ArrowDown: "south",
       ArrowLeft: "west",
       ArrowRight: "east",
@@ -1999,7 +2072,7 @@ class PixelNethack extends HTMLElement {
     }
     const action: Record<string, string> = {
       ".": "wait",
-      s: "search",
+      f: "search",
       g: "pickup",
       e: "eat",
       o: "open",
@@ -2013,7 +2086,7 @@ class PixelNethack extends HTMLElement {
   }
   private guide() {
     this.openMenu(
-      `<h2 id="menu-title">A small guide to a very big world.</h2><p>Find the Amulet of Yendor in the depths, and bring it back. Getting there is a story of curiosity, decisions, and learning from a short life or two.</p><div class="guide-section"><h3>01 / Take your time</h3><p>This is turn-based. Reading, inspecting the map, and opening your backpack cost nothing. An action can take time; the journal tells you what happened.</p></div><div class="guide-section"><h3>02 / Try one thing</h3><p>Tap an arrow or direction button for one step; hold to walk. Release to stop repeating. Rapid taps keep at most one extra step buffered. Walking pauses at walls, nearby creatures, damage, and decisions. Press again deliberately to interact. Search around you, open a door, or pick up something interesting.</p></div><div class="guide-section"><h3>03 / Listen to the dungeon</h3><p>Hunger, danger, and strange objects are part of the adventure. Read warnings before answering. If eating or reading is interrupted, choose the action again only when you want to continue.</p></div><div class="guide-section"><h3>04 / Know what you know</h3><p>The map shows remembered terrain and currently perceived occupants. Creature and object art represents the visible NetHack category, not an exact identity. A green underline marks an ally. Use @ in the corner menu to show the original symbols. Raised stone edges frame corridors; recessed gaps lead toward unexplored space, where the layout is still unknown. Click a tile or open Surroundings for a text description.</p></div><dl class="key-list"><dt>Arrows / H J K L</dt><dd>Tap to step · hold to walk</dd><dt>Y U B N</dt><dd>Move diagonally</dd><dt>. / S / G / E / O</dt><dd>Wait / search / pick up / eat / open</dd><dt>&lt; / &gt;</dt><dd>Go upstairs / downstairs</dd><dt>Enter / arrow keys / Escape</dt><dd>Inspect here / nearby tiles / return</dd><dt>I / ?</dt><dd>Backpack / this guide</dd><dt>Shift + arrows</dt><dd>Pan the map without moving</dd></dl><p class="save-explanation">Your game saves after each completed action, on this browser and address. Clearing site data removes saves. Keep the same game version to return to an older adventure.</p>`,
+      `<h2 id="menu-title">A small guide to a very big world.</h2><p>Find the Amulet of Yendor in the depths, and bring it back. Getting there is a story of curiosity, decisions, and learning from a short life or two.</p><div class="guide-section"><h3>01 / Take your time</h3><p>This is turn-based. Reading, inspecting the map, and opening your backpack cost nothing. An action can take time; the journal tells you what happened.</p></div><div class="guide-section"><h3>02 / Try one thing</h3><p>Tap W A S D, an arrow, or a direction button for one step; hold to walk. Release to stop repeating. Rapid taps keep at most one extra step buffered. Walking pauses at walls, nearby creatures, damage, and decisions. Press again deliberately to interact. Search around you, open a door, or pick up something interesting.</p></div><div class="guide-section"><h3>03 / Listen to the dungeon</h3><p>Hunger, danger, and strange objects are part of the adventure. Read warnings before answering. If eating or reading is interrupted, choose the action again only when you want to continue.</p></div><div class="guide-section"><h3>04 / Know what you know</h3><p>The map shows remembered terrain and currently perceived occupants. Creature and object art represents the visible NetHack category, not an exact identity. A green underline marks an ally. Use @ in the corner menu to show the original symbols. Raised stone edges frame corridors; recessed gaps lead toward unexplored space, where the layout is still unknown. Click a tile or open Surroundings for a text description.</p></div><dl class="key-list"><dt>W A S D / Arrows / H J K L</dt><dd>Tap to step · hold to walk</dd><dt>Y U B N</dt><dd>Move diagonally</dd><dt>. / F / G / E / O</dt><dd>Wait / search / pick up / eat / open</dd><dt>&lt; / &gt;</dt><dd>Go upstairs / downstairs</dd><dt>Enter / arrow keys / Escape</dt><dd>Inspect here / nearby tiles / return</dd><dt>I / ?</dt><dd>Backpack / this guide</dd><dt>Shift + arrows</dt><dd>Pan the map without moving</dd></dl><p class="save-explanation">Your game saves after each completed action, on this browser and address. Clearing site data removes saves. Keep the same game version to return to an older adventure.</p>`,
     );
   }
   private credits() {
