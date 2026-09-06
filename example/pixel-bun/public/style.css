@@ -1590,3 +1590,7 @@ pixel-nethack:not(.in-game) .intro-controls {
   .intro-controls #intro-instruction { font-size: 18px; }
   .intro-controls #continue-adventure { min-width: 0; width: 146px; padding: 10px 8px; }
 }
+.map-viewport canvas.panning { cursor: grabbing; }
+#enter-gate { position: absolute; border: 0; padding: 0; background: transparent; box-shadow: none; cursor: pointer; }
+#enter-gate:hover, #enter-gate:focus-visible { background: #ffe1a01a; outline: none; box-shadow: inset 0 -3px #f3dda0; }
+#enter-gate:disabled { pointer-events: none; opacity: 1; }

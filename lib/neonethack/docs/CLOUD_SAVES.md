@@ -33,7 +33,7 @@ uncertain, and replay must not treat it as a new action.
 
 C pre-input `fsync` boundaries still wait for strict IndexedDB transactions.
 Remote latency is outside that boundary. After a completed protocol request, a
-100 ms debounce batches the latest committed journal data for upload. One upload
+five-second inactivity debounce batches the latest committed journal data for upload. One upload
 runs at a time; new input can continue while it is in flight. Unchanged
 content-addressed blocks are not resent. Durable Objects store blocks in separate
 rows and atomically commit the file manifest and revision. Separate block rows

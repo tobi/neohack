@@ -259,6 +259,48 @@ export class DungeonMap {
     return y <= 96 && Math.abs(x - 160) <= 16 ? "entered" : "moved";
   }
   zoom = 3;
+  private zoomTarget = 3;
+  private zoomFrame = 0;
+  private drag: { id: number; x: number; y: number } | null = null;
+  private wheel = (event: WheelEvent) => {
+    if (!this.observation || event.ctrlKey || event.metaKey || !event.deltaY) return;
+    event.preventDefault();
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? this.canvas.clientHeight : 1;
+    this.zoomTo((this.zoomFrame ? this.zoomTarget : this.zoom) * Math.exp(-Math.max(-300, Math.min(300, event.deltaY * unit)) * .002));
+  };
+  private dragStart = (event: PointerEvent) => {
+    if (!this.observation || event.button !== 1) return;
+    event.preventDefault();
+    this.drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    this.canvas.setPointerCapture(event.pointerId);
+    this.canvas.classList.add("panning");
+  };
+  private dragMove = (event: PointerEvent) => {
+    if (this.drag?.id !== event.pointerId) return;
+    if (!(event.buttons & 4)) { this.endDrag(); return; }
+    event.preventDefault();
+    this.pan((this.drag.x - event.clientX) / (16 * this.zoom), (this.drag.y - event.clientY) / (16 * this.zoom));
+    this.drag.x = event.clientX; this.drag.y = event.clientY;
+  };
+  private endDrag = () => {
+    const drag = this.drag; this.drag = null;
+    if (drag && this.canvas.hasPointerCapture(drag.id)) this.canvas.releasePointerCapture(drag.id);
+    this.canvas.classList.remove("panning");
+  };
+  private auxiliary = (event: MouseEvent) => { if (event.button === 1 && this.observation) event.preventDefault(); };
+  zoomTo(value: number) {
+    cancelAnimationFrame(this.zoomFrame);
+    this.zoomTarget = Math.max(1, Math.min(4, value));
+    if (this.reducedMotion.matches) { this.zoom = this.zoomTarget; this.zoomFrame = 0; this.draw(); return; }
+    const from = this.zoom, start = performance.now();
+    const frame = (now: number) => {
+      const t = Math.min(1, (now - start) / 160);
+      this.zoom = from + (this.zoomTarget - from) * (1 - (1 - t) ** 3);
+      this.draw(now);
+      this.zoomFrame = t < 1 ? requestAnimationFrame(frame) : 0;
+    };
+    this.zoomFrame = requestAnimationFrame(frame);
+  }
   symbols = false;
   private offset = { x: 0, y: 0 };
   private origin = { x: 0, y: 0 };
@@ -294,7 +336,10 @@ export class DungeonMap {
       this.clearMessages();
       this.actorMotions.clear();
     }
-    if (this.reducedMotion.matches) this.actorMotions.clear();
+    if (this.reducedMotion.matches) {
+      this.actorMotions.clear();
+      if (this.zoomFrame) { cancelAnimationFrame(this.zoomFrame); this.zoomFrame = 0; this.zoom = this.zoomTarget; }
+    }
     this.draw();
     if (!document.hidden && (!this.reducedMotion.matches || this.portalComplete))
       this.animation = requestAnimationFrame(this.animate);
@@ -335,16 +380,22 @@ export class DungeonMap {
     this.reducedMotion.addEventListener("change", this.motionChanged);
     document.addEventListener("visibilitychange", this.motionChanged);
     this.motionChanged();
+    canvas.addEventListener("wheel", this.wheel, { passive: false });
+    canvas.addEventListener("pointerdown", this.dragStart);
+    canvas.addEventListener("pointermove", this.dragMove);
+    canvas.addEventListener("pointerup", this.endDrag);
+    canvas.addEventListener("pointercancel", this.endDrag);
+    canvas.addEventListener("lostpointercapture", this.endDrag);
+    canvas.addEventListener("auxclick", this.auxiliary);
+    window.addEventListener("blur", this.endDrag);
     canvas.addEventListener("click", (e) => {
-      if (!this.observation) return;
+      if (!this.observation || e.button !== 0) return;
       const bounds = canvas.getBoundingClientRect();
       const shift = this.travel(performance.now());
       const x =
-        Math.floor(((e.clientX - bounds.left) / this.zoom - shift.x) / 16) +
-        this.origin.x;
+        Math.floor(((e.clientX - bounds.left) / this.zoom - shift.x) / 16 + this.origin.x);
       const y =
-        Math.floor(((e.clientY - bounds.top) / this.zoom - shift.y) / 16) +
-        this.origin.y;
+        Math.floor(((e.clientY - bounds.top) / this.zoom - shift.y) / 16 + this.origin.y);
       const cell = this.observation.world.find(
         (cell) => cell.x === x && cell.y === y,
       );
@@ -416,6 +467,7 @@ export class DungeonMap {
         this.travelStarted = -Infinity;
       }
     }
+    if (!observation) { this.endDrag(); cancelAnimationFrame(this.zoomFrame); this.zoomFrame = 0; }
     this.observation = observation;
     this.hero = hero;
     this.seed = seed;
@@ -512,6 +564,15 @@ export class DungeonMap {
     this.draw();
   }
   destroy() {
+    this.endDrag(); cancelAnimationFrame(this.zoomFrame);
+    this.canvas.removeEventListener("wheel", this.wheel);
+    this.canvas.removeEventListener("pointerdown", this.dragStart);
+    this.canvas.removeEventListener("pointermove", this.dragMove);
+    this.canvas.removeEventListener("pointerup", this.endDrag);
+    this.canvas.removeEventListener("pointercancel", this.endDrag);
+    this.canvas.removeEventListener("lostpointercapture", this.endDrag);
+    this.canvas.removeEventListener("auxclick", this.auxiliary);
+    window.removeEventListener("blur", this.endDrag);
     this.cancelIntroPortal();
     this.clearMessages();
     this.observer.disconnect();
@@ -721,13 +782,20 @@ export class DungeonMap {
     c.imageSmoothingEnabled = false;
     rect(c, "#171f23", 0, 0, canvas.width, canvas.height);
     if (!this.observation) {
+      const gate = canvas.parentElement?.querySelector<HTMLElement>("#enter-gate");
+      if (gate) {
+        gate.style.left = (Math.floor(cols * 8 - 160) + 137) * scale + "px";
+        gate.style.top = (Math.floor(rows * 8 - 128) + 44) * scale + "px";
+        gate.style.width = 46 * scale + "px";
+        gate.style.height = 58 * scale + "px";
+      }
       this.drawWelcomeArt(c, cols, rows, now);
       return;
     }
     const you = this.observation.you;
     this.origin = {
-      x: (you?.x ?? 40) - Math.floor(cols / 2) + this.offset.x,
-      y: (you?.y ?? 10) - Math.floor(rows / 2) + this.offset.y,
+      x: Math.round(((you?.x ?? 40) + .5 - width / (32 * scale) + this.offset.x) * 16) / 16,
+      y: Math.round(((you?.y ?? 10) + .5 - height / (32 * scale) + this.offset.y) * 16) / 16,
     };
     this.positionMessages(now);
     const target = canvas.parentElement!.querySelector<HTMLElement>("#direction-target");
@@ -756,10 +824,9 @@ export class DungeonMap {
     const shift = this.travel(now);
     c.save();
     c.translate(shift.x, shift.y);
-    for (let y = -16; y < canvas.height + 16; y += 16)
-      for (let x = -16; x < canvas.width + 16; x += 16) {
-        const wx = this.origin.x + x / 16,
-          wy = this.origin.y + y / 16;
+    for (let wy = Math.floor(this.origin.y) - 1; wy < this.origin.y + rows + 1; wy++)
+      for (let wx = Math.floor(this.origin.x) - 1; wx < this.origin.x + cols + 1; wx++) {
+        const x = (wx - this.origin.x) * 16, y = (wy - this.origin.y) * 16;
         if (((wx * 31 + wy * 17) & 7) === 0)
           rect(c, "#1b2429", x + 3, y + 9, 3, 1);
       }
@@ -1036,6 +1103,13 @@ export class DungeonMap {
     }
     // Recessed entry and three stepped voussoirs give the hall real depth.
     rect(c, "#0f191f", 136, 43, 48, 60);
+    if (portal === null) {
+      rect(c, "#675e40", 137, 44, 46, 58);
+      rect(c, "#a18b56", 143, 44, 34, 58);
+      rect(c, "#d5b873", 150, 44, 20, 58);
+      rect(c, "#f3dda0", 156, 44, 8, 58);
+      for (let i = 0; i < 7; i++) rect(c, i % 2 ? "#d5b873" : "#edcf87", 139 + i * 6, 96 - (i % 3) * 7, 2, 2);
+    }
     if (portal !== null) {
       const charge = Math.min(1, portal / 0.28),
         pull = Math.max(0, Math.min(1, (portal - 0.12) / 0.64)),

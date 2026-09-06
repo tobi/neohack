@@ -140,3 +140,38 @@ test('lost cloud acknowledgement recovers the durable commit without replaying a
   assert.deepEqual(after.decision, before.decision);
   await context.close();
 });
+
+test('cloud saving waits five idle seconds, resets on play, and flushes on close', { timeout: 60000 }, async t => {
+  const { url, browser } = await fixture(t);
+  const page = await browser.newPage();
+  await create(page, url); await synced(page);
+  const uploads = [];
+  page.on('request', request => {
+    if (request.method() === 'PUT' && /\/api\/vaults\/[^/]+$/.test(request.url())) uploads.push(Date.now());
+  });
+  const search = () => page.evaluate(async () => {
+    const app = document.querySelector('pixel-nethack');
+    await app.run(() => app.game.search());
+  });
+  await search();
+  await page.waitForTimeout(3900);
+  assert.equal(uploads.length, 0);
+  assert.equal(await page.locator('#cloud-status').textContent(), 'Saved here');
+  await search();
+  const lastAction = Date.now();
+  await page.waitForTimeout(2200);
+  assert.equal(uploads.length, 0, 'new input resets the original timer');
+  assert.equal(await page.locator('#cloud-status').textContent(), 'Saved here');
+  await synced(page);
+  assert.equal(uploads.length, 1, 'one coalesced upload after inactivity');
+  assert.ok(uploads[0] - lastAction >= 4800);
+  await search();
+  const start = Date.now();
+  await page.evaluate(async () => {
+    const app = document.querySelector('pixel-nethack');
+    await app.run(() => app.returnToDoorway());
+  });
+  assert.ok(Date.now() - start < 4000, 'explicit close bypasses the idle wait');
+  assert.equal(uploads.length, 2);
+  await page.close();
+});

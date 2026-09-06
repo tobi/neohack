@@ -9,6 +9,23 @@ export type CreaturePixels = {
   rise?: number;
 };
 export const encounterArt: Record<string, CreaturePixels> = {
+  hobbit: {
+    body: "#7e9560", shade: "#76513b", highlight: "#dec09a",
+    pixels: [
+      "....ss.ss...",
+      "...s#ssss#..",
+      "...#sssss#..",
+      "...#hhhhh#..",
+      "...#h#h#h#..",
+      "....#hhh#...",
+      "...#ohooo#..",
+      "..#hohoooh#.",
+      "...#ooooo#..",
+      "....#sss#...",
+      "...#hh#hh#..",
+      "...###.###..",
+    ],
+  },
   "grid bug": {
     body: "#a0b384", shade: "#52685b", highlight: "#c6d9ad",
     pixels: ["#....#..", ".#..#...", "..##....", ".#ho#...", "#oss##..", ".####.#.", "#....#.."],

@@ -104,7 +104,9 @@ export/import tooling is not yet part of the public v1 API.
 Set `replicaUrl` on an IndexedDB storage configuration to use an opaque journal
 endpoint implementing the [cloud commit protocol](CLOUD_SAVES.md). Uploads are
 background work; local pre-input transactions remain awaited. Use
-`onReplicaStatus` to distinguish pending, acknowledged and failed cloud saves.
+`onReplicaStatus` reports `queued` during the five-second inactivity debounce,
+`pending` during upload, `saved` after acknowledgement, and `error` on failure.
+Repeated identical statuses are suppressed. Explicit close flushes immediately.
 The pixel client supplies the Durable Object implementation.
 
 ## Build identity and resume

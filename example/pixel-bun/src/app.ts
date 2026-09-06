@@ -204,7 +204,7 @@ class PixelNethack extends HTMLElement {
     this.innerHTML = `
 
       <main id="main" tabindex="-1">
-        <div class="map-viewport"><canvas id="dungeon" tabindex="0" aria-label="Dungeon entrance. Use arrow keys to walk into the hall."></canvas></div>
+        <div class="map-viewport"><canvas id="dungeon" tabindex="0" aria-label="Dungeon entrance. Use arrow keys to walk into the hall."></canvas><button id="enter-gate" aria-label="Walk into the glowing gate and create an adventurer" title="Enter the dungeon"></button></div>
         <section id="welcome-copy" class="intro-title"><p class="eyebrow">A LITTLE COURAGE. A DEEP DUNGEON.</p><h1>neo<span>nethack</span></h1><p>The old world has an open door.</p><a class="paths-jump" href="#welcome-paths">Play, bring an agent, or build something new ↓</a></section>
         <section id="welcome-actions" class="intro-controls" aria-label="Learn to walk">
           <p id="intro-instruction">Walk into the light</p>
@@ -579,7 +579,7 @@ class PixelNethack extends HTMLElement {
           catch { this.text("#cloud-status", "Saved here · online save pending"); return; }
         }
         if (generation !== this.cloudStatusGeneration) return;
-        this.text("#cloud-status", state === "saved" ? "Saved online" : state === "pending" ? "Saving online…" : "Saved here · cloud sync paused");
+        this.text("#cloud-status", state === "saved" ? "Saved online" : state === "pending" ? "Saving online…" : state === "queued" ? "Saved here" : "Saved here · cloud sync paused");
         if (state === "error") this.error(Error(message));
       },
     });
@@ -800,6 +800,7 @@ class PixelNethack extends HTMLElement {
         labels[b.dataset.action!] ?? b.dataset.action!,
       );
     });
+    this.$("#enter-gate").onclick = () => this.walkToEntrance();
     this.$("#new-adventure").onclick = () => this.walkToEntrance();
     this.$("#continue-adventure").onclick = () =>
       this.resume(this.saves.find((s) => !s.ended)!);
@@ -808,12 +809,10 @@ class PixelNethack extends HTMLElement {
     this.$("#more-actions").setAttribute("aria-label", "More actions");
     this.$("#credits-button").onclick = () => this.credits();
     this.$("#zoom-in").onclick = () => {
-      this.map.zoom = Math.min(4, this.map.zoom + 1);
-      this.map.draw();
+      this.map.zoomTo(this.map.zoom + 1);
     };
     this.$("#zoom-out").onclick = () => {
-      this.map.zoom = Math.max(1, this.map.zoom - 1);
-      this.map.draw();
+      this.map.zoomTo(this.map.zoom - 1);
     };
     this.$("#center-map").onclick = () => this.map.center();
     this.$("#map-symbols").onclick = () => {
@@ -967,7 +966,7 @@ class PixelNethack extends HTMLElement {
       clearTimeout(this.cloudMetadataTimer);
       this.cloudMetadataTimer = setTimeout(() => {
         void publishCloud(this.saves, this.vault).catch(() => {});
-      }, 250);
+      }, 5000);
     }
 
   }
@@ -993,6 +992,7 @@ class PixelNethack extends HTMLElement {
     );
     for (const id of [
       "new-adventure",
+      "enter-gate",
       "continue-adventure",
       "adventures-button",
     ])
@@ -1013,6 +1013,7 @@ class PixelNethack extends HTMLElement {
     this.renderGround();
     this.show("#welcome-copy", !state);
     this.show("#welcome-actions", !state);
+    this.show("#enter-gate", !state);
     this.show("#welcome-paths", !state);
     this.show("#bookmark-hint", !!state);
     this.show("#abandon-run", !!state && !state.ended);
@@ -2137,7 +2138,7 @@ class PixelNethack extends HTMLElement {
   }
   private guide() {
     this.openMenu(
-      `<h2 id="menu-title">A small guide to a very big world.</h2><p>Find the Amulet of Yendor in the depths, and bring it back. Getting there is a story of curiosity, decisions, and learning from a short life or two.</p><div class="guide-section"><h3>01 / Take your time</h3><p>This is turn-based. Reading, inspecting the map, and opening your backpack cost nothing. An action can take time; the journal tells you what happened.</p></div><div class="guide-section"><h3>02 / Try one thing</h3><p>Tap W A S D, an arrow, or a direction button for one step; hold to walk. Release to stop repeating. Rapid taps keep at most one extra step buffered. Walking pauses at walls, nearby creatures, damage, and decisions. Press again deliberately to interact. Search around you, open a door, or pick up something interesting.</p></div><div class="guide-section"><h3>03 / Listen to the dungeon</h3><p>Hunger, danger, and strange objects are part of the adventure. Read warnings before answering. If eating or reading is interrupted, choose the action again only when you want to continue.</p></div><div class="guide-section"><h3>04 / Know what you know</h3><p>The map shows remembered terrain and currently perceived occupants. Creature and object art represents the visible NetHack category, not an exact identity. A green underline marks an ally. Use @ in the corner menu to show the original symbols. Raised stone edges frame corridors; recessed gaps lead toward unexplored space, where the layout is still unknown. Click a tile or open Surroundings for a text description.</p></div><dl class="key-list"><dt>W A S D / Arrows / H J K L</dt><dd>Tap to step · hold to walk</dd><dt>Y U B N</dt><dd>Move diagonally</dd><dt>. / F / G / E / O</dt><dd>Wait / search / pick up / eat / open</dd><dt>&lt; / &gt;</dt><dd>Go upstairs / downstairs</dd><dt>Enter / arrow keys / Escape</dt><dd>Inspect here / nearby tiles / return</dd><dt>I / ?</dt><dd>Backpack / this guide</dd><dt>Shift + arrows</dt><dd>Pan the map without moving</dd></dl><p class="save-explanation">Your game saves after each completed action, on this browser and address. Clearing site data removes saves. Keep the same game version to return to an older adventure.</p>`,
+      `<h2 id="menu-title">A small guide to a very big world.</h2><p>Find the Amulet of Yendor in the depths, and bring it back. Getting there is a story of curiosity, decisions, and learning from a short life or two.</p><div class="guide-section"><h3>01 / Take your time</h3><p>This is turn-based. Reading, inspecting the map, and opening your backpack cost nothing. An action can take time; the journal tells you what happened.</p></div><div class="guide-section"><h3>02 / Try one thing</h3><p>Tap W A S D, an arrow, or a direction button for one step; hold to walk. Release to stop repeating. Rapid taps keep at most one extra step buffered. Walking pauses at walls, nearby creatures, damage, and decisions. Press again deliberately to interact. Search around you, open a door, or pick up something interesting.</p></div><div class="guide-section"><h3>03 / Listen to the dungeon</h3><p>Hunger, danger, and strange objects are part of the adventure. Read warnings before answering. If eating or reading is interrupted, choose the action again only when you want to continue.</p></div><div class="guide-section"><h3>04 / Know what you know</h3><p>The map shows remembered terrain and currently perceived occupants. Creature and object art represents the visible NetHack category, not an exact identity. A green underline marks an ally. Use @ in the corner menu to show the original symbols. Raised stone edges frame corridors; recessed gaps lead toward unexplored space, where the layout is still unknown. Click a tile or open Surroundings for a text description.</p></div><dl class="key-list"><dt>W A S D / Arrows / H J K L</dt><dd>Tap to step · hold to walk</dd><dt>Y U B N</dt><dd>Move diagonally</dd><dt>. / F / G / E / O</dt><dd>Wait / search / pick up / eat / open</dd><dt>&lt; / &gt;</dt><dd>Go upstairs / downstairs</dd><dt>Enter / arrow keys / Escape</dt><dd>Inspect here / nearby tiles / return</dd><dt>I / ?</dt><dd>Backpack / this guide</dd><dt>Mouse wheel / middle drag</dt><dd>Zoom / look around without taking a turn</dd><dt>Shift + arrows</dt><dd>Pan the map without moving</dd></dl><p class="save-explanation">Your game saves after each completed action, on this browser and address. Clearing site data removes saves. Keep the same game version to return to an older adventure.</p>`,
     );
   }
   private credits() {

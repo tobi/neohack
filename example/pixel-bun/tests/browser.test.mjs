@@ -2274,7 +2274,7 @@ test("mobile journal preview is on by default and collapses without consuming a 
   assert.equal(await page.locator(".rightbar").isVisible(), true);
 });
 
-test("twelve additional encounters have distinct small art and preserve unknown appearances", async (t) => {
+test("additional encounters including hobbits have distinct small art and preserve unknown appearances", async (t) => {
   const { page, errors } = await fixture(t);
   const report = await page.evaluate(async () => {
     const app = document.querySelector("pixel-nethack");
@@ -2295,7 +2295,7 @@ test("twelve additional encounters have distinct small art and preserve unknown 
     const observation = { location: { id: "encounter-study", depthLabel: "Study" }, you: { x: 5, y: 4 }, world };
     const encounters = [["grid bug", "x"], ["giant ant", "a"], ["killer bee", "a"], ["cave spider", "s"],
       ["gecko", ":"], ["garter snake", "S"], ["fox", "d"], ["coyote", "d"], ["floating eye", "e"],
-      ["gas spore", "e"], ["acid blob", "b"], ["brown mold", "F"]];
+      ["gas spore", "e"], ["acid blob", "b"], ["brown mold", "F"], ["hobbit", "h"]];
     const crop = (pixels = false) => {
       const out = document.createElement("canvas"); out.width = 24; out.height = 32;
       out.getContext("2d").drawImage(canvas, (8-map.origin.x)*16-4, (4-map.origin.y)*16-16, 24, 32, 0, 0, 24, 32);
@@ -2341,7 +2341,7 @@ test("twelve additional encounters have distinct small art and preserve unknown 
     assert.ok(result.distinct, result.appearance + " has species art instead of its generic category");
     assert.ok(result.unknownBadge, result.appearance + " does not suppress missing-appearance feedback");
   }
-  assert.equal(new Set(report.map(r => r.art)).size, 12);
+  assert.equal(new Set(report.map(r => r.art)).size, 13);
   assert.deepEqual(errors, []);
   await page.locator("#encounter-art-study").screenshot({ path: `${root}/test-results/encounter-art.png` });
 });
@@ -2723,4 +2723,58 @@ test('empty item actions are disabled for free and a fountain enables Drink unde
   await page.getByRole('button', { name: 'No, not now', exact: true }).click();
   await ready(page);
   assert.equal(await page.locator('#error').isVisible(), false);
+});
+
+test('wheel zoom and middle drag move only the camera and preserve tile picking', async t => {
+  const { page } = await fixture(t);
+  await create(page);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const before = await snapshot(page);
+  await page.mouse.move(800, 400);
+  const zoom = await page.evaluate(() => document.querySelector('pixel-nethack').map.zoom);
+  await page.mouse.wheel(0, -180);
+  await page.waitForFunction(z => document.querySelector('pixel-nethack').map.zoom > z, zoom);
+  await page.waitForFunction(() => !document.querySelector('pixel-nethack').map.zoomFrame);
+  const enlarged = await page.evaluate(() => document.querySelector('pixel-nethack').map.zoom);
+  assert.ok(enlarged <= 4);
+  await page.mouse.wheel(0, 160);
+  await page.waitForFunction(z => document.querySelector('pixel-nethack').map.zoom < z, enlarged);
+  await page.waitForFunction(() => !document.querySelector('pixel-nethack').map.zoomFrame);
+  const origin = await page.evaluate(() => ({ ...document.querySelector('pixel-nethack').map.origin }));
+  await page.mouse.down({ button: 'middle' });
+  await page.mouse.move(880, 448, { steps: 8 });
+  await page.mouse.up({ button: 'middle' });
+  const moved = await page.evaluate(() => ({ ...document.querySelector('pixel-nethack').map.origin }));
+  assert.ok(moved.x < origin.x && moved.y < origin.y);
+  assert.equal(await page.locator('.tile-actions').count(), 0);
+  assert.equal(await page.locator('#dungeon').evaluate(el => el.classList.contains('panning')), false);
+  const point = await page.evaluate(() => {
+    const app = document.querySelector('pixel-nethack'), map = app.map;
+    const box = document.querySelector('#dungeon').getBoundingClientRect();
+    const you = app.snapshot.observation.you;
+    return { x: box.x + (you.x - map.origin.x + .5) * 16 * map.zoom, y: box.y + (you.y - map.origin.y + .5) * 16 * map.zoom, you };
+  });
+  await page.mouse.click(point.x, point.y);
+  await page.locator('.tile-actions').waitFor();
+  assert.equal(Number(await page.locator('.tile-actions').getAttribute('data-x')), point.you.x);
+  assert.equal(Number(await page.locator('.tile-actions').getAttribute('data-y')), point.you.y);
+  assert.equal((await snapshot(page)).revision, before.revision);
+  assert.equal((await snapshot(page)).observation.turn, before.observation.turn);
+  await page.screenshot({ path: resolve(root, 'test-results/camera-zoom-pan.png') });
+});
+
+test('the title gate starts lit and clicking it walks into character creation', async t => {
+  const { page } = await fixture(t);
+  const gate = page.getByRole('button', { name: 'Walk into the glowing gate and create an adventurer' });
+  await gate.waitFor();
+  assert.equal(await page.evaluate(() => {
+    const canvas = document.querySelector('#dungeon');
+    const x = Math.floor(canvas.width / 2), y = Math.floor(canvas.height / 2 - 128) + 60;
+    return Array.from(canvas.getContext('2d').getImageData(x, y, 1, 1).data).slice(0, 3).join(',');
+  }), '243,221,160');
+  await page.screenshot({ path: resolve(root, 'test-results/glowing-title-gate.png') });
+  await gate.click();
+  await page.locator('#create-form').waitFor();
+  assert.equal(await page.locator('#create-form').count(), 1);
+  assert.equal(await page.evaluate(() => document.querySelector('pixel-nethack').snapshot == null), true);
 });

@@ -540,3 +540,26 @@ Provide a 1200×630 Open Graph card, 1500×500 profile banner with avatar space,
 1920×1080 transparent stream overlay. `art/social/composition.html` is the editable
 composition; `scripts/build-social.ts` renders static, integer-scale frames through
 the shared welcome-art method. Website metadata uses absolute neohack.dev URLs.
+
+Mouse wheel zooms the dungeon between 1× and 4× over a short eased camera
+transition; reduced motion applies it immediately. Fractional CSS enlargement
+keeps nearest-neighbor pixels while native camera coordinates snap to pixel units.
+Middle mouse drag pans without engine input, uses pointer capture and releases on
+pointer cancellation or window blur. Wheel events over HTML controls keep normal
+scrolling; browser Ctrl/Command zoom remains available. Tile picking follows the
+same current camera transform. Zoom buttons and Center remain keyboard alternatives.
+
+The title doorway has steady warm, stepped light from the first frame. An accessible
+button over the actual gate starts the existing traveler walk and portal sequence,
+then opens character creation. Clicking the doorway does not create a run itself.
+
+A perceived hobbit uses a distinct original 12×12 silhouette: curly brown hair,
+a sage waistcoat, warm face and broad bare feet. Keep the same native-pixel scale
+as other small humanoids; use it only for the engine-supplied "hobbit" appearance,
+never infer species from the h glyph. The unknown humanoid fallback stays generic.
+
+Cloud journal and adventure metadata uploads wait for five seconds of inactivity.
+New actions reset the timer. Queued changes show a stable "Saved here" status;
+"Saving online…" appears only during an actual upload, with duplicate status
+notifications suppressed. Local durable input transactions stay immediate, and
+explicit runtime close flushes pending cloud work without waiting for the debounce.
