@@ -21,6 +21,10 @@ async function create(page, url) {
   await page.getByRole('button', { name: 'Begin your adventure', exact: true }).click();
   await page.getByLabel('YOUR NAME', { exact: true }).fill('Bookmark');
   await page.locator('input[name=role][value=valkyrie]').check();
+  // A repeatable start where Search can legitimately refuse a spotted monster.
+  // Storage tests use Wait below: their input must actually spend a turn.
+  await page.getByText('Choose a world seed (optional)', { exact: true }).click();
+  await page.getByLabel('A number for a repeatable starting world').fill('9');
   await page.getByRole('button', { name: 'Enter the dungeon →', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('pixel-nethack').snapshot?.observation && document.querySelector('pixel-nethack').getAttribute('aria-busy') === 'false');
 }
@@ -62,7 +66,7 @@ test('turns do not wait for cloud uploads; a bookmark resumes through C in a fre
   await create(page, url);
   await started;
   const turn = (await snapshot(page)).observation.turn;
-  await page.evaluate(async () => { const app = document.querySelector('pixel-nethack'); await app.run(() => app.game.search()); });
+  await page.evaluate(async () => { const app = document.querySelector('pixel-nethack'); await app.run(() => app.game.wait()); });
   assert.equal((await snapshot(page)).observation.turn, turn + 1, 'turn completed while the server acknowledgement is held: ' + await page.locator('#error').textContent());
   release();
   await page.evaluate(async () => { const app = document.querySelector('pixel-nethack'); await app.run(() => app.game.pray()); });
@@ -109,7 +113,7 @@ test('lost cloud acknowledgement recovers the durable commit without replaying a
     entered(); await gate;
     await route.fulfill({ response }).catch(() => {});
   });
-  await page.evaluate(async () => { const app = document.querySelector('pixel-nethack'); await app.run(() => app.game.search()); });
+  await page.evaluate(async () => { const app = document.querySelector('pixel-nethack'); await app.run(() => app.game.wait()); });
   const before = await snapshot(page), bookmark = page.url();
   await accepted; await page.close(); release();
   const reopened = await context.newPage(); await reopened.goto(bookmark);
@@ -129,15 +133,15 @@ test('cloud saving waits five idle seconds, resets on play, and flushes on close
   page.on('request', request => {
     if (request.method() === 'PUT' && /\/api\/vaults\/[^/]+$/.test(request.url())) uploads.push(Date.now());
   });
-  const search = () => page.evaluate(async () => {
+  const waitTurn = () => page.evaluate(async () => {
     const app = document.querySelector('pixel-nethack');
-    await app.run(() => app.game.search());
+    await app.run(() => app.game.wait());
   });
-  await search();
+  await waitTurn();
   await page.waitForTimeout(3900);
   assert.equal(uploads.length, 0);
   assert.equal(await page.locator('#cloud-status').textContent(), 'Saved here');
-  await search();
+  await waitTurn();
   const lastAction = Date.now();
   await page.waitForTimeout(2200);
   assert.equal(uploads.length, 0, 'new input resets the original timer');
@@ -145,7 +149,7 @@ test('cloud saving waits five idle seconds, resets on play, and flushes on close
   await synced(page);
   assert.equal(uploads.length, 1, 'one coalesced upload after inactivity');
   assert.ok(uploads[0] - lastAction >= 4800);
-  await search();
+  await waitTurn();
   const start = Date.now();
   await page.evaluate(async () => {
     const app = document.querySelector('pixel-nethack');
