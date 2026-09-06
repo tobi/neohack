@@ -57,7 +57,15 @@ test('real cloud run records public scenes, embeds after death and shares a ledg
   await page.locator('#death-copy-link').click();
   const link=await page.evaluate(()=>navigator.clipboard.readText());assert.equal(new URL(link).searchParams.get('run'),state.sessionId);assert.ok(!link.includes('#'));
   await page.screenshot({path:'/tmp/neohack-replay-death.png',fullPage:true});
+  let releasePage;const heldPage=new Promise(resolve=>{releasePage=resolve;});
+  await page.route('**/api/runs/*/replay?offset=25',async route=>{await heldPage;await route.continue();});
   await page.goto(link);
+  await page.waitForFunction(()=>document.querySelector('neohack-world')?.shadowRoot.querySelector('#status').textContent.includes('frames received'));
+  await page.evaluate(()=>document.querySelector('neohack-world').setAttribute('role','wizard'));
+  assert.match(await page.locator('neohack-world').locator('#status').textContent(),/Loading replay/);
+  assert.equal(await page.locator('neohack-world').locator('#progress').textContent(),'Loading…');
+  releasePage();
+
   await page.waitForFunction(()=>document.querySelector('#replay-lightbox').open && document.querySelector('neohack-world')?.snapshot);
   const world=page.locator('neohack-world');
   await world.getByRole('button',{name:'Pause replay',exact:true}).click();

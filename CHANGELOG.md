@@ -4,6 +4,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Clearer phone HUD and journal spacing, a full-height character sheet, readable
+  status labels, and steadier workshop navigation and replay loading feedback.
+
 - A redesigned workshop chooser pairs a short code preview with clear starter
   examples, private saved scripts, and a mobile layout that scrolls naturally.
 

@@ -325,6 +325,7 @@ test('workshop chooser keeps its heading in view, scrolls on mobile and opens th
   await page.locator('#example-observer').scrollIntoViewIfNeeded();assert.equal(await page.locator('#example-observer').isVisible(),true);
  }
  await page.locator('#new-script').click();await page.locator('.cm-content').waitFor();
+ assert.equal(await page.evaluate(()=>window.scrollY),0,'opening a script returns to its toolbar');
  assert.equal(await page.locator('#project-picker').isVisible(),false);
  await page.locator('#choose-project').click();await page.locator('#project-picker').waitFor();
  assert.equal(await page.locator('#picker-saved').isDisabled(),true);

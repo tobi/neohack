@@ -27,3 +27,9 @@
 #project-workspace { display: contents; }
 #project-workspace[hidden], #project-picker[hidden] { display: none; }
 #script-link { font-size: 13px; }
+
+@media(max-width:850px) {
+ .run-buttons { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; }
+ .run-buttons button { min-height:44px; white-space:nowrap; }
+ .explorer #file-tree { display:none; }
+}

@@ -1734,3 +1734,23 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
 .adventurer-name-field { display: flex; align-items: stretch; gap: 8px; }
 .adventurer-name-field input { flex: 1; min-width: 0; width: 0; }
 .adventurer-name-field button { flex: 0 0 48px; min-height: 48px; padding: 8px; font-size: 24px; }
+
+/* Keep the phone's perceived scene clear of the surrounding UI. */
+.condition[hidden] { display: none; }
+@media(max-width:600px) {
+ .hero-hud .weapon-line { display: none; }
+ .hero-hud .stats-row .hero-level strong { font-size: 16px; }
+ .hero-hud progress { margin-bottom: 7px; }
+ .world-hud .location-hud { position: absolute; right: 0; top: 48px; min-width: 130px; padding-top: 6px; gap: 3px; }
+ #location-heading { white-space: nowrap; }
+ #journal-preview { top: var(--hud-floor,128px); width: calc(100% - 24px); display: grid; grid-template-columns: minmax(0,1fr) 88px; align-items: center; gap: 4px; }
+ #journal-preview .journal-preview-tools { grid-column: 2; grid-row: 1; order: 1; height: 44px; }
+ #journal-preview #recent-messages { grid-column: 1; grid-row: 1; min-width: 0; }
+ #journal-preview .scroll-mark { font-size: 18px; line-height: 1; }
+ #journal-preview .journal-scroll-link { display: flex; align-items: center; gap: 8px; padding: 8px 10px; min-height: 44px; text-align: left; }
+ #journal-preview .journal-scroll-link .scroll-excerpt { display: none; }
+ #journal-preview .journal-scroll-link strong { font-size: 12px; }
+ .rightbar.character-panel { top: 12px; }
+ pixel-nethack:has(.rightbar:not([hidden])) .hero-hud,
+ pixel-nethack:has(.rightbar:not([hidden])) .world-hud { visibility: hidden; }
+}

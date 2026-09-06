@@ -260,6 +260,7 @@ class PixelNethack extends HTMLElement {
     return this.game?.state ?? null;
   }
 
+  private hudLayout?: ResizeObserver;
   connectedCallback() {
     this.innerHTML = `
 
@@ -359,6 +360,12 @@ class PixelNethack extends HTMLElement {
       } else this.inspectTile(x, y);
     });
     this.bind();
+    this.hudLayout = new ResizeObserver(() => {
+      const top = this.getBoundingClientRect().top;
+      const bottom = Math.max(...[".hero-hud", ".location-hud"].map(selector => this.$(selector).getBoundingClientRect().bottom));
+      this.style.setProperty("--hud-floor", `${Math.max(128, bottom - top + 8)}px`);
+    });
+    for (const node of [this, this.$(".hero-hud"), this.$(".location-hud")]) this.hudLayout.observe(node);
     document.addEventListener("keydown", this.keyHandler);
     document.addEventListener("keyup", this.keyUpHandler);
     window.addEventListener("blur", this.stopMovement);
@@ -736,6 +743,7 @@ class PixelNethack extends HTMLElement {
     }
   }
   disconnectedCallback() {
+    this.hudLayout?.disconnect();
     this.preloadAbort.abort();
     this.webMcp?.dispose();
     this.movement.stop();
@@ -1237,8 +1245,9 @@ class PixelNethack extends HTMLElement {
       }
       const weapons = o.inventory.filter(item => item.equipmentSlots?.includes("weapon") || item.equipmentSlots?.includes("offhand"));
       const weapon = o.perception.equipment === "current" && o.perception.inventory === "current" && o.inventoryKnown && o.inventory.every(item=>item.equipmentSlots!==undefined) ? weapons.map(item => item.label).join(" · ") || "Empty hands" : "Equipment unknown";
+      const conditions = [v.hunger !== "not_hungry" ? v.hungerLabel : "", v.burden !== "unencumbered" ? v.burdenLabel : "", ...(Array.isArray(v.condition) ? v.condition : [v.condition])].filter(Boolean).join(" · ");
       this.$("#character-stats").innerHTML =
-        `<div class="health-label"><span>Health</span><strong>${escape(v.health ?? "?")} <span>/ ${escape(v.maxHealth ?? "?")}</span></strong></div><progress aria-label="Health" max="100" value="${Number.isFinite(fraction) ? Math.max(0, Math.min(100, fraction * 100)) : 0}"></progress><div class="stats-row"><div><small>ARMOR</small><strong>${escape(v.armor ?? "?")}</strong></div><div><small>GOLD</small><strong>${escape(v.gold ?? "?")}</strong></div><div class="hero-level"><small>LEVEL</small><strong>${escape(v.level ?? "?")}</strong></div></div><p class="weapon-line"><small>IN HAND</small> ${escape(weapon)}</p><p class="condition">${escape([v.hunger, v.burden, ...(Array.isArray(v.condition) ? v.condition : [v.condition])].filter(Boolean).join(" · ") || "Ready for the next step")}</p>`;
+        `<div class="health-label"><span>Health</span><strong>${escape(v.health ?? "?")} <span>/ ${escape(v.maxHealth ?? "?")}</span></strong></div><progress aria-label="Health" max="100" value="${Number.isFinite(fraction) ? Math.max(0, Math.min(100, fraction * 100)) : 0}"></progress><div class="stats-row"><div><small>ARMOR</small><strong>${escape(v.armor ?? "?")}</strong></div><div><small>GOLD</small><strong>${escape(v.gold ?? "?")}</strong></div><div class="hero-level"><small>LEVEL</small><strong>${escape(v.level ?? "?")}</strong></div></div><p class="weapon-line"><small>IN HAND</small> ${escape(weapon)}</p><p class="condition" ${conditions ? "" : "hidden"}>${escape(conditions)}</p>`;
       this.text(
         "#inventory-count",
         o.inventoryKnown ? o.inventory.length : "?",

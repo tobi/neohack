@@ -1153,3 +1153,10 @@ a small selectable code preview, two example cards, then private saved scripts.
 The chooser scrolls normally at every viewport; only the open IDE uses a fixed
 height. Keep its heading inside the viewport, with muted account context, full
 touch targets and explicit empty saved-script guidance. No new art is required.
+
+Agent-browser walkthrough corrections: mobile HUD uses canonical status labels,
+keeps routine equipment in the character sheet, and places compact journal notes
+below the measured HUD height. Sheets start directly below the site rail and
+hide the underlying HUD. Workshop navigation resets page scrolling and stacks
+mobile run buttons. Replay loading/error messages survive artwork and role redraws;
+loading is never presented as an empty recording.

@@ -123,11 +123,12 @@ function openProject(project: { name: string; files: Record<string,string>; id?:
   dirty = false;
   seedMode(); tabs(); setProjectUrl(botId, example);
   editor.requestMeasure();
+  window.scrollTo({top:0,left:0,behavior:"instant"});
 }
 $('new-script').onclick = () => openProject({name:'My script',files:{'main.js':blankScript}});
 $('example-imp').onclick = () => openProject(examples['curious-imp'], 'curious-imp');
 $('example-observer').onclick = () => openProject(examples['first-steps'], 'first-steps');
-$('choose-project').onclick = () => { $('project-picker').hidden = false; $('project-workspace').hidden = true; };
+$('choose-project').onclick = () => { $('project-picker').hidden = false; $('project-workspace').hidden = true; window.scrollTo({top:0,left:0,behavior:'instant'}); };
 for(const id of ['bot-name','role','seed-mode','seed']) $(id).addEventListener('change',()=>{dirty=true;});
 async function refreshBots(){
   try {

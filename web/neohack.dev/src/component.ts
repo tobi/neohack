@@ -14,6 +14,8 @@ const artReady = loadArt(__NEOHACK_ART__);
 export class NeohackWorld extends HTMLElement {
   static observedAttributes = ['src','autoplay','speed','sound','controls','loop','role','seed'];
   private loading?: AbortController;
+  private sourceMessage?: string;
+  private sourcePending = false;
   private audio?: DungeonSound;
   private map?: DungeonMap;
   private frame: Snapshot | null = null;
@@ -73,7 +75,7 @@ export class NeohackWorld extends HTMLElement {
     play.textContent=this.timer ? 'Pause' : 'Play'; play.setAttribute('aria-label',this.timer ? 'Pause replay' : 'Play replay');play.disabled=this.frames.length<2;
     const seek=this.root.querySelector('#seek') as HTMLInputElement;
     seek.max=String(Math.max(0,this.frames.length-1));seek.value=String(this.index);seek.disabled=!this.frames.length;
-    this.root.querySelector("#progress")!.textContent=this.frames.length ? (this.index+1)+" / "+this.frames.length : "No frames";
+    this.root.querySelector("#progress")!.textContent=this.frames.length ? (this.index+1)+" / "+this.frames.length : this.sourcePending ? "Loading…" : this.sourceMessage ? "Unavailable" : "No frames";
     const speed=this.root.querySelector('#speed') as HTMLSelectElement;
     if(!Array.from(speed.options).some(o=>Number(o.value)===this.speed)) speed.add(new Option(this.speed+"×",String(this.speed)));
     speed.value=String(this.speed);
@@ -81,9 +83,9 @@ export class NeohackWorld extends HTMLElement {
   }
   private async loadSource() {
     this.loading?.abort();const controller=this.loading=new AbortController();
-    this.loadReplay([]);
-    const source=this.getAttribute('src');if(!source)return;
-    this.status.textContent='Loading replay…';
+    const source=this.getAttribute('src');
+    this.sourcePending=!!source;this.sourceMessage=source?'Loading replay…':undefined;
+    this.loadReplay([]);if(!source)return;
     try {
       const url=new URL(source,document.baseURI);
       if(!['http:','https:'].includes(url.protocol) || url.username || url.password)throw Error('Expected an HTTP replay URL');
@@ -102,6 +104,7 @@ export class NeohackWorld extends HTMLElement {
         const batch=Array.isArray(page)?page:page.frames;
         if(!Array.isArray(batch) || frames.length+batch.length>100000)throw Error('Invalid replay frames');
         frames.push(...batch);
+        this.sourceMessage=`Loading replay… ${frames.length} frames received`;this.status.textContent=this.sourceMessage;
         const next=Array.isArray(page)?null:page.next ?? null;
         if(next!==null && (!Number.isSafeInteger(next)||next<=offset!||!batch.length))throw Error('Invalid replay pagination');
         offset=next;
@@ -109,12 +112,14 @@ export class NeohackWorld extends HTMLElement {
         if(page.seed!==undefined)this.setAttribute('seed',String(page.seed));
       } while(offset!==null);
       if(controller.signal.aborted)return;
+      this.sourcePending=false;this.sourceMessage=undefined;
       this.loadReplay(frames);
-      if(!frames.length)this.status.textContent='Replay unavailable: no frames recorded.';
+      if(!frames.length){this.sourceMessage='Replay unavailable: no frames recorded.';this.paint();this.updateControls();}
       this.dispatchEvent(new CustomEvent('replayload',{detail:{length:frames.length}}));
     } catch(error) {
       if(controller.signal.aborted)return;
-      this.status.textContent=error instanceof Error?error.message:String(error);
+      this.sourcePending=false;this.sourceMessage=error instanceof Error?error.message:String(error);
+      this.paint();this.updateControls();
       this.dispatchEvent(new CustomEvent('error',{detail:this.status.textContent}));
     }
   }
@@ -129,11 +134,12 @@ export class NeohackWorld extends HTMLElement {
     const o = this.frame?.observation;
     this.map?.update(o ?? null, heroArt(this.getAttribute('role') ?? 'valkyrie'), this.getAttribute('seed') ?? '0', this.frame);
     this.canvas.setAttribute('aria-label', this.frame?.ended && this.frame.end?.kind === 'death' && o?.you ? 'NetHack world. A tombstone marks your final position.' : 'NetHack world');
-    this.status.textContent = o ? `${o.location.depthLabel} · Level ${o.vitals.level ?? '?'} · HP ${o.vitals.health ?? '?'}/${o.vitals.maxHealth ?? '?'} · Turn ${o.turn}` : 'A world, waiting for a story.';
+    this.status.textContent = this.sourceMessage ?? (o ? `${o.location.depthLabel} · Level ${o.vitals.level ?? '?'} · HP ${o.vitals.health ?? '?'}/${o.vitals.maxHealth ?? '?'} · Turn ${o.turn}` : 'A world, waiting for a story.');
     this.text.textContent = o ? `${o.heard.join('\n')}\n${JSON.stringify(o, null, 2)}` : 'No observation supplied.';
   }
   loadReplay(frames: Snapshot[]) {
     if(!Array.isArray(frames) || frames.length > 100000 || frames.some(f=>!f || typeof f!=='object' || !isSnapshot(f) || !Array.isArray(f.observation.world) || f.observation.world.length>10000)) throw Error('Invalid replay');
+    if(!this.sourcePending)this.sourceMessage=undefined;
     this.pause(); this.frames = structuredClone(frames); this.index = 0;
     this.snapshot = this.frames[0] ?? null;
     this.updateControls();

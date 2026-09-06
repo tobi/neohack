@@ -907,6 +907,7 @@ test(
       beforeBag,
       "item inspection costs no turns",
     );
+    await page.locator("#close-panel").click();
     await page.getByLabel("Game menu", { exact: true }).click();
     await page
       .getByRole("button", { name: "Your adventures", exact: false })
@@ -2332,10 +2333,14 @@ test("mobile journal preview is on by default and collapses without consuming a 
   const { page } = await fixture(t, { touch: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await create(page);
+  const hud=await page.locator(".hero-hud").boundingBox();
+  assert.ok(hud.height<125,"routine HUD leaves room for the dungeon");
+  assert.doesNotMatch(await page.locator(".hero-hud").textContent(),/not_hungry|unencumbered/);
   const toggle = page.locator("#toggle-journal-preview");
   assert.equal(await toggle.getAttribute("aria-expanded"), "true");
   const preview = await page.locator("#journal-preview").boundingBox();
   const worldTop = (await page.locator('.map-viewport').boundingBox()).y;
+  assert.ok(preview.y >= hud.y+hud.height,"journal does not overlap the HUD");
   assert.ok(preview.y - worldTop >= 128 && preview.y - worldTop + preview.height < 300);
   const turn = (await snapshot(page)).observation.turn;
   await toggle.tap();
