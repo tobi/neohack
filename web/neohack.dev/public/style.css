@@ -1487,7 +1487,8 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
 }
 
 /* The welcome page explains the library; the dungeon keeps the full screen. */
-.welcome-paths { position: absolute; top: 28px; right: 28px; bottom: 64px; width: 340px; overflow-y: auto; padding: 0 8px 8px; scrollbar-width: thin; color: #b7c2ae; }
+.welcome-paths { position: absolute; top: max(20px, env(safe-area-inset-top)); right: max(28px, env(safe-area-inset-right)); bottom: 64px; width: 340px; display: flex; flex-direction: column; padding: 0 8px 8px; color: #b7c2ae; }
+.welcome-content { min-height: 0; overflow-y: auto; scrollbar-width: thin; padding-right: 4px; }
 .welcome-paths header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 .welcome-paths .eyebrow { font-size: 9px; letter-spacing: 1px; }
 .welcome-paths a { color: #dbc995; text-underline-offset: 4px; }
@@ -1500,17 +1501,19 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
 .welcome-paths footer p { font-size: 11px; color: #9daa9c; }
 #package-status { color: #b9cc99; }
 @media (min-width: 1100px) {
+  .welcome-paths header { flex-shrink: 0; min-height: 44px; margin-bottom: 0; padding-right: 52px; }
+  .welcome-paths header a { display: inline-flex; align-items: center; min-height: 44px; }
   pixel-nethack:not(.in-game) .map-viewport { right: 396px; }
   pixel-nethack:not(.in-game) .intro-title, pixel-nethack:not(.in-game) .intro-controls { left: calc((100% - 396px) / 2); }
 }
 @media (max-width: 1099px) {
   pixel-nethack:not(.in-game) { overflow-y: auto; overflow-x: hidden; }
-  .welcome-paths { top: 100dvh; bottom: auto; right: auto; left: 0; width: 100%; padding: 24px max(24px, calc((100% - 620px) / 2)) 36px; box-sizing: border-box; background: #171f23; }
+  .welcome-paths { top: 100dvh; bottom: auto; right: auto; left: 0; width: 100%; display: block; padding: 24px max(24px, calc((100% - 620px) / 2)) 36px; box-sizing: border-box; background: #171f23; }
+  .welcome-content { overflow: visible; padding-right: 0; }
   .welcome-paths header { flex-wrap: wrap; }
 }
 
 .paths-jump { display: none; }
-@media (min-width: 1100px) { .welcome-paths { top: 70px; } }
 @media (max-width: 1099px) { .paths-jump { display: inline-block; pointer-events: auto; color: #dbc995; margin-top: 12px; font-size: 11px; text-underline-offset: 4px; } }
 
 .welcome-code { margin: 26px 0 20px; }
