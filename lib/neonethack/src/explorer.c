@@ -2671,7 +2671,12 @@ pin_engine(nhx_t *x, game_t *g, char *pinned, size_t cap)
         while ((n = fread(buf, 1, sizeof buf, in)) > 0)
             if (fwrite(buf, 1, n, out) != n) { fclose(in); fclose(out); unlink(temp); return -1; }
         if (ferror(in) || fflush(out) || fchmod(fileno(out), 0700) || fsync(fileno(out))) { fclose(in); fclose(out); unlink(temp); return -1; }
-        if (fclose(out) || rename(temp, cached)) { fclose(in); unlink(temp); return -1; }
+        if (fclose(out)) { fclose(in); unlink(temp); return -1; }
+        /* Publish once: concurrent session processes may build the same pin.
+         * Never replace an already published cache entry while another process
+         * is linking it into its own session directory. */
+        if (link(temp, cached) < 0 && errno != EEXIST) { fclose(in); unlink(temp); return -1; }
+        unlink(temp);
     }
     fclose(in);
     if (link(cached, pinned) < 0 && errno != EEXIST) return -1;

@@ -1,26 +1,21 @@
-/* Native MCP stdio server. Game validation and execution use only public C API. */
-#define _POSIX_C_SOURCE 200809L
-#include "neonethack.h"
-#include "minjson.h"
-#include "compact.h"
+/* Native MCP transport. Only the public C driver owns gameplay semantics. */
+#define _GNU_SOURCE
+#include "mcp.h"
 #include "mcp-tools.inc"
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
+#include <unistd.h>
 
-#define FRAME_LIMIT (NNH_MAX_REQUEST_BYTES + 8192)
-static char *take(mj_Buf *b)
-{
-    if (!b->ok) { mj_free(b); return NULL; }
-    return mj_take(b);
-}
-
-static mj_val field(const char *s, const char *key)
-{
-    mj_val v = {NULL}; if (s) mj_find(s,key,&v); return v;
-}
-static void raw(mj_Buf *b, mj_val v)
+const char *mcp_tools_json = mcp_tools, *mcp_guidance = mcp_instructions;
+char *mcp_take(mj_Buf *b) { if (!b->ok) { mj_free(b); return NULL; } return mj_take(b); }
+mj_val mcp_field(const char *s, const char *key) { mj_val v = {NULL}; if (s) mj_find(s,key,&v); return v; }
+char *mcp_string(mj_val value) { return value.p ? mj_str(value) : NULL; }
+void mcp_raw(mj_Buf *b, mj_val v)
 {
     size_t n; char *s;
     if (!v.p) { mj_nullv(b); return; }
@@ -28,112 +23,219 @@ static void raw(mj_Buf *b, mj_val v)
     if (!s) { b->ok = 0; return; }
     mj_rawv(b,s); free(s);
 }
-static char *failure(int code, const char *message)
+char *mcp_failure(int code, const char *message)
 {
     mj_Buf b; mj_init(&b); mj_obj(&b);
     mj_key(&b,"code"); mj_intv(&b,code);
     mj_key(&b,"message"); mj_strv(&b,message);
-    mj_endobj(&b); return take(&b);
+    mj_endobj(&b); return mcp_take(&b);
 }
-static int reply(mj_val id, const char *value, int error)
+void mcp_maybe_stop(mcp_server *s)
 {
-    mj_Buf b; char *s;
-    if (!value) return 0;
-    mj_init(&b); mj_obj(&b);
-    mj_key(&b,"jsonrpc"); mj_strv(&b,"2.0");
-    mj_key(&b,"id"); raw(&b,id);
-    mj_key(&b,error ? "error" : "result"); mj_rawv(&b,value);
-    mj_endobj(&b); s = take(&b);
-    if (!s) return 0;
-    int ok = puts(s) >= 0 && fflush(stdout) == 0;
-    free(s); return ok;
+    if (s->stopping && !s->pending && !evbuffer_get_length(s->output)) {
+        /* Let libevent flush completed HTTP replies before retiring sockets. */
+        struct timeval grace = {0,100000};
+        event_base_loopexit(s->base,&grace);
+    }
 }
-static char *call(nnh_context *ctx, compact_state *compact, const char *params, int *error)
+void mcp_finish(mcp_job *j, char *value, int error, int status)
 {
-    mj_val name = field(params,"name"), args = field(params,"arguments");
-    char *tool = name.p ? mj_str(name) : NULL, *method = NULL, *request, *projected, *result;
-    mj_val item; mj_arr_it it = {NULL, 1}; mj_Buf b; nnh_result *response = NULL;
-    mj_val list = field(mcp_tools,"tools");
+    mcp_server *s = j->server;
+    mj_Buf b; mj_val id = mcp_field(j->frame,"id"); char *reply;
+    if (!value) { error = 1; status = 500; value = mcp_failure(-32603,"Transport failed; execution may be uncertain. Retain exact requestId and payload."); }
+    mj_init(&b); mj_obj(&b); mj_key(&b,"jsonrpc"); mj_strv(&b,"2.0");
+    if (id.p || !j->http) { mj_key(&b,"id"); mcp_raw(&b,id); }
+    mj_key(&b,error ? "error" : "result");
+    if (j->http && !error && value) {
+        size_t n = strlen(value);
+        char *members = n >= 2 ? strndup(value+1,n-2) : NULL;
+        if (!members) b.ok = 0;
+        else {
+            char *modern;
+            if (asprintf(&modern,"{\"resultType\":\"complete\",\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"neonethack\",\"version\":\"%s\"}}%s%s}",nnh_version(), *members ? "," : "",members) < 0) b.ok = 0;
+            else { mj_rawv(&b,modern); free(modern); }
+            free(members);
+        }
+    } else if (value) mj_rawv(&b,value);
+    else b.ok = 0;
+    mj_endobj(&b); reply = mcp_take(&b);
+    if (j->http) {
+        if (evhttp_request_get_connection(j->http)) {
+            struct evbuffer *out = evbuffer_new();
+            struct evkeyvalq *headers = evhttp_request_get_output_headers(j->http);
+            evhttp_add_header(headers,"Content-Type","application/json");
+            evhttp_add_header(headers,"Cache-Control","no-store");
+            /* Each request is independent; bounded connection lifetime also
+             * makes disconnect/shutdown ownership unambiguous. */
+            evhttp_add_header(headers,"Connection","close");
+            if (out && reply) evbuffer_add(out,reply,strlen(reply));
+            evhttp_send_reply(j->http,reply ? status : 500,NULL,out);
+            if (out) evbuffer_free(out);
+        } else evhttp_request_free(j->http);
+    } else if (reply) {
+        evbuffer_add(s->output,reply,strlen(reply)); evbuffer_add(s->output,"\n",1);
+        event_add(s->output_event,NULL);
+    } else s->failed = 1;
+    free(reply); free(value); free(j->frame); free(j->semantic); free(j->method); free(j);
+    --s->pending; mcp_maybe_stop(s);
+}
+void mcp_reject(mcp_job *j, int status, int code, const char *message) { mcp_finish(j,mcp_failure(code,message),1,status); }
+
+static void tool_request(mcp_job *j, const char *params)
+{
+    mj_val args = mcp_field(params,"arguments"), item, list = mcp_field(mcp_tools,"tools");
+    char *tool = mcp_string(mcp_field(params,"name")); mj_arr_it it = {NULL,1};
     if (tool) while (mj_arr_next(list.p,&it,&item)) {
-        char *candidate = mj_str(field(item.p,"name"));
+        char *candidate = mcp_string(mcp_field(item.p,"name"));
         int match = candidate && !strcmp(candidate,tool); free(candidate);
-        if (match) { method = strdup(tool); break; }
+        if (match) { j->method = strdup(tool); break; }
     }
     free(tool);
-    if (!method || (args.p && *args.p != '{')) {
-        free(method); *error = 1; return failure(-32602,"Unknown tool or invalid arguments");
-    }
-    char *separator = strchr(method,'_'); if (separator) *separator = '.';
-    mj_init(&b); mj_obj(&b);
+    if (!j->method || (args.p && *args.p != '{')) { mcp_reject(j,400,-32602,"Unknown tool or invalid arguments"); return; }
+    char *separator = strchr(j->method,'_'); if (separator) *separator = '.';
+    mj_Buf b; mj_init(&b); mj_obj(&b);
     mj_key(&b,"version"); mj_intv(&b,1);
-    mj_key(&b,"method"); mj_strv(&b,method);
-    mj_key(&b,"params"); if (args.p) raw(&b,args); else mj_rawv(&b,"{}");
-    mj_endobj(&b); request = take(&b);
-    if (!request) { free(method); return NULL; }
-    nnh_status status = nnh_dispatch(ctx,request,strlen(request),&response); free(request);
-    if (status != NNH_OK) { free(method); return NULL; } /* retire: receipt uncertain */
-    projected = compact_project(compact,nnh_result_json(response),method); free(method);
-    if (!projected) { nnh_result_free(response); return NULL; }
-    mj_init(&b); mj_obj(&b);
-    mj_key(&b,"isError"); mj_boolv(&b,nnh_result_error(response) != NULL);
-    mj_key(&b,"structuredContent"); mj_rawv(&b,projected);
-    mj_key(&b,"content"); mj_arr(&b); mj_endarr(&b);
-    mj_endobj(&b); result = take(&b);
-    free(projected); nnh_result_free(response); return result;
+    mj_key(&b,"method"); mj_strv(&b,j->method);
+    mj_key(&b,"params"); if (args.p) mcp_raw(&b,args); else mj_rawv(&b,"{}");
+    mj_endobj(&b); j->semantic = mcp_take(&b);
+    if (!j->semantic) { mcp_finish(j,NULL,1,500); return; }
+    mcp_route(j);
+}
+void mcp_request(mcp_server *s, const char *line, size_t length, struct evhttp_request *http)
+{
+    mcp_job *j = calloc(1,sizeof *j);
+    if (!j) { s->failed = 1; return; }
+    j->server = s; j->http = http; ++s->pending;
+    if (http) evhttp_request_own(http);
+    if (memchr(line,0,length) || !mj_valid(line)) { mcp_reject(j,400,-32700,"Invalid JSON"); return; }
+    j->frame = mj_canonical((mj_val){line});
+    if (!j->frame) { mcp_reject(j,400,-32600,"Duplicate keys or unsupported JSON structure"); return; }
+    mj_val id = mcp_field(j->frame,"id"), params = mcp_field(j->frame,"params");
+    char *method = mcp_string(mcp_field(j->frame,"method")), *version = mcp_string(mcp_field(j->frame,"jsonrpc"));
+    long long number;
+    int valid_id = !id.p || *id.p == '"' || (mj_int(id,&number) && number >= -9007199254740991LL && number <= 9007199254740991LL);
+    if (!version || strcmp(version,"2.0") || !method || !valid_id ||
+        mcp_field(j->frame,"result").p || mcp_field(j->frame,"error").p || (params.p && *params.p != '{')) {
+        free(j->frame); j->frame = NULL; mcp_reject(j,400,-32600,"Invalid JSON-RPC request");
+    } else if (!id.p) {
+        if (http) mcp_reject(j,400,-32600,"Unsupported notification");
+        else { free(j->frame); free(j); --s->pending; mcp_maybe_stop(s); }
+    } else if (http && !mcp_http_validate(j)) {
+        /* Validation owns the error response and job on failure. */
+    } else if (!strcmp(method,"initialize") && !http) {
+        char *protocol = mcp_string(mcp_field(params.p,"protocolVersion"));
+        if (!protocol || !mcp_field(params.p,"clientInfo").p || !mcp_field(params.p,"capabilities").p) mcp_reject(j,400,-32602,"Missing initialization parameters");
+        else {
+            const char *negotiated = !strcmp(protocol,"2024-11-05") || !strcmp(protocol,"2025-03-26") || !strcmp(protocol,"2025-06-18") ? protocol : "2025-11-25";
+            mj_Buf b; mj_init(&b); mj_obj(&b);
+            mj_key(&b,"protocolVersion"); mj_strv(&b,negotiated);
+            mj_key(&b,"capabilities"); mj_rawv(&b,"{\"tools\":{}}");
+            mj_key(&b,"serverInfo"); mj_rawv(&b,"{\"name\":\"neonethack\",\"version\":\"1.0.0-alpha.1\"}");
+            mj_key(&b,"instructions"); mj_strv(&b,mcp_instructions);
+            mj_endobj(&b); s->initialized = 1; mcp_finish(j,mcp_take(&b),0,200);
+        }
+        free(protocol);
+    } else if (!strcmp(method,"ping")) mcp_finish(j,strdup("{}"),0,200);
+    else if (!http && !s->initialized) mcp_reject(j,400,-32000,"Initialize first");
+    else if (!strcmp(method,"server/discover") && http) {
+        mj_Buf b; mj_init(&b); mj_obj(&b);
+        mj_key(&b,"supportedVersions"); mj_rawv(&b,"[\"" MCP_HTTP_VERSION "\"]");
+        mj_key(&b,"capabilities"); mj_rawv(&b,"{\"tools\":{}}");
+        mj_key(&b,"instructions"); mj_strv(&b,mcp_instructions);
+        mj_endobj(&b); mcp_finish(j,mcp_take(&b),0,200);
+    } else if (!strcmp(method,"tools/list")) mcp_finish(j,strdup(mcp_tools),0,200);
+    else if (!strcmp(method,"tools/call")) tool_request(j,params.p);
+    else mcp_reject(j,404,-32601,"Method not found; HTTP supports 2026-07-28 via server/discover");
+    free(method); free(version);
+}
+static void stop(evutil_socket_t fd, short events, void *arg)
+{
+    mcp_server *s = arg; (void)fd; (void)events;
+    if (!s->stopping) {
+        s->stopping = 1;
+        if (s->input_event) event_del(s->input_event);
+        if (s->listener) { evhttp_del_accept_socket(s->http,s->listener); s->listener = NULL; }
+    }
+    mcp_maybe_stop(s);
+}
+static void child_exited(evutil_socket_t fd, short events, void *arg)
+{
+    (void)fd; (void)events; mcp_reap(arg);
+}
+static void output_ready(evutil_socket_t fd, short events, void *arg)
+{
+    mcp_server *s = arg; (void)events;
+    if (evbuffer_write(s->output,fd) < 0 && errno != EAGAIN && errno != EINTR) {
+        s->failed = 1; evbuffer_drain(s->output,evbuffer_get_length(s->output)); stop(0,0,s);
+    }
+    if (!evbuffer_get_length(s->output)) { event_del(s->output_event); mcp_maybe_stop(s); }
+}
+static void input_ready(evutil_socket_t fd, short events, void *arg)
+{
+    mcp_server *s = arg; (void)events;
+    int got = evbuffer_read(s->input,fd,4096); size_t n; char *line;
+    if (got <= 0) {
+        if (got < 0 && (errno == EAGAIN || errno == EINTR)) return;
+        if (evbuffer_get_length(s->input) || s->oversized) mcp_request(s,"",0,NULL);
+        stop(0,0,s); return;
+    }
+    while ((line = evbuffer_readln(s->input,&n,EVBUFFER_EOL_LF))) {
+        if (s->oversized || n > MCP_FRAME_LIMIT) mcp_request(s,"",0,NULL);
+        else mcp_request(s,line,n,NULL);
+        free(line); s->oversized = 0;
+    }
+    if (evbuffer_get_length(s->input) > MCP_FRAME_LIMIT) { evbuffer_drain(s->input,evbuffer_get_length(s->input)); s->oversized = 1; }
 }
 int main(int argc, char **argv)
 {
-    nnh_context *ctx = NULL; nnh_config config = {sizeof config,NULL,NULL,NULL};
-    compact_state compact = {0};
-    char line[FRAME_LIMIT + 1]; size_t used = 0; int c, oversized = 0, initialized = 0, ok = 1;
+    mcp_server s = {0}; char self[PATH_MAX], *paths[3]; int count = 0, worker = 0;
+    s.config.size = sizeof s.config;
     if (argc == 2 && !strcmp(argv[1],"--version")) { puts(nnh_version()); return 0; }
-    if (argc != 4) { fprintf(stderr,"usage: %s ENGINE DATA SESSIONS\n",argv[0]); return 2; }
-    config.engine_path = argv[1]; config.data_path = argv[2]; config.sessions_path = argv[3];
-    signal(SIGPIPE,SIG_IGN); /* executable only; library never installs handlers */
-    if (nnh_context_open(&config,&ctx) != NNH_OK) { fprintf(stderr,"neonethack-mcp: context open failed\n"); return 1; }
-    while (ok && (c = fgetc(stdin)) != EOF) {
-        if (c != '\n') { if (used < FRAME_LIMIT) line[used++] = (char)c; else oversized = 1; continue; }
-        line[used] = 0;
-        mj_val id = {NULL}; char *value = NULL, *method = NULL, *version = NULL, *canonical = NULL; int error = 0;
-        if (oversized || memchr(line,0,used) || !mj_valid(line)) {
-            error = 1; value = failure(-32700,"Invalid JSON or frame exceeds limit");
-        } else if (!(canonical = mj_canonical((mj_val){line}))) {
-            error = 1; value = failure(-32600,"Duplicate keys or unsupported JSON structure");
-        } else {
-            id = field(canonical,"id");
-            mj_val m = field(canonical,"method"), v = field(canonical,"jsonrpc"), params = field(canonical,"params");
-            method = m.p ? mj_str(m) : NULL; version = v.p ? mj_str(v) : NULL;
-            if (!version || strcmp(version,"2.0") || !method ||
-                (id.p && *id.p != '"' && *id.p != '-' && (*id.p < '0' || *id.p > '9')) ||
-                (params.p && *params.p != '{')) {
-                id.p = NULL; error = 1; value = failure(-32600,"Invalid JSON-RPC request");
-            } else if (!id.p) {
-                /* Notifications never execute tools and never receive replies. */
-            } else if (!strcmp(method,"initialize")) {
-                mj_val pv = field(params.p,"protocolVersion"); char *protocol = pv.p ? mj_str(pv) : NULL;
-                if (!protocol || !field(params.p,"clientInfo").p || !field(params.p,"capabilities").p) {
-                    error = 1; value = failure(-32602,"Missing initialization parameters");
-                } else {
-                    const char *negotiated = !strcmp(protocol,"2024-11-05") || !strcmp(protocol,"2025-03-26") || !strcmp(protocol,"2025-06-18") ? protocol : "2025-11-25";
-                    mj_Buf b; mj_init(&b); mj_obj(&b);
-                    mj_key(&b,"protocolVersion"); mj_strv(&b,negotiated);
-                    mj_key(&b,"capabilities"); mj_rawv(&b,"{\"tools\":{}}");
-                    mj_key(&b,"serverInfo"); mj_rawv(&b,"{\"name\":\"neonethack\",\"version\":\"1.0.0-alpha.1\"}");
-                    mj_key(&b,"instructions"); mj_strv(&b,mcp_instructions);
-                    mj_endobj(&b); value = take(&b); initialized = 1;
-                }
-                free(protocol);
-            } else if (!strcmp(method,"ping")) value = strdup("{}");
-            else if (!initialized) { error = 1; value = failure(-32000,"Initialize first"); }
-            else if (!strcmp(method,"tools/list")) value = strdup(mcp_tools);
-            else if (!strcmp(method,"tools/call")) value = call(ctx,&compact,params.p,&error);
-            else { error = 1; value = failure(-32601,"Method not found"); }
-        }
-        if (id.p || error) ok = reply(id,value,error);
-        free(value); free(method); free(version); free(canonical); used = 0; oversized = 0;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i],"--worker") && i == 1) worker = 1;
+        else if (!strcmp(argv[i],"--http") && !s.port && i+1 < argc) {
+            char *end; long port = strtol(argv[++i],&end,10);
+            if (!*argv[i] || *end || port < 1 || port > 65535) goto usage;
+            s.port = (int)port;
+        } else if (argv[i][0] == '-' || count == 3) goto usage;
+        else paths[count++] = argv[i];
     }
-    if (used || oversized) { char *value = failure(-32700,"Request must end with LF"); reply((mj_val){NULL},value,1); free(value); }
-    free(compact.previous); nnh_context_close(ctx);
-    if (!ok) fprintf(stderr,"neonethack-mcp: transport retired; execution may be uncertain, retain exact requestId and payload\n");
-    return !ok || ferror(stdin) ? 1 : 0;
+    if (count != 3 || (worker && s.port)) goto usage;
+    s.config.engine_path = paths[0]; s.config.data_path = paths[1]; s.config.sessions_path = paths[2];
+    signal(SIGPIPE,SIG_IGN); /* Executable only; never installed by the C library. */
+    if (worker) return mcp_worker_main(&s.config);
+    ssize_t self_length = readlink("/proc/self/exe",self,sizeof self-1);
+    if (self_length >= 0) snprintf(self,sizeof self,"/proc/self/exe");
+    else if (!realpath(argv[0],self)) { perror("MCP executable path"); return 1; }
+    s.self = self;
+    /* Validate runtime paths before accepting work, without opening a game. */
+    nnh_context *probe = NULL;
+    if (nnh_context_open(&s.config,&probe) != NNH_OK) { fprintf(stderr,"neonethack-mcp: context open failed\n"); return 1; }
+    nnh_context_close(probe);
+    struct event_config *ec = event_config_new();
+    /* poll supports redirected regular-file stdin as well as pipes/sockets. */
+    event_config_avoid_method(ec,"epoll"); s.base = event_base_new_with_config(ec); event_config_free(ec);
+    s.input = evbuffer_new(); s.output = evbuffer_new();
+    if (!s.base || !s.input || !s.output) return 1;
+    struct event *sigint = evsignal_new(s.base,SIGINT,stop,&s), *sigterm = evsignal_new(s.base,SIGTERM,stop,&s);
+    struct event *sigchild = evsignal_new(s.base,SIGCHLD,child_exited,&s);
+    event_add(sigint,NULL); event_add(sigterm,NULL); event_add(sigchild,NULL);
+    if (s.port) { if (mcp_http_start(&s)) return 1; }
+    else {
+        evutil_make_socket_nonblocking(STDIN_FILENO); evutil_make_socket_nonblocking(STDOUT_FILENO);
+        s.input_event = event_new(s.base,STDIN_FILENO,EV_READ|EV_PERSIST,input_ready,&s);
+        s.output_event = event_new(s.base,STDOUT_FILENO,EV_WRITE|EV_PERSIST,output_ready,&s);
+        event_add(s.input_event,NULL);
+    }
+    event_base_dispatch(s.base);
+    mcp_workers_close(&s);
+    if (s.http) evhttp_free(s.http);
+    if (s.input_event) event_free(s.input_event);
+    if (s.output_event) event_free(s.output_event);
+    event_free(sigint); event_free(sigterm); event_free(sigchild); evbuffer_free(s.input); evbuffer_free(s.output);
+    free(s.compact.previous); event_base_free(s.base);
+    return s.failed;
+usage:
+    fprintf(stderr,"usage: %s [--http PORT] ENGINE DATA SESSIONS\nNative C MCP: default stdio; HTTP " MCP_HTTP_VERSION " at 127.0.0.1:PORT/mcp.\n",argv[0]);
+    return argc == 2 && (!strcmp(argv[1],"--help") || !strcmp(argv[1],"-h")) ? 0 : 2;
 }

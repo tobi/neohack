@@ -110,10 +110,12 @@ library path. Configure an MCP client with absolute paths:
 }
 ```
 
-The native executable implements newline-delimited JSON-RPC initialization,
-ping, tools/list, and tools/call. Stdout contains only protocol frames; diagnostics
-use stderr. Calls execute serially through `nnh_dispatch`, preserving the native
-filesystem ownership, pins, reservations, and receipts. MCP notifications never
-execute game inputs. Transport cancellation cannot undo already submitted input.
-The Node MCP wrapper remains available for embedding a custom TypeScript transport.
-Both return [compact observation updates](PROTOCOL.md#mcp-observation-presentation).
+The native executable implements stdio MCP and `--http PORT` for MCP 2026-07-28
+Streamable HTTP. It uses a libevent event loop and one C worker/engine per game;
+calls serialize within each game and run concurrently across games. Each create
+has its own persistent `SESSIONS/<sessionId>/` directory. Tool schemas are unchanged.
+MCP notifications never execute game inputs, and transport cancellation cannot
+undo submitted input. See [MCP usage](TYPESCRIPT.md#native-mcp) for HTTP headers,
+process lifecycle and uncertainty handling. Stdio returns compact observation
+updates; HTTP uses independent snapshots. No Node server adapter is required or
+provided.

@@ -27,8 +27,8 @@
       "import": "./dist/typescript/native.js"
     },
     "./mcp": {
-      "types": "./dist/mcp/server.d.ts",
-      "import": "./dist/mcp/server.js"
+      "types": "./dist/mcp/compact.d.ts",
+      "import": "./dist/mcp/compact.js"
     },
     "./wasm": {
       "types": "./dist/typescript/wasm.d.ts",
@@ -51,9 +51,6 @@
       "types": "./dist/mcp/tools.d.ts",
       "import": "./dist/mcp/tools.js"
     }
-  },
-  "bin": {
-    "neonethack-mcp": "./dist/mcp/cli.js"
   },
   "files": [
     "dist/",
@@ -79,13 +76,11 @@
     "test:wasm": "npm run build && node --test tests/wasm/runtime.test.mjs tests/wasm/semantic-perception.test.mjs tests/wasm/reference-client.test.mjs tests/wasm/self-state.test.mjs tests/wasm/warnings.test.mjs tests/wasm/position.test.mjs tests/wasm/text-decisions.test.mjs tests/wasm/manual-actions.test.mjs tests/wasm/manual-fixture.test.mjs",
     "test:browser": "npm run build:example && node --test tests/wasm/browser.test.mjs tests/wasm/lifecycle.test.mjs"
   },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "1.30.0"
-  },
   "devDependencies": {
     "@types/node": "24.10.1",
     "typescript": "5.9.3",
     "ajv": "8.20.0",
-    "playwright-core": "1.63.0"
+    "playwright-core": "1.63.0",
+    "@modelcontextprotocol/sdk": "1.30.0"
   }
 }
