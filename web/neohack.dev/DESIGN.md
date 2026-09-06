@@ -1147,3 +1147,9 @@ Ledger rows are compact: name/class, progress, outcome and an explicit Show repl
 button in its own column. Missing recordings use a quiet dash with an accessible
 label. An amber Errors encountered summary links to aggregate report details;
 these reports must not be presented as errors attributable to individual runs.
+
+The workshop chooser uses a bounded editorial layout: a serif invitation beside
+a small selectable code preview, two example cards, then private saved scripts.
+The chooser scrolls normally at every viewport; only the open IDE uses a fixed
+height. Keep its heading inside the viewport, with muted account context, full
+touch targets and explicit empty saved-script guidance. No new art is required.

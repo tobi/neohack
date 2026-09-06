@@ -4,6 +4,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- A redesigned workshop chooser pairs a short code preview with clear starter
+  examples, private saved scripts, and a mobile layout that scrolls naturally.
+
 - A compact ledger provides explicit Show replay buttons and a “With replay”
   view. Missing recordings stay clearly marked; error reports have a prominent summary.
 

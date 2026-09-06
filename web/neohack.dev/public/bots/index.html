@@ -1,12 +1,20 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2310181d'/%3E%3Ctext x='4' y='25' fill='%23b9ca9c' font-size='28'%3E@%3C/text%3E%3C/svg%3E"><title>Ascender workshop · NeoHack</title><link rel="stylesheet" href="/studio.css"><script type="module" src="/build/bots.js"></script><script type="module" src="/build/rail.js"></script></head><body class="workshop-page"><neohack-rail></neohack-rail><main class="ide-shell">
 <div class="ide-heading"><div><span class="eyebrow">NEOHACK / LAB</span><h1>Ascender workshop</h1></div><span id="author" class="muted">Local experiment</span></div>
 <section id="project-picker" class="project-picker" aria-labelledby="picker-title">
-<h2 id="picker-title">What will you build?</h2><p>Write your own JavaScript or explore an example. Saving an example creates your own private copy.</p>
-<button id="new-script">Create a script</button>
-<h3>Try an example</h3><div class="example-list">
-<button id="example-imp" class="secondary"><strong>Curious imp</strong><span>A small explorer. Walk new paths, find stairs, and stop when it needs help.</span></button>
-<button id="example-observer" class="secondary"><strong>First steps</strong><span>A short introduction to events: look around, search once, and stop.</span></button></div>
-<h3>Your scripts</h3><select id="picker-saved" aria-label="Your saved scripts"><option value="">Sign in to open your saved scripts</option></select>
+<div class="picker-intro">
+<div class="picker-copy"><p class="eyebrow">YOUR IDEAS. THEIR NEXT MOVE.</p><h2 id="picker-title">A little code.<br><em>A new adventure.</em></h2><p class="picker-lede">Give a hero a plan. Watch it unfold in the dungeon. Change a line and try again.</p><button id="new-script">Create a script <span aria-hidden="true">↗</span></button><p class="picker-footnote">JavaScript · Runs in your browser</p></div>
+<div class="picker-preview" aria-label="Example of a short script"><div class="preview-heading"><span>main.js</span><span>YOUR FIRST MOVE</span></div><pre><code><span class="syntax-muted">// Look around. Take one action.</span>
+<span class="syntax-key">bot</span>.on(<span class="syntax-string">"turn"</span>, <span class="syntax-key">async</span> ({ hero }) =&gt; {
+  <span class="syntax-key">await</span> hero.search();
+  hero.stop();
+});</code></pre><div class="preview-caption"><span aria-hidden="true">@</span> The original NetHack engine. Your instructions.</div></div>
+</div>
+<div class="picker-section-heading"><h3>Start with an example</h3><p>Open it. Make it yours.</p></div>
+<div class="example-list">
+<button id="example-imp" class="secondary"><span class="example-mark" aria-hidden="true">@</span><span class="example-copy"><strong>Curious imp</strong><span>A small explorer that follows new paths, finds stairs, and stops when it needs help.</span><span class="example-action">Explore the code <span aria-hidden="true">↗</span></span></span></button>
+<button id="example-observer" class="secondary"><span class="example-mark" aria-hidden="true">?</span><span class="example-copy"><strong>First steps</strong><span>Learn the essentials: look around, search once, and stop. A small place to begin.</span><span class="example-action">Learn the basics <span aria-hidden="true">↗</span></span></span></button></div>
+<div class="picker-saved"><div><h3>Your scripts</h3><p id="picker-note">Sign in to save your work and pick it up later.</p></div><select id="picker-saved" aria-label="Your saved scripts"><option value="">Sign in to open your saved scripts</option></select></div>
+<p class="picker-privacy">Examples stay untouched. Saving one creates your own private copy.</p>
 <p id="project-message" role="status"></p></section>
 <div id="project-workspace" hidden><div class="project-controls ide-toolbar"><button id="choose-project" class="secondary">Scripts</button><label class="project-name">Project<input id="bot-name" maxlength="60" value="Curious imp" aria-label="Bot name"></label><label>Class<select id="role"><option value="random" selected>Random class</option></select></label><label>World<select id="seed-mode"><option value="random" selected>Random seed</option><option value="fixed">Fixed seed</option></select></label><label id="fixed-seed" hidden>Seed<input id="seed" type="number" min="0" max="4294967295" value="42"></label><div class="run-buttons"><button id="test" title="Run test (Ctrl/⌘ Enter)">▶ Run test</button><button id="stop" class="secondary" disabled>■ Stop</button><button id="format-code" class="secondary">Format</button><a id="script-link" hidden>Open script URL</a><button id="save" class="secondary" title="Save project (Ctrl/⌘ S)">Save</button></div></div>
 <p id="secure-context" class="connection-notice" hidden></p>

@@ -314,3 +314,18 @@ test('workshop chooser creates JavaScript scripts and saves private example copi
  assert.equal(invalid.status(),400);
  await page.screenshot({path:'/tmp/neohack-workshop-javascript.png',fullPage:true});
 });
+
+test('workshop chooser keeps its heading in view, scrolls on mobile and opens the editor',async t=>{
+ const {page,url}=await fixture(t);await page.setViewportSize({width:1280,height:800});await page.goto(url+'/bots');
+ await page.locator('#picker-saved:disabled').waitFor();
+ for(const width of [1280,390]) {
+  await page.setViewportSize({width,height:800});
+  const heading=await page.locator('.ide-heading').boundingBox();assert.ok(heading.x>=0&&heading.x+heading.width<=width);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.locator('#example-observer').scrollIntoViewIfNeeded();assert.equal(await page.locator('#example-observer').isVisible(),true);
+ }
+ await page.locator('#new-script').click();await page.locator('.cm-content').waitFor();
+ assert.equal(await page.locator('#project-picker').isVisible(),false);
+ await page.locator('#choose-project').click();await page.locator('#project-picker').waitFor();
+ assert.equal(await page.locator('#picker-saved').isDisabled(),true);
+});

@@ -132,7 +132,7 @@ for(const id of ['bot-name','role','seed-mode','seed']) $(id).addEventListener('
 async function refreshBots(){
   try {
     const user=await accountApi(); signedIn=true;
-    $('author').textContent=`Saved privately as ${user.name}`;
+    $('author').textContent=`Private workspace · ${user.name}`;
     saved=await accountApi('/bots');
   } catch {
     signedIn=false; saved=[];
@@ -143,6 +143,8 @@ async function refreshBots(){
     select.replaceChildren(new Option(signedIn ? 'Open a saved script…' : 'Sign in to open your saved scripts',''));
     for(const bot of saved) select.add(new Option(bot.name,bot.id));
   }
+  $('picker-note').textContent=signedIn ? (saved.length ? 'Your private scripts, ready for another experiment.' : 'No saved scripts yet. Start above and save your first experiment.') : 'Sign in to save your work and pick it up later.';
+  $<HTMLSelectElement>('picker-saved').disabled=saved.length===0;
   if(routePending) {
     const params=new URL(location.href).searchParams;
     const id=params.get('script');
