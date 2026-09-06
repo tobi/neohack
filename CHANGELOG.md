@@ -4,6 +4,10 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- A character sheet separates worn gear, ready weapons and carried items, with
+  exact equipment positions, attributes and mobile Equipment/Backpack views.
+  Removing equipment updates the sheet immediately; unknown assignments stay unknown.
+
 - Full story passages can be reopened as journal scrolls; your opening story appears
   automatically after character creation.
 

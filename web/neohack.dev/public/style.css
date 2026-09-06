@@ -1681,3 +1681,50 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
 @media(max-width:600px){#ended neohack-world{height:340px}#ended:has(neohack-world){max-height:calc(100dvh - 145px)}}
 .world-hud:has(.hud-menu[open]) { z-index:20; }
 .notices:has(#ended:not([hidden]) neohack-world) { top:84px;width:min(880px,calc(100% - 32px));max-height:calc(100% - 100px);pointer-events:auto; }
+
+/* Character sheet: actual engine assignments, with carried items alongside. */
+.rightbar.character-panel { z-index: 11; width: min(760px, calc(100% - 40px)); bottom: 24px; padding: 0 22px 22px; }
+.character-panel > .section-title { position: sticky; top: 0; z-index: 2; padding: 20px 44px 12px 0; margin: 0; background: #202d29; border-bottom: 1px solid #465340; }
+.character-panel #close-panel { position: sticky; top: 10px; z-index: 3; margin: 8px -8px 0 0; min-width: 44px; min-height: 44px; }
+.character-panel .pickup-shortcut { margin: 12px 0; padding: 8px 10px; font-size: 12px; min-height: 36px; }
+.sheet-hero { display: flex; align-items: center; gap: 16px; padding: 8px 0 18px; }
+.sheet-portrait { width: 48px; height: 96px; object-fit: contain; image-rendering: pixelated; flex: 0 0 48px; }
+.sheet-identity { min-width: 0; }
+.sheet-eyebrow { color: #bdca9e; font: 11px ui-monospace, monospace; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 6px; }
+.sheet-identity h3 { font: 32px Georgia, serif; color: #ece5c8; margin: 0; overflow-wrap: anywhere; }
+.sheet-condition { margin: 8px 0 0; color: #aebaa4; font-size: 13px; }
+.sheet-stats { display: grid; grid-template-columns: repeat(6,1fr); margin: 0 0 18px; border-block: 1px solid #48543f; }
+.sheet-stats > div { padding: 12px 6px; min-width: 0; }
+.sheet-stats dt { font-size: 11px; color: #aab79f; }
+.sheet-stats dd { margin: 5px 0 0; color: #e1e7c8; font: 16px ui-monospace, monospace; }
+.sheet-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.sheet-columns > section { min-width: 0; }
+.sheet-bag { border-left: 1px solid #465340; padding-left: 20px; }
+.sheet-section-heading { font: 11px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .09em; color: #c7d4aa; margin: 12px 0 6px; }
+.equipment-group + .equipment-group { margin-top: 22px; }
+.character-sheet .item-row { width: 100%; text-align: left; }
+.character-sheet .equipment-assignment { color: #bdcc9b; font-size: 11px; }
+.character-sheet .known-curse { color: #e0ad8f; font-size: 11px; }
+.character-sheet .item-copy { overflow-wrap: anywhere; min-width: 0; }
+.sheet-notice { border-left: 2px solid #c7a974; padding: 8px 10px; color: #dec69d; font-size: 13px; }
+.sheet-empty { color: #95a58f; font-size: 13px; margin: 16px 0; }
+.sheet-vacancies { margin-top: 20px; font-size: 12px; color: #a5b398; }
+.sheet-vacancies summary { cursor: pointer; padding: 10px 0; }
+.sheet-vacancies ul { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; list-style: none; padding: 0; }
+.sheet-tabs { display: none; }
+@media (max-width: 620px) {
+  .rightbar.character-panel { top: 70px; right: 10px; bottom: max(12px, env(safe-area-inset-bottom)); width: calc(100% - 20px); padding: 0 16px 20px; }
+  .sheet-stats { grid-template-columns: repeat(3,1fr); }
+  .sheet-stats > div { padding: 9px 4px; }
+  .sheet-hero { padding-bottom: 8px; }
+  .sheet-identity h3 { font-size: 28px; }
+  .sheet-tabs { display: flex; position: sticky; top: 80px; z-index: 1; background: #202d29; gap: 8px; padding: 8px 0; border-bottom: 1px solid #465340; }
+  .sheet-tabs button { flex: 1; min-height: 44px; background: transparent; border: 1px solid #56634b; }
+  .sheet-tabs button[aria-pressed=true] { color: #202d29; background: #b8cc9a; }
+  .sheet-columns { display: block; }
+  .sheet-bag { border: 0; padding: 0; }
+  [data-sheet-view=equipment] .sheet-bag, [data-sheet-view=bag] .sheet-equipment { display: none; }
+}
+.sheet-attributes { font-size: 12px; color: #aebc9f; margin: -6px 0 14px; }
+.sheet-attributes summary { cursor: pointer; padding: 10px 0; }
+.sheet-attributes .sheet-stats { margin-bottom: 8px; }

@@ -1099,3 +1099,26 @@ item or operation target. Other terminal outcomes retain the hero; seeking befor
 death restores the hero. No marker is placed when the final position is absent.
 `drawTombstone` in `src/dungeon-art.ts` shares the existing 16px grave artwork and
 its palette/shading with observed graves; no new runtime PNG or vendor asset.
+
+## Character sheet and backpack
+
+The Backpack entry opens a wider character sheet: the existing hero portrait,
+name and class, canonical health/energy/armor/level/strength/gold, then actual
+worn equipment and in-hand/readied items alongside carried possessions. On narrow
+screens, Equipment and Backpack buttons switch sections without taking a turn.
+Keep the close button visible while scrolling; use the available screen height.
+
+Assignments come exclusively from `equipmentSlots`, with explicit left/right
+rings, clothing layers, main/off hand, alternate weapon and quiver labels. A
+multi-slot item appears once with all its assignments. Covered armor remains
+listed. Do not parse decorated labels or infer a second hand for a two-handed
+weapon. Missing assignments remain unknown; stale equipment has a visible notice.
+Only complete current perception permits a list of unoccupied slots, and these
+are not claims about available body parts or equip eligibility.
+
+Item rows use shared perceived-appearance silhouettes and keep their full engine
+labels. Quick actions prioritize the ordinary category action (or removal for
+worn equipment) plus Drop, intersected with the engine's candidates. Selecting an
+item opens all named candidate actions. All actions retain opaque IDs, revision
+checks and real standing decisions; no drag-to-equip or automatic confirmation.
+No new art pack, PNGs or generated character sprites were introduced.

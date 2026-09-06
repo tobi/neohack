@@ -1,5 +1,6 @@
 import './component';
 import { PublicReplayRecorder, embedCode, replayLink } from './public-replay';
+import { renderCharacterSheet, equipmentDescription } from './character-sheet';
 import { actionIcon } from "./action-icons";
 import { accountApi, RunRecorder } from './account-client';
 import { reportError } from "./telemetry";
@@ -109,6 +110,7 @@ class PixelNethack extends HTMLElement {
   private map!: DungeonMap;
   private tilePanel: HTMLElement | null = null;
   private panel = "inventory";
+  private sheetView: "equipment" | "bag" = "equipment";
   private prayerExplained = (() => {
     try { return localStorage.getItem("neonethack-prayer-explained") === "yes"; } catch { return false; }
   })();
@@ -1230,8 +1232,8 @@ class PixelNethack extends HTMLElement {
         button.classList.toggle("action-cue", active);
         button.setAttribute("aria-label", button.dataset.action === "eat" ? (hungry ? "Eat · you are hungry" : "Eat") : (danger ? "Pray · ask for help; safety unknown" : "Pray"));
       }
-      const weapons = o.inventory.filter(item => item.usage?.includes("wielded") || item.usage?.includes("offhand"));
-      const weapon = o.perception.equipment === "current" ? weapons.map(item => item.label).join(" · ") || "Empty hands" : "Equipment unknown";
+      const weapons = o.inventory.filter(item => item.equipmentSlots?.includes("weapon") || item.equipmentSlots?.includes("offhand"));
+      const weapon = o.perception.equipment === "current" && o.perception.inventory === "current" && o.inventoryKnown && o.inventory.every(item=>item.equipmentSlots!==undefined) ? weapons.map(item => item.label).join(" · ") || "Empty hands" : "Equipment unknown";
       this.$("#character-stats").innerHTML =
         `<div class="health-label"><span>Health</span><strong>${escape(v.health ?? "?")} <span>/ ${escape(v.maxHealth ?? "?")}</span></strong></div><progress aria-label="Health" max="100" value="${Number.isFinite(fraction) ? Math.max(0, Math.min(100, fraction * 100)) : 0}"></progress><div class="stats-row"><div><small>ARMOR</small><strong>${escape(v.armor ?? "?")}</strong></div><div><small>GOLD</small><strong>${escape(v.gold ?? "?")}</strong></div><div class="hero-level"><small>LEVEL</small><strong>${escape(v.level ?? "?")}</strong></div></div><p class="weapon-line"><small>IN HAND</small> ${escape(weapon)}</p><p class="condition">${escape([v.hunger, v.burden, ...(Array.isArray(v.condition) ? v.condition : [v.condition])].filter(Boolean).join(" · ") || "Ready for the next step")}</p>`;
       this.text(
@@ -1394,12 +1396,14 @@ class PixelNethack extends HTMLElement {
       b.classList.toggle("active", b.dataset.view === this.panel);
       b.setAttribute("aria-pressed", String(b.dataset.view === this.panel));
     });
+    this.$(".rightbar").classList.toggle("character-panel", this.panel === "inventory");
+    this.$(".rightbar").setAttribute("aria-label", this.panel === "inventory" ? "Character sheet" : "Field notes");
     const body = this.$("#panel-body");
     const o = this.game?.observation;
     this.text(
       "#panel-heading",
       {
-        inventory: "Your backpack",
+        inventory: "Your adventurer",
         surroundings: "Around you",
         journal: "Your journal",
       }[this.panel] ?? "Your backpack",
@@ -1428,39 +1432,19 @@ class PixelNethack extends HTMLElement {
     if (this.panel === "inventory") {
       const settings = this.button("Automatic pickup · " + (o.automaticPickup ? pickupSummary(o.automaticPickup) : "Unavailable"), () => this.openPickupSettings(), "pickup-shortcut");
       settings.disabled = !this.playable() || !o.automaticPickup;
-      body.append(settings);
       this.text(
         "#panel-count",
         o.inventoryKnown ? `${o.inventory.length} ITEMS` : "UNKNOWN",
       );
-      if (o.perception.inventory !== "current")
-        body.append(
-          Object.assign(document.createElement("p"), {
-            className: "subtle",
-            textContent:
-              o.perception.inventory === "lastKnown"
-                ? "Last known items. The current inventory is not available."
-                : "You do not currently know what you are carrying.",
-          }),
-        );
-      for (const item of o.inventory) {
-        const b = this.button("", () => this.itemDetails(item), "item-row");
-        b.innerHTML = `<span class="item-icon" aria-hidden="true"><img src="${inventoryArt(item)}" alt=""></span><span class="item-copy"><span>${escape(item.label)}</span><small>${escape(item.usage?.join(" · ") || item.category || "item")}</small></span><span class="item-quantity">${item.quantity > 1 ? item.quantity : "›"}</span>`;
-        const row = document.createElement("div");
-        row.className = "inventory-entry";
-        row.append(b);
-        const actions = document.createElement("div");
-        actions.className = "inventory-actions";
-        this.appendItemActions(actions, item, true);
-        row.append(actions);
-        body.append(row);
-      }
-      if (o.inventoryKnown && !o.inventory.length)
-        body.append(
-          Object.assign(document.createElement("p"), {
-            textContent: "Your backpack is empty.",
-          }),
-        );
+      body.append(renderCharacterSheet(o, {
+        name: this.current?.name ?? 'Adventurer',
+        role: roles.find(r=>r.id===this.current?.role)?.title.replace('The ','') ?? 'Adventurer',
+        portrait: '/art/'+heroArt(this.current?.role)+'.png',
+        view: this.sheetView, selectView: view=>{this.sheetView=view;},
+        inspect: item=>this.itemDetails(item),
+        actions: (host,item)=>this.appendItemActions(host,item,true),
+      }));
+      body.append(settings);
     } else if (this.panel === "surroundings") {
       this.text("#panel-count", "PERCEIVED");
       const p = document.createElement("p");
@@ -1807,10 +1791,10 @@ class PixelNethack extends HTMLElement {
       });
     };
   }
-  private openMenu(html: string) {
+  private openMenu(html: string, preservePanel = false) {
     this.closeTile();
     this.stopMovement();
-    this.closePanel();
+    if (!preservePanel) this.closePanel();
     this.querySelector<HTMLDetailsElement>(".hud-menu")!.open = false;
     const dialog = this.querySelector<HTMLDialogElement>("#menu")!;
     if (!dialog.open) this.menuReturn = document.activeElement as HTMLElement;
@@ -2027,6 +2011,12 @@ class PixelNethack extends HTMLElement {
       remove: () => g.remove(ref, options),
       drop: () => g.drop(ref, options),
       zap: () => g.zap(ref, undefined, options),
+      throw: () => g.throw(ref, undefined, options),
+      offer: () => g.offer(ref, options),
+      dip: () => g.dip(ref, options),
+      rub: () => g.rub(ref, options),
+      invoke: () => g.invoke(ref, options),
+      quiver: () => g.quiver(ref, options),
     };
     if (actions[name]) {
       this.closeMenu();
@@ -2064,14 +2054,19 @@ class PixelNethack extends HTMLElement {
   }
   private itemDetails(item: ItemRef) {
     this.openMenu(
-      `<div class="large-item-icon" aria-hidden="true"><img src="${inventoryArt(item)}" alt=""></div><h2 id="menu-title">${escape(item.label)}</h2><p class="subtle">${escape(item.location === "here" ? "At your feet" : "In your backpack")}${item.usage?.length ? ` · ${escape(item.usage.join(", "))}` : ""}</p><p>Choose what you’d like to try. The dungeon decides what is possible.</p><div class="more-grid" id="item-actions"></div>`,
+      `<div class="large-item-icon" aria-hidden="true"><img src="${inventoryArt(item)}" alt=""></div><h2 id="menu-title">${escape(item.label)}</h2><p class="subtle">${escape(item.location === "here" ? "At your feet" : equipmentDescription(item))}${item.usage?.length ? ` · ${escape(item.usage.join(", "))}` : ""}</p><p>Choose what you’d like to try. The dungeon decides what is possible.</p><div class="more-grid" id="item-actions"></div>`,
+      !this.$(".rightbar").hidden,
     );
     this.appendItemActions(this.$("#item-actions"), item);
   }
   private appendItemActions(host: HTMLElement, item: ItemRef, compact = false) {
     const game = this.game!, revision = game.state.revision;
-    const labels: Record<string, string> = {pickup: "Pick up", eat: "Eat", equip: "Wear", remove: "Remove", apply: "Use", drink: "Drink", read: "Read", zap: "Zap", wield: "Wield", drop: "Drop"};
-    for (const action of item.actions ?? []) {
+    const labels: Record<string, string> = {pickup: "Pick up", eat: "Eat", equip: "Wear", remove: "Remove", apply: "Use", drink: "Drink", read: "Read", zap: "Zap", wield: "Wield", drop: "Drop", throw: "Throw", offer: "Offer", dip: "Dip", rub: "Rub", invoke: "Invoke", quiver: "Ready in quiver"};
+    // Presentation priority only: eligibility remains the engine's candidate list.
+    const preferred: Record<string,string> = {food:'eat',potion:'drink',scroll:'read',spellbook:'read',wand:'zap',armor:'equip',ring:'equip',amulet:'equip',weapon:'wield',tool:'apply'};
+    const primary = item.equipmentSlots?.some(slot=>!['weapon','offhand','alternateWeapon','quiver'].includes(slot)) ? 'remove' : preferred[item.category];
+    const candidates = (item.actions ?? []).filter(action=>!compact || action===primary || action==='drop');
+    for (const action of candidates) {
       const button = this.button(labels[action]!, () => {
         if (this.game !== game || game.state.revision !== revision || !this.playable()) return;
         this.action(action, item);

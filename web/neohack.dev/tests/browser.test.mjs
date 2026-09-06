@@ -2898,11 +2898,22 @@ test('backpack actions use current engine item IDs and show wielded equipment', 
   const rows = page.locator('.inventory-entry');
   assert.equal(await rows.count(), before.observation.inventory.length);
   for (let i = 0; i < before.observation.inventory.length; i++) {
-    assert.deepEqual(await rows.nth(i).locator('[data-item-action]').evaluateAll(bs => bs.map(b => b.dataset.itemAction)), before.observation.inventory[i].actions);
+    const item = before.observation.inventory[i];
+    const row=page.locator('[data-item-id="'+item.id+'"]');
+    assert.equal(await row.count(),1);
+    const quick=await row.locator('[data-item-action]').evaluateAll(bs=>bs.map(b=>b.dataset.itemAction));
+    assert.ok(quick.length<=2);assert.ok(quick.every(action=>item.actions.includes(action)));
+    assert.equal(await row.locator('.equipment-assignment').textContent(), item.equipmentSlots.length ? item.equipmentSlots.map(slot=>({weapon:'Main hand',shield:'Shield',alternateWeapon:'Alternate weapon',quiver:'Quiver'}[slot] ?? slot)).join(' · ') : 'Carried');
   }
+  const foodRow=page.locator('[data-item-id="'+food.id+'"]');
+  await foodRow.locator('.item-row').click();
+  assert.deepEqual(await page.locator('#item-actions [data-item-action]').evaluateAll(bs=>bs.map(b=>b.dataset.itemAction)),food.actions);
+  await page.keyboard.press('Escape');
   assert.equal((await snapshot(page)).revision, before.revision);
   await page.setViewportSize({width: 390, height: 844});
-  for (const button of await page.locator('.inventory-actions button').all()) {
+  await page.screenshot({path: root + '/test-results/character-sheet-mobile.png'});
+  await page.getByRole('button', {name:'Backpack',exact:true}).click();
+  for (const button of await page.locator('.inventory-actions button:visible').all()) {
     assert.equal(await button.locator('svg[aria-hidden="true"]').count(), 1);
     assert.equal(await button.textContent(), '');
     assert.ok(await button.getAttribute('aria-label'));
@@ -3290,4 +3301,60 @@ test('potion nickname dialog explains witnessed effects and generates only an ed
   assert.equal((await snapshot(page)).decision,null);
   assert.equal(await page.locator('#decision').isVisible(),false);
   assert.deepEqual(errors,[]);
+});
+
+test('character sheet follows actual equipment changes and distinguishes unknown assignments', async t=>{
+  const {page}=await fixture(t);await create(page);
+  const initial=await snapshot(page);
+  const shield=initial.observation.inventory.find(i=>i.equipmentSlots?.includes('shield'));
+  assert.ok(shield);
+  await page.getByRole('button',{name:/Backpack/}).click();
+  await page.screenshot({path:root+'/test-results/character-sheet-desktop.png'});
+  assert.ok(await page.locator('#sheet-equipment').getByText(shield.label,{exact:true}).count());
+  await page.getByRole('button',{name:'Remove '+shield.label,exact:true}).click();await ready(page);
+  const after=await snapshot(page);
+  assert.equal(after.decision,null);
+  assert.deepEqual(after.observation.inventory.find(i=>i.id===shield.id).equipmentSlots,[]);
+  assert.equal(await page.locator('#sheet-equipment [data-item-id="'+shield.id+'"]').count(),0);
+  assert.equal(await page.locator('#sheet-bag [data-item-id="'+shield.id+'"]').count(),1);
+  await page.locator('#sheet-bag [data-item-id="'+shield.id+'"] .item-row').click();
+  await page.getByRole('button',{name:'Throw '+after.observation.inventory.find(i=>i.id===shield.id).label,exact:true}).click();await ready(page);
+  assert.equal((await snapshot(page)).decision.kind,'target');
+  assert.equal((await snapshot(page)).observation.turn,after.observation.turn);
+  await page.keyboard.press('Escape');await ready(page);
+  assert.ok((await snapshot(page)).observation.inventory.some(i=>i.id===shield.id));
+  await page.getByRole('button',{name:/Backpack/}).click();
+  // Render a deliberately incomplete perception; never infer assignments from labels.
+  await page.evaluate(()=>{
+    const app=document.querySelector('pixel-nethack');
+    const frame=structuredClone(app.game.state);
+    frame.observation.perception.equipment='unknown';
+    for(const item of frame.observation.inventory){delete item.equipmentSlots;item.label+=' (being worn)';}
+    app.game.current=frame;app.renderPanel();
+  });
+  assert.match(await page.locator('.character-sheet').textContent(),/not fully known/);
+  assert.equal(await page.getByText(/unoccupied slots/).count(),0);
+  assert.equal(await page.locator('#sheet-equipment .inventory-entry').count(),0);
+  assert.equal(await page.locator('#sheet-bag .equipment-assignment').evaluateAll(es=>es.every(e=>e.textContent==='Assignment unknown')),true);
+  await page.evaluate(()=>{
+    const app=document.querySelector('pixel-nethack');const frame=structuredClone(app.game.state);
+    frame.observation.perception.equipment='lastKnown';
+    frame.observation.inventory[0].equipmentSlots=['leftRing','rightRing'];
+    frame.observation.inventory[1].equipmentSlots=['cloak','bodyArmor','shirt'];
+    app.game.current=frame;app.renderPanel();
+  });
+  assert.match(await page.locator('.character-sheet').textContent(),/Last known equipment/);
+  assert.equal(await page.locator('#sheet-equipment .inventory-entry').count(),2);
+  assert.ok(await page.getByText('Left ring · Right ring',{exact:true}).count());
+  assert.ok(await page.getByText('Cloak · Body armor · Underlayer',{exact:true}).count());
+  await page.setViewportSize({width:390,height:844});
+  await page.getByRole('button',{name:'Backpack',exact:true}).click();
+  assert.equal(await page.getByText('Last known equipment. These assignments may have changed.',{exact:true}).isVisible(),true,'the backpack tab also explains stale assignments');
+  await page.evaluate(()=>{
+    const app=document.querySelector('pixel-nethack');const frame=structuredClone(app.game.state);
+    frame.observation.inventory=[];frame.observation.perception.inventory='lastKnown';
+    frame.observation.perception.equipment='current';app.game.current=frame;app.render();
+  });
+  assert.match(await page.locator('.weapon-line').textContent(),/Equipment unknown/);
+  assert.equal(await page.getByText('Your backpack is empty.',{exact:true}).count(),0);
 });
