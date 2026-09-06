@@ -77,6 +77,74 @@ async function fixture(
     );
   return { page, context, url, errors, requests };
 }
+// Exercise Chromium's real tool registry and invocation path, never app callbacks.
+// Current Chrome exposes agent automation through the CDP WebMCP domain;
+// Chromium 148 exposes its earlier native testing interface instead.
+async function nativeWebMcp(page, t) {
+  const cdp = await page.context().newCDPSession(page);
+  t.after(() => cdp.detach().catch(() => {}));
+  const registered = new Map();
+  const key = tool => tool.frameId + ":" + tool.name;
+  cdp.on("WebMCP.toolsAdded", ({ tools }) => {
+    for (const tool of tools) registered.set(key(tool), tool);
+  });
+  cdp.on("WebMCP.toolsRemoved", ({ tools }) => {
+    for (const tool of tools) registered.delete(key(tool));
+  });
+  try {
+    await cdp.send("WebMCP.enable");
+  } catch (error) {
+    if (!String(error).includes("'WebMCP.enable' wasn't found")) throw error;
+    assert.equal(await page.evaluate(() => typeof navigator.modelContextTesting?.executeTool), "function",
+      "browser must provide a native WebMCP automation interface");
+    return {
+      list: () => page.evaluate(() => (navigator.modelContextTesting?.listTools() ?? []).map(tool =>
+        ({ ...tool, inputSchema: JSON.parse(tool.inputSchema) }))),
+      call: (method, args = {}) => page.evaluate(async ({ method, args }) =>
+        JSON.parse(await navigator.modelContextTesting.executeTool(
+          "neonethack_" + method.replaceAll(".", "_"), JSON.stringify(args))), { method, args }),
+    };
+  }
+  return {
+    list: async () => {
+      // A protocol round trip drains preceding native registry events.
+      await cdp.send("Runtime.evaluate", { expression: "void 0" });
+      return [...registered.values()];
+    },
+    call: async (method, args = {}) => {
+      const name = "neonethack_" + method.replaceAll(".", "_");
+      const tool = [...registered.values()].find(tool => tool.name === name);
+      if (!tool) throw Error("Tool not found: " + name);
+      let invocationId, timer, listener;
+      const early = [];
+      const completion = new Promise((resolve, reject) => {
+        listener = event => {
+          if (!invocationId) { early.push(event); return; }
+          if (event.invocationId !== invocationId) return;
+          if (event.status === "Completed") resolve(event.output);
+          else reject(Error(event.errorText ?? "Native WebMCP invocation " + event.status));
+        };
+        cdp.on("WebMCP.toolResponded", listener);
+        timer = setTimeout(() => reject(Error("Native WebMCP invocation timed out: " + name)), 30000);
+      });
+      // Observe early failures while invokeTool itself is still pending; the
+      // awaited original promise below still propagates every completion error.
+      completion.catch(() => {});
+      try {
+        ({ invocationId } = await cdp.send("WebMCP.invokeTool", {
+          frameId: tool.frameId, toolName: name, input: args,
+        }));
+        for (const event of early) listener(event);
+        const output = await completion;
+        return typeof output === "string" ? JSON.parse(output) : output;
+      } finally {
+        clearTimeout(timer);
+        cdp.off("WebMCP.toolResponded", listener);
+      }
+    },
+  };
+}
+
 const snapshot = (page) =>
   page.evaluate(() => document.querySelector("pixel-nethack").snapshot);
 const ready = (page) =>
@@ -1443,9 +1511,8 @@ test(
       () => document.querySelector("pixel-nethack").dataset.webmcp === "ready",
     );
     const { tools } = await import("../../../lib/neonethack/dist/mcp/tools.js");
-    const registered = await page.evaluate(() =>
-      navigator.modelContextTesting.listTools(),
-    );
+    const native = await nativeWebMcp(page, t);
+    const registered = await native.list();
     assert.deepEqual(
       registered.map((t) => t.name).sort(),
       tools.map((t) => t.name).sort(),
@@ -1453,19 +1520,9 @@ test(
     for (const tool of tools) {
       const native = registered.find((t) => t.name === tool.name);
       assert.equal(native.description, tool.description);
-      assert.deepEqual(JSON.parse(native.inputSchema), tool.inputSchema);
+      assert.deepEqual(native.inputSchema, tool.inputSchema);
     }
-    const call = (method, args = {}) =>
-      page.evaluate(
-        async ({ method, args }) => {
-          const result = await navigator.modelContextTesting.executeTool(
-            `neonethack_${method.replaceAll(".", "_")}`,
-            JSON.stringify(args),
-          );
-          return JSON.parse(result);
-        },
-        { method, args },
-      );
+    const call = native.call;
     assert.equal((await call("protocol.describe")).isError, false);
     assert.equal(await snapshot(page), null);
     const created = await call("session.create", {
@@ -1592,32 +1649,16 @@ test(
     // (model_context.cc registerTool ignores AddAlgorithm's returned handle).
     // Retired callbacks must reject before touching the closed transport even
     // when that browser retains descriptors. Navigation clears the registry.
-    const retired = await page.evaluate(async () => {
-      try {
-        return JSON.parse(
-          await navigator.modelContextTesting.executeTool(
-            "neonethack_protocol_describe",
-            "{}",
-          ),
-        );
-      } catch (error) {
-        return { removed: /Tool not found/.test(String(error)) };
-      }
-    });
+    let retired;
+    try { retired = await call("protocol.describe"); }
+    catch (error) { retired = { removed: /Tool not found/.test(String(error)) }; }
     assert.ok(
       retired.removed ||
         (retired.isError &&
           /cancelled before submission/.test(retired.content[0].text)),
     );
     await page.goto("about:blank");
-    assert.equal(
-      (
-        await page.evaluate(
-          () => navigator.modelContextTesting?.listTools() ?? [],
-        )
-      ).length,
-      0,
-    );
+    assert.equal((await native.list()).length, 0);
     assert.deepEqual(errors, []);
   },
 );
@@ -2492,9 +2533,7 @@ test("removing the client during runtime opening closes the late store owner", {
 test("idle WebMCP discovery and closed adventures release storage for another tab", { timeout: 60000 }, async t => {
   const { page, context, url, errors } = await fixture(t, { webmcp: true });
   await page.waitForFunction(() => document.querySelector("pixel-nethack").dataset.webmcp === "ready");
-  const call = (method, args = {}) => page.evaluate(async ({ method, args }) =>
-    JSON.parse(await navigator.modelContextTesting.executeTool(
-      `neonethack_${method.replaceAll(".", "_")}`, JSON.stringify(args))), { method, args });
+  const { call } = await nativeWebMcp(page, t);
   const owned = () => page.evaluate(async () => (await navigator.locks.query()).held.some(lock => lock.name === `neonethack:v1:${document.querySelector("pixel-nethack").storeName}`));
   assert.equal((await call("protocol.describe")).isError, false);
   assert.equal(await owned(), false, "discovery must not leave a title worker owning the store");
@@ -2777,4 +2816,34 @@ test('the title gate starts lit and clicking it walks into character creation', 
   await page.locator('#create-form').waitFor();
   assert.equal(await page.locator('#create-form').count(), 1);
   assert.equal(await page.evaluate(() => document.querySelector('pixel-nethack').snapshot == null), true);
+});
+
+test('detection scroll map browsing supports keyboard Help, cursor, Done and durable resume', { timeout: 90_000 }, async t => {
+  const {page, errors} = await fixture(t);
+  await create(page,'wizard',7);
+  await page.getByRole('button', {name:'More actions',exact:true}).click();
+  await page.locator('#more-grid button').filter({hasText:/^Read/}).click();
+  await page.locator('#decision[open]').waitFor();
+  await page.locator('#decision-body button').filter({hasText:'scroll of food detection'}).click();
+  await ready(page);
+  const viewed = await snapshot(page);
+  assert.equal(viewed.decision.kind,'position');
+  await page.keyboard.press('a'); await ready(page);
+  assert.equal((await snapshot(page)).decision.cursor.x,viewed.decision.cursor.x-1);
+  assert.equal((await snapshot(page)).observation.turn,viewed.observation.turn);
+  await page.keyboard.press('?'); await ready(page);
+  const helped = await snapshot(page);
+  assert.equal(helped.decision.kind,'position');
+  assert.ok(helped.events.some(e=>e.type==='heard' && /cursor/.test(e.text)));
+  await page.locator('#direction-target summary').click();
+  assert.match(await page.locator('#direction-target details').innerText(),/cursor/);
+  await page.reload();
+  await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.decision?.kind==='position');
+  await ready(page);
+  assert.deepEqual((await snapshot(page)).decision,helped.decision);
+  await page.locator('#direction-target').getByRole('button',{name:'Done',exact:true}).click();
+  await ready(page);
+  assert.equal((await snapshot(page)).decision,null);
+  assert.equal((await snapshot(page)).observation.turn,viewed.observation.turn+1);
+  assert.deepEqual(errors,[]);
 });

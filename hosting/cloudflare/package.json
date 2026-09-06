@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "stage": "node scripts/stage.mjs",
-    "deploy": "node scripts/stage.mjs && wrangler deploy",
+    "deploy": "node scripts/runtime-package.mjs restore https://neohack.dev/ && npm run --prefix ../../lib/neonethack build && bun run --cwd ../../example/pixel-bun build && node scripts/stage.mjs && wrangler deploy",
     "test": "node scripts/stage.mjs && node --test tests/*.test.mjs"
   },
   "devDependencies": {

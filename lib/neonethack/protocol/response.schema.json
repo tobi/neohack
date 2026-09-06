@@ -11492,6 +11492,57 @@
                 "kind",
                 "cancellable"
               ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "about": {
+                  "type": "string"
+                },
+                "cancellable": {
+                  "type": "boolean"
+                },
+                "kind": {
+                  "const": "position"
+                },
+                "cursor": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "integer"
+                    },
+                    "y": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "browse",
+                    "select"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "action",
+                "kind",
+                "cancellable",
+                "cursor",
+                "mode"
+              ]
             }
           ]
         },

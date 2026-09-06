@@ -1251,7 +1251,17 @@ headless_nh_poskey(coordxy *x, coordxy *y, int *mod)
 {
     char *r;
     int key = '\033', ok = 0;
-    r = hl_input("poskey", NULL);
+    if (gg.getposx > 0) {
+        JBuf jb;
+        jb_init(&jb); jb_begin_obj(&jb);
+        jb_key(&jb, "positionMode"); jb_int(&jb, iflags.terrainmode ? 2 : 1);
+        jb_key(&jb, "cursorX"); jb_int(&jb, gg.getposx);
+        jb_key(&jb, "cursorY"); jb_int(&jb, gg.getposy);
+        jb_key(&jb, "prompt"); jb_str(&jb, iflags.terrainmode ? "Explore the detected map" : "Choose a location");
+        jb_end_obj(&jb);
+        r = hl_input("poskey", hl_frag(&jb));
+        jb_free(&jb);
+    } else r = hl_input("poskey", NULL);
     if (!r) {
         hangup(0);
         return '\033';

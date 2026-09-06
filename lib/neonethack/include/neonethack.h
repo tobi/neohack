@@ -46,7 +46,7 @@ typedef enum { NNH_TARGET_SELF, NNH_TARGET_DIRECTION } nnh_target_kind;
 typedef struct { nnh_target_kind kind; nnh_direction direction; } nnh_target;
 /* Exactly one of id/name must be non-NULL. NULL item pointer means discovery. */
 typedef struct { const char *id; const char *name; } nnh_item;
-typedef enum { NNH_ANSWER_ITEM, NNH_ANSWER_TARGET, NNH_ANSWER_CONFIRMATION, NNH_ANSWER_CHOICE, NNH_ANSWER_TEXT } nnh_answer_kind;
+typedef enum { NNH_ANSWER_ITEM, NNH_ANSWER_TARGET, NNH_ANSWER_CONFIRMATION, NNH_ANSWER_CHOICE, NNH_ANSWER_TEXT, NNH_ANSWER_POSITION } nnh_answer_kind;
 typedef struct {
     nnh_answer_kind kind;
     union {
@@ -55,6 +55,7 @@ typedef struct {
         int confirm; /* exactly 0 or 1 */
         struct { const int32_t *ids; size_t count; } choice;
         const char *text;
+        struct { int x, y; const char *command; } position; /* command NULL selects x/y; otherwise compass, finish or help */
     } value;
 } nnh_answer;
 

@@ -20,6 +20,7 @@ export function clearRunUrl() {
 
 
 export type CloudAdventure = {
+  buildId?: string;
   id: string;
   name: string;
   role: string;

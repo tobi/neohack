@@ -28,11 +28,21 @@ export async function startServer(port = Number(process.env.PORT ?? 3333)) {
         const path = decodeURIComponent(new URL(request.url).pathname);
         const runtime = path.startsWith("/runtime/");
         const root = runtime ? runtimeRoot : publicRoot;
-        const relative = runtime
+        let relative = runtime
           ? path.slice(9)
           : path === "/"
             ? "index.html"
             : path.slice(1);
+        if (runtime && relative === 'wasm/current.json') {
+          const manifest = await Bun.file(resolve(runtimeRoot,'wasm/manifest.json')).json();
+          return Response.json({version:1,buildId:manifest.buildId},{headers});
+        }
+        const versioned = relative.match(/^wasm\/([a-f0-9]{64})\/(.+)$/);
+        if (runtime && versioned) {
+          const manifest = await Bun.file(resolve(runtimeRoot,'wasm/manifest.json')).json();
+          if (versioned[1] !== manifest.buildId) throw Error('Runtime not installed');
+          relative = 'wasm/' + versioned[2];
+        }
         if (runtime && !/^(?:wasm|typescript|mcp|protocol)\//.test(relative))
           throw Error("Not a public runtime file");
         const file = await realpath(resolve(root, relative));

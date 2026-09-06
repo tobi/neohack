@@ -9,7 +9,7 @@ EM_JS(int, host_start, (const char *pin, const char *arg), {
     try {
         if (FS.readFile(UTF8ToString(pin), {encoding:'utf8'}) !== globalThis.__nnhHost.identity) {
             globalThis.__nnhHost.diagnostic('Stored engine build differs from this WASM package. Resume requires the original package.');
-            return 0;
+            return -1;
         }
         return globalThis.__nnhHost.start(arg ? [UTF8ToString(arg)] : []);
     } catch (error) { globalThis.__nnhHost.diagnostic(String(error)); return 0; }
@@ -34,7 +34,7 @@ nh_session_t *nh_session_start_with_lease(const char *bin, const char *dir, char
     s = calloc(1, sizeof *s);
     if (!s) return NULL;
     s->handle = host_start(bin, argv ? argv[0] : NULL);
-    if (!s->handle) { free(s); errno = ESTALE; return NULL; }
+    if (s->handle <= 0) { int reason = s->handle < 0 ? ESTALE : EIO; free(s); errno = reason; return NULL; }
     return s;
 }
 nh_session_t *nh_session_start(const char *bin, const char *dir, char *const argv[])

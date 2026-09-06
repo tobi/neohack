@@ -75,6 +75,7 @@ export type Decision = DecisionBase & (
   | { kind: "target"; allowedTargets: ("self" | "direction")[] }
   | { kind: "confirmation" }
   | { kind: "choice"; options: { id: number; label: string }[]; selection?: { min: number; max: number } }
+  | { kind: "position"; cursor: { x: number; y: number }; mode: "browse" | "select" }
   | { kind: "text" }
 );
 export interface Outcome {

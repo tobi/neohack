@@ -1,6 +1,5 @@
 // Browser-safe definitions shared by stdio MCP and WebMCP. No native imports.
-import catalog from "../protocol/catalog.json" with { type: "json" };
-import responseSchema from "../protocol/response.schema.json" with { type: "json" };
+import { catalog, responseSchema } from "./protocol-data.js";
 import type { Method } from "../typescript/types.js";
 
 /** Tool definitions and C validation are generated from the same catalog. */

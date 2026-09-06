@@ -50,10 +50,19 @@ At most one decision is standing. Submit its exact ID and one answer:
 ```json
 {"kind":"item","item":{"id":"item-1"}}
 {"kind":"target","target":"self"}
+{"kind":"position","position":"help"}
+{"kind":"position","position":{"x":42,"y":10}}
 {"kind":"confirmation","confirm":false}
 {"kind":"choice","choose":[0,2]}
 {"kind":"text","text":"Elbereth"}
 ```
+
+A `position` decision exposes the engine cursor and `mode` (`browse` or `select`).
+Answer with a compass direction to move the cursor, `help` for engine instructions,
+`finish` to finish at the cursor, or `{x,y}` to select a map square (x 1–79, y 0–20).
+These continue the standing map prompt; they are not hero movement operations.
+Detection scrolls remain suspended until an explicit finish, selection or cancellation.
+The decision and cursor survive close/resume with the pinned runtime.
 
 Choice IDs are the returned **integers**, not keyboard letters. Headers are not
 options. Cancellation is `decision.cancel`, not an empty choice array, arbitrary

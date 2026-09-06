@@ -233,11 +233,11 @@ nnh_status nnh_decision_cancel(nnh_context *x, const char *sid, const nnh_guard 
 }
 nnh_status nnh_decision_answer(nnh_context *x, const char *sid, const nnh_guard *g, const char *decision, const nnh_answer *a, nnh_result **out)
 {
-    static const char *kinds[] = {"item", "target", "confirmation", "choice", "text"};
+    static const char *kinds[] = {"item", "target", "confirmation", "choice", "text", "position"};
     mj_Buf b; size_t i; start(&b, "decision.answer", sid, g);
     mj_key(&b, "decisionId"); if (decision) mj_strv(&b, decision); else mj_nullv(&b);
     mj_key(&b, "answer"); mj_obj(&b); mj_key(&b, "kind");
-    if (!a || (unsigned)a->kind >= 5) mj_nullv(&b);
+    if (!a || (unsigned)a->kind >= 6) mj_nullv(&b);
     else {
         mj_strv(&b, kinds[a->kind]);
         switch (a->kind) {
@@ -248,6 +248,11 @@ nnh_status nnh_decision_answer(nnh_context *x, const char *sid, const nnh_guard 
             mj_key(&b, "choose");
             if (a->value.choice.count > 64 || (!a->value.choice.ids && a->value.choice.count)) mj_nullv(&b);
             else { mj_arr(&b); for (i = 0; i < a->value.choice.count; i++) mj_intv(&b, a->value.choice.ids[i]); mj_endarr(&b); }
+            break;
+        case NNH_ANSWER_POSITION:
+            mj_key(&b, "position");
+            if (a->value.position.command) mj_strv(&b, a->value.position.command);
+            else { mj_obj(&b); mj_key(&b, "x"); mj_intv(&b, a->value.position.x); mj_key(&b, "y"); mj_intv(&b, a->value.position.y); mj_endobj(&b); }
             break;
         case NNH_ANSWER_TEXT: mj_key(&b, "text"); if (a->value.text) mj_strv(&b, a->value.text); else mj_nullv(&b); break;
         }

@@ -1361,6 +1361,58 @@
                 "type": "object",
                 "properties": {
                   "kind": {
+                    "const": "position"
+                  },
+                  "position": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 79
+                          },
+                          "y": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 20
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "north",
+                          "northeast",
+                          "east",
+                          "southeast",
+                          "south",
+                          "southwest",
+                          "west",
+                          "northwest",
+                          "finish",
+                          "help"
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "position"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
                     "const": "item"
                   },
                   "item": {

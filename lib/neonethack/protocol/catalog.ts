@@ -10,7 +10,9 @@ export const compass = enumeration("north", "northeast", "east", "southeast", "s
 const direction = enumeration(...compass.enum, "up", "down");
 export const target = { oneOf: [enumeration("self"), object({ direction })] };
 export const item = { oneOf: [text(127), object({ id: text(64) })] };
+export const position = { oneOf: [object({ x: integer(1, 79), y: integer(0, 20) }), enumeration(...compass.enum, "finish", "help")] };
 export const answer = { oneOf: [
+  object({ kind: { const: "position" }, position }),
   object({ kind: { const: "item" }, item }),
   object({ kind: { const: "target" }, target }),
   object({ kind: { const: "confirmation" }, confirm: { type: "boolean" } }),

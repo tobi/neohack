@@ -28,3 +28,6 @@
 *.dylib
 *.dSYM/
 .DS_Store
+
+# Verified deployment runtime staging cache
+hosting/cloudflare/.runtime-cache/

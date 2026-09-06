@@ -73,7 +73,7 @@ test("art sources retain portable recipes, not raw templates or retired studies"
   assert.deepEqual(await files(`${root}/art`), [
     "ATTRIBUTION.md", "LimeZu-LICENSE.txt", "README.md", "classes.json",
     "layouts/geometry.txt", "layouts/rooms.txt", "layouts/waterworks.txt",
-    "recipe.json",
+    "recipe.json", "social/README.md", "social/composition.html",
   ].sort());
 });
 

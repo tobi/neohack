@@ -70,6 +70,8 @@ jobs:
       - name: Pixel example and seeded dungeon renderer
         run: |
           bun install --frozen-lockfile --cwd example/pixel-bun
+          bun run --cwd example/pixel-bun build
+          CHROMIUM="$(command -v google-chrome)" node --test hosting/cloudflare/tests/runtime-package.test.mjs
           CHROMIUM="$(command -v google-chrome)" bun run --cwd example/pixel-bun test
       - name: Build checked source/native/npm previews with embedded source
         run: |

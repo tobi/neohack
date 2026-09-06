@@ -72,6 +72,7 @@ export const responseSchema: Schema = {
       decision("confirmation"),
       decision("choice", { options: array(object({ id: integer, label: string })), selection }, ["selection"]),
       decision("text"),
+      decision("position", { cursor: closed({ x: integer, y: integer }), mode: enumeration("browse", "select") }),
     ] }),
     events: array({ oneOf: [
       event("doorWitness", { levelId: string, x: integer, y: integer, fact: enumeration("locked", "unlocked", "opened", "closed", "resisted", "notClosed"), turn: integer }),

@@ -563,3 +563,13 @@ New actions reset the timer. Queued changes show a stable "Saved here" status;
 "Saving online…" appears only during an actual upload, with duplicate status
 notifications suppressed. Local durable input transactions stay immediate, and
 explicit runtime close flushes pending cloud work without waiting for the debounce.
+
+Engine map-browsing prompts use a nonmodal position panel with eight cursor
+directions, Help (?), Done/Select and Cancel. WASD/arrows move the cursor; Enter
+or period finishes, Escape cancels, and clicking a map square explicitly selects
+it. The engine-provided cursor is outlined on the map. A scrollable messages
+disclosure preserves the full engine help. Gameplay shortcuts stay suspended.
+
+New runs select current runtime metadata and record the immutable package hash.
+Resuming a bookmark loads its recorded package, independent of the current release.
+Title warmup preloads content-addressed URLs without owning a store.

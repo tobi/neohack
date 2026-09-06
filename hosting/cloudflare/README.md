@@ -25,6 +25,27 @@ real local Durable Objects and sandboxed Chromium with temporary stores.
 
 ## Deployment
 
-The repository’s deployment workflow builds from source on pushes to `main`.
+The repository’s deployment workflow builds or reuses verified artifacts on pushes to `main`.
 Configure Cloudflare credentials through GitHub Actions secrets, and update the
 account and domain in `wrangler.toml` for your own deployment. Never commit tokens.
+
+### Runtime packages
+
+New adventures select `/runtime/wasm/current.json`. Each adventure records the
+selected package hash, and its worker, WASM, data and helpers load together from
+`/runtime/wasm/<sha256>/` with immutable caching. Resuming uses the recorded
+package, including when another package is current. Development saves without
+that identity are not upgraded.
+
+Deployment first checks the hosted compiler-input registry. The key includes C
+sources, engine data, generated dispatch, build recipes and pinned toolchain
+versions; UI, TypeScript, JS worker glue, docs and tests do not trigger C rebuilds.
+A hit restores and verifies compiled bytes before rebuilding the current JS
+package. A miss installs the toolchain and compiles. Published packages remain
+in subsequent asset manifests; Wrangler uploads missing content hashes only.
+The generated registry/cache and runtime binaries are deployment artifacts, never
+Git source. Failed integrity checks stop deployment. A missing registry on the
+first deployment bootstraps an empty registry.
+
+After local builds, `npm run deploy` also restores the published registry before
+staging, so a manual deployment retains the same immutable packages as CI.

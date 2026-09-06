@@ -111,8 +111,8 @@ validate_request(const char *args, const char *tool, const char **why)
     static const char *const actions[] = { "tool", "sessionId", "expectedRevision", "target", NULL };
     static const char *const common[] = { "tool", "sessionId", "requestId", NULL };
     static const char *const create[] = { "tool", "sessionId", "requestId", "seed", "name", "role", "race", "gender", "align", NULL };
-    static const char *const act[] = { "tool", "sessionId", "requestId", "expectedRevision", "action", "direction", "target", "item", "replyTo", "confirm", "choose", "text", "cancel", NULL };
-    static const char *const answer[] = { "item", "target", "confirm", "choose", "text", "cancel", NULL };
+    static const char *const act[] = { "tool", "sessionId", "requestId", "expectedRevision", "action", "direction", "target", "item", "replyTo", "confirm", "choose", "text", "position", "cancel", NULL };
+    static const char *const answer[] = { "item", "target", "confirm", "choose", "text", "position", "cancel", NULL };
     const char *const *fields;
     mj_val v;
     char action[32] = "", direction[32];
@@ -165,6 +165,14 @@ validate_request(const char *args, const char *tool, const char **why)
         if (mj_find(args, "cancel", &v) && (!mj_bool(v, &boolean) || !boolean)) REQUEST_BAD("invalidAnswer", "cancel must be true");
         if (mj_find(args, "text", &v) && !request_string(v, 0, 128, NULL)) REQUEST_BAD("invalidAnswer", "text must be at most 128 bytes without control characters");
         if (mj_find(args, "choose", &v) && !request_choices(v)) REQUEST_BAD("invalidAnswer", "choose must be one integer or 1..64 distinct integer option ids");
+        if (mj_find(args, "position", &v)) {
+            char command[32]; mj_val x, y;
+            static const char *const coordinates[] = {"x", "y", NULL};
+            if (request_string(v, 1, 31, command)) {
+                int code = move_code(command);
+                if (strcmp(command, "finish") && strcmp(command, "help") && (code < 0 || code == 60 || code == 62)) REQUEST_BAD("invalidAnswer", "unknown position command");
+            } else if (!request_fields(v.p, coordinates) || !mj_find(v.p, "x", &x) || !request_integer(x, 1, 79) || !mj_find(v.p, "y", &y) || !request_integer(y, 0, 20)) REQUEST_BAD("invalidAnswer", "position requires map coordinates");
+        }
         if (target == 0) REQUEST_BAD("invalidTarget", "here is only an inspection target");
         return NULL;
     }

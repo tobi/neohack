@@ -11,6 +11,10 @@ pending_signature(game_t *g, char out[32])
     mj_strv(&b, g->pending.prompt ? g->pending.prompt : "");
     mj_strv(&b, g->pending.choices ? g->pending.choices : "");
     mj_intv(&b, g->pending.def); mj_intv(&b, g->pending.window); mj_intv(&b, g->pending.how);
+    if (g->pending.position_mode) {
+        mj_strv(&b, "positionV1"); mj_intv(&b, g->pending.position_mode);
+        mj_intv(&b, g->pending.cursor_x); mj_intv(&b, g->pending.cursor_y);
+    }
     for (i = 0; i < g->pending.ncommands; i++) mj_strv(&b, g->pending.commands[i]);
     if (g->operation.floor_object_id > 0) {
         mj_strv(&b, "floorBindingV1"); mj_intv(&b, g->operation.floor_object_id);
@@ -131,7 +135,7 @@ sidecar_validate(game_t *g, const char *text)
             !( !strcmp(action, "new_game") && command == 0)) error = "operation command is not bound to its action";
         free(action); if (error) return error;
         if (!mj_find(v.p, "decKind", &field) ||
-            !(record_is(field, "") || record_is(field, "item") || record_is(field, "choice") || record_is(field, "confirmation") || record_is(field, "target") || record_is(field, "text"))) return "invalid decision kind";
+            !(record_is(field, "") || record_is(field, "item") || record_is(field, "choice") || record_is(field, "confirmation") || record_is(field, "target") || record_is(field, "text") || record_is(field, "position"))) return "invalid decision kind";
     }
     return NULL;
 }

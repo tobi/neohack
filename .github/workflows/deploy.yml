@@ -21,10 +21,14 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: lib/neonethack/package-lock.json
+      - name: Reuse hosted WASM compiler artifacts
+        id: wasm-cache
+        run: node hosting/cloudflare/scripts/runtime-package.mjs restore https://neohack.dev/
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
         with:
           install: false
       - name: Native prerequisites
+        if: steps.wasm-cache.outputs.hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build pkg-config libncurses-dev uuid-dev
@@ -32,10 +36,12 @@ jobs:
           echo "LUA_HOME=$(mise where lua@5.4.9)" >> "$GITHUB_ENV"
       - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org --prefix lib/neonethack
       - uses: mymindstorm/setup-emsdk@6ab9eb1bda2574c4ddb79809fc9247783eaf9021 # v14
+        if: steps.wasm-cache.outputs.hit != 'true'
         with:
           version: 6.0.9
           actions-cache-folder: emsdk-cache
       - run: make -C lib/neonethack wasm
+        if: steps.wasm-cache.outputs.hit != 'true'
       - run: npm run --prefix lib/neonethack build
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:

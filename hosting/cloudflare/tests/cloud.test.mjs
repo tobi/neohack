@@ -1,39 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { createServer } from 'node:net';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { resolve } from 'node:path';
+import { createTestHarness } from '../node_modules/wrangler/wrangler-dist/cli.js';
 import { chromium } from '../../../example/pixel-bun/node_modules/playwright-core/index.mjs';
 
 async function fixture(t) {
   const root = resolve(import.meta.dirname, '..');
-  const probe = createServer();
-  await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
-  const port = probe.address().port;
-  await new Promise(resolve => probe.close(resolve));
-  const state = await mkdtemp(join(tmpdir(), 'neonethack-cloud-test-'));
-  const server = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--port', String(port), '--persist-to', state, '--show-interactive-dev-session=false'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
-  let logs = '', browser;
-  server.stdout.on('data', chunk => { logs += chunk; });
-  server.stderr.on('data', chunk => { logs += chunk; });
-  t.after(async () => {
-    await browser?.close();
-    server.kill('SIGTERM');
-    await new Promise(resolve => { server.once('exit', resolve); setTimeout(resolve, 2000).unref(); });
-    await rm(state, { recursive: true, force: true });
-  });
-  const url = `http://127.0.0.1:${port}`;
-  let ready = false;
-  for (let i = 0; i < 100; i++) {
-    try { ready = (await fetch(url + '/api/health')).ok; } catch {}
-    if (ready) break;
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  assert.ok(ready, logs);
-  browser = await chromium.launch({ executablePath: process.env.CHROMIUM ?? '/usr/bin/chromium', headless: true, chromiumSandbox: true });
-  return { url, browser };
+  // Run the actual Wrangler config in its isolated test runtime. The dev CLI's
+  // inspector/logging process can exit while a test holds a response open.
+  const server = createTestHarness({root, workers:[{configPath:'wrangler.toml'}]});
+  let browser;
+  t.after(async()=>{try {await browser?.close();} finally {await server.close();}});
+  const {url} = await server.listen();
+  browser = await chromium.launch({executablePath:process.env.CHROMIUM ?? '/usr/bin/chromium',headless:true,chromiumSandbox:true});
+  return {url:url.href.replace(/\/$/,''),browser};
 }
 async function create(page, url) {
   await page.goto(url);
@@ -45,7 +25,7 @@ async function create(page, url) {
   await page.waitForFunction(() => document.querySelector('pixel-nethack').snapshot?.observation && document.querySelector('pixel-nethack').getAttribute('aria-busy') === 'false');
 }
 const snapshot = page => page.evaluate(() => document.querySelector('pixel-nethack').snapshot);
-const synced = page => page.waitForFunction(() => document.querySelector('#cloud-status').textContent === 'Saved online');
+const synced = async page => {try {await page.waitForFunction(() => document.querySelector('#cloud-status').textContent === 'Saved online');} catch(error) {throw Error((await page.locator('#cloud-status').textContent()) + ' / ' + (await page.locator('#error').textContent()),{cause:error});}};
 
 test('DO commits are atomic, retry-idempotent and reject stale writers', { timeout: 30000 }, async t => {
   const { url } = await fixture(t);

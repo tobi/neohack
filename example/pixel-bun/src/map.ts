@@ -181,6 +181,7 @@ export function actionMessages(snapshot: Snapshot): string[] {
 
 export class DungeonMap {
   context: { x: number; y: number } | null = null;
+  positionCursor: { x: number; y: number } | null = null;
   private intro = {
     x: 160,
     y: 208,
@@ -948,9 +949,10 @@ export class DungeonMap {
     for (const layer of fixtures) layer.draw();
     foreground.sort((a, b) => a.y - b.y || a.x - b.x);
     for (const layer of foreground) layer.draw();
-    if (this.context) {
-      const x = (this.context.x - this.origin.x) * 16,
-        y = (this.context.y - this.origin.y) * 16;
+    const cursor = this.positionCursor ?? this.context;
+    if (cursor) {
+      const x = (cursor.x - this.origin.x) * 16,
+        y = (cursor.y - this.origin.y) * 16;
       c.strokeStyle = "#efd092";
       c.lineWidth = 1;
       c.strokeRect(x + 0.5, y + 0.5, 15, 15);

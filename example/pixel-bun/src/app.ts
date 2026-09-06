@@ -23,7 +23,7 @@ import {
 import { creatureArtUrl, inventoryArt } from "./symbol-art";
 import { MovementInput } from "./movement-input";
 import type { WebMcpRegistration } from "/runtime/typescript/webmcp.js";
-import { loadRuntime, warmPackage } from "./runtime-loader";
+import { loadRuntime, warmPackage, runtimePackage } from "./runtime-loader";
 import {
   cloudReady,
   playerId, rememberPlayer, requestedRun, showRunUrl, clearRunUrl,
@@ -46,6 +46,7 @@ const directions: [Compass, string][] = [
 ];
 type Adventure = {
   id: string;
+  buildId?: string;
   name: string;
   role: string;
   seed?: number;
@@ -63,6 +64,7 @@ const escape = (text: unknown) =>
   );
 class PixelNethack extends HTMLElement {
   private api: Neonethack | null = null;
+  private runtimeBuildId = "";
   private vault = "";
   private storeName = "";
   private indexKey = "";
@@ -290,7 +292,10 @@ class PixelNethack extends HTMLElement {
       <dialog id="decision" aria-labelledby="decision-title"><div class="eyebrow">ONE MOMENT, ADVENTURER</div><h2 id="decision-title"></h2><p id="decision-about"></p><p id="decision-error" class="notice error" role="alert" hidden></p><div id="decision-body"></div></dialog>`;
     this.map = new DungeonMap(this.querySelector("#dungeon")!, (text, x, y) => {
       this.text("#inspect-text", text);
-      this.inspectTile(x, y);
+      const decision = this.game?.decision;
+      if (decision?.kind === "position") {
+        if (!this.busy && x >= 1 && x <= 79 && y >= 0 && y <= 20) void this.run(() => this.game!.answer(decision.id, {kind: "position", position: {x, y}}));
+      } else this.inspectTile(x, y);
     });
     this.bind();
     document.addEventListener("keydown", this.keyHandler);
@@ -325,7 +330,7 @@ class PixelNethack extends HTMLElement {
     const linked = requestedRun();
     if (!linked) return;
     await this.run(async () => {
-      await this.connectRuntime();
+      await this.connectRuntime(linked.id);
       this.game = await this.api!.resume(linked.id);
       const save = this.saves.find(s => s.id === linked.id) ?? { id: linked.id, name: "Saved adventurer", role: "ranger", turn: this.game.observation.turn, ended: this.game.state.ended };
       if (!this.saves.some(s => s.id === save.id)) this.saves.unshift(save);
@@ -364,9 +369,9 @@ class PixelNethack extends HTMLElement {
       this.saves = data;
     } else this.saves = [];
   }
-  private warm() {
+  private warm(buildId?: string) {
     // Speculative warmup is optional; the verified runtime load retries on entry.
-    return this.warmed ??= warmPackage(this.preloadAbort.signal).then(() => {
+    return this.warmed ??= warmPackage(this.preloadAbort.signal, buildId).then(() => {
       this.text("#package-status", "Game downloaded · ready when you are");
     }).catch(() => {
       this.text("#package-status", "The game will finish downloading when you enter.");
@@ -385,7 +390,7 @@ class PixelNethack extends HTMLElement {
     }
     this.runtime = await loadRuntime();
     if (!this.isConnected) return;
-    void this.warm();
+    if (!requestedRun()) void this.warm();
     try {
       this.webMcp = await this.runtime.webmcp.registerWebMcp({
         send: (request) => this.webRequest(request),
@@ -436,7 +441,7 @@ class PixelNethack extends HTMLElement {
       try {
         const params = request.params as Record<string, unknown>;
         let save = this.saves.find((s) => s.id === params.sessionId);
-        await this.connectRuntime();
+        await this.connectRuntime(typeof params.sessionId === "string" ? params.sessionId : undefined);
         save = this.saves.find((s) => s.id === params.sessionId);
         if ("requestId" in params && save?.pending) {
           // Object property order is immaterial; retain every argument and value.
@@ -469,6 +474,7 @@ class PixelNethack extends HTMLElement {
           if (!save && !response.error) {
             save = {
               id: response.sessionId,
+              buildId: this.runtimeBuildId,
               name:
                 typeof params.name === "string" ? params.name : "Adventurer",
               role: typeof params.role === "string" ? params.role : "valkyrie",
@@ -552,14 +558,26 @@ class PixelNethack extends HTMLElement {
     if (!this.isConnected || this.preloadAbort.signal.aborted)
       throw Error("Game interface closed before opening storage.");
   }
-  private async connectRuntime() {
+  private async connectRuntime(sessionId?: string) {
     this.assertConnected();
-    if (this.api) return;
     this.vault = playerId();
     this.storeName = `${STORE}-${this.vault}`;
     this.indexKey = `${this.storeName}:adventures`;
     rememberPlayer(this.vault);
-    await this.warm();
+    let buildId: string | undefined;
+    if (sessionId) {
+      let saved = this.saves.find(save => save.id === sessionId);
+      if (!saved) {
+        const remote = await restoreAdventures(this.vault);
+        if (remote) { this.saves = remote; saved = this.saves.find(save=>save.id===sessionId); }
+      }
+      if (!saved?.buildId) throw Error("This development run has no saved runtime identity. Start a new adventure; its journal has been retained.");
+      buildId = saved.buildId;
+    }
+    const selected = await runtimePackage(buildId, this.preloadAbort.signal);
+    if (this.api && this.runtimeBuildId === selected.buildId) return;
+    if (this.api) { const previous = this.api; this.api = null; await previous.close(); }
+    await this.warm(selected.buildId);
     this.assertConnected();
     ++this.cloudStatusGeneration;
     this.cloudEnabled = await cloudReady();
@@ -570,7 +588,7 @@ class PixelNethack extends HTMLElement {
       storage: replica
         ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica }
         : { kind: "indexeddb", name: this.storeName },
-      workerUrl: new URL("/runtime/wasm/core-worker.mjs", location.href),
+      workerUrl: new URL(`${selected.base}core-worker.mjs`, location.href),
       onReplicaStatus: async ({ state, message }) => {
         if (!this.isConnected) return;
         const generation = ++this.cloudStatusGeneration;
@@ -640,6 +658,7 @@ class PixelNethack extends HTMLElement {
         description.capabilities.durability !== "indexeddb-transaction"
       ) throw Error("Durable browser saves are unavailable. No adventure was started.");
       this.api = api;
+      this.runtimeBuildId = selected.buildId;
     } catch (error) {
       await api.close();
       throw error;
@@ -1179,6 +1198,7 @@ class PixelNethack extends HTMLElement {
       );
       this.show("#ended", false);
     }
+    this.map.positionCursor = state?.decision?.kind === "position" ? state.decision.cursor : null;
     this.map.update(
       state?.observation ?? null,
       heroArt(this.current?.role),
@@ -1576,6 +1596,7 @@ class PixelNethack extends HTMLElement {
         this.game = await this.api!.create({ ...role.identity, name, seed });
         this.current = {
           id: this.game.id,
+          buildId: this.runtimeBuildId,
           name,
           role: role.id,
           seed,
@@ -1601,7 +1622,7 @@ class PixelNethack extends HTMLElement {
       this.game = null;
       this.current = null;
       await this.preparation;
-      await this.connectRuntime();
+      await this.connectRuntime(save.id);
       this.game = await this.api!.resume(save.id);
       this.current = this.saves.find((record) => record.id === save.id) ?? save;
       this.saves = [this.current, ...this.saves.filter(record => record.id !== save.id)];
@@ -1791,7 +1812,7 @@ class PixelNethack extends HTMLElement {
       this.decisionIdentity = "";
       return;
     }
-    if (d.kind === "target" && d.allowedTargets.includes("direction")) {
+    if (d.kind === "position" || (d.kind === "target" && d.allowedTargets.includes("direction"))) {
       if (dialog.open) dialog.close();
       if (this.decisionIdentity === d.id && this.querySelector("#direction-target")) return;
       this.closeMenu();
@@ -1804,7 +1825,7 @@ class PixelNethack extends HTMLElement {
       target.setAttribute("aria-label", d.about ?? "Choose a direction");
       target.innerHTML = '<p class="target-caption"></p><div class="target-arrows"></div><div class="target-extra"></div>';
       target.querySelector("p")!.textContent = `${d.action.charAt(0).toUpperCase() + d.action.slice(1)} · ${d.about ?? "Choose a direction"}`;
-      const answer = (direction: string) => void this.run(() => this.game!.answer(d.id, { kind: "target", target: { direction: direction as Compass } }));
+      const answer = (direction: string) => void this.run(() => this.game!.answer(d.id, d.kind === "position" ? { kind: "position", position: direction as Compass } : { kind: "target", target: { direction: direction as Compass } }));
       directions.forEach(([direction, glyph], index) => {
         const button = this.button(glyph, () => answer(direction));
         button.setAttribute("aria-label", direction);
@@ -1813,8 +1834,18 @@ class PixelNethack extends HTMLElement {
         target.querySelector(".target-arrows")!.append(button);
       });
       const extra = target.querySelector(".target-extra")!;
-      for (const direction of ["up", "down"]) extra.append(this.button(direction === "up" ? "Above" : "Below", () => answer(direction)));
-      if (d.allowedTargets.includes("self")) extra.append(this.button("Myself", () => void this.run(() => this.game!.answer(d.id, { kind: "target", target: "self" }))));
+      if (d.kind === "position") {
+        target.querySelector("p")!.textContent += ` · cursor ${d.cursor.x}, ${d.cursor.y}`;
+        const messages = document.createElement("details");
+        const summary = document.createElement("summary"); summary.textContent = "Map instructions and messages";
+        messages.append(summary);
+        for (const event of this.game!.state.events) if (event.type === "heard") { const p = document.createElement("p"); p.textContent = event.text; messages.append(p); }
+        messages.style.maxHeight = "30vh"; messages.style.overflow = "auto";
+        target.append(messages);
+        extra.append(this.button("Help (?)", () => void this.run(() => this.game!.answer(d.id, { kind: "position", position: "help" }))));
+        extra.append(this.button(d.mode === "browse" ? "Done" : "Select", () => void this.run(() => this.game!.answer(d.id, { kind: "position", position: "finish" }))));
+      } else for (const direction of ["up", "down"]) extra.append(this.button(direction === "up" ? "Above" : "Below", () => answer(direction)));
+      if (d.kind === "target" && d.allowedTargets.includes("self")) extra.append(this.button("Myself", () => void this.run(() => this.game!.answer(d.id, { kind: "target", target: "self" }))));
       if (d.cancellable) extra.append(this.button("Cancel", () => void this.run(() => this.game!.cancel(d.id))));
       target.querySelectorAll<HTMLButtonElement>("button").forEach(button => { button.dataset.choice = ""; });
       this.$("#dungeon").parentElement!.append(target);
@@ -1976,12 +2007,15 @@ class PixelNethack extends HTMLElement {
         return;
       }
       const keys: Record<string, string> = { ArrowUp: "north", ArrowDown: "south", ArrowLeft: "west", ArrowRight: "east", w: "north", a: "west", s: "south", d: "east", h: "west", j: "south", k: "north", l: "east", y: "northwest", u: "northeast", b: "southwest", n: "southeast", "<": "up", ">": "down" };
-      if (keys[e.key] || e.key === "Escape") {
+      if (keys[e.key] || e.key === "Escape" || (this.game?.decision?.kind === "position" && ["?", "Enter", "."].includes(e.key))) {
         e.preventDefault();
         const d = this.game?.decision;
         if (!e.repeat && d && !this.busy) {
           if (e.key === "Escape") { if (d.cancellable) void this.run(() => this.game!.cancel(d.id)); }
-          else void this.run(() => this.game!.answer(d.id, { kind: "target", target: { direction: keys[e.key] as Compass } }));
+          else if (d.kind === "position") {
+            const position = e.key === "?" ? "help" : ["Enter", "."].includes(e.key) ? "finish" : keys[e.key] as Compass;
+            if (keys[e.key] !== "up" && keys[e.key] !== "down") void this.run(() => this.game!.answer(d.id, { kind: "position", position }));
+          } else void this.run(() => this.game!.answer(d.id, { kind: "target", target: { direction: keys[e.key] as Compass } }));
         }
         return;
       }

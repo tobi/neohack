@@ -86,6 +86,7 @@ typedef struct {
     int waiting;
     long long id;
     char kind[16];
+    int position_mode, cursor_x, cursor_y;
     char *prompt;           /* about text when the engine supplies one */
     int window, how;        /* menu */
     char *choices;          /* yn (may be "") */
@@ -2108,6 +2109,15 @@ pending_fill(game_t *g, long long id, const char *kind, const char *params)
     snprintf(g->pending.kind, sizeof g->pending.kind, "%s", kind);
     if (mj_find(params, "prompt", &v) && (s = mj_str(v)) != NULL)
         g->pending.prompt = s;
+    if (!strcmp(kind, "poskey")) {
+        long long mode = 0, x = 0, y = 0;
+        if (mj_find(params, "positionMode", &v)) mj_int(v, &mode);
+        if (mj_find(params, "cursorX", &v)) mj_int(v, &x);
+        if (mj_find(params, "cursorY", &v)) mj_int(v, &y);
+        if ((mode == 1 || mode == 2) && x >= 1 && x < MAP_W && y >= 0 && y < MAP_H) {
+            g->pending.position_mode = (int) mode; g->pending.cursor_x = (int) x; g->pending.cursor_y = (int) y;
+        }
+    }
     if (!strcmp(kind, "menu")) {
         long long w = -1, how = -1;
         if (mj_find(params, "window", &v))
@@ -3062,7 +3072,7 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
         return 0;
     /* Generic error envelopes must retain a standing engine-free choice too.
      * Require its existing identity and a resting engine; do not invent one. */
-    if (g->have_operation && g->operation.dec_pending == -2 &&
+    if (!g->pending.position_mode && g->have_operation && g->operation.dec_pending == -2 &&
         g->operation.decision_id[0] && !strcmp(g->operation.dec_kind, "item") &&
         (!strcmp(g->pending.kind, "key") || !strcmp(g->pending.kind, "poskey"))) {
         if (!emit_item_decision(g, b, g->operation.action)) return 0;
@@ -3248,6 +3258,19 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
         }
         mj_endarr(b);
         mj_endobj(b);
+        return 1;
+    }
+    if (!strcmp(g->pending.kind, "poskey") && g->pending.position_mode) {
+        mj_key(b, "decision"); mj_obj(b);
+        mj_key(b, "id"); mj_strv(b, offer_id(g, "position"));
+        mj_key(b, "kind"); mj_strv(b, "position");
+        snprintf(kind_out, kind_cap, "%s", "position");
+        mj_key(b, "action"); mj_strv(b, g->operation.action);
+        mj_key(b, "about"); mj_strv(b, g->pending.prompt ? g->pending.prompt : "Choose a location");
+        mj_key(b, "mode"); mj_strv(b, g->pending.position_mode == 2 ? "browse" : "select");
+        mj_key(b, "cursor"); mj_obj(b);
+        mj_key(b, "x"); mj_intv(b, g->pending.cursor_x); mj_key(b, "y"); mj_intv(b, g->pending.cursor_y); mj_endobj(b);
+        mj_key(b, "cancellable"); mj_boolv(b, 1); mj_endobj(b);
         return 1;
     }
     if (!strcmp(g->pending.kind, "poskey")) {
@@ -3505,6 +3528,21 @@ translate_reply(game_t *g, const char *dec_kind, const char *args,
         *err = "nothing to decide";
         return NULL;
     }
+    if (!strcmp(dec_kind, "position")) {
+        mj_val pos, xv, yv; long long x, y; char *command;
+        if (!g->pending.position_mode || !mj_find(args, "position", &pos)) { *err = "position decision needs a position or named command"; return NULL; }
+        command = mj_str(pos);
+        if (command) {
+            int code = !strcmp(command, "finish") ? 46 : !strcmp(command, "help") ? 63 : move_code(command);
+            free(command);
+            if (code < 0) { *err = "invalid position command"; return NULL; }
+            snprintf(line, sizeof line, "{\"key\":%d}", code);
+        } else {
+            if (!mj_find(pos.p, "x", &xv) || !mj_int(xv, &x) || !mj_find(pos.p, "y", &yv) || !mj_int(yv, &y) || x < 1 || x >= MAP_W || y < 0 || y >= MAP_H) { *err = "position is outside the map"; return NULL; }
+            snprintf(line, sizeof line, "{\"key\":0,\"x\":%lld,\"y\":%lld,\"mod\":1}", x, y);
+        }
+        goto wrap;
+    }
     if (!strcmp(dec_kind, "target")) {
         /* {target:"self"} or {target:{"direction":"south"}}. Entity and
          * position targets are rejected before any engine input. */
@@ -3729,7 +3767,7 @@ refresh_inventory(nhx_t *x, game_t *g)
     if ((g->have_operation && g->operation.dec_pending != -2) ||
         g->ended || !g->pending.waiting)
         return 0;
-    if (strcmp(g->pending.kind, "key") && strcmp(g->pending.kind, "poskey"))
+    if (g->pending.position_mode || (strcmp(g->pending.kind, "key") && strcmp(g->pending.kind, "poskey")))
         return 0;
     snprintf(line, sizeof line,
              "{\"jsonrpc\":\"2.0\",\"id\":%lld,\"result\":{\"key\":105}}",
@@ -4722,6 +4760,8 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
             return drive_settle(x, g, req_id, turn0, you0_x, you0_y,
                                 had_you, ev_from, msg_start0, msg_count0,
                                 cancelled);
+        if (!strcmp(g->pending.kind, "poskey") && g->pending.position_mode)
+            return drive_suspend(g, req_id, turn0, you0_x, you0_y, had_you, ev_from);
         if (!strcmp(g->pending.kind, "key") ||
             !strcmp(g->pending.kind, "poskey")) {
             if (g->operation.keypos == 0 && cmd >= 0) {
@@ -5091,7 +5131,7 @@ static void
 args_key_of(const char *args, mj_Buf *b)
 {
     static const char *const fields[] = {
-        "action", "direction", "target", "item", "replyTo", "confirm",
+        "action", "direction", "target", "position", "item", "replyTo", "confirm",
         "choose", "text", "cancel", "quantity", NULL
     };
     mj_val v;
@@ -5485,7 +5525,13 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
     }
     if (g->eng) { nh_session_abort(g->eng); g->eng = NULL; }
     tracked_clear(g);
-    if (spawn_game(x, g) < 0) { code = "engineError"; message = "cannot start pinned engine"; goto replay_failed; }
+    if (spawn_game(x, g) < 0) {
+        code = "engineError"; message = "cannot start pinned engine";
+#ifdef __EMSCRIPTEN__
+        if (errno == ESTALE) { code = "runtimeUnavailable"; message = "This run needs its original game runtime, which differs from the deployed version. The saved journal was retained; it was not replayed under another engine."; }
+#endif
+        goto replay_failed;
+    }
     ev_from = g->event_seq;
     g->replaying = 1;
     g->deadline_ms = monotonic_ms() + 120000;
@@ -5522,6 +5568,7 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
             (!strcmp(dk, "confirmation") && !strcmp(pk, "yn")) ||
             (!strcmp(dk, "text") &&
              (!strcmp(pk, "getlin") || !strcmp(pk, "yn"))) ||
+            (!strcmp(dk, "position") && !strcmp(pk, "poskey") && g->pending.position_mode) ||
             (!strcmp(dk, "target") &&
              (!strcmp(pk, "yn") || !strcmp(pk, "poskey")));
         if (fits && g->operation.prompt_signature[0]) {
@@ -5545,7 +5592,7 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
                         NULL, 0, ev_from, g->pending.waiting ? 1 : 0, 0,
                         NULL, NULL);
     }
-    if (!strcmp(g->pending.kind, "key") || !strcmp(g->pending.kind, "poskey")) {
+    if (!g->pending.position_mode && (!strcmp(g->pending.kind, "key") || !strcmp(g->pending.kind, "poskey"))) {
         return envelope(g, req_id, "resume", "completed", NULL, 0, 0,
                         NULL, 0, ev_from, 0, 0, NULL, NULL);
     }
@@ -5845,6 +5892,7 @@ run_reply(nhx_t *x, game_t *g, const char *args, const char *req_id,
     if (!mj_find(args, "cancel", &v)) {
         const char *field = !strcmp(g->operation.dec_kind, "confirmation") ? "confirm" :
             !strcmp(g->operation.dec_kind, "target") ? "target" :
+            !strcmp(g->operation.dec_kind, "position") ? "position" :
             !strcmp(g->operation.dec_kind, "text") ? "text" :
             !strcmp(g->operation.dec_kind, "item") && g->operation.dec_pending == -2 ? "item" : "choose";
         if (!mj_find(args, field, &v))
@@ -6040,8 +6088,8 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
             goto remember;
         }
         /* fresh deeds need a free prompt */
-        if (g->pending.waiting && strcmp(g->pending.kind, "key") &&
-            strcmp(g->pending.kind, "poskey")) {
+        if (g->pending.waiting && (g->pending.position_mode || (strcmp(g->pending.kind, "key") &&
+            strcmp(g->pending.kind, "poskey")))) {
             out = envelope_error(g, req_id, action, "pendingDecision",
                                  "answer or cancel the standing decision first");
             goto remember;

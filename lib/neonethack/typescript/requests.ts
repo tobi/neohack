@@ -25,7 +25,7 @@ export interface MethodParams {
   "game.zap": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string }; target?: "self" | { direction: "north" | "northeast" | "east" | "southeast" | "south" | "southwest" | "west" | "northwest" | "up" | "down" } };
   "game.quit": { sessionId: string; requestId: string; expectedRevision: number };
   "game.pray": { sessionId: string; requestId: string; expectedRevision: number };
-  "decision.answer": { sessionId: string; requestId: string; expectedRevision: number; decisionId: string; answer: { kind: "item"; item: string | { id: string } } | { kind: "target"; target: "self" | { direction: "north" | "northeast" | "east" | "southeast" | "south" | "southwest" | "west" | "northwest" | "up" | "down" } } | { kind: "confirmation"; confirm: boolean } | { kind: "choice"; choose: ReadonlyArray<number> } | { kind: "text"; text: string } };
+  "decision.answer": { sessionId: string; requestId: string; expectedRevision: number; decisionId: string; answer: { kind: "position"; position: { x: number; y: number } | "north" | "northeast" | "east" | "southeast" | "south" | "southwest" | "west" | "northwest" | "finish" | "help" } | { kind: "item"; item: string | { id: string } } | { kind: "target"; target: "self" | { direction: "north" | "northeast" | "east" | "southeast" | "south" | "southwest" | "west" | "northwest" | "up" | "down" } } | { kind: "confirmation"; confirm: boolean } | { kind: "choice"; choose: ReadonlyArray<number> } | { kind: "text"; text: string } };
   "decision.cancel": { sessionId: string; requestId: string; expectedRevision: number; decisionId: string };
 }
 export type Method = keyof MethodParams;

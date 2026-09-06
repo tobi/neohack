@@ -132,7 +132,7 @@ export default {
     headers.set("content-security-policy", CSP);
     headers.set("x-content-type-options", "nosniff");
     headers.set("referrer-policy", "no-referrer");
-    if (url.pathname.startsWith("/runtime/")) headers.set("cache-control", "public, max-age=60");
+    if (url.pathname.startsWith("/runtime/")) headers.set("cache-control", /^\/runtime\/wasm\/[a-f0-9]{64}\//.test(url.pathname) && asset.ok ? "public, max-age=31536000, immutable" : "no-cache");
     return new Response(asset.body, { status: asset.status, headers });
   },
 };
