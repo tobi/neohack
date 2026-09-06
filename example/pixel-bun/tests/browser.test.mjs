@@ -798,7 +798,9 @@ test(
     await page
       .getByRole("button", { name: "More actions", exact: true })
       .click();
-    await page.getByRole("button", { name: "Pray", exact: true }).click();
+    await page.locator("#more-grid button").filter({ hasText: /^Pray$/ }).click();
+    assert.equal((await snapshot(page)).decision, null);
+    await page.getByRole("button", { name: "Continue to prayer", exact: true }).click();
     await ready(page);
     const prayer = await snapshot(page);
     assert.equal(prayer.decision.kind, "confirmation");
@@ -1139,7 +1141,8 @@ test(
         await app.run(() => app.game.move(direction));
       }, direction);
     }
-    await page.getByRole("button", { name: "Open door", exact: true }).click();
+    assert.ok(await page.locator("#contextual-stairs button").filter({ hasText: "Open door · south" }).isVisible());
+    await page.keyboard.press("o");
     await page.locator("#direction-target").waitFor();
     assert.equal(await page.locator(".action-bubble").count(), 0);
     await page.locator('[data-target-direction="south"]').click();
@@ -2252,7 +2255,7 @@ test("contextual stairs use the current engine offer at 70 percent on desktop an
   await create(page);
   const stairs = page.locator("#contextual-stairs button");
   await stairs.waitFor();
-  assert.equal(await stairs.textContent(), "Go upstairs");
+  assert.equal(await stairs.textContent(), "Leave");
   for (const size of [{ width: 1440, height: 1050 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(size);
     const bounds = await stairs.boundingBox();
@@ -2478,6 +2481,7 @@ test("saving a standing warning returns to an unowned title and another tab resu
   const { page, context, url, errors } = await fixture(t);
   await create(page);
   await page.evaluate(() => document.querySelector("pixel-nethack").action("pray"));
+  await page.getByRole("button", { name: "Continue to prayer", exact: true }).click();
   await page.locator("#decision[open]").waitFor();
   const standing = await snapshot(page);
   assert.equal(standing.decision.kind, "confirmation");
@@ -2635,7 +2639,7 @@ test('welcome renders the native example and GitHub remains available in the gam
   await snippet.scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${root}/test-results/welcome-native-example.png` });
   await page.getByLabel('Game menu', { exact: true }).click();
-  const github = page.locator('.menu-github');
+  const github = page.locator('.menu-github').filter({hasText: /^GitHub/});
   assert.equal(await github.isVisible(), true);
   assert.equal(await github.getAttribute('href'), 'https://github.com/tobi/neohack');
   await page.keyboard.press('Escape');
@@ -2753,9 +2757,8 @@ test('empty item actions are disabled for free and a fountain enables Drink unde
   await ready(page);
   const current = await snapshot(page);
   assert.equal(current.observation.neighborhood.cells.find(c => !c.dx && !c.dy).terrain.type, 'fountain');
-  await page.getByRole('button', { name: 'More actions', exact: true }).click();
-  assert.equal(await drink.isDisabled(), false);
-  await drink.click();
+  const contextualDrink = page.locator('#contextual-stairs button').filter({ hasText: 'Drink from fountain' });
+  await contextualDrink.click();
   await page.locator('#decision[open]').waitFor();
   assert.match(await page.locator('#decision-about').textContent(), /fountain/i);
   assert.equal((await snapshot(page)).observation.turn, current.observation.turn);
@@ -2846,4 +2849,90 @@ test('detection scroll map browsing supports keyboard Help, cursor, Done and dur
   assert.equal((await snapshot(page)).decision,null);
   assert.equal((await snapshot(page)).observation.turn,viewed.observation.turn+1);
   assert.deepEqual(errors,[]);
+});
+
+
+test('backpack actions use current engine item IDs and show wielded equipment', async t => {
+  const { page } = await fixture(t);
+  await create(page);
+  const before = await snapshot(page);
+  const weapon = before.observation.inventory.find(item => item.usage?.includes('wielded'));
+  assert.ok(weapon);
+  assert.ok((await page.locator('.weapon-line').textContent()).includes(weapon.label));
+  await page.getByRole('button', {name: /Backpack/}).click();
+  const food = before.observation.inventory.find(item => item.actions?.includes('eat'));
+  assert.ok(food);
+  const rows = page.locator('.inventory-entry');
+  assert.equal(await rows.count(), before.observation.inventory.length);
+  for (let i = 0; i < before.observation.inventory.length; i++) {
+    assert.deepEqual(await rows.nth(i).locator('[data-item-action]').evaluateAll(bs => bs.map(b => b.dataset.itemAction)), before.observation.inventory[i].actions);
+  }
+  assert.equal((await snapshot(page)).revision, before.revision);
+  await page.setViewportSize({width: 390, height: 844});
+  await page.screenshot({path: root + '/test-results/backpack-actions-mobile.png'});
+  await page.getByRole('button', {name: 'Drop ' + food.label, exact: true}).click();
+  await ready(page);
+  const dropped = await snapshot(page);
+  assert.equal(dropped.outcome.action, 'drop');
+  assert.ok(dropped.observation.here.items.some(item => item.label === food.label));
+  assert.equal(dropped.observation.inventory.some(item => item.id === food.id), false);
+});
+
+test('status cues explain prayer without spending a turn or promising safety', async t => {
+  const { page } = await fixture(t);
+  await create(page);
+  const before = await snapshot(page);
+  await page.locator('[data-action="pray"]').click();
+  await page.getByRole('heading', {name: 'Prayer is a plea for help.'}).waitFor();
+  assert.match(await page.locator('#menu-content').textContent(), /cannot tell whether prayer is safe/);
+  assert.equal((await snapshot(page)).revision, before.revision);
+  await page.getByRole('button', {name: 'Not now', exact: true}).click();
+  assert.deepEqual(await snapshot(page), before);
+  // Presentation-only health/hunger states; item, prayer and door behavior use real engine scenarios.
+  await page.evaluate(() => {
+    const app = document.querySelector('pixel-nethack');
+    app.game.current = structuredClone(app.game.state);
+    const v = app.game.current.observation.vitals;
+    v.health = 3; v.maxHealth = 20; v.hunger = 'weak';
+    app.render();
+  });
+  assert.equal(await page.locator('.hero-hud').getAttribute('data-urgency'), 'danger');
+  assert.ok(await page.locator('[data-action="eat"]').evaluate(b => b.classList.contains('action-cue')));
+  assert.ok(await page.locator('[data-action="pray"]').evaluate(b => b.classList.contains('action-cue')));
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({width, height: 844});
+    await page.screenshot({path: root + '/test-results/approachability-' + width + '.png'});
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  }
+  await page.evaluate(() => {
+    const app = document.querySelector('pixel-nethack');
+    app.game.current = structuredClone(app.game.state);
+    const v = app.game.current.observation.vitals;
+    v.health = 20; v.maxHealth = 20; v.hunger = 'not_hungry';
+    app.render();
+  });
+  assert.equal(await page.locator('.hero-hud').getAttribute('data-urgency'), 'normal');
+  assert.equal(await page.locator('.action-cue').count(), 0);
+});
+
+
+test('nearby door controls execute the offered direction and refresh after opening', async t => {
+  const {page} = await fixture(t);
+  await create(page);
+  for (const direction of ['south', 'south', 'west', 'west']) {
+    await page.evaluate(async direction => {
+      const app = document.querySelector('pixel-nethack');
+      await app.run(() => app.game.move(direction));
+    }, direction);
+  }
+  const open = page.locator('#contextual-stairs button').filter({hasText: 'Open door · south'});
+  await open.click();
+  await ready(page);
+  assert.equal((await snapshot(page)).outcome.action, 'open');
+  assert.equal((await snapshot(page)).decision, null);
+  assert.equal(await open.count(), 0);
+  await page.locator('#contextual-stairs button').filter({hasText: 'Close door · south'}).click();
+  await ready(page);
+  assert.equal((await snapshot(page)).outcome.action, 'close');
+  assert.ok(await open.isVisible());
 });

@@ -40,6 +40,8 @@ export type Freshness = "current" | "lastKnown" | "unknown";
 export interface ItemRef {
   id: string; label: string; location: "inventory" | "here";
   quantity: number; category: string;
+  /** Candidate actions from the C resolver; absent when perception is stale. Not safety guarantees. */
+  actions?: ("eat" | "equip" | "remove" | "apply" | "drink" | "read" | "zap" | "wield" | "drop" | "pickup")[];
   usage?: ("worn" | "wielded" | "offhand" | "alternate" | "quivered" | "attached")[];
 }
 export interface Cell {

@@ -275,3 +275,10 @@ knowledge remains `uncertain`, not a claim that no item exists. Eligibility does
 not imply safety: curses, unknown potion effects and warnings remain engine decisions.
 `game.drink()` on a perceived fountain or sink underfoot asks the engine's genuine
 confirmation even without carried potions. Adjacent water features do not qualify.
+
+Current inventory and underfoot item references include optional `actions`: named
+candidate actions computed by the shared C item resolver, using the same perceived
+class and equipment accessibility as explicit operations. The list is omitted for
+stale perception. It is eligibility, not a safety guarantee or an input gate; clients
+must still respect decisions, recovery and the observation revision, and send the
+opaque item ID unchanged. No hidden curse, potion effect or corpse safety is exposed.

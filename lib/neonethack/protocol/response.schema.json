@@ -11019,6 +11019,24 @@
               "category": {
                 "type": "string"
               },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "eat",
+                    "equip",
+                    "remove",
+                    "apply",
+                    "drink",
+                    "read",
+                    "zap",
+                    "wield",
+                    "drop",
+                    "pickup"
+                  ]
+                }
+              },
               "usage": {
                 "type": "array",
                 "items": {
@@ -11074,6 +11092,24 @@
                   },
                   "category": {
                     "type": "string"
+                  },
+                  "actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "eat",
+                        "equip",
+                        "remove",
+                        "apply",
+                        "drink",
+                        "read",
+                        "zap",
+                        "wield",
+                        "drop",
+                        "pickup"
+                      ]
+                    }
                   },
                   "usage": {
                     "type": "array",
@@ -11295,6 +11331,24 @@
                       },
                       "category": {
                         "type": "string"
+                      },
+                      "actions": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "eat",
+                            "equip",
+                            "remove",
+                            "apply",
+                            "drink",
+                            "read",
+                            "zap",
+                            "wield",
+                            "drop",
+                            "pickup"
+                          ]
+                        }
                       },
                       "usage": {
                         "type": "array",

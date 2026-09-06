@@ -89,7 +89,9 @@ class PixelNethack extends HTMLElement {
   private map!: DungeonMap;
   private tilePanel: HTMLElement | null = null;
   private panel = "inventory";
-  private selectedItem: ItemRef | null = null;
+  private prayerExplained = (() => {
+    try { return localStorage.getItem("neonethack-prayer-explained") === "yes"; } catch { return false; }
+  })();
   private journal: { turn: number; lastTurn: number; text: string; count: number }[] = [];
   private lastFrame = "";
   private decisionIdentity = "";
@@ -282,7 +284,7 @@ class PixelNethack extends HTMLElement {
                 `<button data-move="${d}" data-game aria-label="Move ${d}">${g}</button>`,
             )
             .join("")}</div></div>
-          <div class="action-dock"><div class="action-grid"><button data-action="search" data-game>Search<kbd>f</kbd></button><button data-action="pickup" data-game>Pick up<kbd>g</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="open" data-game>Open door<kbd>o</kbd></button><button id="more-actions" data-game>More actions</button></div>
+          <div class="action-dock"><div class="action-grid"><button data-action="search" data-game>Search<kbd>f</kbd></button><button data-action="pickup" data-game>Pick up<kbd>g</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="pray" data-game>Pray</button><button id="more-actions" data-game>More actions</button></div>
           <nav class="side-nav" aria-label="Adventure views"><button data-view="inventory">Backpack <span id="inventory-count"></span><kbd>i</kbd></button><button data-view="surroundings">Surroundings</button><button data-view="journal">Journal</button></nav></div>
         </section>
         <aside class="ground-loot" id="ground-loot" aria-label="On the ground" hidden><h2>On the ground</h2><p>At your feet · choose what to take</p><div id="ground-items"></div></aside>
@@ -1090,8 +1092,21 @@ class PixelNethack extends HTMLElement {
         `Perceived dungeon, ${o.location.depthLabel}. Arrow keys move one step. Shift and arrow keys pan the view.`,
       );
       const fraction = Number(v.health) / Number(v.maxHealth);
+      const hunger = String(v.hunger ?? "");
+      const hungry = ["hungry", "weak", "fainting", "fainted", "starved"].includes(hunger);
+      const severeHunger = hungry && hunger !== "hungry";
+      const danger = fraction <= .2 || ["fainting", "fainted", "starved"].includes(hunger);
+      const warning = fraction <= .4 || severeHunger;
+      this.$(".hero-hud").dataset.urgency = danger ? "danger" : warning ? "warning" : "normal";
+      for (const button of this.querySelectorAll<HTMLElement>('[data-action="eat"], [data-action="pray"]')) {
+        const active = button.dataset.action === "eat" ? hungry : danger;
+        button.classList.toggle("action-cue", active);
+        button.setAttribute("aria-label", button.dataset.action === "eat" ? (hungry ? "Eat · you are hungry" : "Eat") : (danger ? "Pray · ask for help; safety unknown" : "Pray"));
+      }
+      const weapons = o.inventory.filter(item => item.usage?.includes("wielded") || item.usage?.includes("offhand"));
+      const weapon = o.perception.equipment === "current" ? weapons.map(item => item.label).join(" · ") || "Empty hands" : "Equipment unknown";
       this.$("#character-stats").innerHTML =
-        `<div class="health-label"><span>Health</span><strong>${escape(v.health ?? "?")} <span>/ ${escape(v.maxHealth ?? "?")}</span></strong></div><progress aria-label="Health" max="100" value="${Number.isFinite(fraction) ? Math.max(0, Math.min(100, fraction * 100)) : 0}"></progress><div class="stats-row"><div><small>ARMOR</small><strong>${escape(v.armor ?? "?")}</strong></div><div><small>GOLD</small><strong>${escape(v.gold ?? "?")}</strong></div><div><small>LEVEL</small><strong>${escape(v.level ?? "?")}</strong></div></div><p class="condition">${escape([v.hunger, v.burden, ...(Array.isArray(v.condition) ? v.condition : [v.condition])].filter(Boolean).join(" · ") || "Ready for the next step")}</p>`;
+        `<div class="health-label"><span>Health</span><strong>${escape(v.health ?? "?")} <span>/ ${escape(v.maxHealth ?? "?")}</span></strong></div><progress aria-label="Health" max="100" value="${Number.isFinite(fraction) ? Math.max(0, Math.min(100, fraction * 100)) : 0}"></progress><div class="stats-row"><div><small>ARMOR</small><strong>${escape(v.armor ?? "?")}</strong></div><div><small>GOLD</small><strong>${escape(v.gold ?? "?")}</strong></div><div class="hero-level"><small>LEVEL</small><strong>${escape(v.level ?? "?")}</strong></div></div><p class="weapon-line"><small>IN HAND</small> ${escape(weapon)}</p><p class="condition">${escape([v.hunger, v.burden, ...(Array.isArray(v.condition) ? v.condition : [v.condition])].filter(Boolean).join(" · ") || "Ready for the next step")}</p>`;
       this.text(
         "#inventory-count",
         o.inventoryKnown ? o.inventory.length : "?",
@@ -1273,7 +1288,14 @@ class PixelNethack extends HTMLElement {
       for (const item of o.inventory) {
         const b = this.button("", () => this.itemDetails(item), "item-row");
         b.innerHTML = `<span class="item-icon" aria-hidden="true"><img src="${inventoryArt(item.category)}" alt=""></span><span class="item-copy"><span>${escape(item.label)}</span><small>${escape(item.usage?.join(" · ") || item.category || "item")}</small></span><span class="item-quantity">${item.quantity > 1 ? item.quantity : "›"}</span>`;
-        body.append(b);
+        const row = document.createElement("div");
+        row.className = "inventory-entry";
+        row.append(b);
+        const actions = document.createElement("div");
+        actions.className = "inventory-actions";
+        this.appendItemActions(actions, item);
+        row.append(actions);
+        body.append(row);
       }
       if (o.inventoryKnown && !o.inventory.length)
         body.append(
@@ -1341,23 +1363,40 @@ class PixelNethack extends HTMLElement {
     return escape(entry.text) + (entry.count > 1
       ? ` <span class="journal-repeat" aria-label="Repeated ${entry.count} times">×${entry.count}</span>` : "");
   }
+  private climbLabel(direction: "up" | "down") {
+    return direction === "down" ? "Go downstairs" : this.game?.observation.location.depthLabel.trim() === "Dlvl:1" ? "Leave" : "Go upstairs";
+  }
   private renderStairs() {
     const host = this.$("#contextual-stairs");
     host.replaceChildren();
     this.show("#contextual-stairs", false);
     const game = this.game, n = game?.observation.neighborhood;
-    if (!game || !this.playable() || n?.status !== "available" || n.inputGate.state !== "ready") return;
+    if (!game || !this.playable() || n?.status !== "available" || n.inputGate.state !== "ready" || n.basis.revision !== game.state.revision) return;
     const here = n.cells.find(cell => cell.movement.relation === "here");
     for (const offer of here?.actions ?? []) {
-      if (offer.method !== "game.climb" || offer.availability !== "attemptable") continue;
+      const water = here?.terrain?.freshness === "current" && ["fountain", "sink"].includes(here.terrain.type);
+      if (offer.availability !== "attemptable" || (offer.method !== "game.climb" && !(water && offer.method === "game.drink"))) continue;
       const revision = n.basis.revision;
-      const button = this.button(offer.arguments.direction === "down" ? "Go downstairs" : "Go upstairs", () => {
+      const button = this.button(offer.method === "game.climb" ? this.climbLabel(offer.arguments.direction) : `Drink from ${here!.terrain!.type}`, () => {
         if (this.game !== game || !this.playable() || game.state.revision !== revision) return;
         this.stopMovement();
         void this.run(() => this.executeOffer(game, offer, revision));
       });
-      button.dataset.direction = offer.arguments.direction;
+      if (offer.method === "game.climb") button.dataset.direction = offer.arguments.direction;
       host.append(button);
+    }
+    for (const cell of n.cells.filter(c => c.movement.relation === "adjacent" && c.terrain?.freshness === "current")) {
+      for (const offer of cell.actions) {
+        if ((offer.method !== "game.open" && offer.method !== "game.close") || offer.availability !== "attemptable") continue;
+        const revision = n.basis.revision;
+        const label = offer.method === "game.open" ? "Open door" : "Close door";
+        const button = this.button(label + " · " + offer.arguments.target?.direction, () => {
+          if (this.game !== game || !this.playable() || game.state.revision !== revision) return;
+          this.stopMovement();
+          void this.run(() => this.executeOffer(game, offer, revision));
+        });
+        host.append(button);
+      }
     }
     this.show("#contextual-stairs", !!host.childElementCount);
   }
@@ -1484,7 +1523,7 @@ class PixelNethack extends HTMLElement {
           ? occupant.kind === "ally"
             ? "Move toward ally"
             : "Move / attack"
-          : (labels[offer.key] ?? offer.key),
+          : offer.method === "game.climb" && offer.arguments ? this.climbLabel(offer.arguments.direction) : (labels[offer.key] ?? offer.key),
         () => {
           if (game !== this.game || this.busy || !this.playable()) return;
           this.closeTile();
@@ -1728,30 +1767,40 @@ class PixelNethack extends HTMLElement {
     if (offer?.availability !== "knownBlocked") return "";
     return offer.reason === "noPerceivedItems" ? "No eligible items available" : offer.reason === "noKnownTools" ? "No tools in your pack" : "Unavailable here";
   }
+  private explainPrayer() {
+    this.openMenu('<h2 id="menu-title">Prayer is a plea for help.</h2><p>Your deity may help with serious trouble, including hunger or low health. Prayer takes time, and help is not guaranteed.</p><p>Praying too often or displeasing your deity can bring punishment. This interface cannot tell whether prayer is safe. A glow means you are in trouble, not that your deity is ready.</p><p class="subtle">Continue to the dungeon’s own confirmation, or return without taking a turn.</p><div class="more-grid" id="prayer-actions"></div>');
+    this.$("#prayer-actions").append(this.button("Continue to prayer", () => {
+      this.prayerExplained = true;
+      try { localStorage.setItem("neonethack-prayer-explained", "yes"); } catch { /* Optional help preference; never blocks play. */ }
+      this.action("pray");
+    }), this.button("Not now", () => this.closeMenu()));
+  }
   private action(name: string, item?: ItemRef) {
     this.movement.stop();
     if (!this.playable() || this.actionUnavailable(name)) return;
+    if (name === "pray" && !this.prayerExplained) { this.explainPrayer(); return; }
     const g = this.game!,
-      ref = item ? { id: item.id } : undefined;
+      ref = item ? { id: item.id } : undefined,
+      options = { expectedRevision: g.state.revision };
     const actions: Record<string, () => Promise<Snapshot>> = {
       wait: () => g.wait(),
       search: () => g.search(),
-      pickup: () => g.pickup(ref),
-      eat: () => g.eat(ref),
-      drink: () => g.drink(ref),
+      pickup: () => g.pickup(ref, options),
+      eat: () => g.eat(ref, options),
+      drink: () => g.drink(ref, options),
       open: () => g.open(),
       close: () => g.closeDoor(),
       kick: () => g.kick(),
       up: () => g.climb("up"),
       down: () => g.climb("down"),
       pray: () => g.pray(),
-      read: () => g.read(ref),
-      apply: () => g.apply(ref),
-      wield: () => g.wield(ref),
-      equip: () => g.equip(ref),
-      remove: () => g.remove(ref),
-      drop: () => g.drop(ref),
-      zap: () => g.zap(ref),
+      read: () => g.read(ref, options),
+      apply: () => g.apply(ref, options),
+      wield: () => g.wield(ref, options),
+      equip: () => g.equip(ref, options),
+      remove: () => g.remove(ref, options),
+      drop: () => g.drop(ref, options),
+      zap: () => g.zap(ref, undefined, options),
     };
     if (actions[name]) {
       this.closeMenu();
@@ -1773,8 +1822,7 @@ class PixelNethack extends HTMLElement {
       zap: "Zap a wand",
       close: "Close a door",
       kick: "Kick",
-      up: "Go upstairs",
-      down: "Go downstairs",
+      open: "Open a door",
       pray: "Pray",
     })) {
       const b = this.button(label, () => this.action(action));
@@ -1788,32 +1836,27 @@ class PixelNethack extends HTMLElement {
     }
   }
   private itemDetails(item: ItemRef) {
-    this.selectedItem = item;
     this.openMenu(
       `<div class="large-item-icon" aria-hidden="true"><img src="${inventoryArt(item.category)}" alt=""></div><h2 id="menu-title">${escape(item.label)}</h2><p class="subtle">${escape(item.location === "here" ? "At your feet" : "In your backpack")}${item.usage?.length ? ` · ${escape(item.usage.join(", "))}` : ""}</p><p>Choose what you’d like to try. The dungeon decides what is possible.</p><div class="more-grid" id="item-actions"></div>`,
     );
-    const labels =
-      item.location === "here"
-        ? { pickup: "Pick up", eat: "Eat" }
-        : {
-            wield: "Wield",
-            equip: "Wear",
-            remove: "Remove",
-            eat: "Eat",
-            drink: "Drink",
-            read: "Read",
-            apply: "Use",
-            zap: "Zap",
-            drop: "Drop",
-          };
-    for (const [action, label] of Object.entries(labels)) {
-      const b = this.button(label!, () =>
-        this.action(action, this.selectedItem!),
-      );
-      b.disabled = !this.playable();
-      this.$("#item-actions").append(b);
+    this.appendItemActions(this.$("#item-actions"), item);
+  }
+  private appendItemActions(host: HTMLElement, item: ItemRef) {
+    const game = this.game!, revision = game.state.revision;
+    const labels: Record<string, string> = {pickup: "Pick up", eat: "Eat", equip: "Wear", remove: "Remove", apply: "Use", drink: "Drink", read: "Read", zap: "Zap", wield: "Wield", drop: "Drop"};
+    for (const action of item.actions ?? []) {
+      const button = this.button(labels[action]!, () => {
+        if (this.game !== game || game.state.revision !== revision || !this.playable()) return;
+        this.action(action, item);
+      });
+      button.disabled = !this.playable();
+      button.dataset.operation = "";
+      button.dataset.itemAction = action;
+      button.setAttribute("aria-label", labels[action] + " " + item.label);
+      host.append(button);
     }
   }
+
   private renderDecision() {
     const d = this.game?.decision,
       dialog = this.querySelector<HTMLDialogElement>("#decision")!;

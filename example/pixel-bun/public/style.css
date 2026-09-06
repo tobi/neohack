@@ -1594,3 +1594,25 @@ pixel-nethack:not(.in-game) .intro-controls {
 #enter-gate { position: absolute; border: 0; padding: 0; background: transparent; box-shadow: none; cursor: pointer; }
 #enter-gate:hover, #enter-gate:focus-visible { background: #ffe1a01a; outline: none; box-shadow: inset 0 -3px #f3dda0; }
 #enter-gate:disabled { pointer-events: none; opacity: 1; }
+
+/* Status stays legible without motion or reliance on color alone. */
+.hero-hud[data-urgency="warning"] { border-color: #ec7848; outline: 2px solid #b95032; }
+.hero-hud[data-urgency="danger"] { border-color: #ff6255; outline: 3px solid #bb3537; }
+.hero-hud[data-urgency="danger"] progress::-webkit-progress-value { background: #ff6255; }
+.hero-hud[data-urgency="warning"] progress::-webkit-progress-value { background: #ec7848; }
+.stats-row .hero-level { margin-left: auto; }
+.stats-row .hero-level strong { font-size: 28px; font-weight: bold; line-height: 1; color: #f0e4bd; }
+.weapon-line { font-size: 12px; line-height: 1.4; margin: 8px 0 0; overflow-wrap: anywhere; }
+.weapon-line small { color: #a7b398; font-size: 9px; }
+button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px #9e703c, 0 0 12px #dfa45460; }
+.inventory-entry { border-bottom: 1px solid #4c5d4c; padding-bottom: 8px; }
+.inventory-entry .item-row { border-bottom: 0; }
+.inventory-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px; }
+.inventory-actions button { min-height: 44px; padding: 6px 12px; font-size: 13px; }
+#contextual-stairs { flex-wrap: wrap; justify-content: center; width: max-content; max-width: min(640px, calc(100vw - 24px)); max-height: 22vh; overflow-y: auto; }
+#contextual-stairs button { min-width: 0; }
+@media (max-width: 600px) {
+  #contextual-stairs { gap: 6px; }
+  #contextual-stairs button { padding: 10px 12px; font-size: 14px; }
+  .weapon-line { max-width: 210px; }
+}

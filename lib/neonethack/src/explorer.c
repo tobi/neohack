@@ -2840,6 +2840,9 @@ emit_world(game_t *g, mj_Buf *b)
     mj_endarr(b);
 }
 
+static int eligible_carried(game_t *, const char *, const inv_item_t *);
+static int eligible_item(const char *, const char *, const char *);
+
 static void
 emit_inventory(game_t *g, mj_Buf *b)
 {
@@ -2854,6 +2857,14 @@ emit_inventory(game_t *g, mj_Buf *b)
         mj_strv(b, g->inv[i].location ? "here" : "inventory");
         mj_key(b, "quantity"); mj_intv(b, g->inv[i].quantity);
         mj_key(b, "category"); mj_strv(b, g->inv[i].category[0] ? g->inv[i].category : "unknown");
+        if (g->perception_fresh && g->inventory_rev >= 0) {
+            static const char *const actions[] = {"eat", "equip", "remove", "apply", "drink", "read", "zap", "wield", "drop"};
+            size_t a;
+            mj_key(b, "actions"); mj_arr(b);
+            for (a = 0; a < sizeof actions / sizeof actions[0]; a++)
+                if (eligible_carried(g, actions[a], &g->inv[i])) mj_strv(b, actions[a]);
+            mj_endarr(b);
+        }
         if (g->inv[i].usage_known) {
             size_t k;
             mj_key(b, "usage"); mj_arr(b);
@@ -2995,6 +3006,12 @@ emit_observation(game_t *g, mj_Buf *b, int recovery)
             mj_key(b, "location"); mj_strv(b, "here");
             mj_key(b, "category"); mj_strv(b, g->floor[i].category);
             mj_key(b, "quantity"); mj_intv(b, g->floor[i].quantity);
+            if (g->perception_fresh) {
+                mj_key(b, "actions"); mj_arr(b);
+                mj_strv(b, "pickup");
+                if (eligible_item("eat", g->floor[i].label ? g->floor[i].label : "", g->floor[i].category)) mj_strv(b, "eat");
+                mj_endarr(b);
+            }
             mj_endobj(b);
         }
     }

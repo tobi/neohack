@@ -7,7 +7,7 @@ const object = (properties: Record<string, Schema>, required = Object.keys(prope
 const array = (items: Schema): Schema => ({ type: "array", items });
 const nullable = (s: Schema): Schema => ({ anyOf: [s, { type: "null" }] });
 const selection = object({ min: integer, max: integer });
-const item = object({ id: string, label: string, location: enumeration("inventory", "here"), quantity: integer, category: string, usage: array(enumeration("worn", "wielded", "offhand", "alternate", "quivered", "attached")) }, ["id", "label", "location", "quantity"]);
+const item = object({ id: string, label: string, location: enumeration("inventory", "here"), quantity: integer, category: string, actions: array(enumeration("eat", "equip", "remove", "apply", "drink", "read", "zap", "wield", "drop", "pickup")), usage: array(enumeration("worn", "wielded", "offhand", "alternate", "quivered", "attached")) }, ["id", "label", "location", "quantity"]);
 const end = object({ kind: enumeration("death", "ascended", "escaped", "quit", "disconnected", "engineError", "unknown"), cause: string, turn: integer }, ["kind", "turn"]);
 const base = { id: string, action: string, about: string, cancellable: boolean };
 const decision = (kind: string, properties: Record<string, Schema> = {}, optional: string[] = []) => object({ ...base, kind: { const: kind }, ...properties }, ["id", "action", "kind", "cancellable", ...Object.keys(properties).filter(k => !optional.includes(k))]);

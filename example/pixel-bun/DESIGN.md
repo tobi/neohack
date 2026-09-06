@@ -580,3 +580,17 @@ location is descriptive, not a cross-branch depth score. Clearly label browser
 reports and missing older data. Error telemetry sends only a bounded category and
 engine package, asynchronously and once per category/package/page visit. Never
 send bookmarks, vault IDs, raw messages, stacks or journals to the public ledger.
+
+### Approachable action choices
+
+Backpack rows show candidate actions supplied by the shared C driver, bound to the
+current item ID and revision. Eligibility does not promise safety. The everyday
+dock offers Search, Pick up, Eat and Pray; doors, stairs and drinking from a fountain
+or sink appear in context. Ascending from the top dungeon floor reads “Leave” and
+still goes through the engine's confirmation. Other actions remain in More actions.
+The character sheet shows current wielded/offhand equipment and a larger experience
+level. Low health or severe hunger outlines the sheet orange-red, then red at
+critical severity; condition text and the health meter retain the same information.
+Hungry adventurers get a restrained Eat glow; critical trouble also highlights
+Pray, whose first use explains possible help, punishment and unknown safety before
+the engine's own confirmation. These cues never automate an action.
