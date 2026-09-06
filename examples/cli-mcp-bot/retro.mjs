@@ -11,7 +11,7 @@ import { dirname, join as joinPath, resolve } from 'path';
 import { fileURLToPath } from 'url';
 const BOT_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.NEONETHACK_ROOT ?? resolve(BOT_DIR, '../..');
-const AIDIR = BOT_DIR;
+const AIDIR = process.env.NEONETHACK_BOT_STATE ?? joinPath(BOT_DIR, 'state');
 const LOG = `${AIDIR}/logs/retro.log`;
 const BOT_REL = process.env.NEONETHACK_BOT_REL ?? 'examples/cli-mcp-bot';
 
@@ -58,6 +58,8 @@ appendFileSync(LOG, `\n## session ${new Date().toISOString()} — ops=${stats.op
 // nothing to learn from an empty session
 if (stats.ops < 10) { console.log('retro: session too short, skipping'); process.exit(0); }
 
+if (!existsSync(`${AIDIR}/system-prompt.md`) && existsSync(`${BOT_DIR}/system-prompt.md`)) copyFileSync(`${BOT_DIR}/system-prompt.md`, `${AIDIR}/system-prompt.md`);
+if (!existsSync(`${AIDIR}/advisor.mjs`) && existsSync(`${BOT_DIR}/advisor.mjs`)) copyFileSync(`${BOT_DIR}/advisor.mjs`, `${AIDIR}/advisor.mjs`);
 // ---- LLM retrospective ----
 const systemPrompt = existsSync(`${AIDIR}/system-prompt.md`) ? readFileSync(`${AIDIR}/system-prompt.md`, 'utf8') : '';
 const advisorSrc = existsSync(`${AIDIR}/advisor.mjs`) ? readFileSync(`${AIDIR}/advisor.mjs`, 'utf8') : '';
@@ -138,13 +140,8 @@ try {
 }
 
 if (applied.length) {
-  const msg = `retro: ${parsed.summary.slice(0, 160)}`;
-  try {
-    execFileSync('git', ['-C', ROOT, 'add', '--', BOT_REL]);
-    execFileSync('git', ['-C', ROOT, 'commit', '-m', msg, '--', BOT_REL]);
-    appendFileSync(LOG, `applied: ${applied.join(', ')} — ${msg}\n`);
-    console.log(`retro committed: ${msg}`);
-  } catch (e) { console.log('retro: git commit skipped'); }
+  appendFileSync(LOG, `applied: ${applied.join(', ')} — ${parsed.summary.slice(0, 160)}\n`);
+  console.log(`retro applied: ${parsed.summary.slice(0, 160)}`);
 } else {
   appendFileSync(LOG, 'no changes applied\n');
   console.log('retro: no changes applied');

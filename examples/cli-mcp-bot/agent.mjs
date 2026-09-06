@@ -48,8 +48,16 @@ const BASE_URL = process.env.OPENAI_API_BASE ?? process.env.OPENAI_BASE_URL ?? '
 const API_KEY = process.env.OPENAI_API_KEY ?? 'dummy';
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-5.6-luna';
 
-const STATE_DIR = join(BOT_DIR, 'state');
-const LOG_DIR = join(BOT_DIR, 'logs');
+// State directory: everything the bot iterates on lives here — conversation,
+// game state, observations, logs, the LLM-improved system-prompt.md and
+// advisor.mjs. Point NEONETHACK_BOT_STATE elsewhere to run against a
+// different working copy of the bot's "mind".
+const STATE_DIR = process.env.NEONETHACK_BOT_STATE ?? join(BOT_DIR, 'state');
+const LOG_DIR = join(STATE_DIR, 'logs');
+const DOCTRINE_F = join(STATE_DIR, 'system-prompt.md');      // iterated by retro
+const ADVISOR_F = join(STATE_DIR, 'advisor.mjs');            // iterated by retro
+const BUNDLED_DOCTRINE = join(BOT_DIR, 'system-prompt.md');  // committed default
+const BUNDLED_ADVISOR = join(BOT_DIR, 'advisor.mjs');        // committed default
 const STATE_F = `${STATE_DIR}/game-state.json`;
 const CONV_F = `${STATE_DIR}/conversation.json`;
 const OBS_F = `${STATE_DIR}/last-obs.json`;
@@ -129,7 +137,8 @@ for (const t of mcpTools) {
           if (sc?.observation) {
             saveJson(OBS_F, { sessionId: sc.sessionId ?? lastSessionId, revision: sc.revision, decision: sc.decision ?? null, observation: sc.observation });
             try {
-              const out = execFileSync('node', [join(BOT_DIR, 'advisor.mjs'), OBS_F], { timeout: 5000, encoding: 'utf8' });
+              const advisorSrc = existsSync(ADVISOR_F) ? ADVISOR_F : BUNDLED_ADVISOR;
+              const out = execFileSync('node', [advisorSrc, OBS_F], { timeout: 5000, encoding: 'utf8' });
               advisorNote = `\n\nADVISOR (heuristic decision tree — strong prior from past deaths; you may override): ${out.trim().slice(0, 500)}`;
               const aj = JSON.parse(out);
               log(`advisor: p${aj.priority} ${aj.tool} — ${String(aj.reason).slice(0, 90)}`);
@@ -155,10 +164,10 @@ for (const t of mcpTools) {
           log(`op#${opCount} ${t.name} turn=${turn ?? '?'} depth=${depth ?? '?'}`);
         }
         // skill guard 1: interactions without game-turn advancement
-        if (t.name.startsWith('game_') || t.name === 'session_observe') {
+        if (t.name.startsWith('game_') || t.name.startsWith('session_')) {
           const turnNum = parseInt(turn ?? 'NaN');
-          if (!Number.isNaN(turnNum) && turnNum === lastTurnSeen) stalledOps++; else if (!Number.isNaN(turnNum)) stalledOps = 0;
-          if (!Number.isNaN(turnNum)) lastTurnSeen = turnNum;
+          if (Number.isNaN(turnNum) || turnNum === lastTurnSeen) stalledOps++;
+          else { stalledOps = 0; lastTurnSeen = turnNum; }
           if (stalledOps >= 10) {
             saveJson(DEATH_F, { cause: 'skills: 10 interactions without advancing the game', turn: turnNum ?? null, depth: depth ?? null, at: new Date().toISOString() });
             log(`op#${opCount} ${t.name} <<SKILL-DEATH>> 10 interactions without advancing`);
@@ -179,7 +188,7 @@ const model = openai.chat(MODEL);
 
 // system prompt: LLM-editable doctrine in system-prompt.md + fixed session line
 let doctrine = '';
-try { doctrine = readFileSync(join(BOT_DIR, 'system-prompt.md'), 'utf8'); } catch {}
+try { doctrine = readFileSync(DOCTRINE_F, 'utf8'); } catch { doctrine = readFileSync(BUNDLED_DOCTRINE, 'utf8'); }
 const system = `${doctrine}
 
 SESSION: active session "${lastSessionId ?? 'UNKNOWN'}". Your first action: session_observe {"sessionId":"${lastSessionId ?? 'UNKNOWN'}"} to see the world. If it errors, try session_resume {"sessionId":"${lastSessionId ?? 'UNKNOWN'}"}.`;

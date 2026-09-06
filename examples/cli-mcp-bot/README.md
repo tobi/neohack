@@ -51,8 +51,8 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
 | `agent.mjs` | AI driver: MCP client, advisor augmentation, continuous conversation |
 | `advisor.mjs` | Standalone heuristic decision tree (run: `node advisor.mjs state/last-obs.json`) |
 | `retro.mjs` | Post-session LLM self-review; improves doctrine + advisor, commits |
-| `system-prompt.md` | The bot's doctrine — edited by the retro LLM over time |
-| `state/` | Runtime state: conversation, latest observation, death records (git-ignored) |
+| `system-prompt.md` | Committed default doctrine (seed for the state dir) |
+| `state/` | Default state dir: iterated `system-prompt.md` + `advisor.mjs`, conversation, observations, logs (git-ignored) |
 | `sessions/` | Engine session journals (git-ignored) |
 | `logs/` | Agent/runner logs (git-ignored) |
 | `.env` | Local LLM endpoint config (git-ignored; see `.env.example`) |
@@ -64,5 +64,8 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
   adventure.
 - Death detection resets the conversation; the model then starts a new game
   itself (new session ids are captured automatically).
-- Retro commits are scoped to this directory (`git commit -- examples/cli-mcp-bot`),
-  so repository work in progress is never swept into them.
+- The state directory (default `./state`, override with `NEONETHACK_BOT_STATE`)
+  holds everything the bot iterates on: the LLM retro improves
+  `state/system-prompt.md` and `state/advisor.mjs` after every session. Point
+  `NEONETHACK_BOT_STATE` at another directory to run a separate evolving
+  instance (or to keep the evolving mind out of the repository).
