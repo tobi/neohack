@@ -12,7 +12,7 @@ import { categoryMark, drawCreatureArt, drawSymbolArt } from "./symbol-art";
 import { roles, heroArt } from "./characters";
 
 const images = new Map<string, HTMLImageElement>();
-export async function loadArt() {
+export async function loadArt(base: string | Record<string,string> = "/art/") {
   await Promise.all(
     [
       ...roles.flatMap(({ art }) => [art, `${art}-motion`]),
@@ -21,7 +21,7 @@ export async function loadArt() {
       "bat",
     ].map(async (name) => {
       const image = new Image();
-      image.src = `/art/${name}.png`;
+      image.src = typeof base === "string" ? `${base}${name}.png` : base[name]!;
       await image.decode();
       images.set(name, image);
     }),

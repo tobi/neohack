@@ -34,6 +34,7 @@ const options: ts.CompilerOptions = {
 const program = ts.createProgram(
   [
     `${root}/src/app.ts`,
+    `${root}/src/component.ts`,
     `${root}/server.ts`,
     `${root}/scripts/render-dungeon.ts`,
   ],
@@ -50,8 +51,12 @@ if (diagnostics.length) {
   );
   process.exit(1);
 }
+const embeddedArt: Record<string,string> = {};
+for (const file of new Bun.Glob('*.png').scanSync(root+'/public/art')) embeddedArt[file.replace(/\.png$/, '')] = 'data:image/png;base64,' + Buffer.from(await Bun.file(root+'/public/art/'+file).arrayBuffer()).toString('base64');
+const defines = { __NEOHACK_ART__: JSON.stringify(embeddedArt) };
 const result = await Bun.build({
   entrypoints: [`${root}/src/app.ts`],
+  define: defines,
   outdir: `${root}/public/build`,
   target: "browser",
   minify: true,
@@ -62,3 +67,12 @@ if (!result.success)
 console.log(
   "Pixel client typechecked and built. Gameplay uses the public neonethack API.",
 );
+
+for (const [entry, target, format] of [
+  ['component', 'component/neohack.js', 'esm'],
+] as const) {
+  const built = await Bun.build({entrypoints:[root+'/src/'+entry+'.ts'],target:'browser',format,minify:true,define:defines});
+  if(!built.success) throw new AggregateError(built.logs, entry+' build failed');
+  const notice = entry === 'component' ? '/*! NeoHack viewer. NetHack attribution and project terms: https://github.com/tobi/neohack/blob/main/lib/neonethack/NOTICE.md . Character art by LimeZu (https://limezu.itch.io/moderninteriors), licensed for project use; raw asset redistribution is restricted. See example/pixel-bun/art/ATTRIBUTION.md in the matching source. */\n' : '';
+  await Bun.write(root+'/public/'+target,notice + await built.outputs[0]!.text());
+}

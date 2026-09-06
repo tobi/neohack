@@ -13,6 +13,7 @@ export async function startServer(port = Number(process.env.PORT ?? 3333)) {
     port,
     async fetch(request) {
       const headers = {
+        "Access-Control-Allow-Origin": "*",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
         "Cache-Control": "no-cache",
@@ -32,7 +33,7 @@ export async function startServer(port = Number(process.env.PORT ?? 3333)) {
           ? path.slice(9)
           : path === "/"
             ? "index.html"
-            : path === "/dashboard" ? "dashboard.html" : path.slice(1);
+            : path === "/dashboard" ? "dashboard.html" : ["/component", "/component/"].includes(path) ? "component/index.html" : path.slice(1);
         if (runtime && relative === 'wasm/current.json') {
           const manifest = await Bun.file(resolve(runtimeRoot,'wasm/manifest.json')).json();
           return Response.json({version:1,buildId:manifest.buildId},{headers});

@@ -166,9 +166,11 @@ export default {
         return json({error:"server error"},500);
       }
     }
-    const asset = await env.ASSETS.fetch(request);
+    if (url.pathname === "/component") url.pathname = "/component/index.html";
+    const asset = await env.ASSETS.fetch(new Request(url, request));
     const headers = new Headers(asset.headers);
     headers.set("content-security-policy", CSP);
+    if (url.pathname.startsWith("/component/")) headers.set("access-control-allow-origin", "*");
     headers.set("x-content-type-options", "nosniff");
     headers.set("referrer-policy", "no-referrer");
     if (url.pathname.startsWith("/runtime/")) headers.set("cache-control", /^\/runtime\/wasm\/[a-f0-9]{64}\//.test(url.pathname) && asset.ok ? "public, max-age=31536000, immutable" : "no-cache");

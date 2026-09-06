@@ -914,3 +914,12 @@ and the separate door pass share the chosen profile. The threshold stays masonry
 The proposed flooded ruins, mines, crypts, fungal and infernal styles are not
 implemented and are not selectable. Earlier notes that live play always defaults
 to dungeon are superseded by this activation.
+
+## Embeddable component
+
+`/component` is a read-only developer landing page. Reuse the existing stonework
+and LimeZu art through a self-contained shadow-DOM `<neohack-world>` viewer;
+never create a game on the showcase. Charcoal, sage and warm cream carry into
+editorial pages with large serif headlines, selectable code and responsive columns.
+The component defaults to no engine connection. An explicitly supplied transport
+controls discovery and execution; replay playback displays public frames only.
