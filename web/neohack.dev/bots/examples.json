@@ -1,0 +1,40 @@
+[
+  {
+    "id": "curious-imp",
+    "name": "Curious imp",
+    "description": "Open doors, explore new routes, eat known rations, and retreat from nearby enemies.",
+    "files": {
+      "main.js": "imp/main.js",
+      "explore.js": "shared/explore.js",
+      "care.js": "shared/care.js"
+    }
+  },
+  {
+    "id": "cartographer",
+    "name": "Cartographer",
+    "description": "Map one level thoroughly, including unfinished paths and searches.",
+    "files": {
+      "main.js": "cartographer/main.js",
+      "explore.js": "shared/explore.js",
+      "care.js": "shared/care.js"
+    }
+  },
+  {
+    "id": "steady-fighter",
+    "name": "Steady fighter",
+    "description": "Explore and descend; fight single adjacent enemies while healthy.",
+    "files": {
+      "main.js": "fighter/main.js",
+      "explore.js": "shared/explore.js",
+      "care.js": "shared/care.js"
+    }
+  },
+  {
+    "id": "first-steps",
+    "name": "First steps",
+    "description": "Learn events: look around, search once, and stop.",
+    "files": {
+      "main.js": "first-steps/main.js"
+    }
+  }
+]

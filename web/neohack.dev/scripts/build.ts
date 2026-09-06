@@ -2,6 +2,7 @@ import "./build-errors.mjs";
 import ts from "typescript";
 import { resolve } from "node:path";
 import { access } from "node:fs/promises";
+import { catalog, exampleProject } from "../../../examples/workshop/projects.js";
 
 const root = resolve(import.meta.dir, "..");
 const library = resolve(root, "../../lib/neonethack");
@@ -66,7 +67,7 @@ for (const file of new Bun.Glob('*.png').scanSync(root+'/public/art')) embeddedA
 const botTypes: Record<string, string> = {};
 for (const name of ['low', 'high', 'client', 'types', 'requests', 'hero', 'script', 'vocabulary', 'hero-events', 'lifecycle']) botTypes['/types/' + name + '.d.ts'] = await Bun.file(library + '/dist/typescript/' + name + '.d.ts').text();
 for (const name of new Bun.Glob('lib.*.d.ts').scanSync(root + '/node_modules/typescript/lib')) botTypes['/lib/' + name] = await Bun.file(root + '/node_modules/typescript/lib/' + name).text();
-const defines = { __NEOHACK_ART__: JSON.stringify(embeddedArt), __BOT_TYPES__: JSON.stringify(botTypes), __IMP_MAIN__: JSON.stringify(await Bun.file(root+'/bots/imp/main.js').text()) };
+const defines = { __NEOHACK_ART__: JSON.stringify(embeddedArt), __BOT_TYPES__: JSON.stringify(botTypes), __BOT_EXAMPLES__: JSON.stringify(Object.fromEntries(await Promise.all(catalog.map(async (example) => [example.id, await exampleProject(example)])))) };
 const result = await Bun.build({
   define: defines,
   entrypoints: [`${root}/src/app.ts`, `${root}/src/login.ts`, `${root}/src/bots.ts`, `${root}/src/rail.ts`],

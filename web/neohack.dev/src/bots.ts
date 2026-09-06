@@ -17,7 +17,8 @@ import { toolMethods } from '../../../lib/neonethack/mcp/tools';
 const $ = <T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 const output=$('output'), status=$('status');
 const log=(message:string)=>{output.textContent=(output.textContent+'\n'+message).slice(-24000);output.scrollTop=output.scrollHeight;};
-declare const __IMP_MAIN__: string;
+declare const __BOT_EXAMPLES__: Record<string, { name: string; description: string; files: Record<string, string> }>;
+const examples = __BOT_EXAMPLES__;
 const blankScript = `import { defineBot } from "neonethack";
 
 const bot = defineBot({ name: "My script" });
@@ -29,25 +30,6 @@ bot.on("turn", async ({ hero, log }) => {
   hero.stop();
 });
 `;
-const firstSteps = `import { defineBot } from "neonethack";
-
-const bot = defineBot({ name: "First steps" });
-export default bot;
-
-bot.on("enterLevel", ({ to, log }) => {
-  log("Welcome to", to.depthLabel);
-});
-
-bot.on("turn", async ({ hero, log }) => {
-  await hero.search();
-  log("Searched once. Try another action next time.");
-  hero.stop();
-});
-`;
-const examples = {
-  "curious-imp": { name: "Curious imp", files: { "main.js": __IMP_MAIN__ } },
-  "first-steps": { name: "First steps", files: { "main.js": firstSteps } },
-};
 let files:Record<string,string>={'main.js':blankScript};
 let projectVersion = 0;
 let dirty = false;
@@ -126,8 +108,32 @@ function openProject(project: { name: string; files: Record<string,string>; id?:
   window.scrollTo({top:0,left:0,behavior:"instant"});
 }
 $('new-script').onclick = () => openProject({name:'My script',files:{'main.js':blankScript}});
-$('example-imp').onclick = () => openProject(examples['curious-imp'], 'curious-imp');
-$('example-observer').onclick = () => openProject(examples['first-steps'], 'first-steps');
+for (const [id, project] of Object.entries(examples)) {
+  const button = document.createElement('button');
+  button.id = id === 'curious-imp' ? 'example-imp' : id === 'first-steps' ? 'example-observer' : 'example-' + id;
+  button.className = 'secondary';
+  const mark = document.createElement('span');
+  mark.className = 'example-mark';
+  mark.setAttribute('aria-hidden', 'true');
+  mark.textContent = ({'curious-imp':'@', cartographer:'#', 'steady-fighter':'+', 'first-steps':'.'} as Record<string,string>)[id] ?? '@';
+  const copy = document.createElement('span');
+  copy.className = 'example-copy';
+  const name = document.createElement('strong');
+  name.textContent = project.name;
+  const description = document.createElement('span');
+  description.textContent = project.description;
+  const action = document.createElement('span');
+  action.className = 'example-action';
+  action.append('Explore the code ');
+  const arrow = document.createElement('span');
+  arrow.setAttribute('aria-hidden', 'true');
+  arrow.textContent = '↗';
+  action.append(arrow);
+  copy.append(name, description, action);
+  button.append(mark, copy);
+  button.onclick = () => openProject(project, id);
+  $('example-list').append(button);
+}
 $('choose-project').onclick = () => { $('project-picker').hidden = false; $('project-workspace').hidden = true; window.scrollTo({top:0,left:0,behavior:'instant'}); };
 for(const id of ['bot-name','role','seed-mode','seed']) $(id).addEventListener('change',()=>{dirty=true;});
 async function refreshBots(){
@@ -156,7 +162,7 @@ async function refreshBots(){
       else $('project-message').textContent=signedIn ? 'This script is not in your account.' : 'Sign in to open this private script.';
     } else {
       routePending=false;
-      if(example && Object.hasOwn(examples,example)) openProject(examples[example as keyof typeof examples],example);
+      if(example && Object.hasOwn(examples,example)) openProject(examples[example]!,example);
     }
   }
 }

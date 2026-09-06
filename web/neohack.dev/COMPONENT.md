@@ -99,7 +99,7 @@ provides a source viewer and download alongside the read-only replay.
 
 ## Workshop
 
-`/bots` uses CodeMirror (MIT) and TypeScript (Apache-2.0). The named entrypoint is `main.js`. Export `const bot = defineBot({ name: "My bot", autoloot: rules })` and register `bot.on("turn", async ({ hero }) => { ... })` at the top level. Plain event payloads include hero, game and log; `start` runs setup before observations. The single-file imp starter remembers visited squares and attempts nearby paths and stairs; it stops for hunger, enemies or a pending decision. The name is required; optional construction `autoloot` uses the engine’s `AutomaticPickup` schema and is applied through a journaled, zero-turn configuration before initialization. Containers remain explicit.
+`/bots` uses CodeMirror (MIT) and TypeScript (Apache-2.0). The named entrypoint is `main.js`. Export `const bot = defineBot({ name: "My bot", autoloot: rules })` and register `bot.on("turn", async ({ hero }) => { ... })` at the top level. Plain event payloads include hero, game and log; `start` runs setup before observations. The imp starter keeps a short main policy and editable helpers for routes, door handling, rations and decisions. Cartographer maps one level; Steady fighter adds combat; First steps searches once. The name is required; optional construction `autoloot` uses the engine’s `AutomaticPickup` schema and is applied through a journaled, zero-turn configuration before initialization. Containers remain explicit.
 TypeScript provides live cross-file completions, hover docs and advisory diagnostics; Test transpiles the project. The `neonethack` import exposes Hero, direction and entity enums alongside the same
 client classes; arbitrary package imports are unavailable.
 
@@ -119,6 +119,11 @@ bun run --cwd web/neohack.dev build
 node hosting/vercel/scripts/stage.mjs
 node --test hosting/vercel/tests/studio.test.mjs
 ```
+
+Run those same example files locally against the native engine with
+`node examples/workshop/run.js curious-imp --seed 42`. The
+[Node runner guide](../../examples/workshop/README.md) covers setup, limits,
+JSON summaries, traces, and testing saved source projects.
 
 The workshop defaults to random class and seed, sampled once when starting a test.
 Choose a specific class or fixed seed to reproduce a setup. Saved projects retain

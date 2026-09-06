@@ -1,96 +1,88 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-import {
-  fixture,
-  identity,
-} from "../../../lib/neonethack/tests/native-fixture.mjs";
-import {
-  runBot,
-  entities,
-} from "../../../lib/neonethack/dist/typescript/client.js";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runProject } from "../../../examples/workshop/runtime.js";
 
 test(
-  "the simple imp explores a real dungeon and stops before a situation needing a strategy",
+  "Curious imp continues through opening a door and visits new ground",
   { timeout: 60000 },
   async (t) => {
-    const dir = await mkdtemp("/tmp/neohack-imp-");
+    const dir = await mkdtemp(join(tmpdir(), "imp-test-"));
     t.after(() => rm(dir, { recursive: true, force: true }));
-    const library = pathToFileURL(
-      resolve(
-        import.meta.dirname,
-        "../../../lib/neonethack/dist/typescript/client.js",
-      ),
-    ).href;
-    const source = await readFile(
-      resolve(import.meta.dirname, "../bots/imp/main.js"),
-      "utf8",
+    const trace = join(dir, "trace.jsonl");
+    const result = await runProject("curious-imp", {
+      seed: 1,
+      calls: 500,
+      trace,
+    });
+    assert.equal(result.reason, "stopped", result.error);
+    assert.ok(result.moves >= 40);
+    assert.ok(result.uniqueSquares >= 40);
+    const frames = (await readFile(trace, "utf8"))
+      .trim()
+      .split("\n")
+      .map(JSON.parse);
+    const door = frames.findIndex((frame) =>
+      frame.response?.outcome.effects.includes("openedDoor"),
     );
-    await writeFile(
-      dir + "/main.mjs",
-      source.replaceAll('"neonethack"', JSON.stringify(library)),
+    assert.ok(door > 0, "this real dungeon must exercise opening a door");
+    assert.equal(frames[door].response.outcome.positionChanged, false);
+    assert.ok(
+      frames
+        .slice(door + 1)
+        .some((frame) => frame.response.outcome.positionChanged),
+      "opening a door must not end the script",
     );
-    const { default: imp } = await import(
-      pathToFileURL(dir + "/main.mjs").href
-    );
-    const { api } = await fixture(t);
-    const game = await api.create(identity);
-    const positions = new Set();
-    const logs = [];
-    let moves = 0;
-    let attentionRevision;
-    const result = await runBot(
-      game,
-      {
-        name: imp.name,
-        async initialize(context) {
-          await imp.initialize(context);
-          context.hero.on("snapshotChange", ({ snapshot }) => {
-            if (snapshot.observation.you)
-              positions.add(JSON.stringify(snapshot.observation.you));
-            if (snapshot.outcome.positionChanged) moves++;
-            if (
-              context.hero.decision ||
-              context.hero.isHungry() ||
-              context.hero.sense(entities.Enemy).length ||
-              (snapshot.outcome.action === "move" &&
-                !snapshot.outcome.positionChanged)
-            ) {
-              attentionRevision ??= snapshot.revision;
-            }
-            assert.ok(
-              snapshot.revision < 1000,
-              "the teaching example must stop instead of looping indefinitely",
-            );
-          });
-        },
-      },
-      (...values) => logs.push(values.join(" ")),
-    );
-
-    assert.equal(result.reason, "stopped");
-    assert.ok(moves >= 10, "the starter must demonstrate real exploration");
-    assert.ok(positions.size >= 10, "the starter must visit different squares");
-    assert.notEqual(
-      attentionRevision,
-      undefined,
-      "the real run must encounter a stopping condition",
-    );
-    assert.equal(
-      game.state.revision,
-      attentionRevision,
-      "no further input after a decision, hunger, visible enemy or unsuccessful step",
-    );
-    assert.match(logs.at(-1), /needs attention|did not move/);
+    assert.match(result.logs.at(-1), /retreat/);
     t.diagnostic(
       JSON.stringify({
-        moves,
-        squares: positions.size,
-        turn: game.observation.turn,
-        reason: logs.at(-1),
+        moves: result.moves,
+        squares: result.uniqueSquares,
+        stop: result.logs.at(-1),
       }),
     );
+  },
+);
+
+test(
+  "the exploration examples execute unchanged JavaScript and have distinct policies",
+  { timeout: 90000 },
+  async (t) => {
+    const imp = await runProject("curious-imp", { seed: 7, calls: 500 });
+    const mapper = await runProject("cartographer", { seed: 7, calls: 500 });
+    const fighter = await runProject("steady-fighter", { seed: 7, calls: 500 });
+    for (const result of [imp, mapper, fighter]) {
+      assert.equal(result.reason, "stopped", result.error);
+      assert.ok(result.moves > 40);
+      assert.ok(result.uniqueSquares > 40);
+      t.diagnostic(
+        JSON.stringify({
+          name: result.name,
+          moves: result.moves,
+          squares: result.uniqueSquares,
+          depth: result.maxDepth,
+        }),
+      );
+    }
+    assert.ok(imp.maxDepth >= 2, "imp should follow disclosed stairs");
+    assert.equal(
+      mapper.maxDepth,
+      1,
+      "cartographer stays on its starting level",
+    );
+    assert.ok(
+      mapper.uniqueSquares > imp.uniqueSquares,
+      "mapper covers more of one level",
+    );
+    assert.ok(
+      fighter.maxDepth >= 3,
+      "fighter should progress through real encounters",
+    );
+    const first = await runProject("first-steps");
+    assert.equal(first.reason, "stopped", first.error);
+    assert.equal(first.calls, 1);
+    assert.match(first.logs.at(-1), /Searched once/);
   },
 );
