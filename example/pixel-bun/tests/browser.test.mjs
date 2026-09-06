@@ -3116,10 +3116,14 @@ test('automatic pickup editor stages changes, saves live and future settings, an
   await form.getByRole('checkbox',{name:'Automatic pickup',exact:true}).uncheck();
   assert.equal(await form.getByRole('checkbox',{name:'Food',exact:true}).isChecked(),true,'Off retains filters');
   await form.getByRole('checkbox',{name:'Automatic pickup',exact:true}).check();
+  await form.getByLabel('Loot patterns',{exact:true}).fill('ration\nDAGGER');
+  await form.getByLabel('Ignore patterns',{exact:true}).fill('corpse\ncursed');
+  await form.getByRole('checkbox',{name:'Review before collecting',exact:true}).check();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   const before = await snapshot(page);
   await page.screenshot({path:root+'/test-results/automatic-pickup-mobile.png'});
   await form.getByRole('button',{name:'Save settings',exact:true}).click(); await ready(page);
-  const saved = {...defaults,itemTypes:['gold','food']};
+  const saved = {...defaults,itemTypes:['gold','food'],lootPatterns:['ration','DAGGER'],ignorePatterns:['corpse','cursed'],review:true};
   assert.deepEqual((await snapshot(page)).observation.automaticPickup,saved);
   assert.equal((await snapshot(page)).observation.turn,before.observation.turn);
   const prefs = await page.evaluate(key=>localStorage.getItem(key),key);

@@ -13,7 +13,7 @@ async function refresh() {
   for(const run of runs) {
     const card = document.createElement('article'); card.className='run';
     const title = document.createElement('h3'); title.textContent=run.name;
-    const detail = document.createElement('p'); detail.textContent=`${run.role} · ${run.depth} · Level ${run.level ?? '?'} (peak ${run.maxLevel}) · ${run.turn} turns · ${run.outcome}`;
+    const detail = document.createElement('p'); detail.textContent=`${run.control==='bot'?'Automated bot':run.control==='interactive'?'Interactive run':'Run type not recorded'} · ${run.role} · ${run.depth} · Level ${run.level ?? '?'} (peak ${run.maxLevel}) · ${run.turn} turns · ${run.outcome}`;
     const depths = document.createElement('p'); depths.className='muted'; depths.textContent=`Reached: ${run.locations.join(' → ')}. ${run.partial?'Recording begins partway through this run.':'Recorded from the first observation.'}`;
     const button = document.createElement('button'); button.textContent=`Replay ${run.count} frames`;
     button.onclick=()=>void busy(async()=>{
@@ -30,7 +30,40 @@ async function refresh() {
       $('playback').scrollIntoView({behavior:'smooth'});
       status.textContent='Replay loaded. These are recorded public observations, reported by the browser.';
     });
-    card.append(title,detail,depths,button); $('runs').append(card);
+    card.append(title,detail,depths,button);
+    if(run.automated) {
+      const sourceButton=document.createElement('button'); sourceButton.textContent='View bot source';
+      sourceButton.onclick=()=>void busy(async()=>{
+        const saved=await accountApi(`/runs/${run.id}/source`);
+        if(!card.isConnected)return;
+        const source=JSON.parse(saved.artifact);
+        const section=document.createElement('details'); section.open=true;
+        const summary=document.createElement('summary'); summary.textContent='Recorded bot source'; section.append(summary);
+        const provenance=document.createElement('p'); provenance.style.overflowWrap='anywhere'; provenance.textContent=`TypeScript ${source.compiler.version} · Entry: ${source.entrypoint} · SHA-256: ${saved.sha256}. Browser-reported source.`; section.append(provenance);
+        for(const [name,code] of Object.entries(source.files)) {
+          const heading=document.createElement('h4'); heading.textContent=name;
+          const pre=document.createElement('pre'); pre.textContent=String(code); section.append(heading,pre);
+        }
+        const download=document.createElement('button'); download.textContent='Download source and compiled script';
+        download.onclick=()=>{
+          const url=URL.createObjectURL(new Blob([saved.artifact],{type:'application/json'}));
+          const link=document.createElement('a'); link.href=url; link.download=`bot-${run.id}.json`; link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+        };
+        section.append(download); sourceButton.replaceWith(section); status.textContent='Source captured when this test started.';
+      });
+      card.append(sourceButton);
+      const journalButton=document.createElement('button');journalButton.textContent='View script journal';
+      journalButton.onclick=()=>void busy(async()=>{
+        const entries=[];let offset:number|null=0;
+        do {const page=await accountApi(`/runs/${run.id}/journal?offset=${offset}`);entries.push(...page.entries);offset=page.next;}while(offset!==null);
+        if(!card.isConnected)return;
+        const section=document.createElement('details');section.open=true;
+        const heading=document.createElement('summary');heading.textContent='Script journal · browser-reported commentary';section.append(heading);
+        const notes=document.createElement('pre');notes.textContent=entries.map(note=>`[Script · ${note.author} · Turn ${note.turn}] ${note.text}`).join('\n') || 'No script notes recorded.';
+        section.append(notes);journalButton.replaceWith(section);
+      });card.append(journalButton);
+    }
+    $('runs').append(card);
   }
 }
 async function busy(action:()=>Promise<void>) {

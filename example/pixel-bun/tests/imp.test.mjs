@@ -19,12 +19,12 @@ test('the editable imp uses lifecycle events to explore a real dungeon', {timeou
  const {default:imp}=await import(pathToFileURL(dir+'/main.mjs').href);
  const {api}=await fixture(t),game=await api.create(identity);
  const logs=[],levels=[],positions=new Set();let newItems=0, mapChanges=0, moves=0,food=0, equipment=0;
- const result=await runBot(game,{initialize(context){
+ const result=await runBot(game,{name:imp.name,autoloot:imp.autoloot,initialize(context){
    imp.initialize(context);
    context.hero.addEventListener('enterLevel',({detail})=>levels.push(detail.to.depthLabel));
    context.hero.addEventListener('mapChange',()=>mapChanges++);
    context.hero.addEventListener('itemSeen',()=>newItems++);
-   context.hero.addEventListener('stateChange',({detail:{snapshot:s}})=>{
+   context.hero.addEventListener('snapshotChange',({detail:{snapshot:s}})=>{
      if(s.observation.you)positions.add(s.observation.location.id+JSON.stringify(s.observation.you));
      if(s.outcome.positionChanged)moves++;
      if(s.outcome.action==='eat')food++;

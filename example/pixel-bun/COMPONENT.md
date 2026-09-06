@@ -84,9 +84,22 @@ A resumed game starts a new partial recording. Existing anonymous journals are n
 silently claimed or converted. Signing in from the shared top rail updates the current page without navigation.
 Changing accounts stops an active replay recorder before it can upload to a new account.
 
+Recordings explicitly carry `control: "bot" | "interactive"`. Interactive sessions
+can also share control with WebMCP; the label does not attest to human authorship.
+Bot recordings retain their definition's name and immutable source separately from
+the editable saved project. Before initialization, the first frame and source are
+saved atomically. Source contains original and compiled files, the TypeScript
+version, entrypoint and construction autoloot settings. If that save fails, the
+bot does not initialize. Anonymous tests remain temporary.
+
+`GET /api/account/runs/:id/source` returns the owner-only `{artifact, sha256}`:
+`artifact` is the exact stored JSON string, with a SHA-256 of its UTF-8 bytes.
+Later frame appends cannot replace source or change run identity. Account history
+provides a source viewer and download alongside the read-only replay.
+
 ## Workshop
 
-`/bots` uses CodeMirror (MIT) and TypeScript (Apache-2.0). The named entrypoint is `main.ts`, exporting `defineBot({ initialize({ hero, game, log }) { ... } })`. It registers observation listeners and a single awaited `turn` listener. The two-file imp starter demonstrates exploration, retreat, eating and new equipment.
+`/bots` uses CodeMirror (MIT) and TypeScript (Apache-2.0). The named entrypoint is `main.ts`, exporting `defineBot({ name: "My bot", autoloot: rules, initialize({ hero, game, log }) { ... } })`. It registers observation listeners and a single awaited `turn` listener. The two-file imp starter demonstrates exploration, retreat, eating and new equipment. The name is required; optional construction `autoloot` uses the engine’s `AutomaticPickup` schema and is applied through a journaled, zero-turn configuration before initialization. Containers remain explicit.
 TypeScript provides live cross-file completions, hover docs and advisory diagnostics; Test transpiles the project. The `neonethack` import exposes Hero, direction and entity enums alongside the same
 client classes; arbitrary package imports are unavailable.
 

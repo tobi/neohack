@@ -1649,6 +1649,9 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
 .game-page pixel-nethack{height:calc(100dvh - 60px)}
 @media(max-width:1099px){.game-page .welcome-paths{top:calc(100dvh - 60px)}}
 
+.pickup-patterns label { display: block; margin: 10px 0; font: inherit; letter-spacing: normal; text-transform: none; }
+.pickup-patterns textarea { display: block; width: 100%; min-height: 72px; padding: 10px; font: inherit; color: inherit; background: #17201b; border: 1px solid #69775a; resize: vertical; }
+
 /* Engine passages remain readable above the dungeon, without taking a turn. */
 .journal-scroll-link { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 10px 12px; text-align: left; color: #eee4ba; border: 1px solid #7d8962; background: #303a2c; }
 .journal-scroll-link > span:last-child { min-width: 0; }

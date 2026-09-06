@@ -54,7 +54,7 @@ test('component is read-only, bot imports execute real engine, private recording
 });
 test('sandbox blocks network access and Stop terminates an infinite loop', {timeout:120000},async t=>{
  const {page,url,errors}=await fixture(t);await page.goto(url+'/bots');await page.waitForSelector('.cm-content');
- await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(`export default {async initialize({log}) { try { await fetch('/api/account'); log('NETWORK OPEN'); } catch { log('NETWORK BLOCKED'); } while (true) {} }}`);
+ await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(`export default {name:\"Test bot\",async initialize({log}) { try { await fetch('/api/account'); log('NETWORK OPEN'); } catch { log('NETWORK BLOCKED'); } while (true) {} }}`);
  await page.locator('#test').click();await page.waitForFunction(()=>document.querySelector('#output').textContent.includes('NETWORK BLOCKED'),{},{timeout:90000}).catch(async e=>{throw Error((await page.locator('#status[role=status]').textContent())+'\n'+errors.join('\n'),{cause:e});});
  await page.locator('#stop').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled);
  assert.match(await page.locator('#status[role=status]').textContent(),/Stopped by you/);assert.equal(await page.locator('iframe').count(),0);
@@ -78,7 +78,7 @@ test('signed-in human play records real frames and other accounts cannot read th
  await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation&&document.querySelector('pixel-nethack').getAttribute('aria-busy')==='false');
  await page.evaluate(async()=>{const app=document.querySelector('pixel-nethack');await app.run(()=>app.game.search());});
  await page.waitForFunction(()=>document.querySelector('#account-recording').textContent==='Replay saved');
- const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));assert.equal(runs.length,1);assert.ok(runs[0].count>=2);assert.equal(runs[0].name,'Human run');
+ const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));assert.equal(runs.length,1);assert.ok(runs[0].count>=2);assert.equal(runs[0].name,'Human run');assert.equal(runs[0].control,'interactive');assert.equal(runs[0].automated,false);
  const other=await browser.newPage();await register(other,url,'OtherAuthor');
  assert.equal(await other.evaluate(async id=>(await fetch('/api/account/runs/'+id+'/frames')).status,runs[0].id),404);
 });
@@ -111,7 +111,7 @@ test('IDE defaults, random project persistence, in-place top-rail login and resi
 
 test('test runner enforces its fixed 1000-call budget', {timeout:60000},async t=>{
  const {page,url}=await fixture(t);await page.goto(url+'/bots');await page.waitForSelector('.cm-content');
- await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText('export default {initialize({hero,game}) { hero.addEventListener("turn", async()=>{ for(let i=0;i<1001;i++) await game.observe(); }); }}');
+ await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText('export default {name:\"Test bot\",initialize({hero,game}) { hero.addEventListener("turn", async()=>{ for(let i=0;i<1001;i++) await game.observe(); }); }}');
  await page.locator('#test').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:50000});
  assert.equal(await page.locator('#status[role=status]').textContent(),'Test budget reached (1000 calls).');
 });
@@ -126,26 +126,129 @@ test('hero API has real TypeScript completions, documentation, diagnostics and m
  assert.match(await page.locator('.cm-content').innerText(),/direction.northWest/);
  await replace(prefix+'entities.');await page.keyboard.press('Control+Space');
  await page.getByRole('option',{name:'Balrog',exact:true}).waitFor();await page.keyboard.press('Escape');
- await replace(prefix+'defineBot({initialize({hero}) { hero.');await page.keyboard.press('Control+Space');
+ await replace(prefix+'defineBot({name:\"Test bot\",initialize({hero}) { hero.');await page.keyboard.press('Control+Space');
  await page.getByRole('option',{name:'senseClosest',exact:true}).waitFor();await page.getByRole('option',{name:'senseClosest',exact:true}).click();await page.keyboard.press('Escape');
  await replace(prefix+'defineBot(async ({game}) => { const hero = new Hero(game); hero.go(123); }});');
  await page.waitForSelector('.cm-lintRange-error');
  const language=await page.evaluate(async()=>{
    const worker=new Worker('/build/bot-language.js',{type:'module'});
-   const files={'main.ts':"import { defineBot, Hero } from 'neonethack';\nimport { heading } from './strategy';\nexport default defineBot({initialize({hero}) { hero.addEventListener('turn', async()=>{await hero.go(heading);hero.stop();}); }});",'strategy.ts':"import { direction } from 'neonethack'; export const heading = direction.northWest;"};
+   const files={'main.ts':"import { defineBot, Hero } from 'neonethack';\nimport { heading } from './strategy';\nexport default defineBot({name:\"Test bot\",initialize({hero}) { hero.addEventListener('turn', async()=>{await hero.go(heading);hero.stop();}); }});",'strategy.ts':"import { direction } from 'neonethack'; export const heading = direction.northWest;"};
    const ask=(kind,position,name)=>new Promise(resolve=>{worker.onmessage=e=>resolve(e.data);worker.postMessage({id:1,kind,files,file:'main.ts',position,name});});
-   const clean=await ask('diagnostics');files['strategy.ts']='export const heading = 123;';const bad=await ask('diagnostics');
-   files['main.ts']="import { Hero, defineBot } from 'neonethack'; defineBot({initialize({hero}) { hero.";
-   const detail=await ask('detail',files['main.ts'].length,'go');worker.terminate();return {clean,bad,detail};
+   const clean=await ask('diagnostics');const original=files['main.ts'];files['main.ts']="import {defineBot} from 'neonethack'; defineBot({initialize(){}});";const unnamed=await ask('diagnostics');files['main.ts']=original;files['strategy.ts']='export const heading = 123;';const bad=await ask('diagnostics');
+   files['main.ts']="import { Hero, defineBot } from 'neonethack'; defineBot({name:\"Test bot\",initialize({hero}) { hero.";
+   const detail=await ask('detail',files['main.ts'].length,'go');
+   files['main.ts']="import {defineBot,type ScriptState} from 'neonethack'; export default defineBot({name:'Typed state',initialize({hero}){ const state:ScriptState={mode:'run'}; hero.controls.button({id:'pause',label:'Pause',onClick:()=>null}); hero.controls.checkbox({id:'bold',label:'Bold',checked:true,onChange:checked=>({state:{bold:checked}})}); hero.addEventListener('stateChange',({detail})=>{if(detail.from==='run' && detail.to===null) return false;}); hero.addEventListener('beforeLoot',async({detail})=>{await detail.select(detail.decision.options.filter(o=>o.suggested).map(o=>o.id));return {state};}); }});";
+   const stateTypes=await ask('diagnostics');
+   files['main.ts']="import {defineBot} from 'neonethack';defineBot({name:'Bad state',initialize({hero}){hero.setState(123);}});";
+   const badState=await ask('diagnostics');
+   worker.terminate();return {clean,bad,detail,unnamed,stateTypes,badState};
  });
- assert.deepEqual(language.clean.result,[]);assert.ok(language.bad.result.some(d=>d.message.includes('123')));assert.match(language.detail.result.docs,/ONE step/);
+ assert.deepEqual(language.stateTypes.result,[]);assert.ok(language.badState.result.some(d=>d.message.includes('123')));assert.deepEqual(language.clean.result,[]);assert.ok(language.unnamed.result.some(d=>d.message.includes("name")));assert.ok(language.bad.result.some(d=>d.message.includes('123')));assert.match(language.detail.result.docs,/ONE step/);
  await page.locator('#tabs').getByRole('tab',{name:'strategy.ts'}).click();
  await replace("import { direction } from 'neonethack'; export const heading = direction.north;");
  await page.locator('#tabs').getByRole('tab',{name:'main.ts'}).click();
- await replace(prefix+"import { heading } from './strategy';\nexport default defineBot({initialize({hero, log}){ hero.addEventListener('turn', async()=>{log('hungry',hero.isHungry()); log('enemies',hero.sense(entities.Enemy).length); await hero.go(heading); log('hero turn',hero.state.observation.turn);hero.stop();}); }});");
+ await replace(prefix+"import { heading } from './strategy';\nexport default defineBot({name:\"Test bot\",initialize({hero, log}){ hero.addEventListener('turn', async()=>{log('hungry',hero.isHungry()); log('enemies',hero.sense(entities.Enemy).length); await hero.go(heading); log('hero turn',hero.snapshot.observation.turn);hero.stop();}); }});");
  await page.locator('#role').selectOption('valkyrie');await page.locator('#seed-mode').selectOption('fixed');await page.locator('#seed').fill('42');await page.locator('#test').click();
  await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:90000});
  assert.equal(await page.locator('#status[role=status]').textContent(),'Script finished.');
  assert.match(await page.locator('#output').textContent(),/hungry false/);assert.match(await page.locator('#output').textContent(),/hero turn/);
  await page.screenshot({path:'/tmp/neohack-hero-workshop.png',fullPage:true});
+});
+
+test('automated history retains exact source, construction autoloot and executable name', {timeout:90000}, async t=>{
+ const {page,url,browser}=await fixture(t);await register(page,url,'SourceAuthor');
+ await page.goto(url+'/bots');await page.waitForSelector('.cm-content');
+ const replace=async code=>{await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(code);};
+ const main=`import {defineBot} from 'neonethack';
+import {message} from './strategy';
+export default defineBot({name:'Archive imp',autoloot:{enabled:true,itemTypes:['gold'],arrows:false,leaveCorpses:true,leaveKnownCursed:true,lootPatterns:['ration'],ignorePatterns:['corpse']},initialize({hero,log}) {
+ log(message); log('rules',hero.snapshot.observation.automaticPickup);
+ hero.addEventListener('turn',async()=>{await hero.wait();hero.stop();});
+}});`;
+ const helper="export const message='original helper';";
+ await page.locator('#tabs').getByRole('tab',{name:'strategy.ts'}).click();await replace(helper);
+ await page.locator('#tabs').getByRole('tab',{name:'main.ts'}).click();await replace(main);
+ await page.locator('#bot-name').fill('Different project label');
+ await page.locator('#test').click();await replace('// edited after Test was clicked');
+ await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:60000});
+ assert.equal(await page.locator('#status[role=status]').textContent(),'Script finished.');
+ assert.match(await page.locator('#output').textContent(),/original helper/);
+ const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));
+ assert.equal(runs.length,1);const run=runs[0];assert.equal(run.name,'Archive imp');assert.equal(run.automated,true);assert.equal(run.control,'bot');
+ const saved=await page.evaluate(id=>fetch(`/api/account/runs/${id}/source`).then(r=>r.json()),run.id);
+ const source=JSON.parse(saved.artifact);assert.equal(source.files['main.ts'],main);assert.equal(source.files['strategy.ts'],helper);
+ assert.match(source.compiledFiles['main.ts'],/require\("neonethack"\)/);assert.equal(source.compiler.name,'typescript');assert.equal(source.entrypoint,'main.ts');
+ assert.deepEqual(source.autoloot,{enabled:true,itemTypes:['gold'],arrows:false,leaveCorpses:true,leaveKnownCursed:true,lootPatterns:['ration'],ignorePatterns:['corpse']});
+ const {createHash}=await import('node:crypto');assert.equal(saved.sha256,createHash('sha256').update(saved.artifact).digest('hex'));
+ await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('#status').textContent==='Bot saved.');
+ const rejected=await page.evaluate(async ({run,source})=>{
+   const frames=await fetch(`/api/account/runs/${run.id}/frames`).then(r=>r.json());
+   const frame=structuredClone(frames.frames.at(-1));frame.revision=run.revision+1;
+   const append=extra=>fetch(`/api/account/runs/${run.id}/frames`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({...run,index:run.count,frame,...extra})}).then(r=>r.status);
+   return [await append({source}),await append({name:'Renamed imp'}),await append({control:'interactive'})];
+ },{run,source});assert.deepEqual(rejected,[409,409,409]);
+ await page.goto(url+'/login');await page.getByRole('button',{name:'View bot source'}).click();
+ await page.getByText(main,{exact:true}).waitFor();assert.match(await page.locator('#runs').textContent(),/Automated bot/);
+ await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ assert.deepEqual(await page.evaluate(id=>fetch(`/api/account/runs/${id}/source`).then(r=>r.json()),run.id),saved);
+ const other=await browser.newPage();await register(other,url,'SourceOther');
+ assert.equal(await other.evaluate(async id=>(await fetch(`/api/account/runs/${id}/source`)).status,run.id),404);
+});
+
+test('invalid bot names and failed source persistence never initialize the bot', {timeout:90000},async t=>{
+ const {page,url}=await fixture(t);await register(page,url,'SourceFailure');await page.goto(url+'/bots');await page.waitForSelector('.cm-content');
+ const replace=async code=>{await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(code);};
+ await replace(`export default {initialize({log}){log('MUST NOT RUN')}}`);
+ await page.locator('#test').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:60000});
+ assert.match(await page.locator('#status[role=status]').textContent(),/needs a name/);
+ assert.doesNotMatch(await page.locator('#output').textContent(),/MUST NOT RUN/);
+ await page.route('**/api/account/runs/*/frames',route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":"test storage failure"}'}));
+ await replace(`export default {name:'Failure imp',initialize({log}){log('MUST NOT RUN')}}`);
+ await page.locator('#test').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:60000});
+ assert.match(await page.locator('#status[role=status]').textContent(),/Could not save bot source/);
+ assert.doesNotMatch(await page.locator('#output').textContent(),/MUST NOT RUN/);
+ assert.deepEqual(await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json())),[]);
+});
+
+test('script controls, null silence and private journal survive a real workshop run', {timeout:120000},async t=>{
+  const {page,context,browser,url}=await fixture(t);await register(page,url,'StateAuthor');
+  await page.goto(url+'/bots');await page.waitForSelector('.cm-content');
+  await page.locator('.cm-content').click();await page.keyboard.press('Control+a');
+  await page.keyboard.insertText(`import {defineBot} from 'neonethack';
+export default defineBot({name:'Stateful imp',initialize({hero,log}) {
+  log('Initial state',hero.state);
+  hero.controls.checkbox({id:'bold',label:'Bold exploration',checked:false,onChange:checked=>{log('Bold',checked);return 'explore';}});
+  hero.controls.button({id:'yield',label:'Hand back control',onClick:()=>null});
+  hero.addEventListener('stateChange',({detail})=>{log('Transition',detail.from,detail.to);if(detail.to==='denied')return false;});
+  hero.addEventListener('stop',()=>log('FORBIDDEN STOP'));
+  hero.addEventListener('turn',async()=>{log('Turn state',hero.state);if(hero.decision){hero.stop();return;}await hero.wait();await new Promise(resolve=>setTimeout(resolve,200));});
+}});`);
+  await page.locator('#role').selectOption('valkyrie');await page.locator('#seed-mode').selectOption('fixed');await page.locator('#seed').fill('42');
+  await page.locator('#test').click();await page.getByLabel('Bold exploration').waitFor({timeout:60000});
+  await page.getByLabel('Bold exploration').check();
+  await page.waitForFunction(()=>document.querySelector('#output').textContent.includes('Turn state explore'));
+  assert.match(await page.locator('#output').textContent(),/\[Script · Stateful imp · Turn \d+\] Bold true/);
+  await page.locator('#script-state').fill('denied');await page.locator('#set-script-state').click();
+  await page.waitForFunction(()=>document.querySelector('#output').textContent.includes('Turn state denied'));
+  assert.doesNotMatch(await page.locator('#output').textContent(),/Transition explore denied/,'host bypasses veto');
+  await page.screenshot({path:'/tmp/neohack-script-controls.png',fullPage:true});
+  await page.getByRole('button',{name:'Hand back control'}).click();
+  await page.waitForFunction(()=>!document.querySelector('#test').disabled);
+  assert.match(await page.locator('#status[role=status]').textContent(),/Control yielded/);
+  assert.doesNotMatch(await page.locator('#output').textContent(),/FORBIDDEN STOP/);
+  assert.equal(await page.locator('#script-state').inputValue(),'null');
+  assert.equal(await page.getByRole('button',{name:'Hand back control'}).isDisabled(),true);
+  const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));assert.equal(runs.length,1);
+  const path=url+`/api/account/runs/${runs[0].id}/journal`;
+  const journal=await (await context.request.get(path)).json();assert.ok(journal.entries.length>=3);
+  assert.ok(journal.entries.every(e=>e.source==='script'&&e.author==='Stateful imp'));
+  assert.ok(journal.entries.some(e=>e.text==='Bold true'));assert.ok(!journal.entries.some(e=>e.text==='FORBIDDEN STOP'));
+  const headers={origin:url};
+  assert.equal((await context.request.put(path,{headers,data:{index:0,entry:journal.entries[0]}})).status(),409,'cannot overwrite notes');
+  assert.equal((await context.request.put(path,{headers,data:{index:journal.entries.length,entry:{...journal.entries[0],revision:9999999}}})).status(),409,'cannot attach to unrecorded future frame');
+  const anonymous=await browser.newContext();assert.equal((await anonymous.request.get(path)).status(),401);await anonymous.close();
+  const other=await browser.newPage();await register(other,url,'OtherStateAuthor');assert.equal((await other.request.get(path)).status(),404);await other.close();
+  await page.goto(url+'/login');await page.getByRole('button',{name:'View script journal'}).click();
+  await page.waitForFunction(()=>document.querySelector('#runs').textContent.includes('Bold true'));
+  assert.match(await page.locator('#runs').textContent(),/Script · Stateful imp/);
 });

@@ -57,12 +57,13 @@ $('save').onclick=()=>void (async()=>{
   try {storeFile();const bot=await accountApi('/bots',{id:botId,name:$<HTMLInputElement>('bot-name').value,role:$<HTMLSelectElement>('role').value,seed:$<HTMLSelectElement>('seed-mode').value==='random'?'random':$<HTMLInputElement>('seed').value,files},'PUT');botId=bot.id;status.textContent='Bot saved.';await refreshBots();}
   catch(error){status.textContent=String(error);}
 })();
-type ActiveRun = {cancelled:boolean;iframe?:HTMLIFrameElement;port?:MessagePort;timer?:ReturnType<typeof setTimeout>;api?:any;recorder?:RunRecorder;inflight?:Promise<void>};
+type ActiveRun = {cancelled:boolean;yielded?:boolean;iframe?:HTMLIFrameElement;port?:MessagePort;timer?:ReturnType<typeof setTimeout>;api?:any;recorder?:RunRecorder;inflight?:Promise<void>};
 let active: ActiveRun | null = null;
 async function stop(reason='Stopped by you.'){
   const run=active;if(!run || run.cancelled)return;run.cancelled=true;
   run.iframe?.remove();run.port?.close();clearTimeout(run.timer);
   status.textContent=reason;log(reason);
+  for(const el of document.querySelectorAll<HTMLInputElement|HTMLButtonElement>('.script-panel input,.script-panel button'))el.disabled=true;
   await run.inflight;
   status.textContent=reason;
   await run.api?.close().catch((e:unknown)=>log(String(e)));
@@ -70,12 +71,36 @@ async function stop(reason='Stopped by you.'){
   if(active===run){active=null;freezeProject(false);}
 }
 $('stop').onclick=()=>void stop();
+function forceState(value:unknown){
+  const run=active;if(!run || run.cancelled || run.yielded)return;
+  if(value===null){$<HTMLInputElement>('script-state').value='null';run.yielded=true;void stop('Control yielded. The workshop replay remains read-only.');return;}
+  run.port?.postMessage({state:value});
+}
+$('yield-script').onclick=()=>forceState(null);
+$('set-script-state').onclick=()=>{
+  const text=$<HTMLInputElement>('script-state').value;
+  try{forceState(text==='null'||text.trim().startsWith('{')?JSON.parse(text):text);}catch{status.textContent='Use a state name, JSON object, or null.';}
+};
+function showControls(controls:any[],run:ActiveRun){
+  const root=$('script-controls');root.replaceChildren();
+  for(const control of controls.slice(0,32)){
+    if(typeof control.id!=='string'||typeof control.label!=='string')continue;
+    if(control.kind==='button'){
+      const button=document.createElement('button');button.className='secondary';button.textContent=control.label.slice(0,120);
+      button.onclick=()=>run.port?.postMessage({control:{id:control.id}});root.append(button);
+    }else if(control.kind==='checkbox'){
+      const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=!!control.checked;
+      input.onchange=()=>run.port?.postMessage({control:{id:control.id,checked:input.checked}});label.append(input,document.createTextNode(control.label.slice(0,120)));root.append(label);
+    }
+  }
+}
 $('test').onclick=()=>void (async()=>{
   if(active)return;
-  storeFile(); const run:ActiveRun={cancelled:false};active=run;freezeProject(true);output.textContent='';
+  storeFile(); const run:ActiveRun={cancelled:false};active=run;freezeProject(true);output.textContent='';$('script-controls').replaceChildren();$<HTMLInputElement>('script-state').value='run';
   try {
+    const sourceFiles=structuredClone(files);
     const compiled:Record<string,string>=Object.create(null);
-    for(const [name,code] of Object.entries(files)){
+    for(const [name,code] of Object.entries(sourceFiles)){
       const result=ts.transpileModule(code,{fileName:name,reportDiagnostics:true,compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}});
       const errors=result.diagnostics?.filter(d=>d.category===ts.DiagnosticCategory.Error) ?? [];
       if(errors.length)throw Error(errors.map(d=>`${name}: ${ts.flattenDiagnosticMessageText(d.messageText,'\n')}`).join('\n'));
@@ -98,16 +123,35 @@ $('test').onclick=()=>void (async()=>{
     const game=await api.create({...chosen.identity,name:'Bot test',seed});
     if(run.cancelled){await api.close();return;}
     const world=$('bot-world') as NeohackWorld;world.setAttribute('role',chosen.id);world.setAttribute('seed',String(seed));world.snapshot=game.state;
-    if(signedIn)run.recorder=new RunRecorder({name:$<HTMLInputElement>('bot-name').value || 'Untitled bot',role:chosen.id,seed,buildId:pkg.buildId},message=>{$('recording').textContent=message;});
-    run.recorder?.record(game.state);
+    let ready=false, started=false;
     let calls=0, busy=false, logs=0, halted=false;
     const allowed=new Set([...toolMethods.values()].filter(m=>m.startsWith('game.')||m.startsWith('decision.')||['session.observe','session.actions'].includes(m)));
     const channel=new MessageChannel();run.port=channel.port1;
-    channel.port1.onmessage=event=>{
+    channel.port1.onmessage=async event=>{
       if(run.cancelled || halted)return;
       const data=event.data;
+      if(Object.hasOwn(data,'state')){
+        $<HTMLInputElement>('script-state').value=typeof data.state==='string'?data.state:JSON.stringify(data.state);
+        if(data.state===null){run.yielded=true;void stop('Control yielded. The workshop replay remains read-only.');}
+        else for(const el of document.querySelectorAll<HTMLInputElement|HTMLButtonElement>('.script-panel input,.script-panel button'))el.disabled=false;
+        return;
+      }
+      if(data.controls){if(Array.isArray(data.controls))showControls(data.controls,run);return;}
+      if(data.journal){const note=data.journal;if(note.source==='script'&&typeof note.text==='string'&&note.text.length<=2000&&typeof note.author==='string'&&Number.isSafeInteger(note.turn)&&Number.isSafeInteger(note.revision)){if(++logs<=10000){log(`[Script · ${note.author} · Turn ${note.turn}] ${note.text}`);run.recorder?.note(note);}}return;}
       if(data.log!==undefined){if(++logs<=500)log(String(data.log).slice(0,2000));return;}
       if(data.done||data.failure){void stop(data.failure?String(data.failure):'Script finished.');return;}
+      if(data.ready) {
+        if(ready || typeof data.ready.name !== 'string' || !data.ready.name.trim() || data.ready.name.length>60 || /[\u0000-\u001f\u007f]/.test(data.ready.name)) { void stop('Invalid bot definition.'); return; }
+        ready=true;
+        if(signedIn) {
+          run.recorder=new RunRecorder({name:data.ready.name,role:chosen.id,seed,buildId:pkg.buildId,control:'bot',source:{version:1,entrypoint:'main.ts',files:sourceFiles,compiledFiles:compiled,compiler:{name:'typescript',version:ts.version},...(data.ready.autoloot === undefined ? {} : {autoloot:data.ready.autoloot})}},message=>{$('recording').textContent=message;});
+          run.recorder.record(game.state);
+          if(!await run.recorder.flush()) { void stop('Could not save bot source. Test stopped before initialization.'); return; }
+        } else $('recording').textContent='Sign in to retain bot source and replay. This test is temporary.';
+        if(run.cancelled)return;
+        started=true; channel.port1.postMessage({start:true}); return;
+      }
+      if(!started) { void stop('Bot input arrived before its source was recorded.'); return; }
       const request=data.request;
       if(!Number.isSafeInteger(data.id)||!request||request.version!==1||!allowed.has(request.method)||request.params?.sessionId!==game.id||JSON.stringify(request).length>20000){void stop('Rejected a request outside this test session.');return;}
       if(busy){void stop('Concurrent requests are not supported. Await each game operation.');return;}

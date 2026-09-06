@@ -5,15 +5,26 @@ export async function accountApi(path = '', body?: unknown, method = 'POST') {
   if(!response.ok) throw Error(data.error ?? `Account request failed (${response.status})`);
   return data;
 }
+export interface BotSource {
+  version: 1;
+  entrypoint: 'main.ts';
+  files: Record<string,string>;
+  compiledFiles: Record<string,string>;
+  compiler: { name: 'typescript'; version: string };
+  autoloot?: import('neonethack/types').AutomaticPickup;
+}
+type RunMetadata = {name:string;role:string;seed?:string|number;buildId:string;control?:'bot'|'interactive';source?:BotSource};
 /** Optional account copy, never part of the engine's durability contract. */
 export class RunRecorder {
   readonly id = crypto.randomUUID();
   private index = 0;
   private revision = -1;
+  private noteIndex = 0;
   private tail = Promise.resolve();
   private pending = 0;
   private failed = false;
-  constructor(private metadata: {name:string;role:string;seed?:string|number;buildId:string}, private status: (message:string)=>void = ()=>{}) {
+  constructor(private metadata: RunMetadata, private status: (message:string)=>void = ()=>{}) {
+    this.metadata = structuredClone({control:'interactive',...metadata});
     window.addEventListener('accountchange',()=>{this.failed=true;this.status('Recording stopped: account changed.');},{once:true});
   }
   record(frame: Snapshot) {
@@ -28,9 +39,19 @@ export class RunRecorder {
     this.tail = this.tail.then(async()=>{
       if(this.failed) return;
       this.status('Saving replay…');
-      await accountApi(`/runs/${this.id}/frames`,{...this.metadata,index:this.index,frame:copy},'PUT');
+      const {source,...metadata} = this.metadata;
+      await accountApi(`/runs/${this.id}/frames`,{...metadata,...(this.index===0 && source ? {source} : {}),index:this.index,frame:copy},'PUT');
       this.index++; this.status('Replay saved');
     }).catch(error=>{this.failed=true;this.status(`Recording stopped: ${error.message}. Saved frames, if any, remain in your history.`);}).finally(()=>{this.pending--;});
   }
-  async flush() { await this.tail; }
+  note(entry:import('../../../lib/neonethack/typescript/script').ScriptJournalEntry) {
+    if(this.failed || this.metadata.control!=='bot')return;
+    if(this.pending>=100){this.failed=true;this.status('Account recording stopped: upload queue full.');return;}
+    this.pending++;const copy=structuredClone(entry);
+    this.tail=this.tail.then(async()=>{
+      if(this.failed)return;
+      await accountApi(`/runs/${this.id}/journal`,{index:this.noteIndex,entry:copy},'PUT');this.noteIndex++;
+    }).catch(error=>{this.failed=true;this.status(`Script journal recording stopped: ${error.message}`);}).finally(()=>{this.pending--;});
+  }
+  async flush() { await this.tail; return !this.failed; }
 }

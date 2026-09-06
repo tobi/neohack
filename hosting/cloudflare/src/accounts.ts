@@ -10,6 +10,8 @@ export class Accounts {
   constructor(private ctx: DurableObjectState) {
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS account_runs (key TEXT PRIMARY KEY, owner TEXT NOT NULL, updated INTEGER NOT NULL, json TEXT NOT NULL)');
     ctx.storage.sql.exec('CREATE INDEX IF NOT EXISTS account_runs_owner ON account_runs(owner, updated DESC)');
+    ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS account_script_notes (run TEXT NOT NULL, idx INTEGER NOT NULL, json TEXT NOT NULL, PRIMARY KEY(run, idx))');
+    ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS account_run_sources (run TEXT PRIMARY KEY, json TEXT NOT NULL)');
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS account_frames (run TEXT NOT NULL, idx INTEGER NOT NULL, json TEXT NOT NULL, PRIMARY KEY(run, idx))');
   }
   async fetch(request: Request) {
@@ -95,7 +97,7 @@ export class Accounts {
       await store.put(`bot:${uid}:${id}`,bot); return json(bot);
     }
     if(path === '/runs' && request.method === 'GET') return json(store.sql.exec('SELECT json FROM account_runs WHERE owner = ? ORDER BY updated DESC',uid).toArray().map(row=>JSON.parse(String(row.json))));
-    const match = path.match(/^\/runs\/([\w-]{1,100})(?:\/frames)?$/);
+    const match = path.match(/^\/runs\/([\w-]{1,100})(?:\/(?:frames|source|journal))?$/);
     if(match) {
       const key = `run:${uid}:${match[1]}`;
       const frames = path.endsWith('/frames');
@@ -103,6 +105,16 @@ export class Accounts {
         const stored = store.sql.exec('SELECT json FROM account_runs WHERE key = ?', key).toArray()[0];
         const run = stored ? JSON.parse(String(stored.json)) : null;
         if(!run) return json({error:'Run not found'},404);
+        if(path.endsWith('/source')) {
+          const source = store.sql.exec('SELECT json FROM account_run_sources WHERE run = ?',key).toArray()[0];
+          return source ? json(JSON.parse(String(source.json))) : json({error:'Source not recorded'},404);
+        }
+        if(path.endsWith('/journal')) {
+          const offset=Number(url.searchParams.get('offset') ?? 0);
+          if(!Number.isSafeInteger(offset)||offset<0)return json({error:'Invalid offset'},400);
+          const rows=store.sql.exec('SELECT json FROM account_script_notes WHERE run = ? AND idx >= ? ORDER BY idx LIMIT 101',key,offset).toArray();
+          return json({entries:rows.slice(0,100).map(row=>JSON.parse(String(row.json))),next:rows.length>100?offset+100:null});
+        }
         if(!frames) return json(run);
         const offset = Number(url.searchParams.get('offset') ?? 0);
         if(!Number.isInteger(offset) || offset < 0) return json({error:'Invalid offset'},400);
@@ -115,18 +127,47 @@ export class Accounts {
         }
         return json({frames:values,next:offset+values.length < run.count ? offset+values.length : null});
       }
+      if(request.method==='PUT' && path.endsWith('/journal')) {
+        const entry=body.entry;
+        if(!Number.isSafeInteger(body.index)||body.index<0||body.index>=10000||!entry||typeof entry.text!=='string'||entry.text.length>2000||!Number.isSafeInteger(entry.turn)||entry.turn<0||!Number.isSafeInteger(entry.revision)||entry.revision<0)return json({error:'Invalid script note'},400);
+        return store.transactionSync(()=>{
+          const stored=store.sql.exec('SELECT json FROM account_runs WHERE key = ?',key).toArray()[0];
+          if(!stored)return json({error:'Run not found'},404);
+          const run=JSON.parse(String(stored.json));
+          if(run.control!=='bot')return json({error:'Run is not an automated script'},409);
+          if(entry.revision>run.revision||entry.turn>run.turn)return json({error:'Save the observed frame before its note'},409);
+          const count=Number(store.sql.exec('SELECT COUNT(*) AS count FROM account_script_notes WHERE run = ?',key).toArray()[0]?.count ?? 0);
+          if(body.index!==count)return json({error:'Journal sequence differs'},409);
+          const note={source:'script',author:run.name,text:entry.text,turn:entry.turn,revision:entry.revision};
+          store.sql.exec('INSERT INTO account_script_notes VALUES (?, ?, ?)',key,body.index,JSON.stringify(note));
+          return json({count:count+1});
+        });
+      }
       if(request.method === 'PUT' && frames) {
         const f = body.frame;
         if(!Number.isInteger(body.index) || body.index < 0 || body.index >= 100000 || !f || f.version !== 1 || typeof f.sessionId !== 'string' || !Number.isInteger(f.revision) || !f.observation || !Array.isArray(f.observation.world) || f.observation.world.length > 10000 || !Number.isFinite(f.observation.turn) || !f.observation.vitals || typeof f.observation.location?.depthLabel !== 'string' || JSON.stringify(f).length > 1000000 || typeof body.name !== 'string' || body.name.length > 60 || typeof body.role !== 'string' || body.role.length > 30 || !/^[a-f0-9]{64}$/.test(body.buildId)) return json({error:'Invalid public frame'},400);
+        if(!['bot','interactive'].includes(body.control)) return json({error:'Run control must be bot or interactive'},400);
+        if(body.control === 'bot' && (!body.name.trim() || /[\u0000-\u001f\u007f]/.test(body.name))) return json({error:'Invalid bot name'},400);
+        let sourceRecord: unknown;
+        if(body.index === 0 && body.control === 'bot') {
+          const source = body.source;
+          const validFiles = (files: any) => files && typeof files === 'object' && !Array.isArray(files) && Object.keys(files).length>0 && Object.keys(files).length<=20 && Object.hasOwn(files,'main.ts') && Object.entries(files).every(([name,code])=>/^[\w-]+\.(js|ts)$/.test(name) && typeof code === 'string');
+          if(!source || source.version !== 1 || source.entrypoint !== 'main.ts' || !validFiles(source.files) || !validFiles(source.compiledFiles) || JSON.stringify(source).length>500000 || JSON.stringify(Object.keys(source.files).sort())!==JSON.stringify(Object.keys(source.compiledFiles).sort()) || source.compiler?.name!=='typescript' || typeof source.compiler.version!=='string' || source.compiler.version.length>40) return json({error:'Invalid bot source'},400);
+          // Hash the exact stored artifact; retain it independently of mutable saved projects.
+          const artifact=JSON.stringify(source);
+          const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(artifact))),b=>b.toString(16).padStart(2,'0')).join('');
+          sourceRecord={artifact,sha256:hash};
+        } else if(body.source !== undefined) return json({error:'Source is immutable and only allowed on the first bot frame'},409);
         return store.transactionSync(() => {
           const stored = store.sql.exec('SELECT json FROM account_runs WHERE key = ?',key).toArray()[0];
           const run = stored ? JSON.parse(String(stored.json)) : null;
           if(body.index !== (run?.count ?? 0)) return json({error:'Recording sequence differs'},409);
-          if(run && (run.sessionId !== f.sessionId || run.buildId !== body.buildId || f.revision <= run.revision)) return json({error:'Recording identity or revision differs'},409);
+          if(run && (run.sessionId !== f.sessionId || run.buildId !== body.buildId || run.control !== body.control || run.name !== body.name || run.role !== body.role || run.seed !== body.seed || f.revision <= run.revision)) return json({error:'Recording identity or revision differs'},409);
           const depth = f.observation.location.depthLabel;
           const reached = [...new Set([...(run?.locations ?? []),depth])].slice(0,500);
+          if(sourceRecord) store.sql.exec('INSERT INTO account_run_sources VALUES (?, ?)',key,JSON.stringify(sourceRecord));
           store.sql.exec('INSERT INTO account_frames VALUES (?, ?, ?)',key,body.index,JSON.stringify(f));
-          store.sql.exec('INSERT INTO account_runs VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET updated = excluded.updated, json = excluded.json',key,uid,now,JSON.stringify({id:match[1],sessionId:f.sessionId,name:body.name,role:body.role,seed:body.seed,buildId:body.buildId,count:body.index+1,revision:f.revision,turn:f.observation.turn,level:f.observation.vitals.level,maxLevel:Math.max(run?.maxLevel ?? 0,Number(f.observation.vitals.level)||0),depth,locations:reached,ended:!!f.ended,outcome:f.end?.kind ?? 'in progress',updated:now,partial:run?.partial ?? f.revision > 0}));
+          store.sql.exec('INSERT INTO account_runs VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET updated = excluded.updated, json = excluded.json',key,uid,now,JSON.stringify({id:match[1],sessionId:f.sessionId,name:body.name,control:body.control,automated:body.control==='bot',role:body.role,seed:body.seed,buildId:body.buildId,count:body.index+1,revision:f.revision,turn:f.observation.turn,level:f.observation.vitals.level,maxLevel:Math.max(run?.maxLevel ?? 0,Number(f.observation.vitals.level)||0),depth,locations:reached,ended:!!f.ended,outcome:f.end?.kind ?? 'in progress',updated:now,partial:run?.partial ?? f.revision > 0}));
           return json({count:body.index+1});
         });
       }

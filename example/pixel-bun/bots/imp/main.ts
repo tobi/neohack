@@ -3,10 +3,16 @@ import { Explorer } from './strategy';
 
 // A curious, cowardly imp. Simple policy, not a promise of safe play.
 export default defineBot({
+  name: 'Curious imp',
+  autoloot: { enabled: true, itemTypes: ['gold', 'food', 'armor', 'weapons'], arrows: false, leaveCorpses: true, leaveKnownCursed: true, lootPatterns: ['ration', 'dagger'], ignorePatterns: ['corpse'] },
   initialize({ hero, game, log }) {
+    let flee = true;
+    hero.controls.checkbox({id:'flee',label:'Flee visible enemies',checked:true,onChange:checked=>{flee=checked;}});
+    hero.controls.button({id:'yield',label:'Yield control',onClick:()=>null});
+    hero.addEventListener('itemLooted',({detail:{loot}})=>log('Looted',loot.quantity,loot.item.label));
     const explorer = new Explorer();
     const gear = new Set<string>(), triedGear = new Set<string>();
-    const triedFood = new Set<string>(), triedPickup = new Set<string>();
+    const triedFood = new Set<string>();
     hero.addEventListener('enterLevel', ({ detail }) => {
       explorer.reset(); log('Entered', detail.to.depthLabel);
     });
@@ -40,7 +46,7 @@ export default defineBot({
       explorer.visit(hero);
       const enemies = hero.sense(entities.Enemy);
       const escape = explorer.choose(hero, enemies);
-      if (enemies.length && escape) { explorer.record(escape, await hero.go(escape.direction)); return; }
+      if (flee && enemies.length && escape) { explorer.record(escape, await hero.go(escape.direction)); return; }
       if (hero.isHungry() && hero.inventory.freshness === 'current') {
         const food = hero.inventory.items.find(item => item.canEat() && !triedFood.has(item.info!.id));
         if (food) {
@@ -59,11 +65,7 @@ export default defineBot({
         triedGear.add(id); log('Trying to wear', item.info!.label);
         if (await attempt(() => item.equip())) return;
       }
-      const loose = hero.itemsHere?.find(item => !triedPickup.has(hero.location.id + ':' + item.info!.id));
-      if (loose) {
-        triedPickup.add(hero.location.id + ':' + loose.info!.id);
-        if (await attempt(() => loose.pickup())) return;
-      }
+      // Ground pickup follows the construction autoloot rules, including ignores.
       const step = explorer.choose(hero, []);
       if (step && Math.random() > 0.08) explorer.record(step, await hero.go(step.direction));
       else await hero.search();

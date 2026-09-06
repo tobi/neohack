@@ -992,6 +992,16 @@ flat character sheets do not acquire invented 3D body geometry. Selection and
 status cues remain a distinct interface overlay. Independent ray/box checks cover
 both door orientations, all three door states and four neighboring wall heights.
 
+Named bot provenance: `defineBot` requires an executable name and accepts typed
+`autoloot` rules at construction, applied before initialization through the shared
+engine operation. Signed-in workshop tests save the captured original and compiled
+files before allowing bot input. Account history distinguishes automated runs from
+interactive sessions and offers private source viewing/download next to replay.
+The saved project label is independent of the bot definition's name. Source is
+browser-reported and immutable for that recording; anonymous tests are temporary.
+
+Automatic pickup accepts editable Loot patterns and Ignore patterns, one literal substring per line. Matching uses perceived names without case sensitivity; ignore and leave rules take precedence. The same typed settings are available at bot construction and persist with sessions and recorded bot source.
+
 ## Journal scrolls
 
 Keep complete heard-event batches from public receipts, including blank lines;
@@ -1018,3 +1028,14 @@ editable suggestion only; Use nickname submits the standing decision, and Skip
 nickname declines naming without implying that drinking can be undone. Cosmetic
 name generation uses browser randomness, never the engine's random stream.
 Other text decisions retain their ordinary wording.
+
+## Script state and controls
+
+The workshop renders author-provided buttons and checkboxes beneath a player-owned
+script state field. Scripts start in run; null yields and disables all controls.
+Yield ends a workshop test, keeping its component read-only. The SDK supports
+host-driven resume for a future live-game attachment. Script notes show their
+script author and engine turn, and signed-in users can read the private script
+journal beside saved source/replay. These annotations never appear as engine facts.
+Automatic pickup has an explicit Review before collecting toggle: the engine asks
+for a selection before transfer, preserving its suggestions without auto-selecting.
