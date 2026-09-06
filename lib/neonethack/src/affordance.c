@@ -1,6 +1,8 @@
 #include "affordance.h"
 #include <string.h>
 #include <stdlib.h>
+const char *const nnh_item_actions[NNH_ITEM_ACTIONS] = {"eat", "drink", "wield", "equip", "remove", "read", "drop", "zap"};
+static const char *const item_methods[NNH_ITEM_ACTIONS] = {"game.eat", "game.drink", "game.wield", "game.equip", "game.remove", "game.read", "game.drop", "game.zap"};
 const char *const nnh_terrain_names[] = {
     "unknown", "wall", "floor", "corridor", "closedDoor", "stairsUp",
     "stairsDown", "altar", "fountain", "throne", "trap", "dark", "water",
@@ -82,7 +84,14 @@ void nnh_resolve_cell(const nnh_knowledge *k, int index, nnh_cell_actions *out)
     if (here) {
         offer(out, "search", "game.search", "attemptable", -1, NULL, NULL, 0);
         offer(out, "wait", "game.wait", "attemptable", -1, NULL, NULL, 0);
-        if (k->floor_current && k->floor_items) offer(out, "pickup", "game.pickup", "needsSelection", -1, NULL, "item", 0);
+        int i;
+        offer(out, "pickup", "game.pickup", !k->floor_current ? "uncertain" : k->floor_items ? "needsSelection" : "knownBlocked", -1, k->floor_current && !k->floor_items ? "noPerceivedItems" : NULL, !k->floor_current || k->floor_items ? "item" : NULL, 0);
+        for (i = 0; i < NNH_ITEM_ACTIONS; i++) {
+            int water = !strcmp(nnh_item_actions[i], "drink") && (terrain == T_FOUNTAIN || terrain == T_SINK);
+            offer(out, nnh_item_actions[i], item_methods[i], water ? "attemptable" : !k->item_known[i] ? "uncertain" : k->item_count[i] ? "needsSelection" : "knownBlocked", -1,
+                  !water && k->item_known[i] && !k->item_count[i] ? "noPerceivedItems" : NULL,
+                  !water && (!k->item_known[i] || k->item_count[i]) ? "item" : NULL, 0);
+        }
         if (terrain == T_STAIRS_UP || terrain == T_STAIRS_DOWN)
             offer(out, "climb", "game.climb", "attemptable", terrain == T_STAIRS_UP ? 8 : 9, NULL, NULL, 0);
         if (!door) tool_offer(k, out, 0, 0);

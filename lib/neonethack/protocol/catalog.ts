@@ -47,7 +47,7 @@ for (const action of ["kick", "open", "close"]) game(action, `Attempt to ${actio
 const descriptions: Record<string, string> = {
   pickup: "Pick up a perceived object underfoot, not a distant object or a carried item. Does not walk or select an entire floor implicitly.",
   eat: "Eat a perceived eligible item carried or underfoot. Eligibility is not safety. Preserve choking and other warnings; an interrupted meal is not automatically restarted.",
-  drink: "Drink a perceived carried potion. Unidentified properties remain unknown; do not interpret eligibility as safety.",
+  drink: "Drink a perceived carried potion, or omit item on a perceived fountain or sink to request the engine’s drinking confirmation. Unidentified properties remain unknown; do not interpret eligibility as safety.",
   wield: "Wield the selected perceived carried item. Does not choose a weapon strategically.",
   equip: "Wear the selected armor, ring or amulet using its known class. Genuine slot choices remain decisions; no silent replacement or removal of other equipment.",
   remove: "Remove selected worn equipment. Physical accessibility constrains candidates; hidden curses are not revealed by filtering.",
@@ -56,7 +56,8 @@ const descriptions: Record<string, string> = {
   drop: "Drop a selected carried item or stack using the engine's normal single-selection behavior. Quantity selection is not supported by this protocol version.",
   zap: "Zap a selected perceived wand. Target may be self or a compass/vertical direction; here is not a target. Unknown powers and charges remain unknown.",
 };
-for (const [action, description] of Object.entries(descriptions)) game(action, description + " Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision. Ambiguity never selects the first match.", { item, ...(action === "zap" ? { target } : {}) });
+for (const [action, description] of Object.entries(descriptions)) game(action, description + " Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision (drink may instead prompt for a fountain or sink underfoot). Ambiguity never selects the first match.", { item, ...(action === "zap" ? { target } : {}) });
+game("quit", "Abandon this run through the engine. Presents the genuine quit confirmation; only an explicit affirmative answer ends the adventure. Retains its journal.");
 game("pray", "Begin a prayer. Always preserve genuine confirmation; the API does not reveal divine favor or prayer cooldown or decide whether prayer is safe.");
 add("decision.answer", "Continue exactly the standing decisionId with one typed answer. Use returned item refs and integer choice IDs unchanged. confirm:false declines; it is not cancellation. A wrong answer or stale ID does not advance the world. May lead to another decision. Retry the same requestId and payload after uncertainty, never the initiating game operation.", object({ ...guard, decisionId: text(64), answer }), "act", { idempotent: true });
 add("decision.cancel", "Cancel the standing decision only when it is cancellable. Does not implicitly decline every future warning, restart an action or undo turns already spent. Returns the actual outcome and observation.", object({ ...guard, decisionId: text(64) }), "act", { idempotent: true });

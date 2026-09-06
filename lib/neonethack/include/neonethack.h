@@ -88,6 +88,7 @@ nnh_status nnh_game_move(nnh_context *, const char *, const nnh_guard *, nnh_dir
 nnh_status nnh_game_climb(nnh_context *, const char *, const nnh_guard *, nnh_direction, nnh_result **);
 nnh_status nnh_game_wait(nnh_context *, const char *, const nnh_guard *, nnh_result **);
 nnh_status nnh_game_search(nnh_context *, const char *, const nnh_guard *, nnh_result **);
+nnh_status nnh_game_quit(nnh_context *, const char *, const nnh_guard *, nnh_result **);
 nnh_status nnh_game_pray(nnh_context *, const char *, const nnh_guard *, nnh_result **);
 /* NULL target asks for a genuine target decision. */
 nnh_status nnh_game_kick(nnh_context *, const char *, const nnh_guard *, const nnh_target *, nnh_result **);

@@ -220,7 +220,7 @@ class PixelNethack extends HTMLElement {
         <aside id="welcome-paths" class="welcome-paths" aria-label="Three ways into NetHack">
           <header><span class="eyebrow">ONE DUNGEON. MANY POSSIBILITIES.</span><a href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a></header><p id="package-status" role="status">Preparing the game in the background…</p>
           <article><span class="path-number">01 · ADVENTURE</span><h2>Play the classic</h2><p>A deep dungeon. A loyal companion. A thousand ways to learn the hard way. Walk through the doorway and discover NetHack, one turn at a time.</p><a href="#welcome-actions">Enter the dungeon ↓</a></article>
-          <article><span class="path-number">02 · BRING YOUR AGENT</span><h2>Play with WebMCP</h2><p>Let your agent explore the same world through the browser’s WebMCP tools. You watch the adventure unfold; your agent makes the moves.</p><a href="https://github.com/tobi/neohack/blob/main/lib/neonethack/docs/AGENT_BROWSER.md" target="_blank" rel="noopener noreferrer">Agent-browser walkthrough ↗</a></article>
+          <article><span class="path-number">02 · BRING YOUR AGENT</span><h2>Have your Agent play</h2><p>Let your agent play with <a href="https://webmachinelearning.github.io/webmcp/" target="_blank" rel="noopener noreferrer">WebMCP</a>.</p><a href="https://github.com/tobi/neohack/blob/main/lib/neonethack/docs/AGENT_BROWSER.md" target="_blank" rel="noopener noreferrer">Agent-browser walkthrough ↗</a></article>
           <article><span class="path-number">03 · MAKE SOMETHING NEW</span><h2>It’s time for NetHack itself to ascend.</h2><p>The brain of NetHack, separated from its interface and exposed as a JSON protocol. Build a completely new UX, a reinforcement learning environment for small models, an evaluation for frontier models—or whatever comes next.</p><a href="https://github.com/tobi/neohack/tree/main/lib/neonethack" target="_blank" rel="noopener noreferrer">Explore the library ↗</a></article>
           <section class="welcome-code" aria-labelledby="code-heading"><span class="path-number">THE LIBRARY · TYPESCRIPT</span><h2 id="code-heading">Your interface. NetHack’s brain.</h2><pre tabindex="0" aria-label="Native NetHack example"><code><span class="code-keyword">import</span> Nethack <span class="code-keyword">from</span> <span class="code-string">'neonethack'</span>;
 
@@ -251,7 +251,7 @@ class PixelNethack extends HTMLElement {
         <div class="world-hud">
           <div class="location-hud"><span id="location-heading"></span><span id="turn-pill"></span><span id="cloud-status" role="status"></span></div>
           <details class="hud-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
-            <button id="adventures-button">Your adventures</button><button data-guide>Field guide <kbd>?</kbd></button>
+            <button id="adventures-button">Your adventures</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button>
             <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
             <button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p>
           </div></details>
@@ -261,7 +261,7 @@ class PixelNethack extends HTMLElement {
           <div class="notice" id="ended" hidden></div>
         </div>
         <section class="play-controls" id="play-controls" aria-label="Adventure controls" hidden>
-          <div class="direction-pad">${directions
+          <div class="navigation-cluster"><pre id="nearby-ascii" aria-hidden="true"></pre><div class="direction-pad">${directions
             .slice(0, 4)
             .map(
               ([d, g]) =>
@@ -275,8 +275,8 @@ class PixelNethack extends HTMLElement {
               ([d, g]) =>
                 `<button data-move="${d}" data-game aria-label="Move ${d}">${g}</button>`,
             )
-            .join("")}</div>
-          <div class="action-dock"><div class="action-grid"><button data-action="search" data-game>Search<kbd>f</kbd></button><button data-action="pickup" data-game>Pick up<kbd>g</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="open" data-game>Open door<kbd>o</kbd></button><button data-action="down" data-game>Go downstairs<kbd>&gt;</kbd></button><button id="more-actions" data-game>More actions</button></div>
+            .join("")}</div></div>
+          <div class="action-dock"><div class="action-grid"><button data-action="search" data-game>Search<kbd>f</kbd></button><button data-action="pickup" data-game>Pick up<kbd>g</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="open" data-game>Open door<kbd>o</kbd></button><button id="more-actions" data-game>More actions</button></div>
           <nav class="side-nav" aria-label="Adventure views"><button data-view="inventory">Backpack <span id="inventory-count"></span><kbd>i</kbd></button><button data-view="surroundings">Surroundings</button><button data-view="journal">Journal</button></nav></div>
         </section>
         <aside class="ground-loot" id="ground-loot" aria-label="On the ground" hidden><h2>On the ground</h2><p>At your feet · choose what to take</p><div id="ground-items"></div></aside>
@@ -706,6 +706,12 @@ class PixelNethack extends HTMLElement {
         : this.requestFullscreen();
       void task.catch((e) => this.error(e));
     };
+    this.$("#abandon-run").onclick = () => {
+      if (!this.playable()) return;
+      this.querySelector<HTMLDetailsElement>(".hud-menu")!.open = false;
+      this.stopMovement();
+      void this.run(() => this.game!.quit());
+    };
     this.$("#text-map-button").onclick = () => {
       this.querySelector<HTMLDetailsElement>(".hud-menu")!.open = false;
       this.showPanel();
@@ -977,6 +983,11 @@ class PixelNethack extends HTMLElement {
           (this.movement.inFlight && b.hasAttribute("data-move"))
         )),
     );
+    this.querySelectorAll<HTMLButtonElement>("[data-game][data-action]").forEach(button => {
+      const reason = this.actionUnavailable(button.dataset.action!);
+      button.disabled ||= !!reason;
+      button.title = reason;
+    });
     this.querySelectorAll<HTMLButtonElement>("[data-choice]").forEach(
       (b) => (b.disabled = this.busy || this.uncertain()),
     );
@@ -992,7 +1003,7 @@ class PixelNethack extends HTMLElement {
         !this.metadataHealthy;
     (this.$("#retry") as HTMLButtonElement).disabled = this.busy;
     this.querySelectorAll<HTMLButtonElement>("#menu [data-operation]").forEach(
-      (b) => (b.disabled = this.busy),
+      (b) => (b.disabled = this.busy || !!b.dataset.unavailable),
     );
     this.setAttribute("aria-busy", String(this.busy));
     this.renderStairs();
@@ -1004,6 +1015,7 @@ class PixelNethack extends HTMLElement {
     this.show("#welcome-actions", !state);
     this.show("#welcome-paths", !state);
     this.show("#bookmark-hint", !!state);
+    this.show("#abandon-run", !!state && !state.ended);
     this.show("#creator-link", !state);
     this.show("#play-controls", !!state);
     this.show(".hero-hud", !!state);
@@ -1100,9 +1112,9 @@ class PixelNethack extends HTMLElement {
         Array<string>(80).fill(" "),
       );
       const terrain: Record<string, string> = {
-        wall: "#",
+        wall: "|",
         floor: ".",
-        corridor: "·",
+        corridor: "#",
         stairsUp: "<",
         stairsDown: ">",
         closedDoor: "+",
@@ -1112,15 +1124,24 @@ class PixelNethack extends HTMLElement {
         water: "~",
         lava: "~",
         altar: "_",
+        sink: "#",
+        grave: "|",
+        throne: "\\",
+        tree: "#",
       };
+      const walls = new Set(o.world.filter(cell => cell.terrain.type === "wall").map(cell => `${cell.x},${cell.y}`));
       for (const cell of o.world)
         if (lines[cell.y] && cell.x >= 0 && cell.x < 80)
           lines[cell.y]![cell.x] =
             cell.occupant?.mark ??
             cell.objects?.[0]?.mark ??
-            terrain[cell.terrain.type] ??
+            (cell.terrain.type === "wall" && (walls.has(`${cell.x - 1},${cell.y}`) || walls.has(`${cell.x + 1},${cell.y}`)) ? "-" : terrain[cell.terrain.type]) ??
             " ";
       this.text("#map-text", lines.map((row) => row.join("")).join("\n"));
+      const near = o.you ? Array.from({ length: 9 }, (_, row) =>
+        Array.from({ length: 15 }, (_, col) => lines[o.you!.y + row - 4]?.[o.you!.x + col - 7] ?? " ").join("")
+      ).join("\n") : "";
+      this.text("#nearby-ascii", near);
       this.show("#ended", state.ended);
       if (state.ended)
         this.$("#ended").innerHTML =
@@ -1418,6 +1439,7 @@ class PixelNethack extends HTMLElement {
       wait: "Wait",
       pickup: "Pick up…",
       climb: "Take the stairs",
+      eat: "Eat…", drink: "Drink…", wield: "Wield…", equip: "Wear…", remove: "Remove…", read: "Read…", drop: "Drop…", zap: "Zap…",
     };
     const offers = obstruction
       ? cell.actions
@@ -1482,6 +1504,22 @@ class PixelNethack extends HTMLElement {
         return game.apply(offer.arguments.item, options);
       case "game.pickup":
         return game.pickup(offer.arguments.item, options);
+      case "game.eat":
+        return game.eat(offer.arguments.item, options);
+      case "game.drink":
+        return game.drink(offer.arguments.item, options);
+      case "game.wield":
+        return game.wield(offer.arguments.item, options);
+      case "game.equip":
+        return game.equip(offer.arguments.item, options);
+      case "game.remove":
+        return game.remove(offer.arguments.item, options);
+      case "game.read":
+        return game.read(offer.arguments.item, options);
+      case "game.drop":
+        return game.drop(offer.arguments.item, options);
+      case "game.zap":
+        return game.zap(offer.arguments.item, undefined, options);
       case "game.search":
         return game.search(options);
       case "game.wait":
@@ -1650,9 +1688,16 @@ class PixelNethack extends HTMLElement {
     });
     return succeeded && this.playable() && this.metadataHealthy;
   }
+  private actionUnavailable(name: string) {
+    const n = this.game?.observation.neighborhood;
+    if (n?.status !== "available" || n.basis.revision !== this.game?.state.revision) return "";
+    const offer = n.cells.find(cell => cell.dx === 0 && cell.dy === 0)?.actions.find(offer => offer.key === name);
+    if (offer?.availability !== "knownBlocked") return "";
+    return offer.reason === "noPerceivedItems" ? "No eligible items available" : offer.reason === "noKnownTools" ? "No tools in your pack" : "Unavailable here";
+  }
   private action(name: string, item?: ItemRef) {
     this.movement.stop();
-    if (!this.playable()) return;
+    if (!this.playable() || this.actionUnavailable(name)) return;
     const g = this.game!,
       ref = item ? { id: item.id } : undefined;
     const actions: Record<string, () => Promise<Snapshot>> = {
@@ -1696,9 +1741,15 @@ class PixelNethack extends HTMLElement {
       close: "Close a door",
       kick: "Kick",
       up: "Go upstairs",
+      down: "Go downstairs",
       pray: "Pray",
     })) {
       const b = this.button(label, () => this.action(action));
+      const reason = this.actionUnavailable(action);
+      b.disabled = !!reason;
+      b.title = reason;
+      if (reason) { const hint = document.createElement("small"); hint.textContent = reason; b.append(hint); }
+      b.dataset.unavailable = reason;
       b.dataset.operation = "";
       this.$("#more-grid").append(b);
     }
@@ -2091,7 +2142,7 @@ class PixelNethack extends HTMLElement {
   }
   private credits() {
     this.openMenu(
-      `<h2 id="menu-title">An old world. An open door.</h2><p>neonethack is a new, approachable window into NetHack, built on the neonethack library and its shared C engine.</p><p>NetHack by the NetHack DevTeam and its contributors, under the NetHack General Public License. Original notices remain with the engine.</p><p>Character art from Modern Interiors by <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noreferrer">LimeZu</a>. Companion and bat illustrations use original templates from the pixel-art-interfaces skill. Dungeon tiles and interface design are original to this example.</p><p>Gameplay runs in your browser.</p>`,
+      `<h2 id="menu-title">An old world. An open door.</h2><p>neonethack is a new, approachable window into NetHack, built on the neonethack library and its shared C engine.</p><p>NetHack by the NetHack DevTeam and its contributors, under the NetHack General Public License. Original notices remain with the engine.</p><p>Character art from Modern Interiors by <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noreferrer">LimeZu</a>. Companion and bat illustrations use original templates from the pixel-art-interfaces skill. Dungeon tiles and interface design are original to this example.</p><p>JetBrains Mono by the JetBrains Mono Project Authors, under the <a href="/fonts/OFL.txt" target="_blank" rel="noreferrer">SIL Open Font License</a>.</p><p>Gameplay runs in your browser.</p>`,
     );
   }
 }

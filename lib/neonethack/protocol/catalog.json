@@ -562,7 +562,7 @@
     },
     {
       "name": "game.pickup",
-      "description": "Pick up a perceived object underfoot, not a distant object or a carried item. Does not walk or select an entire floor implicitly. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision. Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
+      "description": "Pick up a perceived object underfoot, not a distant object or a carried item. Does not walk or select an entire floor implicitly. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision (drink may instead prompt for a fountain or sink underfoot). Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
       "schema": {
         "type": "object",
         "properties": {
@@ -627,7 +627,7 @@
     },
     {
       "name": "game.eat",
-      "description": "Eat a perceived eligible item carried or underfoot. Eligibility is not safety. Preserve choking and other warnings; an interrupted meal is not automatically restarted. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision. Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
+      "description": "Eat a perceived eligible item carried or underfoot. Eligibility is not safety. Preserve choking and other warnings; an interrupted meal is not automatically restarted. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision (drink may instead prompt for a fountain or sink underfoot). Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
       "schema": {
         "type": "object",
         "properties": {
@@ -692,7 +692,7 @@
     },
     {
       "name": "game.drink",
-      "description": "Drink a perceived carried potion. Unidentified properties remain unknown; do not interpret eligibility as safety. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision. Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
+      "description": "Drink a perceived carried potion, or omit item on a perceived fountain or sink to request the engine’s drinking confirmation. Unidentified properties remain unknown; do not interpret eligibility as safety. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision (drink may instead prompt for a fountain or sink underfoot). Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
       "schema": {
         "type": "object",
         "properties": {
@@ -757,7 +757,7 @@
     },
     {
       "name": "game.wield",
-      "description": "Wield the selected perceived carried item. Does not choose a weapon strategically. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision. Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
+      "description": "Wield the selected perceived carried item. Does not choose a weapon strategically. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision (drink may instead prompt for a fountain or sink underfoot). Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
       "schema": {
         "type": "object",
         "properties": {
@@ -822,7 +822,7 @@
     },
     {
       "name": "game.equip",
-      "description": "Wear the selected armor, ring or amulet using its known class. Genuine slot choices remain decisions; no silent replacement or removal of other equipment. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision. Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
+      "description": "Wear the selected armor, ring or amulet using its known class. Genuine slot choices remain decisions; no silent replacement or removal of other equipment. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision (drink may instead prompt for a fountain or sink underfoot). Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
       "schema": {
         "type": "object",
         "properties": {
@@ -887,7 +887,7 @@
     },
     {
       "name": "game.remove",
-      "description": "Remove selected worn equipment. Physical accessibility constrains candidates; hidden curses are not revealed by filtering. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision. Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
+      "description": "Remove selected worn equipment. Physical accessibility constrains candidates; hidden curses are not revealed by filtering. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision (drink may instead prompt for a fountain or sink underfoot). Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
       "schema": {
         "type": "object",
         "properties": {
@@ -952,7 +952,7 @@
     },
     {
       "name": "game.read",
-      "description": "Read the selected perceived scroll or spellbook. Study may take multiple turns or be interrupted; a new attempt needs a new operation. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision. Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
+      "description": "Read the selected perceived scroll or spellbook. Study may take multiple turns or be interrupted; a new attempt needs a new operation. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision (drink may instead prompt for a fountain or sink underfoot). Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
       "schema": {
         "type": "object",
         "properties": {
@@ -1017,7 +1017,7 @@
     },
     {
       "name": "game.apply",
-      "description": "Apply a perceived carried tool. Tool-specific targets or options are subsequent typed decisions, not initial guessed arguments. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision. Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
+      "description": "Apply a perceived carried tool. Tool-specific targets or options are subsequent typed decisions, not initial guessed arguments. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision (drink may instead prompt for a fountain or sink underfoot). Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
       "schema": {
         "type": "object",
         "properties": {
@@ -1082,7 +1082,7 @@
     },
     {
       "name": "game.drop",
-      "description": "Drop a selected carried item or stack using the engine's normal single-selection behavior. Quantity selection is not supported by this protocol version. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision. Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
+      "description": "Drop a selected carried item or stack using the engine's normal single-selection behavior. Quantity selection is not supported by this protocol version. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision (drink may instead prompt for a fountain or sink underfoot). Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
       "schema": {
         "type": "object",
         "properties": {
@@ -1147,7 +1147,7 @@
     },
     {
       "name": "game.zap",
-      "description": "Zap a selected perceived wand. Target may be self or a compass/vertical direction; here is not a target. Unknown powers and charges remain unknown. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision. Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
+      "description": "Zap a selected perceived wand. Target may be self or a compass/vertical direction; here is not a target. Unknown powers and charges remain unknown. Item accepts an opaque {id} or a perceived-name query; omit it for a zero-turn candidate decision (drink may instead prompt for a fountain or sink underfoot). Ambiguity never selects the first match. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
       "schema": {
         "type": "object",
         "properties": {
@@ -1233,6 +1233,44 @@
                 "additionalProperties": false
               }
             ]
+          }
+        },
+        "required": [
+          "sessionId",
+          "requestId",
+          "expectedRevision"
+        ],
+        "additionalProperties": false
+      },
+      "idempotent": true
+    },
+    {
+      "name": "game.quit",
+      "description": "Abandon this run through the engine. Presents the genuine quit confirmation; only an explicit affirmative answer ends the adventure. Retains its journal. Returns outcome, ordered events, full observation and at most one decision. Answer a decision separately; never repeat this operation to continue it.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "x-maxBytes": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque session identifier returned by create or resume."
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "x-maxBytes": 128,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
           }
         },
         "required": [

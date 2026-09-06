@@ -2903,6 +2903,8 @@ emit_provenance(game_t *g, mj_Buf *b)
     mj_endobj(b);
 }
 
+static void item_knowledge(game_t *, nnh_knowledge *);
+
 static void
 build_knowledge(game_t *g, nnh_knowledge *k, int recovery)
 {
@@ -2925,6 +2927,7 @@ build_knowledge(game_t *g, nnh_knowledge *k, int recovery)
     for (j = 0; j < g->ninv; j++) if (!strcmp(g->inv[j].category, "tool")) k->tools++;
     k->floor_current = g->floor_valid && g->perception_fresh;
     k->floor_items = g->nfloor > 0;
+    item_knowledge(g, k);
     for (i = 0; i < NNH_NEIGHBORHOOD_CELLS; i++) {
         int x = k->origin_x + i % 9 - 4, y = k->origin_y + i / 9 - 4, d;
         nnh_known_cell *c = &k->cells[i]; cell_t *source;
@@ -4055,6 +4058,20 @@ collect_candidates(game_t *g, const char *action, cand_t *out, size_t cap)
     return n;
 }
 
+static void
+item_knowledge(game_t *g, nnh_knowledge *k)
+{
+    int i; size_t j;
+    cand_t pool[128];
+    for (i = 0; i < NNH_ITEM_ACTIONS; i++) {
+        const char *action = nnh_item_actions[i];
+        k->item_known[i] = k->inventory_current && (!action_uses_floor(action) || k->floor_current);
+        if (equipment_action(action))
+            for (j = 0; j < g->ninv; j++) if (!g->inv[j].usage_known) k->item_known[i] = 0;
+        k->item_count[i] = (int) collect_candidates(g, action, pool, sizeof pool / sizeof pool[0]);
+    }
+}
+
 /* Resolve an {item} argument against known candidates.
  * 0 = resolved (op->item_letter or op->floor_index set),
  * 1 = no usable item given (caller should offer candidates),
@@ -4274,7 +4291,7 @@ cmdkey_of(const char *action)
         return 100;
     if (!strcmp(action, "zap"))
         return 122;
-    if (!strcmp(action, "pray"))
+    if (!strcmp(action, "pray") || !strcmp(action, "quit"))
         return 35;
     return -2;                  /* not scripted */
 }
@@ -4800,6 +4817,12 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
                 bump_once(g, bumped);
                 continue;
             }
+            if (bare && is_letter_prompt(g->pending.prompt) && !strcmp(action, "drink") && !g->operation.item_letter) {
+                /* Declining environmental water does not choose a potion. */
+                if (!drive_abort(g, "", "")) return envelope_error(g, req_id, action, "engineError", "write failed");
+                cancelled = 1;
+                continue;
+            }
             if (bare && is_letter_prompt(g->pending.prompt)) {
                 /* No resolved letter, or the world keeps asking: never
                  * guess slots and never spin. */
@@ -4854,11 +4877,11 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
                                  had_you, ev_from);
         }
         if (!strcmp(g->pending.kind, "extcmd")) {
-            if (!strcmp(action, "pray")) {
+            if (!strcmp(action, "pray") || !strcmp(action, "quit")) {
                 size_t i;
                 long found = -1;
                 for (i = 0; i < g->pending.ncommands; i++)
-                    if (!strcmp(g->pending.commands[i], "pray")) {
+                    if (!strcmp(g->pending.commands[i], action)) {
                         found = (long) i;
                         break;
                     }
@@ -4875,7 +4898,7 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
                     continue;
                 }
                 if (!drive_abort(g, "unsupportedAction",
-                                 "prayer is not available here"))
+                                 "the requested command is not available here"))
                     return envelope_error(g, req_id, action, "engineError",
                                           "write failed");
                 continue;
@@ -5748,6 +5771,10 @@ run_scripted(nhx_t *x, game_t *g, const char *action, const char *args,
     if (action_takes_item(action)) {
         int rc;
         int want_item = 1;
+        if (!strcmp(action, "drink") && (!mj_find(args, "item", &v) || mj_is_null(v)) &&
+            g->have_you && g->you_x >= 1 && g->you_x < MAP_W && g->you_y >= 0 && g->you_y < MAP_H &&
+            (g->terrain[g->you_y][g->you_x] == T_FOUNTAIN || g->terrain[g->you_y][g->you_x] == T_SINK))
+            want_item = 0; /* Ask the engine's environmental drinking question. */
         if (!strcmp(action, "pickup") &&
             (!mj_find(args, "item", &v) || mj_is_null(v)))
             want_item = 0;      /* take-all: the ',' key means gather */
@@ -5763,7 +5790,7 @@ run_scripted(nhx_t *x, game_t *g, const char *action, const char *args,
         return drive_loop(x, g, req_id, turn0, you0_x, you0_y, had_you,
                           ev_from, &bumped, 0);
     }
-    if (!strcmp(action, "pray") || !strcmp(action, "search"))
+    if (!strcmp(action, "pray") || !strcmp(action, "quit") || !strcmp(action, "search"))
         return drive_loop(x, g, req_id, turn0, you0_x, you0_y, had_you,
                           ev_from, &bumped, 0);
     if (!strcmp(action, "cast"))
@@ -6052,7 +6079,7 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
             !strcmp(action, "wear") || !strcmp(action, "remove") ||
             !strcmp(action, "takeoff") || !strcmp(action, "read") ||
             !strcmp(action, "apply") || !strcmp(action, "drop") ||
-            !strcmp(action, "zap") || !strcmp(action, "pray") ||
+            !strcmp(action, "zap") || !strcmp(action, "pray") || !strcmp(action, "quit") ||
             !strcmp(action, "inventory") || !strcmp(action, "inspect")) {
             out = run_scripted(x, g, action, args, req_dup ? req_dup : req_id);
             goto remember;

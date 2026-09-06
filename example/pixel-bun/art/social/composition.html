@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>neonethack social artwork</title>
+<style>
+@font-face { font-family: JetBrains; src: url('/fonts/JetBrainsMono-Regular.woff2'); }
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+body { background: #171f23; color: #ede4bd; font-family: Arial, sans-serif; }
+.frame { z-index: 2; pointer-events: none; position: absolute; inset: 24px; border: 1px solid #455146; }
+.frame::before, .frame::after { content: ''; position: absolute; width: 24px; height: 24px; border: 4px solid #9cac7e; }
+.frame::before { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
+.frame::after { bottom: -2px; right: -2px; border-left: 0; border-top: 0; }
+.scene { position: absolute; right: -32px; bottom: 20px; width: 640px; height: 512px; image-rendering: pixelated; }
+.copy { position: absolute; left: 64px; top: 78px; }
+.eyebrow, .url, .paths, .credit { font-family: JetBrains, monospace; }
+.eyebrow { color: #b8c59d; font-size: 13px; letter-spacing: 2px; margin: 0 0 42px; }
+h1 { font-size: 78px; letter-spacing: -5px; margin: 0 0 28px; line-height: 1; font-weight: 700; }
+h1 span { color: #b5c993; }
+.tagline { font: 38px/1.25 Georgia, serif; margin: 0; color: #ece3c3; }
+.paths { margin: 30px 0 0; color: #a9b7a5; font-size: 13px; line-height: 1.8; }
+.url { position: absolute; bottom: 63px; left: 64px; font-size: 21px; color: #e4bc73; }
+.credit { position: absolute; right: 48px; bottom: 37px; color: #8c9a88; font-size: 9px; }
+body[data-format=banner] .scene { right: 0; bottom: -30px; }
+body[data-format=banner] .copy { left: 270px; top: 76px; }
+body[data-format=banner] .eyebrow { margin-bottom: 28px; }
+body[data-format=banner] h1 { font-size: 72px; margin-bottom: 20px; }
+body[data-format=banner] .tagline { font-size: 30px; }
+body[data-format=banner] .paths { display: none; }
+body[data-format=banner] .url { left: 270px; bottom: 61px; }
+body[data-format=overlay] { background: transparent; }
+body[data-format=overlay] .frame { border-color: transparent; }
+body[data-format=overlay] .copy { left: 40px; top: 38px; background: #171f23; padding: 18px 24px; border-bottom: 3px solid #859968; }
+body[data-format=overlay] h1 { font-size: 38px; letter-spacing: -2px; margin: 0; }
+body[data-format=overlay] .eyebrow, body[data-format=overlay] .tagline, body[data-format=overlay] .paths, body[data-format=overlay] .credit { display: none; }
+body[data-format=overlay] .scene { width: 320px; height: 256px; bottom: 26px; right: 32px; }
+body[data-format=overlay] .url { left: 40px; bottom: 40px; background: #171f23; padding: 12px 18px; font-size: 18px; }
+#source { display: none; }
+</style></head><body>
+<div class="frame"></div><canvas class="scene" width="320" height="256" aria-label="Torchlit dungeon entrance with a traveler and loyal dog"></canvas>
+<div class="copy"><p class="eyebrow">A LITTLE COURAGE. A DEEP DUNGEON.</p><h1><span>neo</span>nethack</h1><p class="tagline">The old world has<br>an open door.</p><p class="paths">PLAY THE CLASSIC.<br>BRING YOUR AGENT. BUILD SOMETHING NEW.</p></div>
+<div class="url">neohack.dev ↗</div><div class="credit">Character art · LimeZu</div><div id="source"><canvas></canvas></div>
+<script type="module">
+import { DungeonMap, loadArt } from '/scene.js';
+document.body.dataset.format = new URL(location.href).searchParams.get('format') ?? 'card';
+await loadArt();
+await document.fonts.ready;
+const scene = document.querySelector('.scene');
+const map = new DungeonMap(document.querySelector('#source canvas'), () => {});
+map.drawWelcomeArt(scene.getContext('2d'), 20, 16, 0);
+map.destroy();
+window.artReady = true;
+</script></body></html>

@@ -1528,6 +1528,56 @@
           "const": 1
         },
         "method": {
+          "const": "game.quit"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque session identifier returned by create or resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID. On a timeout retry this exact ID and payload; never create a new ID to retry."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Revision of the observation on which this operation is based. Not game time. Known retries are checked before this guard."
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
           "const": "game.pray"
         },
         "params": {

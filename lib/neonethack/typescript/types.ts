@@ -9,7 +9,7 @@ export type Answer = MethodParams["decision.answer"]["answer"];
 export type ActionTarget = MethodParams["session.actions"]["target"];
 export interface ActionBasis { revision: number; levelId: string; origin: { x: number; y: number } }
 export type InputGate = { state: "ready" | "recoveryRequired" | "ended" | "unavailable" } | { state: "decision"; decisionId: string };
-type OfferMethod = "game.move" | "game.open" | "game.close" | "game.kick" | "game.apply" | "game.search" | "game.wait" | "game.pickup" | "game.climb";
+type OfferMethod = "game.move" | "game.open" | "game.close" | "game.kick" | "game.apply" | "game.search" | "game.wait" | "game.pickup" | "game.climb" | "game.eat" | "game.drink" | "game.wield" | "game.equip" | "game.remove" | "game.read" | "game.drop" | "game.zap";
 type OfferArguments<M extends OfferMethod> = Omit<MethodParams[M], "sessionId" | "requestId" | "expectedRevision">;
 export type ActionOffer = { [M in OfferMethod]: {
   key: string; method: M; cost: "variable";

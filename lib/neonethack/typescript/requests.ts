@@ -23,6 +23,7 @@ export interface MethodParams {
   "game.apply": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string } };
   "game.drop": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string } };
   "game.zap": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string }; target?: "self" | { direction: "north" | "northeast" | "east" | "southeast" | "south" | "southwest" | "west" | "northwest" | "up" | "down" } };
+  "game.quit": { sessionId: string; requestId: string; expectedRevision: number };
   "game.pray": { sessionId: string; requestId: string; expectedRevision: number };
   "decision.answer": { sessionId: string; requestId: string; expectedRevision: number; decisionId: string; answer: { kind: "item"; item: string | { id: string } } | { kind: "target"; target: "self" | { direction: "north" | "northeast" | "east" | "southeast" | "south" | "southwest" | "west" | "northwest" | "up" | "down" } } | { kind: "confirmation"; confirm: boolean } | { kind: "choice"; choose: ReadonlyArray<number> } | { kind: "text"; text: string } };
   "decision.cancel": { sessionId: string; requestId: string; expectedRevision: number; decisionId: string };

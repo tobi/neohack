@@ -721,7 +721,7 @@ export class DungeonMap {
     c.imageSmoothingEnabled = false;
     rect(c, "#171f23", 0, 0, canvas.width, canvas.height);
     if (!this.observation) {
-      this.illustration(c, cols, rows, now);
+      this.drawWelcomeArt(c, cols, rows, now);
       return;
     }
     const you = this.observation.you;
@@ -970,7 +970,7 @@ export class DungeonMap {
     c.restore();
   }
   // An authored welcome courtyard, never inserted into a game observation.
-  private illustration(
+  drawWelcomeArt(
     c: CanvasRenderingContext2D,
     cols: number,
     rows: number,

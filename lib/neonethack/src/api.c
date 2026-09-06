@@ -213,7 +213,7 @@ nnh_status nnh_session_create(nnh_context *x, const nnh_identity *i, nnh_result 
 #define SESSION(name) nnh_status nnh_session_##name(nnh_context *x, const char *sid, nnh_result **out) { mj_Buf b; start(&b, "session." #name, sid, NULL); return finish(x, &b, out); }
 SESSION(observe) SESSION(resume) SESSION(close)
 #define SIMPLE(name) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, nnh_result **out) { mj_Buf b; start(&b, "game." #name, sid, g); return finish(x, &b, out); }
-SIMPLE(wait) SIMPLE(search) SIMPLE(pray)
+SIMPLE(wait) SIMPLE(search) SIMPLE(pray) SIMPLE(quit)
 #define DIRECTION(name) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, nnh_direction d, nnh_result **out) { mj_Buf b; start(&b, "game." #name, sid, g); mj_key(&b, "direction"); put_direction(&b, d); return finish(x, &b, out); }
 DIRECTION(move) DIRECTION(climb)
 #define TARGET(name) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, const nnh_target *t, nnh_result **out) { mj_Buf b; start(&b, "game." #name, sid, g); if (t) { mj_key(&b, "target"); put_target(&b, t); } return finish(x, &b, out); }

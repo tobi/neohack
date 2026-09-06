@@ -29,6 +29,7 @@
 #define mj_rawv nnh_private_mj_rawv
 #define nnh_object_next nnh_private_object_next
 #define nnh_schema_valid nnh_private_schema_valid
+#define nnh_item_actions nnh_private_item_actions
 #define nnh_terrain_names nnh_private_terrain_names
 #define nnh_compass_names nnh_private_compass_names
 #define nnh_resolve_cell nnh_private_resolve_cell

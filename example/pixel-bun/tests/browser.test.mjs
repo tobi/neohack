@@ -2576,8 +2576,8 @@ test("welcome explains all three paths on desktop and mobile", { timeout: 60000 
   assert.ok(world.x + world.width <= rail.x);
   await page.screenshot({path: `${root}/test-results/welcome-paths-desktop.png`});
   await page.setViewportSize({width:390,height:844});
-  await paths.getByRole('heading', {name:'Play with WebMCP'}).scrollIntoViewIfNeeded();
-  assert.ok(await paths.getByRole('heading', {name:'Play with WebMCP'}).isVisible());
+  await paths.getByRole('heading', {name:'Have your Agent play'}).scrollIntoViewIfNeeded();
+  assert.ok(await paths.getByRole('heading', {name:'Have your Agent play'}).isVisible());
   assert.equal(await page.evaluate(() => document.querySelector('pixel-nethack').scrollWidth <= innerWidth), true);
   await page.screenshot({path: `${root}/test-results/welcome-paths-mobile.png`});
   await page.locator('#new-adventure').scrollIntoViewIfNeeded();
@@ -2655,4 +2655,72 @@ test("WASD moves in four directions and F searches", async (t) => {
   await page.keyboard.press('f');
   await ready(page);
   assert.ok((await page.evaluate(() => window.keyRequests)).some(r => r.method === 'game.search'));
+});
+
+test('nearby ASCII stays above the pad and abandoning requires an engine confirmation', async t => {
+  const { page } = await fixture(t);
+  await create(page);
+  const before = await snapshot(page);
+  const mini = page.locator('#nearby-ascii');
+  const rows = (await mini.textContent()).split('\n');
+  assert.equal(rows.length, 9);
+  assert.ok(rows.every(row => row.length === 15));
+  assert.equal(rows[4][7], '@');
+  assert.equal(await page.locator('.action-grid [data-action="down"]').count(), 0);
+  for (const viewport of [{ width: 1440, height: 1050 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await page.evaluate(() => document.fonts.ready);
+    const map = await mini.boundingBox();
+    const pad = await page.locator('.direction-pad').boundingBox();
+    assert.ok(map.y >= 0 && map.y + map.height <= pad.y);
+    assert.ok(map.x >= 0 && map.x + map.width <= viewport.width);
+    assert.equal(await mini.evaluate(el => getComputedStyle(el).fontFamily.includes('JetBrains Mono')), true);
+    assert.equal(await page.evaluate(() => document.fonts.check('12px "JetBrains Mono"')), true);
+    await page.screenshot({ path: resolve(root, `test-results/ascii-hud-${viewport.width}.png`) });
+  }
+  assert.equal((await snapshot(page)).observation.turn, before.observation.turn);
+  await page.getByLabel('Game menu', { exact: true }).click();
+  await page.getByRole('button', { name: 'Abandon run', exact: true }).click();
+  await page.locator('#decision[open]').waitFor();
+  assert.equal((await snapshot(page)).decision.kind, 'confirmation');
+  assert.equal((await snapshot(page)).ended, false);
+  await page.getByRole('button', { name: 'No, not now', exact: true }).click();
+  await ready(page);
+  assert.equal((await snapshot(page)).ended, false);
+  await page.getByLabel('Game menu', { exact: true }).click();
+  await page.getByRole('button', { name: 'Abandon run', exact: true }).click();
+  await page.getByRole('button', { name: 'Yes, continue', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('pixel-nethack').snapshot?.ended);
+  assert.equal((await snapshot(page)).end.kind, 'quit');
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector('pixel-nethack').snapshot?.ended);
+  assert.equal((await snapshot(page)).end.kind, 'quit');
+});
+
+test('empty item actions are disabled for free and a fountain enables Drink underfoot', async t => {
+  const { page } = await fixture(t);
+  await create(page, 'valkyrie', 3);
+  const before = await snapshot(page);
+  assert.equal(before.observation.inventory.some(item => item.category === 'potion'), false);
+  await page.getByRole('button', { name: 'More actions', exact: true }).click();
+  const drink = page.locator('#more-grid button').filter({ hasText: /^Drink/ });
+  const zap = page.locator('#more-grid button').filter({ hasText: /^Zap a wand/ });
+  assert.equal(await drink.isDisabled(), true);
+  assert.equal(await zap.isDisabled(), true);
+  assert.match(await drink.textContent(), /No eligible items/);
+  assert.equal((await snapshot(page)).revision, before.revision);
+  await page.locator('#menu .close-dialog').click();
+  await page.keyboard.press('a');
+  await ready(page);
+  const current = await snapshot(page);
+  assert.equal(current.observation.neighborhood.cells.find(c => !c.dx && !c.dy).terrain.type, 'fountain');
+  await page.getByRole('button', { name: 'More actions', exact: true }).click();
+  assert.equal(await drink.isDisabled(), false);
+  await drink.click();
+  await page.locator('#decision[open]').waitFor();
+  assert.match(await page.locator('#decision-about').textContent(), /fountain/i);
+  assert.equal((await snapshot(page)).observation.turn, current.observation.turn);
+  await page.getByRole('button', { name: 'No, not now', exact: true }).click();
+  await ready(page);
+  assert.equal(await page.locator('#error').isVisible(), false);
 });

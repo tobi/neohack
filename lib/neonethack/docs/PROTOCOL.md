@@ -22,7 +22,7 @@ These artifacts and C validation data are generated together by
 | Discovery | `protocol.describe` |
 | Session | `session.create`, `session.observe`, `session.resume`, `session.close` |
 | Movement | `game.move`, `game.wait`, `game.climb` |
-| Environment | `game.search`, `game.kick`, `game.open`, `game.close`, `game.pray` |
+| Environment | `game.search`, `game.kick`, `game.open`, `game.close`, `game.pray`, `game.quit` |
 | Items | `game.pickup`, `game.eat`, `game.drink`, `game.wield`, `game.equip`, `game.remove`, `game.read`, `game.apply`, `game.drop`, `game.zap` |
 | Continuation | `decision.answer`, `decision.cancel` |
 
@@ -254,3 +254,15 @@ It is omitted during hallucination and by older engine packages. Clients must no
 infer it from message prose, symbol/color pairs or remembered occupants. Refresh
 it from each observation; absence must clear an earlier description. Saved games
 continue to use their pinned package and may lack this optional field.
+
+`game.quit` requests NetHack’s own quit confirmation. Declining keeps the run
+active; an explicit affirmative decision answer ends it. Its journal and terminal
+state remain available on resume. `session.close` only unloads a session.
+
+The current cell's action offers include item eligibility computed by the same C
+candidate resolver used by operations. `knownBlocked` with `noPerceivedItems`
+means a client can disable that action without sending input. Unknown or stale
+knowledge remains `uncertain`, not a claim that no item exists. Eligibility does
+not imply safety: curses, unknown potion effects and warnings remain engine decisions.
+`game.drink()` on a perceived fountain or sink underfoot asks the engine's genuine
+confirmation even without carried potions. Adjacent water features do not qualify.

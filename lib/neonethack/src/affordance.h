@@ -9,7 +9,8 @@ typedef enum {
     T_DOOR_OPEN, T_BARS, T_TREE, T_ICE, T_GRAVE, T_BRIDGE
 } terrain_t;
 #define NNH_NEIGHBORHOOD_CELLS 81
-#define NNH_AFFORDANCE_ACTIONS 6
+#define NNH_AFFORDANCE_ACTIONS 16
+#define NNH_ITEM_ACTIONS 8
 #define NNH_DOOR_FACT_LIMIT 8192
 
 typedef struct {
@@ -27,6 +28,7 @@ typedef struct {
     char level[80];
     int ordinary_locomotion, door_diagonals, direction_reliable;
     int inventory_current, tools, floor_current, floor_items;
+    int item_count[NNH_ITEM_ACTIONS], item_known[NNH_ITEM_ACTIONS];
     const char *gate, *decision_id, *unavailable_reason;
     nnh_known_cell cells[NNH_NEIGHBORHOOD_CELLS];
 } nnh_knowledge;
@@ -41,6 +43,7 @@ typedef struct {
     nnh_action_offer actions[NNH_AFFORDANCE_ACTIONS];
     int action_count;
 } nnh_cell_actions;
+extern const char *const nnh_item_actions[NNH_ITEM_ACTIONS];
 extern const char *const nnh_terrain_names[];
 extern const char *const nnh_compass_names[];
 void nnh_resolve_cell(const nnh_knowledge *, int, nnh_cell_actions *);

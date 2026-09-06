@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "composition": "art/social/composition.html",
+  "renderer": "src/map.ts:drawWelcomeArt",
+  "frameTime": 0,
+  "scale": "integer nearest-neighbor",
+  "outputs": [
+    {
+      "file": "open-graph.png",
+      "width": 1200,
+      "height": 630,
+      "sha256": "70d7dde263d85a6688abdf9c9de2f19023bfba48cec7a3fe43d3ae8f6b4fcc8c"
+    },
+    {
+      "file": "profile-banner.png",
+      "width": 1500,
+      "height": 500,
+      "sha256": "1a18e7998f52ddb36c2372d0745d039a8065912130f58e0c49d7c2a5f4d1cff3"
+    },
+    {
+      "file": "stream-overlay.png",
+      "width": 1920,
+      "height": 1080,
+      "sha256": "266470d74ac90377a23e50052ecb66ec8ff3d6275fe3533627e766bfcd0da1f1"
+    }
+  ]
+}

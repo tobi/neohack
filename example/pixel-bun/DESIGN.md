@@ -516,3 +516,27 @@ block turns; local pre-input durability and uncertain-request guarantees remain.
 Creation uses a bounded dialog with a single scrolling field region and a fixed
 submit footer, including short landscape screens. WASD joins arrows and vi keys
 for movement; F searches. Direction prompts and tile inspection also accept WASD.
+
+A faint 15×9 classic-symbol neighborhood sits above the direction pad, centered
+on the current player. It uses bundled JetBrains Mono (SIL OFL in public/fonts),
+current public occupants and remembered terrain only. Unknown cells stay blank;
+the decorative view consumes no engine input and does not intercept clicks.
+Keep downstairs out of the permanent action dock: its contextual stair offer,
+More actions and > shortcut remain. The hamburger offers Abandon run through
+public game.quit, preserving the engine's explicit confirmation and terminal journal.
+
+Disable item actions only when the current revision's C action offer says
+knownBlocked. More actions includes a short reason below unavailable choices.
+Never duplicate inventory eligibility rules in the client or probe by spending
+input. Drink remains available on a perceived fountain/sink underfoot and asks
+for the engine's confirmation; lack of potions alone does not block that use.
+
+Keep the welcome arrow pad and its instruction/actions at the left edge, clear
+of the centered traveler. Use a narrow left column on phones, retaining 44px keys.
+
+Social artwork reuses the authored torchlit doorway, Ranger and dog in the same
+charcoal/sage/gold palette. Keep the name and neohack.dev readable at preview size.
+Provide a 1200×630 Open Graph card, 1500×500 profile banner with avatar space, and
+1920×1080 transparent stream overlay. `art/social/composition.html` is the editable
+composition; `scripts/build-social.ts` renders static, integer-scale frames through
+the shared welcome-art method. Website metadata uses absolute neohack.dev URLs.

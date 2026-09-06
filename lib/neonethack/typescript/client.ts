@@ -144,6 +144,7 @@ export class Game {
   wait(options: RevisionOptions = {}) { return this.operation("game.wait", {}, options); }
   climb(direction: "up" | "down", options: RevisionOptions = {}) { return this.operation("game.climb", { direction }, options); }
   search(options: RevisionOptions = {}) { return this.operation("game.search", {}, options); }
+  quit(options: RevisionOptions = {}) { return this.operation("game.quit", {}, options); }
   pray(options: RevisionOptions = {}) { return this.operation("game.pray", {}, options); }
   kick(direction?: Compass, options: RevisionOptions = {}) { return this.operation("game.kick", direction ? { target: { direction } } : {}, options); }
   open(direction?: Compass, options: RevisionOptions = {}) { return this.operation("game.open", direction ? { target: { direction } } : {}, options); }

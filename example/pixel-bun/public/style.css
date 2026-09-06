@@ -1545,3 +1545,48 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
   #menu:has(#create-form) h2 { font-size: 20px; }
   #menu:has(#create-form) .subtle { display: none; }
 }
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+.navigation-cluster { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+#nearby-ascii {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: 400 12px/14px "JetBrains Mono", ui-monospace, monospace;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+  white-space: pre;
+  color: #bec9b3;
+  opacity: .34;
+  pointer-events: none;
+  user-select: none;
+}
+#nearby-ascii::selection { background: transparent; }
+@media (max-height: 500px) {
+  #nearby-ascii { font-size: 10px; line-height: 10px; }
+  .navigation-cluster { gap: 6px; }
+}
+.more-grid button small { display: block; margin-top: 5px; font-size: 11px; font-weight: 400; }
+
+pixel-nethack:not(.in-game) .intro-controls {
+  left: max(20px, env(safe-area-inset-left));
+  right: auto;
+  transform: none;
+  width: 220px;
+  text-align: left;
+}
+.intro-controls .intro-arrows { margin-left: 0; }
+.intro-controls .intro-links { justify-content: flex-start; }
+@media (max-width: 480px) {
+  pixel-nethack:not(.in-game) .intro-controls { left: max(12px, env(safe-area-inset-left)); width: 146px; }
+  .intro-controls .intro-hint { line-height: 1.5; }
+  .intro-controls #intro-instruction { font-size: 18px; }
+  .intro-controls #continue-adventure { min-width: 0; width: 146px; padding: 10px 8px; }
+}

@@ -15,7 +15,7 @@ const event = (type: string, properties: Record<string, Schema>) => object({ typ
 const closed = (properties: Record<string, Schema>, required = Object.keys(properties)): Schema => ({ ...object(properties, required), additionalProperties: false });
 const basis = closed({ revision: integer, levelId: string, origin: closed({ x: integer, y: integer }) });
 const inputGate = { oneOf: [closed({ state: enumeration("ready", "recoveryRequired", "ended", "unavailable") }), closed({ state: { const: "decision" }, decisionId: string })] };
-const offerMethods = ["move", "open", "close", "kick", "apply", "search", "wait", "pickup", "climb"];
+const offerMethods = ["move", "open", "close", "kick", "apply", "search", "wait", "pickup", "climb", "eat", "drink", "wield", "equip", "remove", "read", "drop", "zap"];
 const actionOffer = { oneOf: offerMethods.flatMap(action => {
   const method = catalog.methods.find(m => m.name === 'game.' + action)!;
   const properties = Object.fromEntries(Object.entries(method.schema.properties).filter(([k]) => !["sessionId", "requestId", "expectedRevision"].includes(k))) as Record<string, Schema>;
@@ -35,7 +35,7 @@ const cellActions = closed({
   door: closed({ lock: enumeration("locked", "unlocked", "unknown"), freshness: enumeration("witnessed", "remembered", "unknown"), observedTurn: integer }, ["lock", "freshness"]),
   occupant: closed({ kind: enumeration("self", "creature", "ally") }), hazards: array(enumeration("trap", "water", "lava")),
   walkable: nullable(boolean), movement: closed({ relation: enumeration("here", "adjacent", "distant"), intent: enumeration("step", "attemptOpen", "attemptObstacle", "creatureBump", "allyBump", "possiblePush", "unknown"), knownRestriction: enumeration("intactDoorDiagonal", "lockedDoor", "knownTerrainObstacle") }, ["relation"]),
-  actions: { ...array(actionOffer), maxItems: 6 },
+  actions: { ...array(actionOffer), maxItems: 16 },
 }, ["x", "y", "dx", "dy", "inBounds", "walkable", "movement", "actions"]);
 const neighborhood = { oneOf: [
   closed({ version: { const: 1 }, status: { const: "available" }, basis, inputGate, radius: { const: 4 }, cells: { ...array(cellActions), minItems: 81, maxItems: 81 } }),
