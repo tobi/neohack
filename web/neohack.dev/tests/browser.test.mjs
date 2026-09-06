@@ -2437,6 +2437,7 @@ test("dungeon loading scene covers creation and previous-run resume without extr
   });
   await delayEntry();
   await page.getByRole("button", { name: "Begin your adventure" }).click();
+  const chosenName = await page.getByLabel("YOUR NAME", {exact:true}).inputValue();
   await page.getByRole("button", { name: "Enter the dungeon" }).click();
   await page.waitForFunction(() => typeof globalThis.releaseEntry === "function");
   const loading = page.locator("#dungeon-loading");
@@ -2455,7 +2456,7 @@ test("dungeon loading scene covers creation and previous-run resume without extr
   // Revisit the doorway; opening the bookmarked run URL resumes automatically.
     await page.goto(new URL("/", page.url()).href);
   await page.locator("#continue-adventure").waitFor();
-  assert.match(await page.locator("#continue-adventure").innerText(), /Continue previous run\s+Ada · Turn 1/);
+  assert.equal((await page.locator("#continue-adventure").innerText()).replace(/\s+/g," "), `Continue previous run ${chosenName} · Turn 1`);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await delayEntry();
   await page.locator("#continue-adventure").click();
