@@ -1,39 +1,93 @@
 # neonethack
 
-Fresh library-first repository. The supported implementation lives entirely in
-`lib/neonethack/`; `examples/` and `example/pixel-bun/` are clients of its public
-API. Do not restore the old Bun server, UI, generic public `act` tool or retired
-JS semantic adapter.
+NetHack's engine, exposed through a semantic protocol, with an approachable web
+UX. Humans and agents play the same game through the same perceived information
+and explicit decisions. Improving access to that information is the goal; the
+interface must not become a strategy advisor, hidden-state oracle or forgiving
+rescue service.
+
+## Project map
+
+The supported engine and library implementation lives in `lib/neonethack/`.
+Follow a change through these layers rather than implementing a separate version
+of its semantics in each client:
+
+| Part | Responsibility |
+| --- | --- |
+| `lib/neonethack/engine/` | Pinned NetHack source, game rules and headless integration. Supplies what the hero actually perceives and the engine's genuine input decisions. |
+| `lib/neonethack/src/` | Shared C semantic driver, public dispatch, perception, action/decision handling, sessions, journals, receipts and replay integrity. `explorer.*` and private headers are internal. |
+| `lib/neonethack/protocol/`, `include/neonethack.h`, `docs/PROTOCOL.md` | Public contract. `protocol/catalog.ts` generates method schemas, C dispatch metadata, TypeScript requests and MCP definitions; `protocol/response.ts` defines response schemas. Regenerate with Node and check drift. |
+| `lib/neonethack/cli/` | Native process entry points: public NDJSON requests/responses and stdio MCP. These expose the semantic contract, not the engine's private input protocol. |
+| `lib/neonethack/typescript/` | Typed library clients and native/browser transports. Client conveniences preserve protocol meaning, costs, decisions and uncertainty. |
+| `lib/neonethack/wasm/` | The same C driver and engine in browser workers, with explicit storage ownership and durability guarantees. Worker plumbing does not own game rules. |
+| `lib/neonethack/mcp/`, `typescript/webmcp.ts` | MCP and browser WebMCP adapters. Named tools expose the same operations and perceived results. Compact presentations must preserve their meaning. |
+| `examples/` | Small public-API consumers and runnable integration examples. Keep sample clients correct and their command-coverage limits explicit. |
+| `example/pixel-bun/` | The developing web UX: character creation, dungeon map, local views, inventory, settings, accessible controls and agent interaction. Read its [AGENTS.md](example/pixel-bun/AGENTS.md) and [DESIGN.md](example/pixel-bun/DESIGN.md) before UX work. |
+| `hosting/cloudflare/` | Website/runtime delivery, durable cloud storage and supporting web services. Browser gameplay runs in WASM; hosting does not duplicate game rules or provide a separate HTTP gameplay engine. |
+
+The flow is **client intent → named semantic operation → C driver → NetHack →
+perceived observation, actual outcome and any standing decision → client**.
+The C library, typed library, NDJSON, MCP and WebMCP are surfaces of this contract,
+not different games. WebMCP in the pixel client shares the active game with the
+human-facing HUD. Do not restore the retired Bun gameplay server, old UI, generic
+public `act` tool, raw-key escape hatch or JS semantic adapter.
+
+## Perceptual parity and UX
+
+Before any UX work, read [example/pixel-bun/AGENTS.md](example/pixel-bun/AGENTS.md)
+and [example/pixel-bun/DESIGN.md](example/pixel-bun/DESIGN.md). Follow the established
+interaction and visual decisions, and update DESIGN.md when those decisions change.
+
+- Human, accessible and agent interfaces should receive compatible descriptions
+  of the same perceived scene. Presentation can differ; knowledge must not.
+- Keep one coherent perception model across the map and local views. Represent
+  apparent creatures, known objects and hazards as separate layers. Preserve
+  uncertainty, visibility and remembered knowledge rather than guessing identity
+  from a glyph, sprite, label or presentation shortcut.
+- Expose canonical self-state through the semantic contract. Clients should not
+  recover structured facts by parsing padded display strings.
+- Explain failures using witnessed reasons. An eligible action is an attempt,
+  not a safety guarantee or an omniscient prediction of success.
+- Make useful information and controls easier to discover through clear text,
+  keyboard/touch access and accessible descriptions. Do not silently select an
+  item, confirm a warning, repeat an occupation or rescue a failed plan.
+- Named operations are distinct from answering or cancelling a standing
+  decision. Real decisions remain explicit, including when an agent is acting.
+- Free observation queries consume neither engine input nor randomness. Actual
+  elapsed turns and terminal facts outrank a client's intended action or outcome.
+- The overnight run used an evolving, error-prone client; it was not a controlled
+  study of NetHack's difficulty. Do not infer that monsters, hunger or paralysis
+  need weakening from those deaths. Fix client/protocol defects and demonstrate
+  them with focused scenarios; balance changes require their own justification.
+
+## Session and protocol integrity
+
+- Keep game semantics in the shared C implementation. TS, workers, MCP adapters,
+  rendering and hosting must not acquire independent game rules or hidden state.
+- Use opaque item references. Never infer item identity from display labels,
+  inventory slots or menu order.
+- Preserve input journals, request reservations, exact receipts, engine/static
+  data pins and pending-context integrity. Missing receipts mean uncertainty,
+  not permission to execute again. Corruption is not silently truncated or fixed.
+- Discovery describes actual backend guarantees. Memory is volatile; IndexedDB
+  requires explicit origin/name ownership and awaited pre-input transactions.
+- Resume uses the recorded engine package. New runs may select the current
+  runtime; existing runs must never silently replay on an upgraded binary.
 
 ## Development compatibility
 
-- Backwards compatibility is not a requirement. Replace old implementations and
-  delete obsolete code, formats, fallbacks and generated artifacts outright.
+- Backwards compatibility is not a requirement. Replace obsolete implementations,
+  formats, fallbacks and generated artifacts rather than preserving them.
 - Do not add migrations, compatibility adapters, legacy runtime loaders or package
   archives to preserve old development saves. Those saves are disposable; start
-  fresh after an incompatible change.
-- Keep current-format integrity checks and durable request/receipt guarantees.
-  Never silently replay an old save on a different engine or treat an uncertain
-  request as permission to execute it again.
+  fresh after an incompatible change. This does not waive current-format
+  integrity checks or the pins required to resume supported published runs.
+- Existing local sessions are not migration fixtures. Test with new temporary
+  stores only.
 
-## Boundaries
+## Verification
 
-- Public contract: `lib/neonethack/docs/PROTOCOL.md`, generated JSON schemas,
-  `include/neonethack.h`. `protocol/catalog.ts` generates C dispatch metadata,
-  TypeScript requests and MCP tool schemas. Regenerate with Node; check drift.
-- `src/explorer.*` and private headers are internal. Native and WASM share this
-  C semantic driver; worker/TS/MCP code must not acquire game rules.
-- Named operations are distinct from answering/cancelling a standing decision.
-  Never infer item identity from labels, inventory slots or menu order. Do not
-  auto-confirm warnings, repeat occupations or expose hidden state.
-- Preserve input journals, request reservations, static data/engine pins and
-  pending-context integrity. Missing receipts mean uncertainty, not permission
-  to execute again. Corrupt data is not silently truncated or repaired.
-- Discovery describes actual backend guarantees. Memory is volatile; IndexedDB
-  requires explicit origin/name ownership and awaited pre-input transactions.
-  WASM resume needs the same package, not an automatic binary upgrade.
-
-## Checks
+Run checks appropriate to the affected layers. The core checks are:
 
 ```sh
 make -C lib/neonethack test
@@ -45,18 +99,23 @@ npm run --prefix lib/neonethack test:browser
 node lib/neonethack/scripts/generate.ts --check
 ```
 
-Use actual engine/browser scenarios. Missing coverage is not a passing test.
-Never disable Chromium sandboxing, weaken storage checks or rewrite recordings
-to make a test pass. Native C calls must not change the host's signal handlers.
+For pixel UX changes, also run `bun run --cwd example/pixel-bun test`. For cloud
+storage, runtime delivery or dashboard changes, run
+`npm test --prefix hosting/cloudflare` after building the library and pixel client.
+See each area's README for prerequisites and narrower test entry points.
+
+Use actual engine/browser scenarios, including native/WASM and presentation
+parity where relevant. Missing coverage is not a passing test. Never disable
+Chromium sandboxing, weaken storage checks or rewrite recordings to make a test
+pass. Native C calls must not change the host's signal handlers.
 
 ## Source and release hygiene
 
 - Never publish local sessions, private journals/pins, credentials, SDK installs,
   dependencies or generated build output as source. Release binaries are separate
   artifacts accompanied by licenses and matching source.
-- NetHack notices and base attribution remain intact. Its NGPL obligations apply
-  to derivatives. See `lib/neonethack/NOTICE.md` for project and dependency terms.
-- Do not push or change visibility without
-  an explicit request. No commits are implied by passing local tests.
-- Existing local sessions are not migration fixtures. Test with new temporary
-  stores only. Public distribution guidance is `lib/neonethack/docs/DISTRIBUTION.md`.
+- Keep NetHack notices and base attribution intact. Its NGPL obligations apply
+  to derivatives. See [NOTICE.md](lib/neonethack/NOTICE.md) and
+  [distribution guidance](lib/neonethack/docs/DISTRIBUTION.md).
+- Do not push or change visibility without an explicit request. Passing local
+  tests does not imply permission to commit.
