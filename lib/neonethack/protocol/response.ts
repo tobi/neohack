@@ -53,7 +53,7 @@ const observation = object({
   world: array(object({
     x: integer, y: integer, visible: boolean,
     terrain: object({ type: string, knowledge: { const: "remembered" }, orientation: enumeration("horizontal", "vertical") }, ["type", "knowledge"]),
-    occupant: object({ kind: enumeration("self", "creature", "ally"), mark: string, color: integer, appearance: string }, ["kind", "mark"]),
+    occupant: object({ kind: enumeration("self", "creature", "ally"), mark: string, color: integer, appearance: string, attitude: enumeration("hostile", "peaceful", "tame") }, ["kind", "mark"]),
     objects: array(object({ mark: string, color: integer })),
   }, ["x", "y", "terrain"])), heard: array(string),
 }, ["turn", "location", "you", "vitals", "inventory", "inventoryKnown", "here", "perception", "world", "heard"]);

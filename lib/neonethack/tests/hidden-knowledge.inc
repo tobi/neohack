@@ -38,6 +38,17 @@ static void fixture_begin(void)
             unseen++; if (!strcmp(variant,"monster")) svl.level.monsters[x][y] = NULL;
         }
     }
+    /* Visible attitude scenarios intentionally change disclosed facts. */
+    if (!strcmp(variant,"peaceful") || !strcmp(variant,"hostile")) {
+        for (x = 1; x < COLNO; x++) for (y = 0; y < ROWNO; y++) {
+            struct monst *m = m_at(x,y);
+            if (m && cansee(x,y) && canspotmon(m) && !m->mundetected && m->m_ap_type == M_AP_NOTHING) {
+                m->mtame = 0;
+                m->mpeaceful = !strcmp(variant,"peaceful");
+                newsym(x,y);
+            }
+        }
+    }
     fixture_item = NULL;
     for (o = gi.invent; o; o = o->nobj) if (o->oclass == TOOL_CLASS) { fixture_item = o; break; }
     if (fixture_item) {

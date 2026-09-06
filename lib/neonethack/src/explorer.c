@@ -57,6 +57,7 @@ typedef struct {
     int visibility_known, visible, boulder, trap_base;
     int door_orientation; /* 0 unknown, 1 horizontal frame, 2 vertical frame */
     char appearance[128];
+    char attitude[16];
 } cell_t;
 
 typedef struct {
@@ -1462,6 +1463,17 @@ ingest(game_t *g, const char *line)
                             mj_int(cv2, &cc);
                         if (mj_find(ecpy, "framecolor", &fv2))
                             mj_int(fv2, &fc);
+                        g->cells[y][x].attitude[0] = '\0';
+                        { mj_val av;
+                          if (mj_find(ecpy, "attitude", &av)) {
+                              char *name = mj_str(av);
+                              if (name) {
+                                  if (!strcmp(name, "hostile") || !strcmp(name, "peaceful") || !strcmp(name, "tame"))
+                                      snprintf(g->cells[y][x].attitude, sizeof g->cells[y][x].attitude, "%s", name);
+                                  free(name);
+                              }
+                          }
+                        }
                         g->cells[y][x].appearance[0] = '\0';
                         { mj_val av;
                           if (mj_find(ecpy, "appearance", &av)) {
@@ -2643,7 +2655,7 @@ turn_of(game_t *g)
 }
 
 static const char *const HUNGER_MAP[][2] = {
-    { "satiated", "satiated" }, { "not hungry", "not_hungry" },
+    { "", "not_hungry" }, { "satiated", "satiated" }, { "not hungry", "not_hungry" },
     { "hungry", "hungry" }, { "weak", "weak" },
     { "fainting", "fainting" }, { "fainted", "fainted" },
     { NULL, NULL },
@@ -2665,6 +2677,8 @@ emit_lower_map(mj_Buf *b, const char *sense, const char *v,
     snprintf(low, sizeof low, "%s", v);
     for (p = low; *p; p++)
         *p = (char) tolower((unsigned char) *p);
+    /* Stock status words are padded for terminal alignment. */
+    while (p > low && isspace((unsigned char) p[-1])) *--p = '\0';
     mj_key(b, sense);
     for (i = 0; map[i][0]; i++)
         if (!strcmp(low, map[i][0])) {
@@ -2855,6 +2869,7 @@ emit_world(game_t *g, mj_Buf *b)
             } else if (c->present && (band == 0 || band == 1)) {
                 mj_key(b, "occupant"); mj_obj(b);
                 mj_key(b, "kind"); mj_strv(b, band ? "ally" : "creature");
+                if (c->attitude[0]) { mj_key(b, "attitude"); mj_strv(b, c->attitude); }
                 if (c->appearance[0]) { mj_key(b, "appearance"); mj_strv(b, c->appearance); }
                 mj_key(b, "mark"); mj_strv(b, mark);
                 mj_key(b, "color"); mj_intv(b, c->color);

@@ -1,3 +1,4 @@
+import { beforeInput, accepted, scheduled } from './lifecycle.js';
 import type { AutomaticPickup, ActionTarget, ActionsResponse, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
 export type { AutomaticPickup, ActionTarget, ActionsResponse, ActionOffer, ActionBasis, CellActions, Neighborhood, InputGate, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
 
@@ -84,10 +85,11 @@ export class Game {
   private enqueue<T>(f: () => Promise<T>): Promise<T> {
     const run = this.tail.then(f);
     this.tail = run.then(() => undefined, () => undefined);
+    scheduled(this, run);
     return run;
   }
-  private accept(r: Response): Snapshot {
-    if (isSnapshot(r) && r.revision >= this.current.revision) this.current = freeze(r);
+  private accept(r: Response, notify = true): Snapshot {
+    if (isSnapshot(r) && r.revision >= this.current.revision) { this.current = freeze(r); if (notify) accepted(this, this.current); }
     return snapshot(r);
   }
   private async send(request: Request): Promise<Snapshot> {
@@ -100,6 +102,7 @@ export class Game {
     return this.accept(response);
   }
   private operation<M extends GameMethod>(method: M, args: Arguments<M>, options: RevisionOptions = {}): Promise<Snapshot> {
+    beforeInput(this);
     // Copy inputs at invocation; caller mutation while queued cannot change intent.
     const copy = structuredClone(args);
     const expectedRevision = options.expectedRevision;
@@ -114,6 +117,7 @@ export class Game {
   }
   /** Retrieve the same receipt. A returned old frame never rewinds state. */
   retry(): Promise<Snapshot> {
+    beforeInput(this);
     return this.enqueue(async () => {
       if (!this.unresolved) throw Error("No uncertain request to retry.");
       return this.send(this.unresolved);
@@ -131,9 +135,10 @@ export class Game {
     });
   }
   observe(): Promise<Snapshot> {
-    return this.enqueue(async () => this.accept(await this.client.request("session.observe", { sessionId: this.id })));
+    return this.enqueue(async () => this.accept(await this.client.request("session.observe", { sessionId: this.id }), false));
   }
   close(): Promise<Snapshot> {
+    beforeInput(this);
     return this.enqueue(async () => {
       const r = this.accept(await this.client.request("session.close", { sessionId: this.id }));
       this.retired = true;
@@ -164,3 +169,8 @@ export class Game {
   answer(decisionId: string, answer: Answer, options: RevisionOptions = {}) { return this.operation("decision.answer", { decisionId, answer }, options); }
   cancel(decisionId: string, options: RevisionOptions = {}) { return this.operation("decision.cancel", { decisionId }, options); }
 }
+
+export { Hero, Entity, Inventory, InventoryItem, defineBot, runBot, direction, entities } from './hero.js';
+export type { BotContext, BotDefinition, Step } from './hero.js';
+
+export type { HeroEvent, HeroEventName, HeroEventDetails, HeroListener, BotResult, StopReason, CellChange, ItemSighting } from './hero-events.js';

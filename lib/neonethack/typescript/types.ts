@@ -43,6 +43,7 @@ export interface ItemRef {
   quantity: number; category: string;
   /** Candidate actions from the C resolver; absent when perception is stale. Not safety guarantees. */
   actions?: ("eat" | "equip" | "remove" | "apply" | "drink" | "read" | "zap" | "wield" | "drop" | "pickup")[];
+
   usage?: ("worn" | "wielded" | "offhand" | "alternate" | "quivered" | "attached")[];
 }
 export interface Cell {
@@ -50,7 +51,7 @@ export interface Cell {
   /** Engine sight at this boundary. Omitted by older engine packages. */
   visible?: boolean;
   terrain: { type: string; knowledge: "remembered"; orientation?: "horizontal" | "vertical" };
-  occupant?: { kind: "self" | "creature" | "ally"; mark: string; color?: number; appearance?: string };
+  occupant?: { kind: "self" | "creature" | "ally"; mark: string; color?: number; appearance?: string; attitude?: "hostile" | "peaceful" | "tame" };
   objects?: { mark: string; color: number }[];
 }
 /** Omitted facts are unknown; empty known lists really are empty. */

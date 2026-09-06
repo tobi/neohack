@@ -125,6 +125,7 @@ See [WASM build, persistence and resume](docs/WASM.md).
 
 - [Protocol](docs/PROTOCOL.md): lifecycle, requests, results and guarantees.
 - [C API](docs/C_API.md): ownership, errors, threading and typed calls.
+- [Typed Hero API](docs/HERO.md): direction/species enums, sensing, inventory and workshop completion.
 - [TypeScript and MCP](docs/TYPESCRIPT.md): clients, decisions and uncertainty.
 - [WebAssembly](docs/WASM.md): building, browser example and storage guarantees.
 - [Distributions](docs/DISTRIBUTION.md): checked native/npm/source previews,

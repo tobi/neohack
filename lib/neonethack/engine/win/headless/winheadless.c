@@ -116,6 +116,7 @@ struct hl_cell {
     int tileidx, color256idx;
     int cmap, background_cmap; /* perceived symbols, never unseen terrain */
     int visible; /* engine sight, independent of remembered display glyphs */
+    int attitude; /* 0 unknown, 1 hostile, 2 peaceful, 3 tame: visible look facts */
     int appearance; /* displayed monster type, never a hidden monster lookup */
     int dirty;
 };
@@ -158,6 +159,19 @@ headless_flush(void)
             int visible = cansee(x, y) ? 1 : 0;
             int appearance = (!Hallucination && glyph_is_monster(c->glyph))
                                  ? glyph_to_mon(c->glyph) + 1 : 0;
+            int attitude = 0;
+            struct monst *seen = m_at(x, y);
+            /* Match look's non-hallucinatory, spotted monster information.
+             * Disguises, hidden creatures, and remembered glyphs disclose none. */
+            if (visible && appearance && !u.uswallow && seen
+                && canspotmon(seen) && !seen->mundetected
+                && seen->m_ap_type == M_AP_NOTHING
+                && !(x == u.ux && y == u.uy))
+                attitude = seen->mtame ? 3 : seen->mpeaceful ? 2 : 1;
+            if (c->attitude != attitude) {
+                c->attitude = attitude;
+                c->dirty = hl_map_dirty = 1;
+            }
             /* The stock optional background glyph deliberately omits room
              * floor. An object first seen on it therefore has no terrain
              * glyph for a layered client. Render the visible base explicitly,
@@ -212,6 +226,10 @@ headless_flush(void)
             jb_bool(&cells, glyph_is_object(c->glyph) && glyph_to_obj(c->glyph) == BOULDER);
             jb_key(&cells, "visible");
             jb_bool(&cells, c->visible);
+            if (c->attitude) {
+                jb_key(&cells, "attitude");
+                jb_str(&cells, c->attitude == 3 ? "tame" : c->attitude == 2 ? "peaceful" : "hostile");
+            }
             if (c->appearance > 0 && c->appearance <= NUMMONS) {
                 jb_key(&cells, "appearance");
                 jb_str(&cells, mons[c->appearance - 1].pmnames[NEUTRAL]);

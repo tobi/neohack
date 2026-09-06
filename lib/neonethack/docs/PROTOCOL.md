@@ -409,3 +409,18 @@ fresh snapshot. Do not manufacture a new action ID to recover. The exported
 `CompactObservationReader` from `neonethack/webmcp` or `neonethack/mcp` materializes
 observations and rejects a delta without its baseline. It does not authorize
 input, auto-answer warnings, or reconstruct neighborhood offers.
+
+### Perceived attitude and normalized hunger
+
+`observation.world[].occupant.attitude` is optional: `hostile`, `peaceful`, or
+`tame`. The shared headless engine discloses it only for a currently visible,
+spotted, undisguised creature while not hallucinating or swallowed. Omission means
+unknown, not hostile. Remembered glyphs and hidden monsters disclose no attitude.
+Like appearance, this is a boundary observation rather than persistent identity.
+
+The C semantic driver strips terminal padding from hunger/burden words. A received
+blank hunger status means `not_hungry`, as displayed by the engine; an absent
+status remains unknown. Clients must not derive numerical nutrition from it.
+
+The [Hero facade](HERO.md) uses these public observations and existing named
+operations; it does not extend the request protocol or infer item identities.
