@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,cp,readFile,writeFile,mkdir} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {resolve,extname} from 'node:path';
-import {chromium} from '../../../example/pixel-bun/node_modules/playwright-core/index.mjs';
+import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
 import {stage,restore,root} from '../scripts/runtime-package.mjs';
 import {compileIdentity} from '../../../lib/neonethack/scripts/wasm-inputs.mjs';
 import {compiled} from '../../../lib/neonethack/scripts/check-package.mjs';
@@ -21,7 +21,7 @@ test('hosted packages reuse verified compiler bytes and new current preserves bo
   t.after(async()=>{await browser?.close(); if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));} await rm(temp,{recursive:true,force:true});});
   const site=`${temp}/site`, packages=`${site}/runtime/wasm`, cache=`${temp}/cache`, original=`${root}/lib/neonethack/dist/wasm`;
   await mkdir(`${site}/runtime`,{recursive:true});
-  await cp(`${root}/example/pixel-bun/public`,site,{recursive:true});
+  await cp(`${root}/web/neohack.dev/public`,site,{recursive:true});
   await cp(`${root}/lib/neonethack/dist/typescript`,`${site}/runtime/typescript`,{recursive:true});
   await cp(`${root}/lib/neonethack/dist/mcp`,`${site}/runtime/mcp`,{recursive:true});
   await cp(`${root}/lib/neonethack/dist/protocol`,`${site}/runtime/protocol`,{recursive:true});

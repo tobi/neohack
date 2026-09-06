@@ -4,13 +4,21 @@
   "type": "module",
   "scripts": {
     "stage": "node scripts/stage.mjs",
-    "deploy": "node scripts/stage.mjs && vercel deploy --yes --prod=false"
+    "deploy": "node scripts/stage.mjs && vercel deploy --yes --prod",
+    "test": "node scripts/stage.mjs && node --test tests/*.test.mjs",
+    "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@vercel/blob": "^2.0.0"
+    "@vercel/blob": "^2.8.0",
+    "@simplewebauthn/server": "^14.0.1"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
+    "@vercel/routing-utils": "^6.5.0",
+    "typescript": "^5.9.3",
     "vercel": "^50.0.1"
+  },
+  "engines": {
+    "node": "24.x"
   }
 }

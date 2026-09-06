@@ -35,10 +35,10 @@ C pre-input `fsync` boundaries still wait for strict IndexedDB transactions.
 Remote latency is outside that boundary. After a completed protocol request, a
 five-second inactivity debounce batches the latest committed journal data for upload. One upload
 runs at a time; new input can continue while it is in flight. Unchanged
-content-addressed blocks are not resent. Durable Objects store blocks in separate
-rows and atomically commit the file manifest and revision. Separate block rows
-also avoid putting the entire journal into one SQLite row, which has a
-[2 MB limit](https://developers.cloudflare.com/durable-objects/platform/limits/).
+content-addressed blocks are not resent. Vercel stores immutable blocks separately
+in private Blob storage and conditionally commits the file manifest, exact request
+digest and revision using its ETag. A stale writer cannot replace newer progress.
+Upload requests are bounded to fit Vercel Functions' payload limit.
 
 Each upload has a durable commit ID and base revision. Network retries send the
 same immutable upload. The server accepts an identical retry, rejects a changed
@@ -70,6 +70,6 @@ this trace to one approximately 24 KB upload; searches took 20–24 ms with the
 same latency. These are local Chromium measurements, not production latency
 claims.
 
-`hosting/cloudflare/tests/cloud.test.mjs` uses actual local Durable Objects and
+`hosting/vercel/tests/cloud.test.mjs` runs the actual Vercel handlers with an isolated conditional-write store and
 sandboxed Chromium to check atomic commits, stale writers, a held server
 acknowledgement, fresh-browser C resumption and lost-acknowledgement recovery.

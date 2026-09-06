@@ -1,14 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
-import { createTestHarness } from '../node_modules/wrangler/wrangler-dist/cli.js';
-import { chromium } from '../../../example/pixel-bun/node_modules/playwright-core/index.mjs';
+import { createTestHarness } from './server.mjs';
+import { chromium } from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
 
 async function fixture(t) {
   const root = resolve(import.meta.dirname, '..');
-  // Run the actual Wrangler config in its isolated test runtime. The dev CLI's
-  // inspector/logging process can exit while a test holds a response open.
-  const server = createTestHarness({root, workers:[{configPath:'wrangler.toml'}]});
+  const server = createTestHarness();
   let browser;
   t.after(async()=>{try {await browser?.close();} finally {await server.close();}});
   const {url} = await server.listen();
@@ -31,7 +29,7 @@ async function create(page, url) {
 const snapshot = page => page.evaluate(() => document.querySelector('pixel-nethack').snapshot);
 const synced = async page => {try {await page.waitForFunction(() => document.querySelector('#cloud-status').textContent === 'Saved online');} catch(error) {throw Error((await page.locator('#cloud-status').textContent()) + ' / ' + (await page.locator('#error').textContent()),{cause:error});}};
 
-test('DO commits are atomic, retry-idempotent and reject stale writers', { timeout: 30000 }, async t => {
+test('Cloud journal commits are atomic, retry-idempotent and reject stale writers', { timeout: 30000 }, async t => {
   const { url } = await fixture(t);
   const endpoint = `${url}/api/vaults/${crypto.randomUUID()}`;
   const commit = { version: 1, base: null, commit: crypto.randomUUID(), files: [], blocks: [] };

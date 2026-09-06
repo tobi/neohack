@@ -4,10 +4,10 @@ setDefaultResultOrder('ipv4first');
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {resolve} from 'node:path';
-import {createTestHarness} from '../node_modules/wrangler/wrangler-dist/cli.js';
-import {chromium} from '../../../example/pixel-bun/node_modules/playwright-core/index.mjs';
+import { createTestHarness } from './server.mjs';
+import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
 async function fixture(t,{insecure=false}={}){
- const server=createTestHarness({root:resolve(import.meta.dirname,'..'),workers:[{configPath:'wrangler.toml'}]});
+ const server=createTestHarness();
  const {url}=await server.listen();
  const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true,args:insecure?['--host-resolver-rules=MAP workshop-preview.test 127.0.0.1','--no-proxy-server']:[]});
  t.after(async()=>{await browser.close();await server.close();});

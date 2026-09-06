@@ -6,7 +6,7 @@ import { sourceState, sha256 } from '../../../lib/neonethack/scripts/source-file
 import { compiled, notices, workers, checkCompiled } from '../../../lib/neonethack/scripts/check-package.mjs';
 export const root = resolve(import.meta.dirname, '../../..');
 const dist = `${root}/lib/neonethack/dist/wasm`;
-const cache = `${root}/hosting/cloudflare/.runtime-cache`;
+const cache = `${root}/hosting/vercel/.runtime-cache`;
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 export function validateRegistry(registry) {
   if (registry.version !== 1 || !registry.builds || !registry.packages ||
@@ -30,7 +30,7 @@ export async function restore(base, directory = dist, cacheDirectory = cache) {
   const registry = raw ? validateRegistry(JSON.parse(new TextDecoder().decode(raw))) : {version:1,builds:{},packages:{}};
   await rm(cacheDirectory, {recursive:true,force:true}); await mkdir(cacheDirectory,{recursive:true});
   // Retain published immutable packages in the next deployment's asset manifest.
-  // Wrangler's asset hash negotiation uploads only missing contents.
+  // Vercel's asset hash negotiation uploads only missing contents.
   const downloaded = new Map();
   for (const [id, manifest] of Object.entries(registry.packages)) {
     const target = `${cacheDirectory}/${id}`; await mkdir(target,{recursive:true});

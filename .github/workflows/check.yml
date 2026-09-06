@@ -67,13 +67,14 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
-      - name: Pixel example and seeded dungeon renderer
+      - name: Web UI, Vercel services and seeded dungeon renderer
         run: |
-          bun install --frozen-lockfile --cwd example/pixel-bun
-          bun run --cwd example/pixel-bun build
-          bun install --frozen-lockfile --cwd hosting/cloudflare
-          CHROMIUM="$(command -v google-chrome)" npm test --prefix hosting/cloudflare
-          CHROMIUM="$(command -v google-chrome)" bun run --cwd example/pixel-bun test
+          bun install --frozen-lockfile --cwd web/neohack.dev
+          bun run --cwd web/neohack.dev build
+          bun install --frozen-lockfile --cwd hosting/vercel
+          npm run --prefix hosting/vercel check
+          CHROMIUM="$(command -v google-chrome)" npm test --prefix hosting/vercel
+          CHROMIUM="$(command -v google-chrome)" bun run --cwd web/neohack.dev test
       - name: Build checked source/native/npm previews with embedded source
         run: |
           CHROMIUM="$(command -v google-chrome)" npm run --prefix lib/neonethack package:preview -- "$RUNNER_TEMP/distribution"
