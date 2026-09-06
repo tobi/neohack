@@ -561,6 +561,11 @@ around the map, buttons or character cards. Preserve keyboard operation.
 
 ## Welcome page paths
 
+On desktop, align the welcome heading and GitHub link with the game menu, below
+the account rail. Reserve space for the menu's 44px target. Only the content
+beneath this heading scrolls, keeping navigation clear of the scrollbar. On
+phones, retain the stacked welcome content and a single page scroll.
+
 The title is also the library’s frontpage. Keep the playable courtyard and its
 walk-in entrance. Beside it on desktop, show three cards: Play the classic,
 Play with WebMCP (link the agent-browser walkthrough), and build with the library.
