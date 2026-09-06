@@ -45,20 +45,18 @@ prerequisites, CMake/Ninja recipes and the public APIs.
   [visual design](example/pixel-bun/DESIGN.md) covers raised walls, seeded variety,
   accessible controls and the boundary between decoration and game knowledge.
 
-## Release status and licensing
+## Play with an agent
 
-Checked local previews build matching source/native/npm archives and audit fresh
-consumers and source rebuilds. They are **not publication approval**. The owner
-must approve code licensing, art redistribution, the exact public source/history
-and remote CI before publication. The pixel client's
-[art terms](example/pixel-bun/art/ATTRIBUTION.md) are separate from the library;
-its restricted sprites are not included in the library preview archives.
-See [distribution and release gates](lib/neonethack/docs/DISTRIBUTION.md).
+The pixel client exposes game tools through browser-native WebMCP. Follow the
+[agent-browser walkthrough](lib/neonethack/docs/AGENT_BROWSER.md) to create a game,
+play from perceived observations and resume saved adventures.
 
-NetHack retains its [original license](lib/neonethack/engine/dat/license).
-A license for the new standalone project code must be chosen before publication;
-see [notices](lib/neonethack/NOTICE.md). Development saves are not migration
-fixtures or release artifacts; never publish player stores.
+## Distributions and notices
+
+Build matching source/native/npm archives with the
+[checked preview workflow](lib/neonethack/docs/DISTRIBUTION.md).
+See [project and dependency notices](lib/neonethack/NOTICE.md) and the pixel
+client's [art attribution](example/pixel-bun/art/ATTRIBUTION.md).
 
 ## Development
 

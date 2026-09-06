@@ -4,7 +4,6 @@ Fresh library-first repository. The supported implementation lives entirely in
 `lib/neonethack/`; `examples/` and `example/pixel-bun/` are clients of its public
 API. Do not restore the old Bun server, UI, generic public `act` tool or retired
 JS semantic adapter.
-Legacy services are retired; do not recreate their local runtime aliases.
 
 ## Development compatibility
 
@@ -56,10 +55,8 @@ to make a test pass. Native C calls must not change the host's signal handlers.
   dependencies or generated build output as source. Release binaries are separate
   artifacts accompanied by licenses and matching source.
 - NetHack notices and base attribution remain intact. Its NGPL obligations apply
-  to derivatives. Publication/own-code licensing needs owner approval.
-- This work prepares `tobi/neonethack`; do not push or change visibility without
+  to derivatives. See `lib/neonethack/NOTICE.md` for project and dependency terms.
+- Do not push or change visibility without
   an explicit request. No commits are implied by passing local tests.
 - Existing local sessions are not migration fixtures. Test with new temporary
   stores only. Public distribution guidance is `lib/neonethack/docs/DISTRIBUTION.md`.
-  During release preparation an ignored local `lib/neonethack/PLAN.md` may hold
-  agent checkpoints, workstation paths and service bookkeeping. Never publish it.

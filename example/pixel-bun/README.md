@@ -21,7 +21,7 @@ bun run --cwd example/pixel-bun start
 
 Open http://127.0.0.1:3333. `PORT` changes the port. The server binds to loopback,
 serves only `public/` and the library's `dist/` under `/runtime/`, and has no
-upload/action/session endpoints. Do not serve the repository or skill directory.
+upload/action/session endpoints. Serve only these public runtime assets.
 The client typechecks against the public library declarations. At runtime it
 imports the public `client.js` and `wasm.js` modules, keeping the WASM package
 together. The renderer knows presentation, never collision, identity or combat.
@@ -33,25 +33,9 @@ or remote hostname is not a secure browser context: Web Locks are unavailable
 and the game cannot safely open persistent saves. For an embedded preview, the
 outer page must also be secure; opening the game's secure URL in a new tab can help.
 
-For a remote preview, use Tailscale Serve on its own HTTPS port:
-
-```sh
-tailscale serve --bg --https=3333 3333
-```
-
-Open the HTTPS URL printed by Tailscale from a device on your tailnet. This keeps
-the game on a dedicated port alongside other previews. To remove this route,
-run `tailscale serve --https=3333 off`.
-
-Alternatively, forward the port from your browser's computer:
-
-```sh
-ssh -N -L 3333:127.0.0.1:3333 user@server
-```
-
-Then open http://127.0.0.1:3333 on that computer. Use a current browser with site
-storage allowed. Saves belong to the exact browser origin, so changing the
-hostname, scheme or port opens a separate save collection.
+Configure an HTTPS reverse proxy for remote access. Saves belong to the exact
+browser origin: changing the hostname, scheme or port opens a separate save
+collection. Use a current browser with site storage allowed.
 
 ## The visual workshop
 
@@ -71,8 +55,8 @@ repeatability checks. Generated art stays under ignored `test-results/`.
 
 Walk the traveler into the entrance hall with the overlaid arrows, keyboard or
 Begin button. Then choose a name and one of all thirteen NetHack starting classes.
-Valkyrie, Wizard and Ranger use the original fantasy-art pilot; the remaining
-classes retain their individually illustrated prototype art.
+All thirteen classes use the same native 16×32 character scale. Valkyrie, Wizard
+and Ranger use their default character selections.
 The courtyard is a separate tutorial: it creates no engine session or turns. An optional seed
 is available. Tap an arrow key or direction button for one step; hold to walk.
 The first step is immediate, repetition starts after 240 ms and continues at up
@@ -94,8 +78,8 @@ Door results and other short messages appear in temporary action bubbles on the
 map. A completed silent search shows “You search nearby.”; discoveries use the
 engine's actual messages. The journal retains feedback without repeating the
 entire message history each turn. Warnings still require explicit decisions.
-Pixel illustrations represent visible creature and item categories. The @ map
-button restores NetHack symbols; inspection and the text map always retain them.
+Pixel illustrations represent visible creature and item categories. The Art/Symbols map
+button switches between illustrations and NetHack symbols; inspection and the text map always retain them.
 Corridors have connected stone shoulders with recessed openings at unknown edges.
 The traveler uses authored four-direction idle/walk clips, faces observed movement,
 and respects reduced motion. These animations never submit game inputs.
@@ -139,17 +123,12 @@ a warning across abrupt reload, ownership exclusion,
 static-server boundaries and desktop/mobile screenshots. Generated screenshots
 live in ignored `test-results/`. No saved user games are test fixtures.
 
-## Release status
+## Credits
 
-This is a private local preview toward a free-to-play revival. The app and library
-remain private; this example does not publish, upload, or grant a new license.
-Read [art/ATTRIBUTION.md](art/ATTRIBUTION.md) for the precise sprite provenance and
-remaining art distribution decisions. A free game is not automatically an open
-asset pack. NetHack's notices and NGPL obligations remain in effect. The project
-owner must approve licensing and publication under the library's
-[distribution guidance](../../lib/neonethack/docs/DISTRIBUTION.md).
+See [art attribution](art/ATTRIBUTION.md) for sprite sources and terms, and
+[NetHack and dependency notices](../../lib/neonethack/NOTICE.md).
 
-### Development saves
+## Development saves
 
 Only the current package under `/runtime/wasm/` is supported. Builds replace it;
 there are no package archives, legacy loaders or save migrations. Old development
@@ -163,6 +142,8 @@ preserve exact receipts and standing decisions.
 The map fills the viewport. Health and conditions remain visible; backpack,
 surroundings and journal open on demand. The corner menu holds saved adventures,
 help, map controls, the text map, fullscreen mode and credits.
+
+For a runnable agent walkthrough, see [Play with agent-browser and WebMCP](../../lib/neonethack/docs/AGENT_BROWSER.md).
 
 Every MCP tool is also registered through native WebMCP when the browser supports
 it. Agent actions use the same durable engine and update the visible HUD. See the

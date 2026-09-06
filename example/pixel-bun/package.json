@@ -8,9 +8,7 @@
     "start": "bun server.ts",
     "art:render": "bun scripts/render-dungeon.ts",
     "test": "bun run build && node --test tests/*.test.mjs",
-    "art:characters": "node scripts/build-characters.mjs",
-    "art:original": "node scripts/build-original-heroes.mjs",
-    "art:original:import": "node scripts/import-original-heroes.mjs"
+    "art:characters": "node scripts/build-characters.mjs"
   },
   "devDependencies": {
     "@types/bun": "1.3.9",

@@ -1,9 +1,7 @@
 # Contributing to neonethack
 
-This is an unpublished alpha. Publication and the license for independently
-owned project code still require owner approval; see the
-[release gates](lib/neonethack/docs/DISTRIBUTION.md). These contribution
-instructions do not grant a license or resolve third-party asset rights.
+neonethack is an alpha. Keep changes focused and include a reproduction and
+relevant test results.
 
 ## Start here
 
@@ -13,7 +11,6 @@ instructions do not grant a license or resolve third-party asset rights.
 - [AGENTS.md](AGENTS.md) — repository boundaries and source hygiene.
 - [Security](SECURITY.md) — trust boundaries and private reporting.
 
-Keep changes focused and describe the behavior, reproduction and checks run.
 Use fresh temporary game stores in tests, never player histories. Do not attach
 private journals, engine pins, credentials or recordings to an issue or patch.
 
@@ -73,6 +70,5 @@ and review of `engine/SOURCES.json`. Do not bundle dependencies, SDK installatio
 generated build/test output or local checkpoints as source.
 
 CI uses read-only permissions and commit-pinned actions. Review upstream changes
-before updating their hashes; keep dependency lockfiles in sync. There is no
-publishing workflow. No passing check authorizes a push, tag, upload, visibility
-change or license grant.
+before updating their hashes; keep dependency lockfiles in sync. The workflow builds
+and audits preview archives; publishing is a separate step.

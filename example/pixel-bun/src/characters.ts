@@ -5,7 +5,6 @@ export const roles: {
   title: string;
   description: string;
   art: string;
-  frameWidth?: number;
   identity: Identity;
 }[] = [
   {
@@ -13,8 +12,7 @@ export const roles: {
     title: "The Valkyrie",
     description:
       "A sturdy first step. A shield, a sword, and a little courage.",
-    art: "valkyrie-original",
-    frameWidth: 24,
+    art: "valkyrie",
     identity: {
       role: "valkyrie",
       race: "human",
@@ -26,8 +24,7 @@ export const roles: {
     id: "wizard",
     title: "The Wizard",
     description: "For the curious. Books, magic, and wonderfully risky ideas.",
-    art: "wizard-original",
-    frameWidth: 24,
+    art: "wizard",
     identity: {
       role: "wizard",
       race: "human",
@@ -39,8 +36,7 @@ export const roles: {
     id: "ranger",
     title: "The Ranger",
     description: "Travel light. A bow, keen eyes, and a path of your own.",
-    art: "ranger-original",
-    frameWidth: 24,
+    art: "ranger",
     identity: {
       role: "ranger",
       race: "elf",
@@ -171,10 +167,5 @@ export const roles: {
 ];
 
 export function heroArt(role?: string): string {
-  return roles.find((entry) => entry.id === role)?.art ?? "valkyrie-original";
-}
-
-/** Art geometry only; the engine ground grid remains 16x16. */
-export function heroFrameWidth(art: string): number {
-  return roles.find((entry) => entry.art === art)?.frameWidth ?? 16;
+  return roles.find((entry) => entry.id === role)?.art ?? "valkyrie";
 }

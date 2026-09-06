@@ -503,12 +503,12 @@ test("perception-only corridor and sprite study: directions, loot and static red
       you: { x: 10, y: 5 },
       world,
     };
-    map.update(observation, "valkyrie-original", "study:42");
+    map.update(observation, "valkyrie", "study:42");
     const facing = [],
       images = [],
       matchingArt = [];
     const source = new Image();
-    for (const hero of ["valkyrie-original", "wizard-original", "ranger-original"]) {
+    for (const hero of ["valkyrie", "wizard", "ranger"]) {
     map.update(observation, hero, "study:42");
     source.src = `/art/${hero}-motion.png`;
     await source.decode();
@@ -528,33 +528,33 @@ test("perception-only corridor and sprite study: directions, loot and static red
       );
       facing.push(canvas.dataset.facing);
       const sheet = document.createElement("canvas");
-      sheet.width = 24;
+      sheet.width = 16;
       sheet.height = 32;
       sheet
         .getContext("2d")
         .drawImage(
           canvas,
-          Math.floor(canvas.width / 32) * 16 - 4,
+          Math.floor(canvas.width / 32) * 16,
           Math.floor(canvas.height / 32) * 16 - 16,
-          24,
+          16,
           32,
           0,
           0,
-          24,
+          16,
           32,
         );
       images.push(sheet.toDataURL());
       // Independently audited source order: right, up, left, down.
       // Check opaque face pixels, not merely the renderer's direction label.
       const expected = document.createElement("canvas");
-      expected.width = 24;
+      expected.width = 16;
       expected.height = 32;
       const group = dx < 0 ? 2 : dx > 0 ? 0 : dy < 0 ? 1 : 3;
       expected
         .getContext("2d")
-        .drawImage(source, group * 144, 0, 24, 32, 0, 0, 24, 32);
-      const pixels = expected.getContext("2d").getImageData(0, 0, 24, 32).data;
-      const actual = sheet.getContext("2d").getImageData(0, 0, 24, 32).data;
+        .drawImage(source, group * 96, 0, 16, 32, 0, 0, 16, 32);
+      const pixels = expected.getContext("2d").getImageData(0, 0, 16, 32).data;
+      const actual = sheet.getContext("2d").getImageData(0, 0, 16, 32).data;
       matchingArt.push(
         pixels.every(
           (v, i) =>
@@ -563,12 +563,12 @@ test("perception-only corridor and sprite study: directions, loot and static red
       );
     }
     }
-    source.src = "/art/valkyrie-original-motion.png";
+    source.src = "/art/valkyrie-motion.png";
     await source.decode();
     const boulder = world.find((cell) => cell.x === 6 && cell.y === 2);
     boulder.objects = [{ mark: "`", color: 7 }];
     // Render-only overlap fixture: a tall rock in front of the north wall.
-    map.update(observation, "valkyrie-original", "study:42");
+    map.update(observation, "valkyrie", "study:42");
     const rockPixel = (dx, dy) => [
       ...canvas
         .getContext("2d")
@@ -584,19 +584,19 @@ test("perception-only corridor and sprite study: directions, loot and static red
     const ordered = canvas.toDataURL();
     map.update(
       { ...observation, world: [...world].reverse() },
-      "valkyrie-original",
+      "valkyrie",
       "study:42",
     );
     const inputOrderStable = canvas.toDataURL() === ordered;
     // Mobile actors remain above the ground-object pass.
-    map.update({ ...observation, you: { x: 6, y: 1 } }, "valkyrie-original", "study:42");
+    map.update({ ...observation, you: { x: 6, y: 1 } }, "valkyrie", "study:42");
     const crownOverActor = rockPixel(6, -3);
     const sourceCanvas = document.createElement("canvas");
     sourceCanvas.width = source.width; sourceCanvas.height = source.height;
     const sourceContext = sourceCanvas.getContext("2d");
     sourceContext.drawImage(source, 0, 0);
-    const expectedActor = [...sourceContext.getImageData(3 * 144 + 10, 29, 1, 1).data];
-    map.update(observation, "valkyrie-original", "study:42");
+    const expectedActor = [...sourceContext.getImageData(3 * 96 + 6, 29, 1, 1).data];
+    map.update(observation, "valkyrie", "study:42");
     map.destroy();
     return {
       facing,
@@ -777,7 +777,7 @@ test(
     await competitor.locator("#error").waitFor({ state: "visible" });
     assert.match(
       await competitor.locator("#error").textContent(),
-      /owns this WASM store/i,
+      /open in another tab/i,
     );
     assert.equal(
       await snapshot(competitor),
@@ -838,7 +838,7 @@ test(
     for (const role of ["valkyrie", "wizard", "ranger", "archeologist", "barbarian", "caveman", "healer", "knight", "monk", "priest", "rogue", "samurai", "tourist"]) {
       const { page, errors } = await fixture(t);
       await create(page, role, 42);
-      const art = ["valkyrie", "wizard", "ranger"].includes(role) ? `${role}-original` : role;
+      const art = role;
       assert.ok((await page.locator("#portrait").getAttribute("src")).endsWith(`/art/${art}.png`));
       assert.equal(await page.evaluate(() => document.querySelector("pixel-nethack").map.hero), art);
       const state = await snapshot(page);
@@ -963,7 +963,7 @@ test(
   { timeout: 30000 },
   async (t) => {
     const { url, page, requests } = await fixture(t);
-    const heroes = ["archeologist", "barbarian", "caveman", "healer", "knight", "monk", "priest", "rogue", "samurai", "tourist", "valkyrie-original", "wizard-original", "ranger-original"];
+    const heroes = ["archeologist", "barbarian", "caveman", "healer", "knight", "monk", "priest", "rogue", "samurai", "tourist", "valkyrie", "wizard", "ranger"];
     const art = [
       "/art/bat.png", "/art/cat.png", "/art/dog.png",
       ...heroes.flatMap(name => [`/art/${name}.png`, `/art/${name}-motion.png`]),
@@ -1110,7 +1110,7 @@ test(
         true;
       map.update(
         current,
-        "valkyrie-original",
+        "valkyrie",
         `${app.current.seed}:${current.location.id}`,
       );
       const lit = sample();
@@ -1860,10 +1860,10 @@ test("early creatures stay small beside the hero and known appearances clear que
     };
     map.update({ ...observation, world: world.map(cell =>
       cell.y === 3 ? { ...cell, occupant: undefined } : cell)
-    }, "valkyrie-original", "creatures:42");
+    }, "valkyrie", "creatures:42");
     const context = canvas.getContext("2d");
     const before = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    map.update(observation, "valkyrie-original", "creatures:42");
+    map.update(observation, "valkyrie", "creatures:42");
     const after = context.getImageData(0, 0, canvas.width, canvas.height).data;
     const sizes = species.map((name, i) => {
       const ox = (2 + i * 2 - map.origin.x) * 16;
@@ -1987,7 +1987,7 @@ test(
         you: { x: 6, y: 6 },
         world,
       });
-      map.update(observation(beforeWorld), "valkyrie-original", "motion:42");
+      map.update(observation(beforeWorld), "valkyrie", "motion:42");
 
       const afterWorld = makeWorld();
       at(afterWorld, 5, 4).occupant = structuredClone(
@@ -2010,7 +2010,7 @@ test(
       at(afterWorld, 7, 7).occupant = structuredClone(
         at(beforeWorld, 10, 7).occupant,
       );
-      map.update(observation(afterWorld), "valkyrie-original", "motion:42");
+      map.update(observation(afterWorld), "valkyrie", "motion:42");
       const keys = [...map.actorMotions.keys()];
       const started = map.actorMotions.get("5,4").started;
       const petCell = at(afterWorld, 5, 4);
@@ -2050,11 +2050,11 @@ test(
         world,
       });
       firstWorld[0].occupant = { kind: "ally", mark: "d", color: 3 };
-      map.update(frame(firstWorld), "valkyrie-original", "reduced:42");
+      map.update(frame(firstWorld), "valkyrie", "reduced:42");
       const secondWorld = structuredClone(firstWorld);
       delete secondWorld[0].occupant;
       secondWorld[1].occupant = { kind: "ally", mark: "d", color: 3 };
-      map.update(frame(secondWorld), "valkyrie-original", "reduced:42");
+      map.update(frame(secondWorld), "valkyrie", "reduced:42");
       const count = map.actorMotions.size;
       map.destroy();
       host.remove();
@@ -2297,11 +2297,11 @@ test("twelve additional encounters have distinct small art and preserve unknown 
     const results = [];
     for (const [appearance, mark] of encounters) {
       delete target.occupant;
-      map.update(observation, "valkyrie-original", "encounters:42");
+      map.update(observation, "valkyrie", "encounters:42");
       const empty = crop(true);
       // Same known category/color, only the public apparent species differs.
       target.occupant = { kind: "creature", mark, appearance: "unpictured creature", color: 3 };
-      map.update(observation, "valkyrie-original", "encounters:42");
+      map.update(observation, "valkyrie", "encounters:42");
       const fallback = crop();
       target.occupant.appearance = appearance; map.draw();
       const art = crop();
@@ -2479,4 +2479,102 @@ test("removing the client during runtime opening closes the late store owner", {
   await peer.goto(url);
   await create(peer);
   assert.equal((await snapshot(peer)).observation.turn, 1, "another client can acquire the store");
+});
+
+test("idle WebMCP discovery and closed adventures release storage for another tab", { timeout: 60000 }, async t => {
+  const { page, context, url, errors } = await fixture(t, { webmcp: true });
+  await page.waitForFunction(() => document.querySelector("pixel-nethack").dataset.webmcp === "ready");
+  const call = (method, args = {}) => page.evaluate(async ({ method, args }) =>
+    JSON.parse(await navigator.modelContextTesting.executeTool(
+      `neonethack_${method.replaceAll(".", "_")}`, JSON.stringify(args))), { method, args });
+  const owned = () => page.evaluate(async () => (await navigator.locks.query()).held.some(lock => lock.name === "neonethack:v1:neonethack-pixel-bun-v1"));
+  assert.equal((await call("protocol.describe")).isError, false);
+  assert.equal(await owned(), false, "discovery must not leave a title worker owning the store");
+  // Exercise the C rejection through the client transport directly: the native
+  // WebMCP schema validator can reject malformed input before opening storage.
+  const rejected = await page.evaluate(() => document.querySelector("pixel-nethack").webRequest({
+    version: 1, method: "session.create", params: { unexpected: true },
+  }));
+  assert.ok(rejected.error);
+  assert.equal(await owned(), false, "a rejected start must not keep an idle owner either");
+  const created = await call("session.create", { name: "Agent", role: "valkyrie", seed: 42 });
+  assert.equal(created.isError, false);
+  const sid = created.structuredContent.sessionId;
+  const warning = await call("game.pray", { sessionId: sid, expectedRevision: created.structuredContent.revision, requestId: "owner-warning" });
+  assert.equal(warning.isError, false);
+  assert.equal(warning.structuredContent.decision.kind, "confirmation");
+  assert.equal((await call("session.close", { sessionId: sid })).isError, false);
+  assert.equal(await snapshot(page), null);
+  assert.equal(await owned(), false, "closing an agent adventure must release its worker's store lock");
+  const peer = await context.newPage();
+  await peer.goto(url);
+  await peer.getByRole("button", { name: /^Continue previous run/ }).click();
+  await peer.locator("#decision[open]").waitFor();
+  await ready(peer);
+  assert.equal((await snapshot(peer)).sessionId, sid);
+  assert.deepEqual((await snapshot(peer)).decision, warning.structuredContent.decision);
+  assert.deepEqual((await snapshot(peer)).observation, warning.structuredContent.observation);
+  assert.deepEqual(errors, []);
+});
+
+test("illustrated dogs remain sprites and focus feedback has no map rectangle", { timeout: 30000 }, async t => {
+  const { page } = await fixture(t);
+  await create(page);
+  const dog = await page.evaluate(() => {
+    const app = document.querySelector("pixel-nethack"), map = app.map;
+    const c = document.querySelector("#dungeon").getContext("2d");
+    const images = [], letters = [];
+    const draw = c.drawImage.bind(c), text = c.fillText.bind(c);
+    c.drawImage = (...args) => { images.push(args[0].src ?? ""); return draw(...args); };
+    c.fillText = (...args) => { letters.push(args[0]); return text(...args); };
+    const you = app.snapshot.observation.you;
+    // Presentation fixture: a currently perceived canine, independent of which
+    // pet a generated world chooses. No game request or saved state is changed.
+    const world = app.snapshot.observation.world.filter(cell => cell.x !== you.x + 1 || cell.y !== you.y);
+    world.push({ x: you.x + 1, y: you.y, visible: true, terrain: { type: "floor", knowledge: "remembered" }, occupant: { kind: "ally", mark: "d", color: 3, appearance: "little dog" } });
+    map.update({ ...app.snapshot.observation, world }, "valkyrie", "dog-art");
+    const result = { dogDrawn: images.some(src => src.endsWith('/art/dog.png')), letterDrawn: letters.includes('d'), symbols: map.symbols };
+    c.drawImage = draw; c.fillText = text;
+    return result;
+  });
+  assert.deepEqual(dog, { dogDrawn: true, letterDrawn: false, symbols: false });
+  await page.locator("#dungeon").focus();
+  assert.equal(await page.locator("#dungeon").evaluate(el => getComputedStyle(el).outlineStyle), "none");
+  await page.locator(".hud-menu > summary").click();
+  const mode = page.getByRole("button", { name: "Show NetHack symbols", exact: true });
+  assert.equal(await mode.textContent(), "Art");
+  await mode.click();
+  const art = page.getByRole("button", { name: "Show illustrated map", exact: true });
+  assert.equal(await art.textContent(), "Symbols");
+  await art.focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(await art.evaluate(el => getComputedStyle(el).outlineStyle), "none");
+  assert.ok(await art.evaluate(el => getComputedStyle(el).textDecorationLine.includes("underline")));
+  await art.click();
+  assert.equal(await page.evaluate(() => document.querySelector("pixel-nethack").map.symbols), false);
+  await page.screenshot({ path: `${root}/test-results/default-heroes-and-dog.png` });
+});
+
+test("welcome explains all three paths on desktop and mobile", { timeout: 60000 }, async (t) => {
+  const { page, errors } = await fixture(t);
+  const paths = page.locator('#welcome-paths');
+  assert.equal(await paths.locator('article').count(), 3);
+  assert.match(await paths.innerText(), /JSON protocol/);
+  assert.equal(await paths.getByRole('link', {name:'GitHub ↗', exact:true}).getAttribute('href'), 'https://github.com/tobi/neohack');
+  await page.waitForFunction(() => document.querySelector('#package-status').textContent.includes('Game downloaded'));
+  const world = await page.locator('.map-viewport').boundingBox();
+  const rail = await paths.boundingBox();
+  assert.ok(world.x + world.width <= rail.x);
+  await page.screenshot({path: `${root}/test-results/welcome-paths-desktop.png`});
+  await page.setViewportSize({width:390,height:844});
+  await paths.getByRole('heading', {name:'Play with WebMCP'}).scrollIntoViewIfNeeded();
+  assert.ok(await paths.getByRole('heading', {name:'Play with WebMCP'}).isVisible());
+  assert.equal(await page.evaluate(() => document.querySelector('pixel-nethack').scrollWidth <= innerWidth), true);
+  await page.screenshot({path: `${root}/test-results/welcome-paths-mobile.png`});
+  await page.locator('#new-adventure').scrollIntoViewIfNeeded();
+  await page.setViewportSize({width:1440,height:1050});
+  await create(page);
+  assert.equal(await paths.isVisible(), false);
+  assert.deepEqual(errors, []);
 });

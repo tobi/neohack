@@ -9,7 +9,6 @@ Do not put exploit details, credentials, player journals or private engine pins
 in a public issue. Use the repository's **Security → Report a vulnerability**
 action when private reporting is enabled. If it is unavailable, ask the repository
 owner for a private reporting channel without disclosing the vulnerability.
-Before public launch, the owner must enable and verify that channel.
 
 Include the affected source revision/package identity, platform, minimal
 reproduction using a **new temporary store**, and expected versus actual behavior.
@@ -37,4 +36,4 @@ Do not send live player stores. Coordinate disclosure privately with the owner.
 See the [protocol](lib/neonethack/docs/PROTOCOL.md),
 [WASM storage contract](lib/neonethack/docs/WASM.md),
 [replay limits](lib/neonethack/docs/REPLAY.md) and
-[distribution gate](lib/neonethack/docs/DISTRIBUTION.md) for the exact guarantees.
+[distribution guide](lib/neonethack/docs/DISTRIBUTION.md) for the exact guarantees.

@@ -16,8 +16,8 @@ flat square tiles before we call it finished.
 - Fixed three-quarter pixel view. Bake 3D masonry with an oblique projection
   that preserves NetHack's square ground grid and eight directions. There is no
   perspective scaling or isometric input mapping.
-- World cells use a native 16×16 footprint. The original hero pilot uses 24×32 figures; the remaining
-  prototype classes use 16×32. Both have a stable bottom-center anchor. Display at integer scales; disable canvas smoothing.
+- World cells use a native 16×16 footprint. All characters use 16×32 figures
+  with a stable bottom-center (8,32) anchor. Display at integer scales; disable canvas smoothing.
 - **Walls have height.** Draw distinct top/cap planes, dark vertical faces,
   lighter upper edges, courses of masonry and a small ground-contact shadow.
   Corners, intersections, door jambs and narrow corridors must connect plausibly.
@@ -151,7 +151,7 @@ promise of a traversable route. No exterior
 wall cells, exits or hidden floor are fabricated. Corners and junctions follow the
 currently supplied neighbors and update as exploration reveals more.
 
-The remaining LimeZu prototype characters use six authored frames for each of
+The LimeZu characters use six authored frames for each of
 four idle and four walk clips, on a 16×32 canvas,
 with feet anchored at the bottom center of the player's actual tile. Walking plays
 once after an observed adjacent displacement; blocked actions do not animate a
@@ -223,22 +223,15 @@ handle a partially explored live map.
 - Optional animation must be presentation-only, slow and pausable. No movement
   loops that imply the game advanced while it did not.
 
-## Assets and release
+## Assets
 
-Use the pixel-art-interfaces skill and its assets with provenance. The user chose
-to keep only the finished-project exports actually used: two 16×32 UI portraits,
-two cropped idle/walk sheets, and three 16×16 creature portraits. Preserve the
-selected appearance; do not copy raw skill assets, editable creature templates,
-full vendor sheets, catalogs, pack archives, private tools or behavior metadata.
-Keep nonpixel export parameters in `art/recipe.json`, not public JSON sidecars.
-Exact terms and visible credit remain required. Original rendering code and
-layout recipes authored for this example stay editable beside it. Asset
-minimization is not redistribution permission or approval to publish old history.
+Keep the 29 runtime PNGs listed in `art/recipe.json`: thirteen character
+portrait/sheet pairs and three animal portraits. Keep the selected asset/layer
+identifiers and export parameters in the recipes and retain
+[art attribution](art/ATTRIBUTION.md). Full vendor sheets and local art tools
+are not project source.
 
-The desired product is a beautiful free-to-play revival. That is not a blanket
-asset redistribution license. NetHack attribution and NGPL terms remain intact;
-the owner must resolve independently owned code and art licensing before public
-release. No automatic deployment or publication is part of this implementation.
+Dungeon rendering code and layout recipes stay editable beside the example.
 
 ## Acceptance checks
 
@@ -411,47 +404,21 @@ cell, show a large Go upstairs/Go downstairs button centered at 70% viewport hei
 It uses that offer and revision and disappears while input is busy, uncertain, ended
 or awaiting a decision. Drawers and menus hide it to keep their controls clear.
 
-## Class roster and character study
+## Class roster and scale
 
 Character creation exposes all thirteen engine roles as fixed valid identity
-presets in `src/characters.ts`. That catalog also selects creation portraits,
-HUD portraits and live animation sheets. Art must never collapse every non-wizard
-back to a generic traveler. The title traveler now uses the original Ranger.
+presets in `src/characters.ts`. The catalog selects creation and HUD portraits
+and live animation sheets. All thirteen use the established 16×32 LimeZu scale
+over the 16×16 ground grid, with bottom-center (8,32) anchors.
 
-The user delegated the direction after reviewing the character study. The chosen
-original fantasy pilot replaces Valkyrie, Wizard and Ranger. The remaining ten
-classes retain the LimeZu layered prototypes in `art/classes.json`.
+Valkyrie restores premade character 03 and Wizard premade character 02. Ranger
+restores its original layered traveler preset and supplies the welcome traveler.
+The other ten class selections stay unchanged. The larger generated three-hero
+pilot was rejected for scale; do not restore it or enlarge these defaults.
 
-The 16px-wide trial lost shoulder, hat and cloak structure. Final original frames
-are **24×32**, pivot **(12,32)**, over the unchanged 16×16 ground cell. They overhang
-four pixels on either side and use the renderer's existing raised-sprite margins.
-The packed atlas is 576×64: right/up/left/down, six timing cells per direction,
-idle row 0 and walk row 32. The remaining prototypes keep their 384×64 atlases.
-`src/characters.ts` owns these presentation dimensions; no game rules changed.
-
-Built-in image_gen produced three separate 887×1774 transparent source sheets.
-Actual prompts, sources, hashes, shared 27-color palette and editable pixel grids
-are in `art/original-heroes/`. The tool did not report its model version or seed.
-The prompts requested 16×32 pixels but the outputs were high-resolution source
-art, not grid-perfect native sprites; the import step records that distinction.
-`scripts/import-original-heroes.mjs` reduces fixed 6×8 source cells to 24×32,
-thresholds alpha at 160, snaps colors to the shared palette and translates each
-complete clip to one ground baseline. It never independently resizes or mirrors
-walking poses. Directional idle holds the first drawing across six cells to avoid
-generated shimmer; six generated walking poses play at 10 fps. This is a stylized
-walk, not equipment-specific combat animation. Reduced motion freezes idle.
-`scripts/build-original-heroes.mjs` rebuilds from editable grids without imagegen.
-Re-importing is explicit because it overwrites manual grid edits.
-
-Valkyrie has broad slate shoulders, a braid and split ivory tunic. Wizard has a
-pointed violet hat and long robe. Ranger has a green hood and asymmetric mantle.
-Hands are empty; costume is class illustration, not an inventory assertion.
-Keep weapon, shield and mount drawing separate and grounded in public state.
-
-The private character and movement studies established this direction. Their
-retired prototype baselines and generated review pages are not shipped as source
-or loaded by the game. Full-roster original conversion is a later production
-stage; these three form the validated direction and size reference.
+Each sheet is 384×64: right/up/left/down groups, six frames per direction, idle
+above walking. Preserve native pixels, fixed pivots, facing and reduced motion.
+Appearance is class illustration, not an assertion about equipped items.
 
 ## Early-monster scale
 
@@ -475,7 +442,7 @@ actor/loot ordering, text inspection and engine interaction rules remain intact.
 
 The browser early-creature study compares the painted footprint to an empty
 observation, enforces small bounds and the sewer/giant-rat size distinction, and
-renders the group beside the original hero. Its screenshot is in ignored
+renders the group beside the default hero. Its screenshot is in ignored
 `test-results/early-creatures.png`. Real-game and corridor-rendering regression
 checks also cover this change.
 
@@ -510,3 +477,31 @@ finish immediately on readiness and expose errors instead of leaving the cover u
 Reduced motion shows static nested arches. The welcome offers a prominent Continue
 previous run button with name and turn when an unfinished save exists; a resumed
 run moves to the front of the existing save list.
+
+### Save-store ownership
+
+Idle title screens release the WASM transport after WebMCP discovery, failed
+starts and agent session close. Closing preserves pending decisions for resume.
+A second active tab stays excluded and explains how to release the first tab
+without deleting browser data; the client never steals its lock or retries game
+input automatically.
+
+### Map mode and focus feedback
+
+Use the default illustrated map, including the dog sprite. The map-mode button
+labels the current mode Art or Symbols, with a tooltip describing the switch.
+Letter glyphs belong only to the explicitly selected Symbols mode.
+Focus uses underlines and color changes on controls, without rectangular outlines
+around the map, buttons or character cards. Preserve keyboard operation.
+
+## Welcome page paths
+
+The title is also the library’s frontpage. Keep the playable courtyard and its
+walk-in entrance. Beside it on desktop, show three cards: Play the classic,
+Play with WebMCP (link the agent-browser walkthrough), and build with the library.
+Explain the separation of NetHack’s brain from its UX through the JSON protocol;
+mention new interfaces, reinforcement learning environments and model evaluations.
+Include a prominent GitHub link, NetHack history and sprite attribution. Show the
+existing background package download status without constructing a game worker or
+claiming offline/service-worker support. On narrow screens, stack the cards below
+the courtyard with a visible jump link. Hide this content during gameplay.

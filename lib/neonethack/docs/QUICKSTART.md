@@ -88,5 +88,3 @@ See [DISTRIBUTION.md](DISTRIBUTION.md) for the checked preview/archive audit.
   make an error disappear. Preserve original files/runtimes for inspection.
 - Serialize all C calls in a process, even across contexts. Native executables,
   data and stores are trusted resources, not an authorization/sandbox boundary.
-- Previews passing tests are not publication approval or an owner-code license
-  grant. That decision remains separate.

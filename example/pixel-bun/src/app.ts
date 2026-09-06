@@ -199,7 +199,7 @@ class PixelNethack extends HTMLElement {
 
       <main id="main" tabindex="-1">
         <div class="map-viewport"><canvas id="dungeon" tabindex="0" aria-label="Dungeon entrance. Use arrow keys to walk into the hall."></canvas></div>
-        <section id="welcome-copy" class="intro-title"><p class="eyebrow">A LITTLE COURAGE. A DEEP DUNGEON.</p><h1>neo<span>nethack</span></h1><p>The old world has an open door.</p></section>
+        <section id="welcome-copy" class="intro-title"><p class="eyebrow">A LITTLE COURAGE. A DEEP DUNGEON.</p><h1>neo<span>nethack</span></h1><p>The old world has an open door.</p><a class="paths-jump" href="#welcome-paths">Play, bring an agent, or build something new ↓</a></section>
         <section id="welcome-actions" class="intro-controls" aria-label="Learn to walk">
           <p id="intro-instruction">Walk into the light</p>
           <div class="intro-arrows" aria-label="Arrow keys move your traveler">
@@ -211,6 +211,13 @@ class PixelNethack extends HTMLElement {
           <p class="intro-hint">Hold the arrow keys · or touch them here</p>
           <div class="intro-links"><button id="new-adventure" class="text-button">Begin your adventure</button><button id="continue-adventure" class="primary" hidden>Continue previous run</button></div>
         </section>
+        <aside id="welcome-paths" class="welcome-paths" aria-label="Three ways into NetHack">
+          <header><span class="eyebrow">ONE DUNGEON. MANY POSSIBILITIES.</span><a href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a></header><p id="package-status" role="status">Preparing the game in the background…</p>
+          <article><span class="path-number">01 · ADVENTURE</span><h2>Play the classic</h2><p>A deep dungeon. A loyal companion. A thousand ways to learn the hard way. Walk through the doorway and discover NetHack, one turn at a time.</p><a href="#welcome-actions">Enter the dungeon ↓</a></article>
+          <article><span class="path-number">02 · BRING YOUR AGENT</span><h2>Play with WebMCP</h2><p>Let your agent explore the same world through the browser’s WebMCP tools. You watch the adventure unfold; your agent makes the moves.</p><a href="https://github.com/tobi/neohack/blob/main/lib/neonethack/docs/AGENT_BROWSER.md" target="_blank" rel="noopener noreferrer">Agent-browser walkthrough ↗</a></article>
+          <article><span class="path-number">03 · MAKE SOMETHING NEW</span><h2>It’s time for NetHack itself to ascend.</h2><p>The brain of NetHack, separated from its interface and exposed as a JSON protocol. Build a completely new UX, a reinforcement learning environment for small models, an evaluation for frontier models—or whatever comes next.</p><a href="https://github.com/tobi/neohack/tree/main/lib/neonethack" target="_blank" rel="noopener noreferrer">Explore the library ↗</a></article>
+          <footer><p>A living dungeon since 1987. Decades of the NetHack DevTeam’s imagination, surprising interactions, and player discoveries live underneath this new doorway. <a href="https://www.nethack.org/common/info.html" target="_blank" rel="noopener noreferrer">Meet NetHack ↗</a></p><p>Character sprites: <a href="https://limezu.itch.io/" target="_blank" rel="noopener noreferrer">LimeZu</a>.</p></footer>
+        </aside>
         <a id="creator-link" class="creator-link" href="https://x.com/tobi" target="_blank" rel="noopener noreferrer" aria-label="@tobi on X (opens in a new tab)">@tobi</a>
         <section class="hero-hud" aria-label="Adventurer" hidden>
           <img id="portrait" src="/art/${heroArt("ranger")}.png" alt="">
@@ -221,7 +228,7 @@ class PixelNethack extends HTMLElement {
           <div class="location-hud"><span id="location-heading"></span><span id="turn-pill"></span></div>
           <details class="hud-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
             <button id="adventures-button">Your adventures</button><button data-guide>Field guide <kbd>?</kbd></button>
-            <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false">@</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
+            <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
             <button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p>
           </div></details>
         </div>
@@ -318,7 +325,11 @@ class PixelNethack extends HTMLElement {
   }
   private warm() {
     // Speculative warmup is optional; the verified runtime load retries on entry.
-    return this.warmed ??= warmPackage(this.preloadAbort.signal).catch(() => {});
+    return this.warmed ??= warmPackage(this.preloadAbort.signal).then(() => {
+      this.text("#package-status", "Game downloaded · ready when you are");
+    }).catch(() => {
+      this.text("#package-status", "The game will finish downloading when you enter.");
+    });
   }
   private async prepareRuntime() {
     if (!window.isSecureContext) {
@@ -745,6 +756,10 @@ class PixelNethack extends HTMLElement {
         "aria-pressed",
         String(this.map.symbols),
       );
+      this.text("#map-symbols", this.map.symbols ? "Symbols" : "Art");
+      const label = this.map.symbols ? "Show illustrated map" : "Show NetHack symbols";
+      this.$("#map-symbols").setAttribute("aria-label", label);
+      this.$("#map-symbols").setAttribute("title", label);
       this.map.draw();
     };
     this.$("#retry").onclick = () =>
@@ -921,6 +936,7 @@ class PixelNethack extends HTMLElement {
     this.renderGround();
     this.show("#welcome-copy", !state);
     this.show("#welcome-actions", !state);
+    this.show("#welcome-paths", !state);
     this.show("#creator-link", !state);
     this.show("#play-controls", !!state);
     this.show(".hero-hud", !!state);
@@ -1856,6 +1872,7 @@ class PixelNethack extends HTMLElement {
     }
     if (
       !this.game &&
+      !(e.target instanceof Element && e.target.closest("#welcome-paths")) &&
       !e.ctrlKey &&
       !e.metaKey &&
       !e.altKey &&
@@ -2001,7 +2018,7 @@ class PixelNethack extends HTMLElement {
   }
   private credits() {
     this.openMenu(
-      `<h2 id="menu-title">An old world. An open door.</h2><p>neonethack is a new, approachable window into NetHack, built on the neonethack library and its shared C engine.</p><p>NetHack by the NetHack DevTeam and its contributors, under the NetHack General Public License. Original notices remain with the engine.</p><p>Valkyrie, Wizard and Ranger artwork created for neonethack. Other character art from Modern Interiors by <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noreferrer">LimeZu</a>. Companion and bat illustrations use original templates from the pixel-art-interfaces skill. Dungeon tiles and interface design are original to this example.</p><p class="subtle">This is a local preview toward a free-to-play revival. Art retains its own license; it is not a freely redistributable asset pack. Project publication and licensing are still being prepared.</p><p>No accounts, ads, analytics, or gameplay server. Your adventure lives in your browser.</p>`,
+      `<h2 id="menu-title">An old world. An open door.</h2><p>neonethack is a new, approachable window into NetHack, built on the neonethack library and its shared C engine.</p><p>NetHack by the NetHack DevTeam and its contributors, under the NetHack General Public License. Original notices remain with the engine.</p><p>Character art from Modern Interiors by <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noreferrer">LimeZu</a>. Companion and bat illustrations use original templates from the pixel-art-interfaces skill. Dungeon tiles and interface design are original to this example.</p><p>Gameplay runs in your browser.</p>`,
     );
   }
 }

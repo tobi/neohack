@@ -46,10 +46,14 @@ a {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-summary:focus-visible,
-canvas:focus-visible {
-  outline: 3px solid var(--gold);
-  outline-offset: 4px;
+summary:focus-visible {
+  outline: none;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+canvas:focus {
+  outline: none;
 }
 button,
 input,
@@ -1419,7 +1423,7 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
 #direction-target { position: absolute; z-index: 18; transform: translate(-50%, -84px); width: 168px; }
 .target-arrows { display: grid; grid-template: repeat(3, 48px) / repeat(3, 48px); gap: 12px; }
 .target-arrows button { padding: 0; min-width: 44px; font-size: 26px; color: #eee4b8; background: #263431ed; border: 2px solid #a6ad7c; box-shadow: 3px 3px #101819; }
-.target-arrows button:hover, .target-arrows button:focus-visible { background: #53614b; outline: 2px solid #eee4b8; }
+.target-arrows button:hover, .target-arrows button:focus-visible { background: #53614b; outline: none; }
 .target-caption { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); width: 250px; text-align: center; color: #eee4b8; background: #172123; padding: 6px; }
 .target-extra { display: flex; justify-content: center; gap: 4px; margin-top: 10px; }
 .target-extra button { min-height: 44px; padding: 6px; background: #172123; }
@@ -1446,8 +1450,8 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
   scrollbar-width: thin;
 }
 .role-card:focus-within {
-  outline: 2px solid var(--sage);
-  outline-offset: 2px;
+  outline: none;
+  background: #34473d;
 }
 
 /* The engine loads behind a small, pixel-stepped descent through stone arches. */
@@ -1481,3 +1485,30 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
   .arch-mid { transform: translateX(-50%) scale(.8); }
   .arch-far { transform: translateX(-50%) scale(.45); }
 }
+
+/* The welcome page explains the library; the dungeon keeps the full screen. */
+.welcome-paths { position: absolute; top: 28px; right: 28px; bottom: 64px; width: 340px; overflow-y: auto; padding: 0 8px 8px; scrollbar-width: thin; color: #b7c2ae; }
+.welcome-paths header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.welcome-paths .eyebrow { font-size: 9px; letter-spacing: 1px; }
+.welcome-paths a { color: #dbc995; text-underline-offset: 4px; }
+.welcome-paths header a { white-space: nowrap; font-size: 13px; }
+.welcome-paths article { background: #1e2a2d; border: 1px solid #394743; padding: 19px 20px; margin-bottom: 12px; box-shadow: 3px 3px #111b20; }
+.welcome-paths .path-number { color: #91aa83; font-size: 10px; letter-spacing: 1px; }
+.welcome-paths h2 { font: normal 23px/1.15 Georgia, serif; color: #eee2bf; margin: 10px 0; }
+.welcome-paths p { font-size: 13px; line-height: 1.6; margin: 10px 0 14px; }
+.welcome-paths article > a { font-size: 12px; display: inline-block; padding: 4px 0; }
+.welcome-paths footer p { font-size: 11px; color: #9daa9c; }
+#package-status { color: #b9cc99; }
+@media (min-width: 1100px) {
+  pixel-nethack:not(.in-game) .map-viewport { right: 396px; }
+  pixel-nethack:not(.in-game) .intro-title, pixel-nethack:not(.in-game) .intro-controls { left: calc((100% - 396px) / 2); }
+}
+@media (max-width: 1099px) {
+  pixel-nethack:not(.in-game) { overflow-y: auto; overflow-x: hidden; }
+  .welcome-paths { top: 100dvh; bottom: auto; right: auto; left: 0; width: 100%; padding: 24px max(24px, calc((100% - 620px) / 2)) 36px; box-sizing: border-box; background: #171f23; }
+  .welcome-paths header { flex-wrap: wrap; }
+}
+
+.paths-jump { display: none; }
+@media (min-width: 1100px) { .welcome-paths { top: 70px; } }
+@media (max-width: 1099px) { .paths-jump { display: inline-block; pointer-events: auto; color: #dbc995; margin-top: 12px; font-size: 11px; text-underline-offset: 4px; } }

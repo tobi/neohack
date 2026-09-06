@@ -15,7 +15,7 @@
 /lib/neonethack/dist/
 /lib/neonethack/engine/playground/
 /lib/neonethack/*.tgz
-# Local agent checkpoint contains workstation/process/backup bookkeeping.
+# Local release notes
 /lib/neonethack/PLAN.md
 /examples/wasm/neonethack.js
 /hosting/cloudflare/site/

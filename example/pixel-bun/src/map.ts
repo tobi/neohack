@@ -8,7 +8,7 @@ import {
 } from "./dungeon-art";
 import { categoryMark, drawCreatureArt, drawSymbolArt } from "./symbol-art";
 
-import { roles, heroArt, heroFrameWidth } from "./characters";
+import { roles, heroArt } from "./characters";
 
 const images = new Map<string, HTMLImageElement>();
 export async function loadArt() {
@@ -846,7 +846,7 @@ export class DungeonMap {
           rect(c, "#26312b", x + 2, y + 13, 12, 2);
           rect(c, "#a6be87", x + 4, y + 15, 8, 1);
           const image = images.get(`${this.hero}-motion`);
-          const width = heroFrameWidth(this.hero);
+          const width = 16;
           const walking = !this.reducedMotion.matches && now < this.walkUntil;
           const frame = this.reducedMotion.matches
             ? 0
@@ -1124,7 +1124,7 @@ export class DungeonMap {
     if (dog) c.drawImage(dog, 181, 205);
     const introArt = heroArt("ranger");
     const hero = images.get(`${introArt}-motion`);
-    const width = heroFrameWidth(introArt);
+    const width = 16;
     const moving = now < this.intro.moved + 140;
     const t = this.reducedMotion.matches
       ? 1

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source": "LimeZu adult character generator; appearance presets, not equipment state",
+  "source": "LimeZu Modern Interiors premade characters and adult generator; appearance presets, not equipment state",
   "characters": [
     {
       "id": "archeologist",
@@ -64,6 +64,16 @@
       ]
     },
     {
+      "id": "ranger",
+      "body": "generator-body-03",
+      "eyes": "generator-eyes-02",
+      "outfit": "generator-outfit-04-01",
+      "hair": "generator-hairstyle-04-02",
+      "accessories": [
+        "generator-accessory-03-backpack-01"
+      ]
+    },
+    {
       "id": "rogue",
       "body": "generator-body-02",
       "eyes": "generator-eyes-02",
@@ -87,6 +97,14 @@
       "accessories": [
         "generator-accessory-03-backpack-03"
       ]
+    },
+    {
+      "id": "valkyrie",
+      "asset": "modern-premade-character-03"
+    },
+    {
+      "id": "wizard",
+      "asset": "modern-premade-character-02"
     }
   ]
 }

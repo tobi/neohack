@@ -12,6 +12,15 @@ const temp = await mkdtemp(join(tmpdir(), 'neonethack-characters-'));
 const run = (...args) => execFileSync(pixel, args, { stdio: 'pipe' });
 try {
   for (const recipe of recipes.characters) {
+    if (recipe.asset) {
+      for (const [suffix, rect] of [["", [48, 0, 16, 32]], ["-motion", [0, 32, 384, 64]]]) {
+        const out = join(temp, recipe.id + suffix + '.png');
+        run('export', recipe.asset, '--rect', ...rect.map(String), '--out', out);
+        await copyFile(out, join(root, 'public/art/' + recipe.id + suffix + '.png'));
+      }
+      console.log('Exported ' + recipe.id + ': premade portrait + directional clips');
+      continue;
+    }
     const sheet = join(temp, `${recipe.id}.png`);
     const args = ['character', '--body', recipe.body, '--eyes', recipe.eyes, '--outfit', recipe.outfit];
     if (recipe.hair) args.push('--hair', recipe.hair);

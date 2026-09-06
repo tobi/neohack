@@ -1,12 +1,8 @@
-# Local distributions and release gate
+# Building distributions
 
-This repository currently prepares **local previews**, not approved releases.
-The package is private. No script publishes npm packages, uploads artifacts,
-creates tags, pushes Git or changes repository visibility.
-
-Passing packaging checks is not release approval. Review the [runtime profile
-and replay limits](REPLAY.md), final archive/source/attribution checks and the
-owner's licensing decision before distribution.
+The preview workflow builds and audits matching source, native and npm archives
+locally. It does not publish packages. See [notices](../NOTICE.md) for attribution
+and [replay limits](REPLAY.md) for the supported runtime profile.
 
 ## Build a checked preview
 
@@ -102,72 +98,16 @@ new engine files with `npm run sources:update`, then review the diff. Ordinary
 builds and source-archive consumers do not require Git. It is not an engine pin
 or a game-history migration mechanism.
 
-## Public repository is a separate artifact
+## Release checklist
 
-The library previews deliberately omit `example/pixel-bun/`. A public Git
-repository would **not** omit those tracked files automatically. In particular,
-the pixel client's LimeZu character sprites have supplied terms prohibiting asset
-redistribution; its original creature-template exports also await an owner license
-decision. Review `example/pixel-bun/art/ATTRIBUTION.md` in the checkout. Obtain
-explicit source-redistribution permission, replace the art with independently
-licensed assets, or approve a library-only public source tree. Do not infer that
-finished-game use permits publishing extractable source assets.
+- Check the version, package metadata, supported platforms and remote CI results.
+- Rebuild and audit after any source, version or notice change.
+- Keep matching source, binaries, checksums and third-party notices together.
+  Exclude player stores, build workspaces and audit scratch data.
+- Review the source tree and history intended for publication. Library archives
+  exclude the pixel client; its asset terms (`example/pixel-bun/art/ATTRIBUTION.md`)
+  apply separately to a source repository.
 
-The intended public destination is `tobi/neonethack`. Package metadata naming that
-repository is not evidence that the checkout's remote points there or that it is
-approved for publication. Inspect the actual remote before any authorized push.
-Review the full tracked tree, including examples and CI, independently of the
-archive allowlists. Ignore rules do not exclude already tracked files.
-
-Review every commit/ref intended for publication, not just the tip. Old commits
-can retain retired applications, local checkpoints, workstation paths and assets
-removed from today's tree. Prefer an explicitly approved, reviewed fresh source
-import if the existing history is unsuitable; preserve the private repository
-rather than rewriting or deleting it as a cleanup shortcut. This document does
-not authorize creating that public import.
-
-Before launch, enable and verify private vulnerability reporting, review the
-root `SECURITY.md` and `CONTRIBUTING.md`, and run the pinned, read-only CI workflow
-on the approved remote. Local success is not a remote CI result.
-
-## Publication remains a separate owner decision
-
-NetHack's NGPL requires preserving notices, marking changes, applying its terms
-to derivatives and satisfying its executable/source distribution conditions.
-Its archive-site alternative is specifically limited to noncommercial
-redistribution; the preview recipe instead accompanies binaries with source.
-Lua and the embedded Emscripten runtimes retain their own notices/licenses.
-
-The owner's grant for independently owned new code still needs an explicit
-scope/decision. Third-party notices and this build recipe do not make that
-choice. Complete the remaining release audit and owner review before changing
-`private`, uploading binaries or pushing a public repository.
-
-### Owner release checklist
-
-1. Choose an explicit license and scope for independently owned code, including
-   original example art/template exports. Resolve restricted third-party sprite
-   redistribution or exclude/replace those assets in the approved source tree.
-   Retain NetHack's terms for its derivatives and every third-party notice; seek
-   legal review if the combined/standalone boundary is unclear. This document
-   makes no choice or grant for the owner.
-2. Approve the exact repository, visibility and **source tree/history** to make
-   public. A clean candidate tree does not prove an existing repository's old
-   commits are publishable. Never publish preserved local history, aliases,
-   private checkpoints or workspaces merely because current files pass checks.
-3. Authorize and review CI on that intended remote platform. Locally passing
-   GCC/Clang, browser and archive-consumer tests are not a remote CI result.
-4. Review the chosen version, package metadata, platform claims and matching
-   source/native/npm identities. License/version/source changes require a fresh
-   build and archive audit. Preserve complete original runtimes for old worlds;
-   no version bump authorizes replacing their pins or migrating their settings.
-5. Separately authorize any push, tag, upload or registry publication. The
-   current preview builder/auditor deliberately expects a private package and
-   `publicationApproved:false`; it is not a publishing command. Any release
-   mode or metadata change must itself be reviewed, not bypassed to make these
-   checks green. Distribute only approved artifacts and matching source/notices,
-   never `work/`, `audit/` or player stores.
-
-Completion of the local engineering checklist is not completion of these owner
-approval steps. This alpha covers the advertised catalog, not every NetHack
-command or every possible historical runtime/platform.
+The preview builder requires a private npm package and records
+`publicationApproved: false`. Registry publication needs a separate release
+workflow.

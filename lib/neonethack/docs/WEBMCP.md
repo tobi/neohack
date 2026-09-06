@@ -37,6 +37,12 @@ before submission. Close a human menu before agent input. Returned standing
 choices appear in the game UI and await an explicit `decision.answer` or
 `decision.cancel` from either participant.
 
+Idle title screens release their WASM transport after discovery, rejected starts
+and `session.close`. Closing an adventure preserves its unfinished status and
+standing decisions so another tab can resume it. If another tab is actively
+playing, close that tab or use **Save & return to doorway** there before resuming
+here. Do not clear site data to resolve ownership.
+
 Agent-created games appear immediately in the HUD and browser adventure list.
 Operations use the same origin-owned IndexedDB journal as human input. Exact
 uncertain requests are retained in display metadata as well as the engine store;
@@ -73,29 +79,7 @@ Leaving the document clears its registry. Current-spec AbortSignal cleanup and
 legacy explicit `unregisterTool` are covered by adapter tests; native tests also
 verify that disposed callbacks cannot reach the closed engine.
 
-## agent-browser
+## Play with agent-browser
 
-Verified with **agent-browser 0.36.0 + Chrome for Testing 152.0.7977.82** against
-the pixel client's HTTPS preview: `webmcp list` discovers all 26 tools;
-`webmcp invoke` creates a fresh persistent game and performs a search, advancing
-both the engine and visible HUD by one turn. Removing that test interface also
-removed all 26 registrations in this browser run.
-
-The CLI supports `webmcp list`, `webmcp invoke`, `webmcp result` and
-`webmcp cancel`. It uses Chrome's experimental **CDP WebMCP domain**; Chromium 148
-can expose the older page testing API while lacking this domain. Upgrade the
-browser as well as the CLI. Managed Chrome enables WebMCP by default. For an
-attached, sandboxed browser, enable experimental web platform features when
-launching Chrome and pass its CDP port on every command:
-
-```sh
-agent-browser --cdp "$CHROME_CDP_PORT" open https://your-preview.example
-agent-browser --cdp "$CHROME_CDP_PORT" webmcp list
-agent-browser --cdp "$CHROME_CDP_PORT" webmcp invoke neonethack_protocol_describe --params '{}'
-agent-browser --cdp "$CHROME_CDP_PORT" webmcp invoke neonethack_game_search --params @search.json
-```
-
-`search.json` must contain the actual session ID, latest expected revision and a
-unique request ID. Retain that exact file for an uncertain retry. Cancelling a CLI
-invocation does not undo engine input already submitted; receipt recovery remains
-required. Run probes with a new browser profile, never a player's existing saves.
+Follow [the agent-browser walkthrough](AGENT_BROWSER.md) to discover tools, create
+a game, take turns, answer decisions and resume browser saves through WebMCP.

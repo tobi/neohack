@@ -76,5 +76,4 @@ jobs:
           CHROMIUM="$(command -v google-chrome)" npm run --prefix lib/neonethack package:preview -- "$RUNNER_TEMP/distribution"
           cd "$RUNNER_TEMP/distribution"
           sha256sum -c SHA256SUMS
-      # No publishing/uploading until the owner approves licensing and the
-      # final release/source audit. Preview generation is deliberately local.
+      # Build and audit previews without uploading artifacts.

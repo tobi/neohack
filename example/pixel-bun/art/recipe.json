@@ -14,8 +14,14 @@
     "wallHeight": 20,
     "cutawayHeight": 6,
     "doorFrameHeight": 24,
-    "spriteSize": [25, 34],
-    "anchorOffset": [9, 18],
+    "spriteSize": [
+      25,
+      34
+    ],
+    "anchorOffset": [
+      9,
+      18
+    ],
     "cacheLimit": 256
   },
   "seed": "threshold:42",
@@ -31,272 +37,527 @@
       "file": "archeologist.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#archeologist",
-      "export": { "output": "avatar" },
+      "export": {
+        "output": "avatar"
+      },
       "use": "Archeologist HUD portrait and starting-path card",
-      "size": [16, 32],
+      "size": [
+        16,
+        32
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "archeologist-motion.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#archeologist",
-      "export": { "rect": [0, 32, 384, 64], "scale": 1 },
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
       "use": "Archeologist directional idle/walk clips",
-      "size": [384, 64],
+      "size": [
+        384,
+        64
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "barbarian.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#barbarian",
-      "export": { "output": "avatar" },
+      "export": {
+        "output": "avatar"
+      },
       "use": "Barbarian HUD portrait and starting-path card",
-      "size": [16, 32],
+      "size": [
+        16,
+        32
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "barbarian-motion.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#barbarian",
-      "export": { "rect": [0, 32, 384, 64], "scale": 1 },
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
       "use": "Barbarian directional idle/walk clips",
-      "size": [384, 64],
+      "size": [
+        384,
+        64
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "caveman.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#caveman",
-      "export": { "output": "avatar" },
+      "export": {
+        "output": "avatar"
+      },
       "use": "Caveman HUD portrait and starting-path card",
-      "size": [16, 32],
+      "size": [
+        16,
+        32
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "caveman-motion.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#caveman",
-      "export": { "rect": [0, 32, 384, 64], "scale": 1 },
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
       "use": "Caveman directional idle/walk clips",
-      "size": [384, 64],
+      "size": [
+        384,
+        64
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "healer.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#healer",
-      "export": { "output": "avatar" },
+      "export": {
+        "output": "avatar"
+      },
       "use": "Healer HUD portrait and starting-path card",
-      "size": [16, 32],
+      "size": [
+        16,
+        32
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "healer-motion.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#healer",
-      "export": { "rect": [0, 32, 384, 64], "scale": 1 },
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
       "use": "Healer directional idle/walk clips",
-      "size": [384, 64],
+      "size": [
+        384,
+        64
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "knight.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#knight",
-      "export": { "output": "avatar" },
+      "export": {
+        "output": "avatar"
+      },
       "use": "Knight HUD portrait and starting-path card",
-      "size": [16, 32],
+      "size": [
+        16,
+        32
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "knight-motion.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#knight",
-      "export": { "rect": [0, 32, 384, 64], "scale": 1 },
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
       "use": "Knight directional idle/walk clips",
-      "size": [384, 64],
+      "size": [
+        384,
+        64
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "monk.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#monk",
-      "export": { "output": "avatar" },
+      "export": {
+        "output": "avatar"
+      },
       "use": "Monk HUD portrait and starting-path card",
-      "size": [16, 32],
+      "size": [
+        16,
+        32
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "monk-motion.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#monk",
-      "export": { "rect": [0, 32, 384, 64], "scale": 1 },
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
       "use": "Monk directional idle/walk clips",
-      "size": [384, 64],
+      "size": [
+        384,
+        64
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "priest.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#priest",
-      "export": { "output": "avatar" },
+      "export": {
+        "output": "avatar"
+      },
       "use": "Priest HUD portrait and starting-path card",
-      "size": [16, 32],
+      "size": [
+        16,
+        32
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "priest-motion.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#priest",
-      "export": { "rect": [0, 32, 384, 64], "scale": 1 },
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
       "use": "Priest directional idle/walk clips",
-      "size": [384, 64],
+      "size": [
+        384,
+        64
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "rogue.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#rogue",
-      "export": { "output": "avatar" },
+      "export": {
+        "output": "avatar"
+      },
       "use": "Rogue HUD portrait and starting-path card",
-      "size": [16, 32],
+      "size": [
+        16,
+        32
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "rogue-motion.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#rogue",
-      "export": { "rect": [0, 32, 384, 64], "scale": 1 },
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
       "use": "Rogue directional idle/walk clips",
-      "size": [384, 64],
+      "size": [
+        384,
+        64
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "samurai.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#samurai",
-      "export": { "output": "avatar" },
+      "export": {
+        "output": "avatar"
+      },
       "use": "Samurai HUD portrait and starting-path card",
-      "size": [16, 32],
+      "size": [
+        16,
+        32
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "samurai-motion.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#samurai",
-      "export": { "rect": [0, 32, 384, 64], "scale": 1 },
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
       "use": "Samurai directional idle/walk clips",
-      "size": [384, 64],
+      "size": [
+        384,
+        64
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "tourist.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#tourist",
-      "export": { "output": "avatar" },
+      "export": {
+        "output": "avatar"
+      },
       "use": "Tourist HUD portrait and starting-path card",
-      "size": [16, 32],
+      "size": [
+        16,
+        32
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "tourist-motion.png",
       "source": "Modern Interiors adult character generator by LimeZu",
       "recipe": "classes.json#tourist",
-      "export": { "rect": [0, 32, 384, 64], "scale": 1 },
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
       "use": "Tourist directional idle/walk clips",
-      "size": [384, 64],
+      "size": [
+        384,
+        64
+      ],
       "credit": "Modern Interiors by LimeZu"
     },
     {
-      "file": "valkyrie-original.png",
-      "source": "Original built-in image_gen design normalized into editable pixel grids",
-      "recipe": "original-heroes/valkyrie.json",
-      "export": { "row": 3, "col": 0 },
-      "use": "Valkyrie HUD portrait and starting-path card",
-      "size": [24, 32]
+      "file": "valkyrie.png",
+      "source": "Modern Interiors premade character 03 by LimeZu",
+      "recipe": "classes.json#valkyrie",
+      "export": {
+        "rect": [
+          48,
+          0,
+          16,
+          32
+        ],
+        "scale": 1
+      },
+      "use": "valkyrie HUD portrait and starting-path card",
+      "size": [
+        16,
+        32
+      ],
+      "credit": "Modern Interiors by LimeZu"
     },
     {
-      "file": "valkyrie-original-motion.png",
-      "source": "Original built-in image_gen design normalized into editable pixel grids",
-      "recipe": "original-heroes/valkyrie.json",
-      "export": { "output": "packed-idle-walk" },
-      "use": "Valkyrie directional idle/walk clips",
-      "size": [576, 64]
+      "file": "valkyrie-motion.png",
+      "source": "Modern Interiors premade character 03 by LimeZu",
+      "recipe": "classes.json#valkyrie",
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
+      "use": "valkyrie directional idle/walk clips",
+      "size": [
+        384,
+        64
+      ],
+      "credit": "Modern Interiors by LimeZu"
     },
     {
-      "file": "wizard-original.png",
-      "source": "Original built-in image_gen design normalized into editable pixel grids",
-      "recipe": "original-heroes/wizard.json",
-      "export": { "row": 3, "col": 0 },
-      "use": "Wizard HUD portrait and starting-path card",
-      "size": [24, 32]
+      "file": "wizard.png",
+      "source": "Modern Interiors premade character 02 by LimeZu",
+      "recipe": "classes.json#wizard",
+      "export": {
+        "rect": [
+          48,
+          0,
+          16,
+          32
+        ],
+        "scale": 1
+      },
+      "use": "wizard HUD portrait and starting-path card",
+      "size": [
+        16,
+        32
+      ],
+      "credit": "Modern Interiors by LimeZu"
     },
     {
-      "file": "wizard-original-motion.png",
-      "source": "Original built-in image_gen design normalized into editable pixel grids",
-      "recipe": "original-heroes/wizard.json",
-      "export": { "output": "packed-idle-walk" },
-      "use": "Wizard directional idle/walk clips",
-      "size": [576, 64]
+      "file": "wizard-motion.png",
+      "source": "Modern Interiors premade character 02 by LimeZu",
+      "recipe": "classes.json#wizard",
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
+      "use": "wizard directional idle/walk clips",
+      "size": [
+        384,
+        64
+      ],
+      "credit": "Modern Interiors by LimeZu"
     },
     {
-      "file": "ranger-original.png",
-      "source": "Original built-in image_gen design normalized into editable pixel grids",
-      "recipe": "original-heroes/ranger.json",
-      "export": { "row": 3, "col": 0 },
-      "use": "Ranger HUD portrait and starting-path card",
-      "size": [24, 32]
+      "file": "ranger.png",
+      "source": "Modern Interiors adult character generator by LimeZu",
+      "recipe": "classes.json#ranger",
+      "export": {
+        "output": "avatar"
+      },
+      "use": "ranger HUD portrait and starting-path card and welcome traveler",
+      "size": [
+        16,
+        32
+      ],
+      "credit": "Modern Interiors by LimeZu"
     },
     {
-      "file": "ranger-original-motion.png",
-      "source": "Original built-in image_gen design normalized into editable pixel grids",
-      "recipe": "original-heroes/ranger.json",
-      "export": { "output": "packed-idle-walk" },
-      "use": "Welcome traveler and Ranger directional idle/walk clips",
-      "size": [576, 64]
+      "file": "ranger-motion.png",
+      "source": "Modern Interiors adult character generator by LimeZu",
+      "recipe": "classes.json#ranger",
+      "export": {
+        "rect": [
+          0,
+          32,
+          384,
+          64
+        ],
+        "scale": 1
+      },
+      "use": "ranger directional idle/walk clips and welcome traveler",
+      "size": [
+        384,
+        64
+      ],
+      "credit": "Modern Interiors by LimeZu"
     },
     {
       "file": "dog.png",
       "source": "Original pixel-art-interfaces dog template; finished portrait only",
-      "export": { "template": "dog", "name": "Companion", "color": "#c79b67" },
+      "export": {
+        "template": "dog",
+        "name": "Companion",
+        "color": "#c79b67"
+      },
       "use": "Canine illustration, welcome companion and favicon",
-      "size": [16, 16]
+      "size": [
+        16,
+        16
+      ]
     },
     {
       "file": "cat.png",
       "source": "Original pixel-art-interfaces cat template; finished portrait only",
-      "export": { "template": "cat", "name": "Feline" },
+      "export": {
+        "template": "cat",
+        "name": "Feline"
+      },
       "use": "Feline illustration",
-      "size": [16, 16]
+      "size": [
+        16,
+        16
+      ]
     },
     {
       "file": "bat.png",
       "source": "Original pixel-art-interfaces bat template; finished portrait only",
-      "export": { "template": "bat", "name": "Bat" },
+      "export": {
+        "template": "bat",
+        "name": "Bat"
+      },
       "use": "Bat-class illustration",
-      "size": [16, 16]
+      "size": [
+        16,
+        16
+      ]
     }
   ],
   "liveMap": {
-    "geometry": "Integer 16px ground tiles; original heroes 24x32, remaining prototypes 16x32, all anchored bottom-center on the actual player tile.",
+    "geometry": "Integer 16px ground tiles; all heroes use native 16x32 frames anchored bottom-center on the actual player tile.",
     "knowledge": "Remembered terrain; only occupants/objects supplied in the current public observation. No persistent occupant cache or hidden species inference.",
     "movement": "No art controller, pathfinding, collision or game rules. Named library operations own all game behavior.",
     "symbols": "Original art in src/symbol-art.ts and src/encounter-art.ts; original glyphs retained in inspection, text map and optional symbol mode. No hidden species/item identity inference."
   },
   "animation": {
-    "directions": ["right", "up", "left", "down"],
+    "directions": [
+      "right",
+      "up",
+      "left",
+      "down"
+    ],
     "framesPerDirection": 6,
-    "rows": { "idle": 0, "walk": 32 },
-    "fps": { "idle": 6, "walk": 10 },
-    "original": {
-      "frameSize": [24, 32],
-      "pivot": [12, 32],
-      "idle": "Held first directional drawing"
+    "rows": {
+      "idle": 0,
+      "walk": 32
     },
-    "prototype": {
-      "frameSize": [16, 32],
-      "pivot": [8, 32]
+    "fps": {
+      "idle": 6,
+      "walk": 10
     },
-    "reducedMotion": "directional idle frame 0"
+    "reducedMotion": "directional idle frame 0",
+    "frameSize": [
+      16,
+      32
+    ],
+    "pivot": [
+      8,
+      32
+    ]
   }
 }

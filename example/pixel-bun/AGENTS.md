@@ -5,13 +5,10 @@ as the user's choices develop. This example is a client of the public library AP
 all repository boundary, storage, licensing and verification rules still apply.
 
 Keep only the 29 runtime PNGs listed in `art/recipe.json` under `public/art/`:
-ten LimeZu prototype portrait/sheet pairs, three original hero pairs and three
-animal portraits. Preserve the ten original project source files in
-`art/original-heroes/` (README, generated source PNGs, prompts and editable JSON
-pixel grids); these are original art inputs, not copied vendor skill assets.
-Never copy raw skill templates, vendor pixel grids/layers/full sheets, catalogs
-or private tools into source. Keep portable export parameters in the art recipes,
-not public JSON sidecars. Do not restore retired prototype exports or review
-reports. Preserve the exact art terms and run `node --test tests/assets.test.mjs`
-from this example when changing the selection; minimization is not redistribution
-permission.
+thirteen LimeZu character portrait/sheet pairs and three animal portraits. All
+characters use 16×32 frames and bottom-center (8,32) anchors. Valkyrie and Wizard
+use the original premade selections; Ranger uses its original layered preset.
+Do not restore the retired 24×32 generated hero pilot or its build scripts.
+Keep portable asset/layer identifiers and export parameters in the art recipes,
+not public JSON sidecars or full vendor sheets. Preserve attribution and run
+`node --test tests/assets.test.mjs` when changing the asset selection.

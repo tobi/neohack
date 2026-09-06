@@ -6,14 +6,11 @@ Send a named operation. Receive what happened, the explorer's full perceived
 world, and—only when necessary—a genuine choice. No keystrokes, inventory
 letters, display pauses, or hidden-state queries are part of the public API.
 
-**Release preparation:** the C API, TypeScript client, MCP adapter and shared-core
-WASM runtime are implemented. Native and WASM gameplay, retries, browser
-persistence and the small browser example have real integration tests. Release
-previews include matching source/native/npm archives. Final owner source/license approval and remote CI
-remain; this is not a stable 1.0 release. New worlds use a [recorded runtime
-profile](docs/REPLAY.md): fixed UTC creation calendar and isolated user options.
-Unprofiled historical worlds are refused rather than silently migrated.
-The old Bun application/UI are not part of the library or its distributions.
+The C API, TypeScript client, MCP adapter and shared-core WASM runtime are
+implemented and covered by native and browser integration tests. This is an
+alpha. Checked previews include matching source/native/npm archives.
+New worlds use a [recorded runtime profile](docs/REPLAY.md): a fixed UTC creation
+calendar and isolated user options. Incompatible historical worlds are refused.
 
 Start with the [first-five-minutes guide](docs/QUICKSTART.md) for runnable
 source, browser and installed-preview paths.
@@ -123,19 +120,17 @@ See [WASM build, persistence and resume](docs/WASM.md).
 - [TypeScript and MCP](docs/TYPESCRIPT.md): clients, decisions and uncertainty.
 - [WebAssembly](docs/WASM.md): building, browser example and storage guarantees.
 - [Distributions](docs/DISTRIBUTION.md): checked native/npm/source previews,
-  source provenance, embedded dependencies and the publication gate.
+  source provenance and embedded dependencies.
 - [`protocol/catalog.json`](protocol/catalog.json): exact supported methods.
 - [`protocol/request.schema.json`](protocol/request.schema.json) and
   [`protocol/response.schema.json`](protocol/response.schema.json).
 
-The old application's archive UI, authentication/HTTP policy and management
-utilities are not part of the new library's public API. Raw engine documentation
-under `protocol/engine/` is implementation material, not a client interface.
+Raw engine documentation under `protocol/engine/` is implementation material,
+not a client interface.
 
 ## License
 
 NetHack retains its original license in [`engine/dat/license`](engine/dat/license).
-The license for new standalone project code must be selected before publication;
-the npm package is deliberately private meanwhile. See [notices](NOTICE.md).
+See [notices](NOTICE.md) for project and dependency licensing.
 
 Browser agents can use the complete MCP catalog through [`neonethack/webmcp`](docs/WEBMCP.md). The adapter uses native WebMCP and the application’s public transport; the pixel client shares its persistent engine and HUD with agent calls.
