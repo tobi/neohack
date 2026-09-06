@@ -4,6 +4,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Restored missing ledger history after the hosting move. Storage outages now show
+  an explicit notice; fresh adventures can still start and resume in this browser.
+
 - A character sheet separates worn gear, ready weapons and carried items, with
   exact equipment positions, attributes and mobile Equipment/Backpack views.
   Removing equipment updates the sheet immediately; unknown assignments stay unknown.

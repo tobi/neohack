@@ -64,7 +64,7 @@ export function journalUrl(vault = playerId()) {
 
 export async function cloudReady() {
   try {
-    const response = await fetch("/api/health");
+    const response = await fetch("/api/health", {cache:"no-store",signal:AbortSignal.timeout(8000)});
     return response.ok && (await response.json()).ok === true;
   } catch {
     return false;

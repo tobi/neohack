@@ -3358,3 +3358,16 @@ test('character sheet follows actual equipment changes and distinguishes unknown
   assert.match(await page.locator('.weapon-line').textContent(),/Equipment unknown/);
   assert.equal(await page.getByText('Your backpack is empty.',{exact:true}).count(),0);
 });
+
+test('a suspended cloud store does not block a fresh local adventure or erase its local resume', async t=>{
+  const {page}=await fixture(t);let journalReads=0;
+  await page.route('**/api/health',route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":"Storage unavailable"}'}));
+  page.on('request',request=>{if(/\/api\/vaults\/[^/]+$/.test(new URL(request.url()).pathname))journalReads++;});
+  await create(page);
+  const first=await snapshot(page);assert.ok(first.sessionId);
+  assert.match(await page.locator('#cloud-status').textContent(),/Online saves unavailable/);
+  assert.equal(journalReads,0);
+  await page.reload();await page.waitForFunction(()=>!!document.querySelector('pixel-nethack').snapshot);await ready(page);
+  assert.equal((await snapshot(page)).sessionId,first.sessionId);
+  assert.equal((await snapshot(page)).revision,first.revision);
+});

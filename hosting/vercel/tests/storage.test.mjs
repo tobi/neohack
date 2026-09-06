@@ -148,3 +148,26 @@ test("corrupted content-addressed objects fail instead of becoming replay facts"
     await assert.rejects(immutable({ turn: 1 }), /hash differs/);
   });
 });
+
+test('storage health fails closed without attempting writes during a storage outage', async()=>{
+  let writes=0;
+  await storageContext.run({read:async()=>{throw Error('store suspended');},write:async()=>{writes++;}},async()=>{
+    for(const path of ['health','stats']) {
+      const response=await handler(new Request('https://neohack.dev/api/'+path));
+      assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'Storage unavailable'});
+    }
+  });
+  assert.equal(writes,0);
+});
+
+test('ledger persists across independent server instances and stale updates cannot erase completed runs', async t=>{
+  const store=new MemoryStorage();
+  const one=createTestHarness({store});const a=(await one.listen()).url;
+  const submit=(url,runs)=>fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({runs})});
+  assert.equal((await submit(a,[{id:'durable-run',name:'Hero',role:'wizard',turn:900,ended:true,maxLevel:8}])).status,200);
+  await one.close();
+  const two=createTestHarness({store});t.after(()=>two.close());const b=(await two.listen()).url;
+  await submit(b,[]);await submit(b,[{id:'durable-run',turn:1,ended:false}]);
+  const stats=await (await fetch(new URL('/api/stats',b))).json();
+  assert.equal(stats.totals.runs,1);assert.equal(stats.best[0].turn,900);assert.equal(stats.best[0].ended,true);
+});

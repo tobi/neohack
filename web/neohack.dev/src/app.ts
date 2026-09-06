@@ -649,7 +649,7 @@ class PixelNethack extends HTMLElement {
     this.assertConnected();
     ++this.cloudStatusGeneration;
     this.cloudEnabled = await cloudReady();
-    this.text("#cloud-status", this.cloudEnabled ? "Connecting online save…" : "Saved in this browser");
+    this.text("#cloud-status", this.cloudEnabled ? "Connecting online save…" : "Online saves unavailable · saving in this browser");
     const replica = this.cloudEnabled ? journalUrl(this.vault) : undefined;
     if (requestedRun() && !replica && !this.saves.some(save => save.id === requestedRun()!.id)) throw Error("The cloud save could not be reached. Retry this bookmark when connected; no new game was started.");
     const wasm = await this.runtime.wasm.createWasm({
@@ -677,7 +677,7 @@ class PixelNethack extends HTMLElement {
     // Refresh only after acquiring ownership, before any request can persist it.
     try {
       this.readSaves();
-      if (!this.saves.length) {
+      if (!this.saves.length && this.cloudEnabled) {
         const remote = await restoreAdventures(this.vault);
         if (remote?.length) this.saves = remote;
       }

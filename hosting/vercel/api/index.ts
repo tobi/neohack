@@ -3,7 +3,7 @@ import { Accounts } from "../src/accounts.ts";
 import { vaults } from "../src/vaults.ts";
 import { replay } from '../src/replays.ts';
 import { board } from "../src/board.ts";
-import { configured, Conflict } from "../src/storage.ts";
+import { configured, Conflict, read } from "../src/storage.ts";
 async function dispatch(request: Request) {
   const url = new URL(request.url);
   const path = url.searchParams.get("__path");
@@ -20,8 +20,10 @@ async function dispatch(request: Request) {
   try {
     const publicReplay=pathname.match(/^\/api\/runs\/([\w-]{1,64})\/replay$/);
     if(publicReplay)return await replay(request,publicReplay[1]);
-    if (pathname === "/api/health")
-      return json({ ok: true, platform: "vercel", webmcp: "browser-mediated" });
+    if (pathname === "/api/health") {
+      await read("board/index.json"); // Verify access, not just presence of a token.
+      return json({ ok: true, storage: "available", platform: "vercel", webmcp: "browser-mediated" });
+    }
     if (pathname === "/api/account" || pathname.startsWith("/api/account/"))
       return await new Accounts().fetch(request);
     if (
@@ -36,12 +38,6 @@ async function dispatch(request: Request) {
     if (error instanceof Conflict)
       return json({ error: "Concurrent storage update; retry" }, 409);
     console.error("request_failed", { code: "server" });
-    await board(
-      new Request(new URL("/api/errors", url), {
-        method: "POST",
-        body: JSON.stringify({ code: "server" }),
-      }),
-    ).catch(() => {});
     return json({ error: "Storage unavailable" }, 503);
   }
 }

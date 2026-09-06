@@ -1,0 +1,15 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
+import {createTestHarness} from './server.mjs';
+test('ledger shows storage failure prominently and keeps the last loaded records',async t=>{
+  const server=createTestHarness();const {url}=await server.listen();
+  const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});
+  t.after(async()=>{await browser.close();await server.close();});const page=await browser.newPage();let failing=true;
+  await page.route('**/api/stats',route=>route.fulfill({status:failing?503:200,contentType:'application/json',body:JSON.stringify(failing?{error:'Storage unavailable'}:{generatedAt:Date.now(),totals:{runs:1,living:1,ascended:0,longest:500},best:[{id:'saved',name:'Retained Hero',role:'ranger',turn:500,maxLevel:4}],roles:[],errors:[]})}));
+  await page.goto(new URL('/dashboard',url).href);await page.locator('#ledger-error').waitFor({state:'visible'});
+  assert.match(await page.locator('#ledger-error').textContent(),/not a report of zero/);assert.equal(await page.locator('#empty').isVisible(),false);
+  failing=false;await page.locator('#refresh').click();await page.getByText('Retained Hero',{exact:false}).waitFor();
+  failing=true;await page.locator('#refresh').click();await page.locator('#ledger-error').waitFor({state:'visible'});
+  assert.match(await page.locator('#runs').textContent(),/Retained Hero/);assert.match(await page.locator('#freshness').textContent(),/last successfully loaded/);
+});

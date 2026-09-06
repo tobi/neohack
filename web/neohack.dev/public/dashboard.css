@@ -10,3 +10,4 @@
 #replay-lightbox neohack-world { height:min(65dvh,650px);min-height:320px; }
 #replay-lightbox p { margin:10px 0 0;font-size:13px; }
 #embed-code { width:100%;min-height:100px;background:#17201c;color:#eee8d0; }
+#ledger-error { padding: 18px; border: 1px solid #b99968; background: #342d24; color: #f0d5ac; font-size: 17px; }

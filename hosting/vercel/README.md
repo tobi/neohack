@@ -70,3 +70,25 @@ keeping their actual status; ordinary fetch clients continue receiving JSON.
 Vercel automatically uses static error pages for platform crashes/timeouts only
 on Enterprise plans. On Hobby, a failure before our handler starts still uses
 Vercel’s platform page. No paid-plan change is made by this repository.
+
+### Ledger preservation and outage recovery
+
+Deployments must retain the production Blob store and its `board/index.json`.
+A failed read is an outage, never an empty ledger or permission to overwrite it.
+The health endpoint checks an actual storage read; the dashboard retains its last
+loaded rows and shows an explicit error when storage is unavailable. Fresh local
+adventures remain available without replacing unreachable cloud-only runs.
+
+The one-time relocation recovery tool reads the original `board/runs.json` and
+adds only IDs missing from `board/index.json`. Existing records and diagnostics
+win; neither the source ledger nor private saves/accounts are changed. Run with
+production `BLOB_READ_WRITE_TOKEN` supplied through the environment:
+
+```sh
+node hosting/vercel/scripts/recover-ledger.mjs          # counts/hash only; no writes
+node hosting/vercel/scripts/recover-ledger.mjs --apply  # conditional atomic merge
+```
+
+On 2026-09-06, recovery restored 1,573 missing records (1,665 total at verification).
+Repeated execution reports zero additions. Retain the original ledger as evidence;
+this tool is operational recovery, not a game-save compatibility layer.

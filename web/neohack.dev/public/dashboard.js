@@ -40,6 +40,7 @@ async function refresh() {
     const response=await fetch("/api/stats",{cache:"no-store"});
     if(!response.ok) throw Error("The ledger is unavailable. Try refreshing.");
     data=await response.json();
+    $("#ledger-error").hidden=true;
     $("#metrics").replaceChildren(...[["Recorded runs",data.totals.runs],["Still adventuring",data.totals.living],["Ascensions",data.totals.ascended],["Longest run · turns",data.totals.longest]].map(([label,value])=>{
       const node=element("div","");node.className="metric";node.append(element("strong",format(value)),element("span",label));return node;
     }));
@@ -54,7 +55,12 @@ async function refresh() {
     }));
     if(!data.errors.length){const row=element("tr","");const cell=element("td","No error reports in this window.");cell.colSpan=4;row.append(cell);$("#errors").append(row);}
     $("#freshness").textContent="Updated "+new Date(data.generatedAt).toLocaleString()+". Refreshes every minute.";
-  } catch(error) {$("#freshness").textContent=error.message;}
+  } catch(error) {
+    $("#freshness").textContent=data ? "Showing the last successfully loaded ledger." : "Ledger could not be loaded.";
+    $("#ledger-error").hidden=false;
+    $("#ledger-error").textContent="Online storage is unavailable. The ledger cannot be read right now; this is not a report of zero adventures. Try Refresh shortly.";
+    $("#empty").hidden=true;
+  }
   finally {$("#refresh").disabled=false;}
 }
 $("#refresh").addEventListener("click",refresh);
