@@ -70,6 +70,10 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
   output-token and cache-miss totals.
 - Observation snapshots and deltas are merged into `state/last-obs.json`, so
   the advisor retains its world cache while the model receives compact deltas.
+- Stuck detection tracks revealed cells, depth, position history and turns—not
+  merely whether turns advance. Three zero-turn actions, short position cycles,
+  or 25 turns without discovery when no downstairs is known end the run for
+  retrospective repair.
 - Death detection resets the conversation; the model then starts a new game
   itself (new session ids are captured automatically).
 - The state directory (default `./state`, override with `NEONETHACK_BOT_STATE`)

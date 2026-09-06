@@ -26,10 +26,10 @@ function dirName(dx, dy) { for (const [n, ax, ay] of DIRS) if (ax === dx && ay =
 
 // ---- world helpers (observation-scoped, stateless) ----
 function isUnknown(k, map, h) {
-  const c = h.get(k);                                  // hood is fresher: map can say "dark"
-  if (c) return c.terrain?.type === 'dark' || c.visible === false;  // for already-revealed floor
+  const c = h.get(k); // neighborhood is fresher, but visibility is not knowledge
+  if (c) return !c.terrain?.type || c.terrain.type === 'dark';
   const w = map.get(k);
-  if (w) return w.terrain?.type === 'dark';
+  if (w) return !w.terrain?.type || w.terrain.type === 'dark';
   return true;
 }
 function passable(k, map, h) {
