@@ -1,0 +1,21 @@
+{
+  "name": "@neohack/example-cli-mcp-bot",
+  "version": "1.0.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "description": "LLM-driven NetHack bot: plays the neonethack C engine through the neonethack MCP stdio server (Vercel AI SDK + OpenAI-compatible endpoint).",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node agent.mjs",
+    "runner": "bash ai-runner.sh",
+    "retro": "node retro.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^2.0.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "ai": "^7.0.92",
+    "zod": "^4.5.4"
+  }
+}
