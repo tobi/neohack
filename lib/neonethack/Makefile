@@ -1,7 +1,9 @@
 # The same CMake graph supports both Make and Ninja. No JavaScript runtime is
 # needed to build/link the native C library from committed generated sources.
 BUILD ?= build/native
-CMAKE ?= cmake
+# GNU Make 4.3 can select Emscripten's cmake/ directory from PATH as an
+# executable. Shell lookup skips directories; keep explicit CMAKE overrides.
+CMAKE ?= $(shell command -v cmake)
 GENERATOR ?= Ninja
 PREFIX ?= /usr/local
 WASM_BUILD ?= build/wasm
