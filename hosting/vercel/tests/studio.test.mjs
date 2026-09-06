@@ -252,3 +252,16 @@ export default defineBot({name:'Stateful imp',initialize({hero,log}) {
   await page.waitForFunction(()=>document.querySelector('#runs').textContent.includes('Bold true'));
   assert.match(await page.locator('#runs').textContent(),/Script · Stateful imp/);
 });
+
+test('plain-text platform failures explain account outage and a fresh explicit attempt succeeds', {timeout:60000},async t=>{
+ const {page,url}=await fixture(t);await page.goto(url+'/login');await passkey(page);
+ let calls=0;
+ await page.route('**/api/account/options',async route=>{calls++;if(calls===1)return route.fulfill({status:500,contentType:'text/plain',body:'A server error has occurred\nFUNCTION_INVOCATION_FAILED'});return route.continue();});
+ await page.locator('#open-login').click();await page.locator('#name').fill('AfterOutage');await page.locator('#register').click();
+ await page.waitForFunction(()=>document.querySelector('neohack-rail').shadowRoot.querySelector('#auth-status').textContent.includes('temporarily unavailable'));
+ assert.equal(calls,1,'credential ceremonies are not automatically retried');
+ assert.equal(await page.evaluate(()=>document.querySelector('neohack-rail').shadowRoot.querySelector('#auth-status').textContent),'The account service is temporarily unavailable. Please try again in a moment.');
+ await page.locator('#register').click();
+ await page.waitForFunction(()=>!document.querySelector('#account').hidden);
+ assert.equal(await page.locator('#handle').textContent(),'AfterOutage');assert.equal(calls,2);
+});

@@ -1,8 +1,24 @@
 import type { Snapshot } from 'neonethack/types';
 export async function accountApi(path = '', body?: unknown, method = 'POST') {
-  const response = await fetch('/api/account'+path,{method:body === undefined ? 'GET' : method,headers:body === undefined ? {} : {'content-type':'application/json'},body:body === undefined ? undefined : JSON.stringify(body)});
-  const data = await response.json();
-  if(!response.ok) throw Error(data.error ?? `Account request failed (${response.status})`);
+  let response: Response;
+  try {
+    response = await fetch('/api/account'+path, {
+      method: body === undefined ? 'GET' : method,
+      cache: 'no-store',
+      headers: {accept:'application/json', ...(body === undefined ? {} : {'content-type':'application/json'})},
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw Error('Couldn’t reach the account service. Check your connection and try again.');
+  }
+  // A platform failure can return plain text or HTML before our handler starts.
+  // Never expose that body or retry a credential ceremony automatically.
+  if(response.status >= 500) throw Error('The account service is temporarily unavailable. Please try again in a moment.');
+  let data: any;
+  try { data = await response.json(); }
+  catch { throw Error('The account service returned an unreadable response. Please try again.'); }
+  if(!response.ok) throw Error(typeof data?.error === 'string' ? data.error : `Account request failed (${response.status})`);
+  if(data === null || typeof data !== 'object') throw Error('The account service returned an unreadable response. Please try again.');
   return data;
 }
 export interface BotSource {

@@ -46,11 +46,11 @@ class NeohackRail extends HTMLElement {
       const optionsJSON=await accountApi('/options',register?{register:true,name}:{});
       const response=register?await startRegistration({optionsJSON}):await startAuthentication({optionsJSON});
       this.user=await accountApi('/verify',response);this.changed();this.dialog.close();
-    } catch(error){status.textContent=String(error);} finally {this.busy=false;this.root.querySelectorAll<HTMLButtonElement>('form button,#signin').forEach(button=>button.disabled=false);}
+    } catch(error){status.textContent=error instanceof Error ? error.message : String(error);} finally {this.busy=false;this.root.querySelectorAll<HTMLButtonElement>('form button,#signin').forEach(button=>button.disabled=false);}
   }
   private async signout() {
     try {await accountApi('/logout',{});this.user=null;this.changed();}
-    catch(error){this.open();this.root.querySelector('#auth-status')!.textContent=String(error);}
+    catch(error){this.open();this.root.querySelector('#auth-status')!.textContent=error instanceof Error ? error.message : String(error);}
   }
 }
 if(!customElements.get('neohack-rail'))customElements.define('neohack-rail',NeohackRail);
