@@ -189,9 +189,9 @@ static void put_direction(mj_Buf *b, nnh_direction direction)
 }
 static void put_item(mj_Buf *b, const nnh_item *i)
 {
-    if (!!i->id == !!i->name) { mj_nullv(b); return; }
+    if (!!i->id == !!i->name || (i->name && i->quantity)) { mj_nullv(b); return; }
     if (i->name) mj_strv(b, i->name);
-    else { mj_obj(b); mj_key(b, "id"); mj_strv(b, i->id); mj_endobj(b); }
+    else { mj_obj(b); mj_key(b, "id"); mj_strv(b, i->id); if (i->quantity) { mj_key(b, "quantity"); mj_intv(b, i->quantity); } mj_endobj(b); }
 }
 static void put_target(mj_Buf *b, const nnh_target *t)
 {
@@ -237,17 +237,26 @@ nnh_status nnh_session_create(nnh_context *x, const nnh_identity *i, nnh_result 
 }
 #define SESSION(name) nnh_status nnh_session_##name(nnh_context *x, const char *sid, nnh_result **out) { mj_Buf b; start(&b, "session." #name, sid, NULL); return finish(x, &b, out); }
 SESSION(observe) SESSION(resume) SESSION(close)
-#define SIMPLE(name) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, nnh_result **out) { mj_Buf b; start(&b, "game." #name, sid, g); return finish(x, &b, out); }
-SIMPLE(loot) SIMPLE(wait) SIMPLE(search) SIMPLE(pray) SIMPLE(quit)
-#define DIRECTION(name) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, nnh_direction d, nnh_result **out) { mj_Buf b; start(&b, "game." #name, sid, g); mj_key(&b, "direction"); put_direction(&b, d); return finish(x, &b, out); }
-DIRECTION(move) DIRECTION(climb)
+#define SIMPLE_AS(name, action) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, nnh_result **out) { mj_Buf b; start(&b, "game." #action, sid, g); return finish(x, &b, out); }
+#define SIMPLE(name) SIMPLE_AS(name, name)
+SIMPLE(cast) SIMPLE(enhance) SIMPLE(swap) SIMPLE_AS(two_weapon, twoWeapon) SIMPLE(pay) SIMPLE(engrave) SIMPLE(loot) SIMPLE(wait) SIMPLE(search) SIMPLE(pray) SIMPLE(quit)
+#define DIRECTION_AS(name, action) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, nnh_direction d, nnh_result **out) { mj_Buf b; start(&b, "game." #action, sid, g); mj_key(&b, "direction"); put_direction(&b, d); return finish(x, &b, out); }
+#define DIRECTION(name) DIRECTION_AS(name, name)
+DIRECTION(attack) DIRECTION_AS(move_without_attack, moveWithoutAttack) DIRECTION(move) DIRECTION(climb)
 #define TARGET(name) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, const nnh_target *t, nnh_result **out) { mj_Buf b; start(&b, "game." #name, sid, g); if (t) { mj_key(&b, "target"); put_target(&b, t); } return finish(x, &b, out); }
-TARGET(kick) TARGET(open) TARGET(close)
+TARGET(fire) TARGET(chat) TARGET(kick) TARGET(open) TARGET(close)
 #define ITEM(name) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, const nnh_item *i, nnh_result **out) { mj_Buf b; start(&b, "game." #name, sid, g); if (i) { mj_key(&b, "item"); put_item(&b, i); } return finish(x, &b, out); }
-ITEM(pickup) ITEM(eat) ITEM(drink) ITEM(wield) ITEM(equip) ITEM(remove) ITEM(read) ITEM(apply) ITEM(drop)
+ITEM(dip) ITEM(rub) ITEM(invoke) ITEM(quiver) ITEM(offer) ITEM(pickup) ITEM(eat) ITEM(drink) ITEM(wield) ITEM(equip) ITEM(remove) ITEM(read) ITEM(apply) ITEM(drop)
 nnh_status nnh_game_zap(nnh_context *x, const char *sid, const nnh_guard *g, const nnh_item *i, const nnh_target *t, nnh_result **out)
 {
     mj_Buf b; start(&b, "game.zap", sid, g);
+    if (i) { mj_key(&b, "item"); put_item(&b, i); }
+    if (t) { mj_key(&b, "target"); put_target(&b, t); }
+    return finish(x, &b, out);
+}
+nnh_status nnh_game_throw(nnh_context *x, const char *sid, const nnh_guard *g, const nnh_item *i, const nnh_target *t, nnh_result **out)
+{
+    mj_Buf b; start(&b, "game.throw", sid, g);
     if (i) { mj_key(&b, "item"); put_item(&b, i); }
     if (t) { mj_key(&b, "target"); put_target(&b, t); }
     return finish(x, &b, out);

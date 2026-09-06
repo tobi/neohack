@@ -81,7 +81,9 @@ Keep the same guard **and all arguments** when retrieving a timed-out receipt.
 - `nnh_direction` distinguishes eight compass directions and up/down.
 - `nnh_target` distinguishes self and direction; individual methods constrain it.
 - `nnh_item` has exactly one non-NULL `id` or `name`. A NULL item pointer asks for
-  candidates. Invalid/ambiguous selectors are not guessed.
+  selection. Invalid/ambiguous selectors are not guessed. Initialize `quantity`
+  to zero for the engine default; a positive count requires an ID and is
+  supported by initial drop or a standing `counted:true` item decision.
 - `nnh_answer` is a tagged union for item, target, confirmation, choice and text.
   Confirmation is exactly 0 or 1. Choices are returned integer IDs, not slots.
 - `nnh_decision_cancel` is separate from answering. Pass the standing decision ID.
@@ -90,6 +92,14 @@ The typed API serializes into the same strict C protocol validator. Passing a
 bad enum, irrelevant target or missing guard cannot bypass schema checks.
 `nnh_dispatch` is the length-delimited bridge for bindings that already use JSON;
 it does not expose legacy raw input or reconstruction methods.
+
+New named helpers cover throw/offer, cast/enhance, fire/quiver/swap/twoWeapon,
+pay/chat/dip/rub/invoke/engrave and attack/moveWithoutAttack. Throw takes an item
+and optional target; cast/enhance/engrave begin engine menus. Continue with
+`nnh_decision_answer` rather than repeating the initiating command. Returned
+JSON includes `observation.knowledge`, item `known` properties and, after genuine
+terminal scoring, `end.score`. See [PROTOCOL.md](PROTOCOL.md) for field knowledge
+and count limits; the C and transport layers share those rules.
 
 ## Concurrency and paths
 
@@ -122,6 +132,7 @@ parameters. Sessions must not be supplied as arbitrary uploaded executables or
 input journals. Native leases and conservative integrity checks are not a
 multi-user authorization system.
 
-ABI version 1 uses fixed public enums and opaque handles. `config.size` must be
+ABI version 2 adds the counted item layout; rebuild C consumers against this
+header. No compatibility adapter or save migration is provided. `config.size` must be
 `sizeof(nnh_config)`; a mismatched layout fails instead of being interpreted as
 another ABI. Protocol version and library version are separate.

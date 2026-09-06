@@ -764,7 +764,11 @@ getspell(int *spell_no)
         }
     }
 
-    if (flags.menu_style == MENU_TRADITIONAL) {
+    if (flags.menu_style == MENU_TRADITIONAL
+#ifdef HEADLESS_GRAPHICS
+        && !WINDOWPORT(headless)
+#endif
+       ) {
         /* if we get here, we know there is at least 1 known spell */
         if (nspells == 1)
             Strcpy(lets, "a");
@@ -2449,3 +2453,17 @@ num_spells(void)
 }
 
 /*spell.c*/
+
+#ifdef HEADLESS_GRAPHICS
+/* Exactly the ordinary spell menu's facts, with its rounded retention. */
+int headless_spell_info(int i, const char **name, int *level,
+                        const char **category, int *failure, char *retention)
+{
+    if (i < 0 || i >= MAXSPELL || spellid(i) == NO_SPELL) return 0;
+    *name = spellname(i); *level = spellev(i);
+    *category = spelltypemnemonic(spell_skilltype(spellid(i)));
+    *failure = 100 - percent_success(i);
+    spellretention(i, retention);
+    return spellid(i);
+}
+#endif

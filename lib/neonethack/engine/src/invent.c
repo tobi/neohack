@@ -1914,9 +1914,25 @@ getobj(
         return (struct obj *) 0;
     }
     for (;;) {
+#ifdef HEADLESS_GRAPHICS
+        struct obj *headless_selection = NULL;
+#endif
         cnt = 0L;
         cntgiven = FALSE;
         Sprintf(qbuf, "What do you want to %s?", word);
+#ifdef HEADLESS_GRAPHICS
+        if (WINDOWPORT(headless) && !gi.in_doagain) {
+            long selected_count = -1L;
+            headless_selection = headless_getobj_prompt(qbuf, allownone, allowcnt,
+                                                         &selected_count);
+            ilet = !headless_selection ? '\033' : headless_selection == &hands_obj
+                ? HANDS_SYM : headless_selection->invlet;
+            if (selected_count >= 0L) {
+                cnt = selected_count;
+                cntgiven = TRUE;
+            }
+        } else
+#endif
         if (gi.in_doagain) {
             ilet = readchar();
         } else if (iflags.force_invmenu) {
@@ -2000,6 +2016,10 @@ getobj(
             /* they typed a letter (not a space) at the prompt */
         }
         /* find the item which was picked */
+#ifdef HEADLESS_GRAPHICS
+        if (headless_selection) otmp = headless_selection;
+        else
+#endif
         for (otmp = gi.invent; otmp; otmp = otmp->nobj)
             if (otmp->invlet == ilet)
                 break;

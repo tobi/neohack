@@ -7,14 +7,14 @@ import { NativeTransport, type NativeOptions } from "../typescript/native.js";
 import type { Transport } from "../typescript/client.js";
 import type { Request } from "../typescript/types.js";
 
-import { tools } from "./tools.js";
+import { tools, instructions } from "./tools.js";
 export { tools } from "./tools.js";
 
 export function createMcpServer(transport: Transport): Server {
   const compact = new CompactResponses();
   const server = new Server({ name: "neonethack", version: "1.0.0-alpha.1" }, {
     capabilities: { tools: {} },
-    instructions: "NetHack through a perception-limited world API, not a terminal. Create or resume a session. Use one named game tool per intent; use decision_answer or decision_cancel for a returned choice. Never automatically confirm a warning. Each gameplay/decision request requires a unique requestId and the latest expectedRevision. If a call times out, retry the exact requestId and payload, never a new action. Observation and eligibility do not reveal hidden properties. Observation updates: snapshot replaces state; delta replaces supplied fields and upserts world cells by x,y, removes update.remove fields and update.worldRemoved coordinates. Apply only when update.base equals your last update.id; otherwise call session_observe. Neighborhood offers are available via session_actions. A cached retry receipt may describe an earlier revision.",
+    instructions,
   });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
   server.setRequestHandler(CallToolRequestSchema, async request => {

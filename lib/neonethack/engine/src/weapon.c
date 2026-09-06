@@ -1843,3 +1843,15 @@ setmnotwielded(struct monst *mon, struct obj *obj)
 #undef AKLYS_LIM
 
 /*weapon.c*/
+
+#ifdef HEADLESS_GRAPHICS
+int headless_skill_info(int skill, const char **name, const char **level,
+                        int *advancement)
+{
+    static char levelbuf[BUFSZ];
+    if (skill < 0 || skill >= P_NUM_SKILLS || P_RESTRICTED(skill)) return 0;
+    *name = P_NAME(skill); *level = skill_level_name(skill, levelbuf);
+    *advancement = can_advance(skill, FALSE) ? 1 : could_advance(skill) ? 2 : peaked_skill(skill) ? 3 : 0;
+    return 1;
+}
+#endif

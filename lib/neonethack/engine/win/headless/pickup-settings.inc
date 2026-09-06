@@ -50,6 +50,7 @@ hl_pickup_configure(const char *json)
         hl_pickup.types = types;
     }
     flags.pickup = hl_pickup.enabled;
+    flags.autoquiver = FALSE; iflags.fireassist = FALSE; /* explicit weapon/ammunition choices */
     for (i = 0; i < SIZE(hl_pickup_classes); i++)
         if (hl_pickup.types & (1U << i)) flags.pickup_types[n++] = hl_pickup_classes[i].oclass;
     /* An empty NetHack type string means ALL. VENOM is the deliberate no-floor-

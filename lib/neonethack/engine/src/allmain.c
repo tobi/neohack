@@ -695,6 +695,7 @@ stop_occupation(void)
     if (go.occupation) {
 #ifdef HEADLESS_GRAPHICS
         headless_study_stopped();
+        headless_engraving_stopped();
 #endif
         if (!maybe_finished_meal(TRUE)) {
 #ifdef HEADLESS_GRAPHICS

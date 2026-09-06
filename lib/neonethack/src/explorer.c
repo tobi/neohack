@@ -100,6 +100,7 @@ typedef struct {
     int glyph;
     int selectable; /* -1 = legacy/unspecified; otherwise engine fact */
     long long object_id; /* private binding for an offered object row */
+    long long quantity;
     int transfer; /* engine-authored container side: 1 take, 2 put */
     char *text;
 } menu_item_t;
@@ -114,6 +115,7 @@ typedef struct {
     int used;
     int window;
     int container_phase; /* 1 inspect, 2 transfer */
+    int item_selection, counted;
     char *prompt;
     menu_item_t *items;
     size_t nitems, cap;
@@ -123,6 +125,8 @@ typedef struct {
     int waiting;
     long long id;
     char kind[16];
+    char context[32];
+    long long object_id;
     int position_mode, cursor_x, cursor_y;
     char *prompt;           /* about text when the engine supplies one */
     int window, how;        /* menu */
@@ -183,7 +187,10 @@ typedef struct {
     char category[24];      /* perceived object class, not name heuristics */
     unsigned usage;
     int usage_known;
+    int accessory;
+    long long object_id;
     int armor_access_known, armor_accessible;
+    char known[1024];
 } inv_item_t;
 
 static const char *const USAGE_NAMES[] = { "worn", "wielded", "offhand", "alternate", "quivered", "attached", NULL };
@@ -201,8 +208,10 @@ typedef struct {
     int keypos;             /* script keys consumed so far */
     int cmdkey;             /* command key to send (-2 = use action table) */
     char item_letter;       /* resolved inventory letter (0 = none) */
+    long long item_count;   /* explicit count; zero means engine default */
     int floor_index;        /* legacy floor-flow hint (-1 = none) */
     long long floor_object_id; /* resolved identity, never a menu ordinal */
+    long long item_object_id; /* resolved carried engine identity */
     int dir_code;           /* resolved direction key (-1 = none) */
     int self_ok;            /* target self allowed for this action */
     int letter_answers;     /* letter-prompt answers given this run */
@@ -217,6 +226,7 @@ typedef struct {
     int quantity;
     long long object_id;   /* engine-issued identity from perception */
     int container;         /* disclosed appearance, never contents/lock/trap */
+    char known[1024];
 } floor_item_t;
 
 typedef struct req_entry {
@@ -248,10 +258,14 @@ typedef struct game {
     char terminal_kind[32];
     char terminal_cause[256];
     long long terminal_turn;
+    long long final_score;
+    int final_score_known;
     char location_id[80];
     int structured_perception; /* engine perception version; zero = legacy peeks */
     char pickup_settings[1024]; /* actual engine configuration, restored by replay */
     int affordance_version, ordinary_locomotion, normal_map, door_diagonals, direction_reliable;
+    int non_food_diet;
+    char knowledge[65536];
     long long knowledge_epoch;
     door_fact_t *door_facts;
     size_t ndoor_facts, door_capacity;
@@ -616,6 +630,8 @@ sidecar_save(game_t *g)
         mj_key(&b, "cmdkey"); mj_intv(&b, g->operation.cmdkey);
         mj_key(&b, "dirCode"); mj_intv(&b, g->operation.dir_code);
         mj_key(&b, "itemLetter"); mj_intv(&b, g->operation.item_letter);
+        mj_key(&b, "itemCount"); mj_intv(&b, g->operation.item_count);
+        mj_key(&b, "itemObjectId"); mj_intv(&b, g->operation.item_object_id);
         mj_key(&b, "floorIndex"); mj_intv(&b, g->operation.floor_index);
         mj_key(&b, "floorObjectId"); mj_intv(&b, g->operation.floor_object_id);
         mj_key(&b, "selfAllowed"); mj_intv(&b, g->operation.self_ok);
@@ -844,6 +860,8 @@ sidecar_load(game_t *g)
                 if (mj_find(cpy, "floorObjectId", &dv) && mj_int(dv, &n)) g->operation.floor_object_id = n;
                 if (mj_find(cpy, "selfAllowed", &dv) && mj_int(dv, &n)) g->operation.self_ok = (int) n;
                 if (mj_find(cpy, "letterAnswers", &dv) && mj_int(dv, &n)) g->operation.letter_answers = (int) n;
+                if (mj_find(cpy, "itemCount", &dv) && mj_int(dv, &n)) g->operation.item_count = n;
+                if (mj_find(cpy, "itemObjectId", &dv) && mj_int(dv, &n)) g->operation.item_object_id = n;
             }
             g->have_operation = g->operation.action[0] != '\0';
             free(cpy);
@@ -1322,6 +1340,7 @@ ingest_belongings(game_t *g, const char *params)
         g->affordance_version = 1;
         if (mj_find(params, "knowledgeEpoch", &v) && mj_int(v, &n)) g->knowledge_epoch = n;
         if (mj_find(params, "ordinaryLocomotion", &v)) mj_bool(v, &g->ordinary_locomotion);
+        if (mj_find(params, "nonFoodDiet", &v)) mj_bool(v, &g->non_food_diet);
         if (mj_find(params, "normalMap", &v)) mj_bool(v, &g->normal_map);
         if (mj_find(params, "doorDiagonals", &v)) mj_bool(v, &g->door_diagonals);
         if (mj_find(params, "directionReliable", &v)) mj_bool(v, &g->direction_reliable);
@@ -1342,6 +1361,11 @@ ingest_belongings(game_t *g, const char *params)
         remember_door_orientation(&g->cells[g->you_y][g->you_x], (int) n);
     }
     g->structured_perception = 1;
+    g->knowledge[0] = 0;
+    if (mj_find(params, "knowledge", &v)) {
+        size_t size; const char *raw = mj_raw(v, &size);
+        if (size < sizeof g->knowledge) { memcpy(g->knowledge, raw, size); g->knowledge[size] = 0; }
+    }
     if (mj_find(params, "automaticPickup", &v)) {
         size_t len; const char *raw = mj_raw(v, &len);
         if (len < sizeof g->pickup_settings) {
@@ -1385,6 +1409,10 @@ ingest_belongings(game_t *g, const char *params)
                     item->label = name; name = NULL;
                     item->quantity = (int) quantity;
                     item->object_id = id;
+                    if (mj_find(obj, "known", &v)) {
+                        size_t size; const char *raw = mj_raw(v, &size);
+                        if (size < sizeof item->known) { memcpy(item->known, raw, size); item->known[size] = 0; }
+                    }
                     if (mj_find(obj, "container", &v)) mj_bool(v, &item->container);
                 }
             } else {
@@ -1397,7 +1425,13 @@ ingest_belongings(game_t *g, const char *params)
                     snprintf(item->category, sizeof item->category, "%s", category ? category : "object");
                     item->label = name; name = NULL;
                     item->letter = (char) slot;
+                    item->object_id = id;
                     item->quantity = (int) quantity;
+                    if (mj_find(obj, "known", &v)) {
+                        size_t size; const char *raw = mj_raw(v, &size);
+                        if (size < sizeof item->known) { memcpy(item->known, raw, size); item->known[size] = 0; }
+                    }
+                    if (mj_find(obj, "accessory", &v)) mj_bool(v, &item->accessory);
                     if (mj_find(obj, "armorAccessible", &v))
                         item->armor_access_known = mj_bool(v, &item->armor_accessible);
                     if (mj_find(obj, "usage", &v) && *v.p == '[') {
@@ -1448,7 +1482,7 @@ ingest(game_t *g, const char *line)
     if (g->terminal_kind[0] && (!strcmp(method, "perception") ||
         !strcmp(method, "snapshot") || !strcmp(method, "map_delta") ||
         !strcmp(method, "status_update") || !strcmp(method, "window_clear") ||
-        !strcmp(method, "cursor") || !strcmp(method, "door_witness"))) goto done;
+        !strcmp(method, "cursor") || !strcmp(method, "text") || !strcmp(method, "message") || !strcmp(method, "door_witness"))) goto done;
     if (!strcmp(method, "door_witness")) {
         ingest_door_witness(g, params);
     } else if (!strcmp(method, "perception")) {
@@ -1666,6 +1700,7 @@ ingest(game_t *g, const char *line)
         m->items[m->nitems].glyph = (int) glyph;
         m->items[m->nitems].selectable = -1;
         m->items[m->nitems].object_id = 0;
+        m->items[m->nitems].quantity = 1;
         m->items[m->nitems].transfer = 0;
         if (mj_find(params, "selectable", &av))
             mj_bool(av, &m->items[m->nitems].selectable);
@@ -1680,8 +1715,17 @@ ingest(game_t *g, const char *line)
             goto done;
         m = menu_for(g, (int) w, 0);
         if (m) for (k = 0; k < m->nitems; k++)
-            if (m->items[k].index == idx && menu_selectable(&m->items[k]))
+            if (m->items[k].index == idx && menu_selectable(&m->items[k])) {
                 m->items[k].object_id = object;
+                if (mj_find(params, "quantity", &v)) mj_int(v, &m->items[k].quantity);
+            }
+    } else if (!strcmp(method, "item_menu")) {
+        mj_val v; long long w; menu_t *m;
+        if (!mj_find(params, "window", &v) || !mj_int(v, &w)) goto done;
+        m = menu_for(g, (int) w, 0);
+        if (!m) goto done;
+        m->item_selection = 1;
+        if (mj_find(params, "counted", &v)) mj_bool(v, &m->counted);
     } else if (!strcmp(method, "container_menu") || !strcmp(method, "container_item")) {
         mj_val v; long long w, idx; size_t k;
         menu_t *m; char *value;
@@ -1786,6 +1830,13 @@ ingest(game_t *g, const char *line)
             mj_free(&b);
         }
         free(kind); free(cause);
+    } else if (!strcmp(method, "final_result") && g->terminal_kind[0]) {
+        mj_val score, knowledge;
+        if (mj_find(params, "score", &score) && mj_int(score, &g->final_score)) g->final_score_known = 1;
+        if (mj_find(params, "knowledge", &knowledge)) {
+            size_t size; const char *raw = mj_raw(knowledge, &size);
+            if (size < sizeof g->knowledge) { memcpy(g->knowledge, raw, size); g->knowledge[size] = 0; }
+        }
     } else if (!strcmp(method, "session_ended")) {
         mj_val rv;
         char *reason = NULL;
@@ -2184,6 +2235,10 @@ pending_fill(game_t *g, long long id, const char *kind, const char *params)
     g->pending.waiting = 1;
     g->pending.id = id;
     snprintf(g->pending.kind, sizeof g->pending.kind, "%s", kind);
+    if (mj_find(params, "objectId", &v)) mj_int(v, &g->pending.object_id);
+    if (mj_find(params, "context", &v) && (s = mj_str(v)) != NULL) {
+        snprintf(g->pending.context, sizeof g->pending.context, "%s", s); free(s);
+    }
     if (mj_find(params, "prompt", &v) && (s = mj_str(v)) != NULL)
         g->pending.prompt = s;
     if (!strcmp(kind, "poskey")) {
@@ -2340,7 +2395,7 @@ await_prompt(game_t *g, int timeout_ms)
             /* Life saving has already been ruled out. Optional post-game
              * disclosures need no invented answers; teardown closes the UI.
              * Historical answers still replay verbatim. */
-            if (g->terminal_kind[0] && !g->replaying) {
+            if (g->terminal_kind[0] && g->final_score_known && !g->replaying) {
                 g->ended = 1;
                 pending_clear(g);
                 return 0;
@@ -2641,6 +2696,7 @@ tracked_clear(game_t *g)
     g->msg_start = g->msg_count = 0;
     g->terminal_kind[0] = g->terminal_cause[0] = '\0';
     g->terminal_turn = 0;
+    g->final_score = 0; g->final_score_known = 0; g->knowledge[0] = 0;
     g->location_id[0] = '\0';
     free(g->door_facts); g->door_facts = NULL; g->ndoor_facts = g->door_capacity = 0;
     memset(g->door_index, -1, sizeof g->door_index);
@@ -2862,8 +2918,9 @@ emit_inventory(game_t *g, mj_Buf *b)
         mj_strv(b, g->inv[i].location ? "here" : "inventory");
         mj_key(b, "quantity"); mj_intv(b, g->inv[i].quantity);
         mj_key(b, "category"); mj_strv(b, g->inv[i].category[0] ? g->inv[i].category : "unknown");
+        if (g->inv[i].known[0]) { mj_key(b, "known"); mj_rawv(b, g->inv[i].known); }
         if (g->perception_fresh && g->inventory_rev >= 0) {
-            static const char *const actions[] = {"eat", "equip", "remove", "apply", "drink", "read", "zap", "wield", "drop"};
+            static const char *const actions[] = {"eat", "equip", "remove", "apply", "drink", "read", "zap", "wield", "drop", "throw", "offer", "dip", "rub", "invoke", "quiver"};
             size_t a;
             mj_key(b, "actions"); mj_arr(b);
             for (a = 0; a < sizeof actions / sizeof actions[0]; a++)
@@ -2891,6 +2948,7 @@ emit_inventory(game_t *g, mj_Buf *b)
         mj_key(b, "inventory"); mj_strv(b, g->inventory_rev >= 0 ? freshness : "unknown");
         mj_key(b, "here"); mj_strv(b, g->floor_valid ? freshness : "unknown");
         mj_key(b, "equipment"); mj_strv(b, equipment_known ? freshness : "unknown");
+        mj_key(b, "knowledge"); mj_strv(b, g->knowledge[0] ? freshness : "unknown");
         mj_endobj(b);
     }
 }
@@ -2984,6 +3042,7 @@ emit_observation(game_t *g, mj_Buf *b, int recovery)
     mj_key(b, "observation");
     mj_obj(b);
     if (g->pickup_settings[0]) { mj_key(b, "automaticPickup"); mj_rawv(b, g->pickup_settings); }
+    if (g->knowledge[0]) { mj_key(b, "knowledge"); mj_rawv(b, g->knowledge); }
     mj_key(b, "turn"); mj_intv(b, turn_of(g));
     emit_location(g, b);
     mj_key(b, "you");
@@ -3009,10 +3068,11 @@ emit_observation(game_t *g, mj_Buf *b, int recovery)
             mj_key(b, "location"); mj_strv(b, "here");
             mj_key(b, "category"); mj_strv(b, g->floor[i].category);
             mj_key(b, "quantity"); mj_intv(b, g->floor[i].quantity);
+            if (g->floor[i].known[0]) { mj_key(b, "known"); mj_rawv(b, g->floor[i].known); }
             if (g->perception_fresh) {
                 mj_key(b, "actions"); mj_arr(b);
                 mj_strv(b, "pickup");
-                if (eligible_item("eat", g->floor[i].label ? g->floor[i].label : "", g->floor[i].category)) mj_strv(b, "eat");
+                if (g->non_food_diet || eligible_item("eat", g->floor[i].label ? g->floor[i].label : "", g->floor[i].category)) mj_strv(b, "eat");
                 mj_endarr(b);
             }
             mj_endobj(b);
@@ -3063,8 +3123,15 @@ yn_is_confirm(const char *choices)
 }
 
 /* Forward declarations for driver helpers defined further below. */
-static int is_direction_prompt(const char *prompt);
 static int is_quantity_prompt(const char *prompt);
+static void emit_target_directions(game_t *g, mj_Buf *b)
+{
+    static const char *const names[] = {"north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest", "up", "down"};
+    size_t i;
+    mj_key(b, "allowedDirections"); mj_arr(b);
+    for (i = 0; i < (g->operation.self_ok ? 10U : 8U); i++) mj_strv(b, names[i]);
+    mj_endarr(b);
+}
 static int emit_text_decision(game_t *g, mj_Buf *b, char *kind_out,
                               size_t kind_cap);
 static int move_code(const char *dir);
@@ -3128,6 +3195,33 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
         size_t nsel = 0;
         if (!m)
             return 0;
+        if (m->item_selection) {
+            mj_key(b, "decision"); mj_obj(b);
+            mj_key(b, "id"); mj_strv(b, offer_id(g, "item"));
+            mj_key(b, "kind"); mj_strv(b, "item");
+            snprintf(kind_out, kind_cap, "%s", "item");
+            mj_key(b, "action"); mj_strv(b, g->operation.action);
+            mj_key(b, "about"); mj_strv(b, m->prompt ? m->prompt : "Select an item");
+            mj_key(b, "cancellable"); mj_boolv(b, 1);
+            mj_key(b, "counted"); mj_boolv(b, m->counted);
+            mj_key(b, "selection"); mj_obj(b);
+            mj_key(b, "min"); mj_intv(b, 1); mj_key(b, "max"); mj_intv(b, 1); mj_endobj(b);
+            mj_key(b, "options"); mj_arr(b);
+            for (i = 0; i < m->nitems; i++) {
+                char ref[32]; menu_item_t *row = &m->items[i];
+                if (!menu_selectable(row)) continue;
+                if (row->object_id > 0) snprintf(ref, sizeof ref, "item-%lld", row->object_id);
+                else snprintf(ref, sizeof ref, "hands");
+                mj_obj(b);
+                mj_key(b, "id"); mj_strv(b, ref);
+                mj_key(b, "label"); mj_strv(b, row->text);
+                mj_key(b, "location"); mj_strv(b, "inventory");
+                mj_key(b, "quantity"); mj_intv(b, row->quantity);
+                mj_endobj(b);
+            }
+            mj_endarr(b); mj_endobj(b);
+            return 1;
+        }
         for (i = 0; i < m->nitems; i++)
             if (menu_selectable(&m->items[i]))
                 nsel++;
@@ -3202,7 +3296,7 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
             mj_endobj(b);
             return 1;
         }
-        if (is_direction_prompt(g->pending.prompt)) {
+        if (!strcmp(g->pending.context, "direction")) {
             mj_key(b, "decision"); mj_obj(b);
             mj_key(b, "id"); mj_strv(b, offer_id(g, "target"));
             mj_key(b, "kind"); mj_strv(b, "target");
@@ -3212,6 +3306,7 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
             mj_key(b, "allowedTargets"); mj_arr(b);
             if (g->operation.self_ok) mj_strv(b, "self");
             mj_strv(b, "direction"); mj_endarr(b);
+            emit_target_directions(g, b);
             mj_key(b, "cancellable"); mj_boolv(b, 1);
             mj_endobj(b);
             return 1;
@@ -3356,7 +3451,7 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
     }
     if (!strcmp(g->pending.kind, "yn") && g->pending.choices &&
         !g->pending.choices[0] &&
-        is_direction_prompt(g->pending.prompt)) {
+        !strcmp(g->pending.context, "direction")) {
         /* getdir-style direction question: a direction, never a letter.
          * Synthetic listings are never overwritten by resting prompts. */
         int self = g->operation.self_ok;
@@ -3436,6 +3531,38 @@ translate_reply(game_t *g, const char *dec_kind, const char *args,
             goto wrap;
         }
     }
+    if (!strcmp(dec_kind, "item") && !strcmp(g->pending.kind, "menu")) {
+        menu_t *m = menu_for(g, g->pending.window, 0);
+        mj_val id, quantity;
+        char *ref = NULL;
+        long long count = -1;
+        size_t i; int selected = -1, matches = 0;
+        if (!m || !m->item_selection || !mj_find(args, "item", &v)) {
+            *err = "no engine item selection stands"; return NULL;
+        }
+        if (*v.p == '{') {
+            if (mj_find(v.p, "id", &id)) ref = mj_str(id);
+            if (mj_find(v.p, "quantity", &quantity) && (!mj_int(quantity, &count) || count < 1)) {
+                free(ref); *err = "quantity must be positive"; return NULL;
+            }
+        } else ref = mj_str(v);
+        for (i = 0; ref && i < m->nitems; i++) {
+            char candidate[32]; menu_item_t *row = &m->items[i];
+            if (!menu_selectable(row)) continue;
+            if (row->object_id) snprintf(candidate, sizeof candidate, "item-%lld", row->object_id);
+            else snprintf(candidate, sizeof candidate, "hands");
+            if (!strcmp(ref, candidate) || !strcmp(ref, row->text)) { selected = (int)i; matches++; }
+        }
+        free(ref);
+        if (matches != 1) { *err = "select one engine-bound item reference from this decision"; return NULL; }
+        if (count > 0 && (!m->counted || count > m->items[selected].quantity)) {
+            *err = "quantity is not allowed or exceeds the observed stack"; return NULL;
+        }
+        snprintf(line, sizeof line, "{\"picks\":[%d],\"counts\":[%lld]}", m->items[selected].index, count);
+        g->operation.item_letter = 0; /* a subsequent item is a new explicit choice */
+        g->operation.letter_answers++;
+        goto wrap;
+    }
     if (!strcmp(dec_kind, "confirmation")) {
         int c = 0;
         if (!mj_find(args, "confirm", &v) || !mj_bool(v, &c)) {
@@ -3451,10 +3578,11 @@ translate_reply(game_t *g, const char *dec_kind, const char *args,
             return NULL;
         }
         if (!strcmp(g->pending.kind, "yn")) {
-            /* Single-character engine prompt (counts): first char only. */
-            if (!s[0]) {
+            /* A character prompt is not a generic line input. Never silently
+             * truncate a caller's text or pretend it entered a full count. */
+            if (!s[0] || s[1]) {
                 free(s);
-                *err = "text decision needs a character";
+                *err = "this engine character decision requires exactly one character";
                 return NULL;
             }
             if (!reply_character(line, sizeof line, s[0])) {
@@ -3632,6 +3760,9 @@ translate_reply(game_t *g, const char *dec_kind, const char *args,
                 }
                 code = move_code(dstr);
                 free(dstr);
+                if ((code == '<' || code == '>') && !g->operation.self_ok) {
+                    *err = "this action takes a compass direction"; return NULL;
+                }
                 if (code < 0) {
                     *err = "unknown direction: north/south/east/west/northeast/northwest/southeast/southwest/up/down";
                     return NULL;
@@ -3899,6 +4030,7 @@ op_start(game_t *g, const char *action)
     g->operation.floor_index = -1;
     g->operation.dir_code = -1;
     g->operation.cmdkey = -2;
+    g->operation.self_ok = !strcmp(action, "apply") || !strcmp(action, "invoke");
     g->have_operation = 0;
 }
 
@@ -4018,6 +4150,8 @@ eligible_item(const char *action, const char *label, const char *category)
 {
     if (!category || !*category) return eligible_for(action, label);
     if (!strcmp(action, "eat")) return !strcmp(category, "food");
+    if (!strcmp(action, "apply") || !strcmp(action, "read")) return 1;
+    if (!strcmp(action, "offer")) return !strcmp(category, "food") || !strcmp(category, "amulet");
     if (!strcmp(action, "drink")) return !strcmp(category, "potion");
     if (!strcmp(action, "zap")) return !strcmp(category, "wand");
     if (!strcmp(action, "read")) return !strcmp(category, "scroll") || !strcmp(category, "spellbook");
@@ -4035,20 +4169,22 @@ equipment_action(const char *action)
 }
 
 static int
-equipment_key(const char *action, const char *category)
+equipment_key(const char *action, const inv_item_t *item)
 {
+    const char *category = item->category;
     int removing = !strcmp(action, "remove") || !strcmp(action, "takeoff");
     if (!strcmp(category, "armor")) return removing ? 'T' : 'W';
-    if (!strcmp(category, "ring") || !strcmp(category, "amulet")) return removing ? 'R' : 'P';
+    if (!strcmp(category, "ring") || !strcmp(category, "amulet") || item->accessory) return removing ? 'R' : 'P';
     return -1; /* Never infer an equipment route from a display name. */
 }
 
 static int
 eligible_carried(game_t *g, const char *action, const inv_item_t *item)
 {
+    if (!strcmp(action, "eat") && g->non_food_diet) return 1;
     if (equipment_action(action)) {
         int removing = !strcmp(action, "remove") || !strcmp(action, "takeoff");
-        if (equipment_key(action, item->category) < 0 || !g->perception_fresh || !item->usage_known) return 0;
+        if (equipment_key(action, item) < 0 || !g->perception_fresh || !item->usage_known) return 0;
         if (removing && !strcmp(item->category, "armor")) {
             if (item->armor_access_known) {
                 if (!item->armor_accessible) return 0;
@@ -4069,7 +4205,7 @@ eligible_carried(game_t *g, const char *action, const inv_item_t *item)
 static int
 action_uses_floor(const char *action)
 {
-    return !strcmp(action, "eat") || !strcmp(action, "pickup");
+    return !strcmp(action, "eat") || !strcmp(action, "offer") || !strcmp(action, "pickup");
 }
 
 /* Refresh known inventory when it is stale and the engine awaits a plain
@@ -4137,7 +4273,7 @@ collect_candidates(game_t *g, const char *action, cand_t *out, size_t cap)
     if (action_uses_floor(action) && g->floor_valid) {
         for (i = 0; i < g->nfloor && n < cap; i++) {
             const char *label = g->floor[i].label ? g->floor[i].label : "";
-            if (!eligible_item(action, label, g->floor[i].category))
+            if (!(!strcmp(action, "eat") && g->non_food_diet) && !eligible_item(action, label, g->floor[i].category))
                 continue;
             snprintf(out[n].ref, sizeof out[n].ref, "%s", g->floor[i].ref);
             out[n].label = label;
@@ -4174,6 +4310,14 @@ resolve_item_arg(nhx_t *x, game_t *g, const char *action, const char *args,
     mj_val v;
     cand_t pool[128];
     size_t npool, i;
+    mj_val selected_item, count;
+    g->operation.item_count = 0;
+    if (mj_find(args, "item", &selected_item) && *selected_item.p == '{' &&
+        mj_find(selected_item.p, "quantity", &count)) {
+        if (strcmp(action, "drop") || !mj_int(count, &g->operation.item_count) || g->operation.item_count < 1) {
+            *ecode = "invalidQuantity"; *emsg = "initial stack quantities are supported for drop; other counted selections use the standing engine item decision"; return -1;
+        }
+    }
     if (action_uses_floor(action))
         ensure_floor(x, g);
     if (!ensure_inventory(x, g)) {
@@ -4224,7 +4368,14 @@ resolve_item_arg(nhx_t *x, game_t *g, const char *action, const char *args,
             }
             for (i = 0; strcmp(action, "pickup") && i < g->ninv; i++) {
                 if (!strcmp(id, g->inv[i].ref) && eligible_carried(g, action, &g->inv[i])) {
+                    if (g->operation.item_count > g->inv[i].quantity) {
+                        g->operation.item_count = 0;
+                        free(id); free(cpy);
+                        *ecode = "invalidQuantity"; *emsg = "quantity exceeds the observed stack";
+                        return -1;
+                    }
                     g->operation.item_letter = g->inv[i].letter;
+                    g->operation.item_object_id = g->inv[i].object_id;
                     g->operation.floor_index = -1;
                     g->operation.floor_object_id = 0;
                     rc = 0;
@@ -4293,6 +4444,7 @@ resolve_item_arg(nhx_t *x, game_t *g, const char *action, const char *args,
             for (i = 0; i < g->ninv; i++)
                 if (!strcmp(g->inv[i].ref, pool[hits[0]].ref)) {
                     g->operation.item_letter = g->inv[i].letter;
+                    g->operation.item_object_id = g->inv[i].object_id;
                     g->operation.floor_index = -1;
                     g->operation.floor_object_id = 0;
                     return 0;
@@ -4318,18 +4470,6 @@ resolve_item_arg(nhx_t *x, game_t *g, const char *action, const char *args,
     }
 }
 
-/* A bare-yn prompt asking for a direction ("In what direction?", "Zap in
- * which direction?", ...). Letter and quantity prompts look different. */
-static int
-is_direction_prompt(const char *prompt)
-{
-    char buf[256];
-    if (!prompt)
-        return 0;
-    norm_label(prompt, buf, sizeof buf);
-    return strstr(buf, "direction") != NULL;
-}
-
 static int
 is_letter_prompt(const char *prompt)
 {
@@ -4350,10 +4490,23 @@ is_quantity_prompt(const char *prompt)
     return strstr(buf, "how many") != NULL;
 }
 
+/* Exact engine command names, never user-provided extended commands. */
+static const char *extended_command(const char *action)
+{
+    static const char *const commands[] = {"offer", "pray", "quit", "loot", "cast", "enhance", "fire", "quiver", "swap", "chat", "dip", "rub", "invoke", "pay", "engrave", NULL};
+    size_t i;
+    if (!strcmp(action, "twoWeapon")) return "twoweapon";
+    for (i = 0; commands[i]; i++) if (!strcmp(action, commands[i])) return commands[i];
+    return NULL;
+}
+
 /* Command key per scripted action; -1 = zero-turn query. */
 static int
 cmdkey_of(const char *action)
 {
+    if (extended_command(action)) return '#';
+    if (!strcmp(action, "attack")) return 'F';
+    if (!strcmp(action, "moveWithoutAttack")) return 'm';
     if (!strcmp(action, "search"))
         return 115;
     if (!strcmp(action, "kick"))
@@ -4382,7 +4535,9 @@ cmdkey_of(const char *action)
         return 100;
     if (!strcmp(action, "zap"))
         return 122;
-    if (!strcmp(action, "pray") || !strcmp(action, "quit") || !strcmp(action, "loot"))
+    if (!strcmp(action, "throw")) return 't';
+    if (!strcmp(action, "offer")) return '#';
+    if (!strcmp(action, "pray") || !strcmp(action, "quit") || !strcmp(action, "loot") || !strcmp(action, "offer"))
         return 35;
     return -2;                  /* not scripted */
 }
@@ -4395,7 +4550,7 @@ action_takes_item(const char *action)
         !strcmp(action, "wear") || !strcmp(action, "remove") ||
         !strcmp(action, "takeoff") || !strcmp(action, "read") ||
         !strcmp(action, "apply") || !strcmp(action, "drop") ||
-        !strcmp(action, "zap") || !strcmp(action, "pickup");
+        !strcmp(action, "dip") || !strcmp(action, "rub") || !strcmp(action, "invoke") || !strcmp(action, "quiver") || !strcmp(action, "zap") || !strcmp(action, "pickup") || !strcmp(action, "throw") || !strcmp(action, "offer");
 }
 
 /* Send one key answer to a key/poskey prompt. */
@@ -4784,10 +4939,10 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
     if (!g->operation.keypos && equipment_action(action)) {
         size_t i;
         for (i = 0; i < g->ninv; i++)
-            if (g->inv[i].letter == g->operation.item_letter && eligible_carried(g, action, &g->inv[i])) break;
+            if (g->inv[i].object_id == g->operation.item_object_id && eligible_carried(g, action, &g->inv[i])) break;
         if (i == g->ninv)
             return envelope_error(g, req_id, action, "equipmentKnowledgeUnavailable", "chosen equipment is not currently available; no substitute was selected");
-        cmd = g->operation.cmdkey = equipment_key(action, g->inv[i].category);
+        cmd = g->operation.cmdkey = equipment_key(action, &g->inv[i]);
     }
     /* The engine holds an unanswered resting prompt: answer it first.
      * Awaiting before sending would hang until the timeout, since the
@@ -4826,6 +4981,11 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
                 bump_once(g, bumped);
                 continue;
             }
+            if (g->operation.keypos == 1 && (!strcmp(action, "attack") || !strcmp(action, "moveWithoutAttack"))) {
+                if (answer_key(g, g->pending.id, g->operation.dir_code) < 0)
+                    return envelope_error(g, req_id, action, "engineError", "write failed");
+                pending_clear(g); g->operation.keypos = 2; bump_once(g, bumped); continue;
+            }
             return drive_settle(x, g, req_id, turn0, you0_x, you0_y,
                                 had_you, ev_from, msg_start0, msg_count0,
                                 cancelled);
@@ -4845,29 +5005,36 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
                                           "write failed");
                 continue;
             }
-            if (g->operation.item_letter && action_takes_item(action)) {
+            if (g->operation.floor_object_id > 0 && container_menu &&
+                container_menu->item_selection && (!strcmp(action, "offer") || !strcmp(action, "eat"))) {
+                if (!drive_abort(g, "noMatch", "the engine did not offer the selected floor object"))
+                    return envelope_error(g, req_id, action, "engineError", "write failed");
+                continue;
+            }
+            if (g->operation.item_letter && !g->operation.letter_answers &&
+                container_menu && container_menu->item_selection && action_takes_item(action)) {
                 menu_t *m = menu_for(g, g->pending.window, 0);
                 size_t k;
                 int idx = -1;
                 if (m) {
-                    for (k = 0; k < m->nitems; k++)
-                        if (m->items[k].accel ==
-                            (int) g->operation.item_letter) {
+                    for (k = 0; k < m->nitems; k++) {
+                        if (g->operation.item_object_id > 0 && m->items[k].object_id == g->operation.item_object_id &&
+                            (!g->operation.item_count || (m->counted && g->operation.item_count <= m->items[k].quantity))) {
                             idx = m->items[k].index;
                             break;
                         }
-                    menu_clear(m);
-                    m->used = 0;
+                    }
                 }
                 if (idx >= 0) {
                     char line[256];
                     snprintf(line, sizeof line,
-                             "{\"jsonrpc\":\"2.0\",\"id\":%lld,\"result\":{\"picks\":[%d],\"counts\":[]}}",
-                             g->pending.id, idx);
+                             "{\"jsonrpc\":\"2.0\",\"id\":%lld,\"result\":{\"picks\":[%d],\"counts\":[%lld]}}",
+                             g->pending.id, idx, g->operation.item_count ? g->operation.item_count : -1LL);
                     if (send_engine(g, line) < 0)
                         return envelope_error(g, req_id, action,
                                               "engineError", "write failed");
                     pending_clear(g);
+                    g->operation.letter_answers++;
                     bump_once(g, bumped);
                     continue;
                 }
@@ -4883,7 +5050,16 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
         if (!strcmp(g->pending.kind, "yn")) {
             int bare = !g->pending.choices || !g->pending.choices[0];
             char line[256];
-            if (bare && is_direction_prompt(g->pending.prompt)) {
+            if (!strcmp(g->pending.context, "floorItem") &&
+                (g->operation.item_letter || g->operation.floor_object_id > 0)) {
+                /* This prompt selects a bound floor object; separate danger
+                 * warnings have no floorItem context and always suspend. */
+                snprintf(line, sizeof line, "{\"jsonrpc\":\"2.0\",\"id\":%lld,\"result\":{\"answer\":\"%c\"}}", g->pending.id,
+                         g->operation.floor_object_id == g->pending.object_id ? 'y' : 'n');
+                if (send_engine(g, line) < 0) return envelope_error(g, req_id, action, "engineError", "write failed");
+                pending_clear(g); bump_once(g, bumped); continue;
+            }
+            if (bare && !strcmp(g->pending.context, "direction")) {
                 if (g->operation.dir_code >= 0) {
                     snprintf(line, sizeof line,
                              "{\"jsonrpc\":\"2.0\",\"id\":%lld,\"result\":{\"answer\":\"%c\"}}",
@@ -4893,6 +5069,7 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
                         return envelope_error(g, req_id, action,
                                               "engineError", "write failed");
                     pending_clear(g);
+                    g->operation.dir_code = -1; /* only the supplied first target */
                     bump_once(g, bumped);
                     continue;
                 }
@@ -4973,11 +5150,11 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
                                  had_you, ev_from);
         }
         if (!strcmp(g->pending.kind, "extcmd")) {
-            if (!strcmp(action, "pray") || !strcmp(action, "quit") || !strcmp(action, "loot")) {
+            if (extended_command(action)) {
                 size_t i;
                 long found = -1;
                 for (i = 0; i < g->pending.ncommands; i++)
-                    if (!strcmp(g->pending.commands[i], action)) {
+                    if (!strcmp(g->pending.commands[i], extended_command(action))) {
                         found = (long) i;
                         break;
                     }
@@ -5084,6 +5261,7 @@ emit_item_decision(game_t *g, mj_Buf *b, const char *action)
     mj_strv(b, action);
     mj_key(b, "about");
     mj_strv(b, about);
+    mj_key(b, "counted"); mj_boolv(b, !strcmp(action, "drop"));
     mj_key(b, "selection");
     mj_obj(b);
     mj_key(b, "min"); mj_intv(b, 1);
@@ -5656,6 +5834,7 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
         int fits = (!strcmp(dk, "choice") &&
                     (!strcmp(pk, "menu") || !strcmp(pk, "yn") ||
                      !strcmp(pk, "extcmd"))) ||
+            (!strcmp(dk, "item") && !strcmp(pk, "menu")) ||
             (!strcmp(dk, "confirmation") && !strcmp(pk, "yn")) ||
             (!strcmp(dk, "text") &&
              (!strcmp(pk, "getlin") || !strcmp(pk, "yn"))) ||
@@ -5905,14 +6084,21 @@ run_scripted(nhx_t *x, game_t *g, const char *action, const char *args,
         return drive_loop(x, g, req_id, turn0, you0_x, you0_y, had_you,
                           ev_from, &bumped, 0);
     }
-    if (!strcmp(action, "kick") || !strcmp(action, "open") ||
+    if (!strcmp(action, "attack") || !strcmp(action, "moveWithoutAttack")) {
+        char *direction = NULL;
+        if (mj_find(args, "direction", &v)) direction = mj_str(v);
+        g->operation.dir_code = move_code(direction); free(direction);
+        return drive_loop(x, g, req_id, turn0, you0_x, you0_y, had_you, ev_from, &bumped, 0);
+    }
+    if (!strcmp(action, "fire") || !strcmp(action, "cast")) g->operation.self_ok = 1;
+    if (!strcmp(action, "kick") || !strcmp(action, "open") || !strcmp(action, "chat") || !strcmp(action, "fire") ||
         !strcmp(action, "close")) {
-        if (parse_target_arg(g, args, 0, &ecode, &emsg) < 0)
+        if (parse_target_arg(g, args, !strcmp(action, "fire"), &ecode, &emsg) < 0)
             return envelope_error(g, req_id, action, ecode, emsg);
         return drive_loop(x, g, req_id, turn0, you0_x, you0_y, had_you,
                           ev_from, &bumped, 0);
     }
-    if (!strcmp(action, "zap")) {
+    if (!strcmp(action, "zap") || !strcmp(action, "throw")) {
         int rc;
         g->operation.self_ok = 1;
         if (parse_target_arg(g, args, 1, &ecode, &emsg) < 0)
@@ -5934,6 +6120,7 @@ run_scripted(nhx_t *x, game_t *g, const char *action, const char *args,
             g->have_you && g->you_x >= 1 && g->you_x < MAP_W && g->you_y >= 0 && g->you_y < MAP_H &&
             (g->terrain[g->you_y][g->you_x] == T_FOUNTAIN || g->terrain[g->you_y][g->you_x] == T_SINK))
             want_item = 0; /* Ask the engine's environmental drinking question. */
+        if ((!strcmp(action, "offer") || !strcmp(action, "quiver") || !strcmp(action, "wield")) && !mj_find(args, "item", &v)) want_item = 0;
         if (!strcmp(action, "pickup") &&
             (!mj_find(args, "item", &v) || mj_is_null(v)))
             want_item = 0;      /* take-all: the ',' key means gather */
@@ -5959,24 +6146,12 @@ run_scripted(nhx_t *x, game_t *g, const char *action, const char *args,
             return envelope_synth(g, req_id, action, "blocked", ev_from, 0,
                                   "noPerceivedContainers", "no perceived container is underfoot");
     }
-    if (!strcmp(action, "pray") || !strcmp(action, "quit") || !strcmp(action, "loot") || !strcmp(action, "search"))
+    if (extended_command(action) || !strcmp(action, "search"))
         return drive_loop(x, g, req_id, turn0, you0_x, you0_y, had_you,
                           ev_from, &bumped, 0);
-    if (!strcmp(action, "cast"))
-        return envelope_error(g, req_id, action, "unsupportedAction",
-                              "spellcasting is not bound yet");
-    if (!strcmp(action, "engrave"))
-        return envelope_error(g, req_id, action, "unsupportedAction",
-                              "engraving is not bound yet");
     if (!strcmp(action, "unlock"))
         return envelope_error(g, req_id, action, "unsupportedAction",
                               "unlock via apply with a key toward the door");
-    if (!strcmp(action, "attack"))
-        return envelope_error(g, req_id, action, "unsupportedAction",
-                              "attack by moving into a hostile creature");
-    if (!strcmp(action, "swap"))
-        return envelope_error(g, req_id, action, "unsupportedAction",
-                              "swap places by moving into an ally");
     return envelope_error(g, req_id, action, "unsupportedAction",
                           "unknown action");
 }
@@ -6016,7 +6191,7 @@ run_reply(nhx_t *x, game_t *g, const char *args, const char *req_id,
             !strcmp(g->operation.dec_kind, "target") ? "target" :
             !strcmp(g->operation.dec_kind, "position") ? "position" :
             !strcmp(g->operation.dec_kind, "text") ? "text" :
-            !strcmp(g->operation.dec_kind, "item") && g->operation.dec_pending == -2 ? "item" : "choose";
+            !strcmp(g->operation.dec_kind, "item") ? "item" : "choose";
         if (!mj_find(args, field, &v))
             return g->operation.dec_pending == -2 ?
                 envelope_synth(g, req_id, "act", "blocked", ev_from, 1, "invalidAnswer", "answer does not match the standing decision kind") :
@@ -6244,21 +6419,21 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
                              ev_from, &bumped, 0);
             goto remember;
         }
-        if (!strcmp(action, "search") || !strcmp(action, "climb") ||
+        if (cmdkey_of(action) >= 0 || !strcmp(action, "search") || !strcmp(action, "climb") ||
             !strcmp(action, "kick") || !strcmp(action, "open") ||
             !strcmp(action, "close") || !strcmp(action, "pickup") ||
             !strcmp(action, "eat") || !strcmp(action, "drink") ||
             !strcmp(action, "wield") || !strcmp(action, "equip") ||
             !strcmp(action, "wear") || !strcmp(action, "remove") ||
             !strcmp(action, "takeoff") || !strcmp(action, "read") ||
-            !strcmp(action, "apply") || !strcmp(action, "drop") ||
-            !strcmp(action, "zap") || !strcmp(action, "pray") || !strcmp(action, "quit") || !strcmp(action, "loot") ||
+            !strcmp(action, "throw") || !strcmp(action, "apply") || !strcmp(action, "drop") ||
+            !strcmp(action, "zap") || !strcmp(action, "pray") || !strcmp(action, "quit") || !strcmp(action, "loot") || !strcmp(action, "offer") ||
             !strcmp(action, "inventory") || !strcmp(action, "inspect") || !strcmp(action, "configurePickup")) {
             out = run_scripted(x, g, action, args, req_dup ? req_dup : req_id);
             goto remember;
         }
         out = envelope_error(g, req_id, action, "unsupportedAction",
-                             "this build moves, waits, climbs, kicks, opens, picks up, loots containers, eats, drinks, wields, wears, reads, applies, drops, zaps, prays, searches, inspects, and answers; spellcasting and engraving are not bound yet");
+                             "this action is not in the supported semantic command catalog");
     remember:
         if (req_dup && out) {
             mj_Buf kb;
@@ -6405,6 +6580,7 @@ emit_end(game_t *g, mj_Buf *b)
         mj_key(b, "cause"); mj_strv(b, cause);
     }
     mj_key(b, "turn"); mj_intv(b, g->terminal_kind[0] ? g->terminal_turn : turn_of(g));
+    if (g->final_score_known) { mj_key(b, "score"); mj_intv(b, g->final_score); }
     mj_endobj(b);
 }
 

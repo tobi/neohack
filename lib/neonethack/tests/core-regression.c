@@ -190,10 +190,10 @@ main(int argc, char **argv)
 
     /* Unknown actions are honest. */
     snprintf(req, sizeof req,
-             "{\"tool\":\"act\",\"sessionId\":\"%s\",\"action\":\"cast\"}",
+             "{\"tool\":\"act\",\"sessionId\":\"%s\",\"action\":\"teleport\"}",
              sid);
     r = call(x, req);
-    CHECK(has(r, "\"code\":\"unsupportedAction\""), "cast unsupported");
+    CHECK(has(r, "\"code\":\"unsupportedAction\""), "intrinsic teleport remains unsupported");
     nhx_free(r);
 
     /* Climb with no stairs underfoot is blocked, not a wall bump. */

@@ -22,7 +22,7 @@ set_target_properties(neonethack-objects PROPERTIES POSITION_INDEPENDENT_CODE ON
 add_library(neonethack $<TARGET_OBJECTS:neonethack-objects>)
 target_link_libraries(neonethack PRIVATE Threads::Threads)
 target_include_directories(neonethack PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-set_target_properties(neonethack PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION 1)
+set_target_properties(neonethack PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION 2)
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(neonethack-objects PRIVATE -Wall -Wextra "-ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=.")
 endif()

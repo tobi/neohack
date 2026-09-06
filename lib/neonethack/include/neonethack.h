@@ -1,4 +1,4 @@
-/* libneonethack public C API, ABI 1.
+/* libneonethack public C API, ABI 2.
  * No engine headers, terminal keys, global initialization or allocator sharing.
  * Each context owns isolated games. Calls into this library (including close)
  * must be serialized within a process; use separate processes for concurrency.
@@ -12,7 +12,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define NNH_ABI_VERSION 1
+#define NNH_ABI_VERSION 2
 #define NNH_PROTOCOL_VERSION 1
 #define NNH_MAX_REQUEST_BYTES 4096
 
@@ -50,8 +50,8 @@ typedef enum {
 } nnh_direction;
 typedef enum { NNH_TARGET_SELF, NNH_TARGET_DIRECTION } nnh_target_kind;
 typedef struct { nnh_target_kind kind; nnh_direction direction; } nnh_target;
-/* Exactly one of id/name must be non-NULL. NULL item pointer means discovery. */
-typedef struct { const char *id; const char *name; } nnh_item;
+/* Exactly one of id/name must be non-NULL. NULL item pointer requests selection. */
+typedef struct { const char *id; const char *name; int32_t quantity; /* 0: default; positive: explicit count with id */ } nnh_item;
 typedef enum { NNH_ANSWER_ITEM, NNH_ANSWER_TARGET, NNH_ANSWER_CONFIRMATION, NNH_ANSWER_CHOICE, NNH_ANSWER_TEXT, NNH_ANSWER_POSITION } nnh_answer_kind;
 typedef struct {
     nnh_answer_kind kind;
@@ -99,6 +99,20 @@ nnh_status nnh_game_search(nnh_context *, const char *, const nnh_guard *, nnh_r
 nnh_status nnh_game_quit(nnh_context *, const char *, const nnh_guard *, nnh_result **);
 /* Open perceived floor containers; engine choices retain their decision IDs. */
 nnh_status nnh_game_loot(nnh_context *, const char *, const nnh_guard *, nnh_result **);
+nnh_status nnh_game_cast(nnh_context *, const char *, const nnh_guard *, nnh_result **);
+nnh_status nnh_game_enhance(nnh_context *, const char *, const nnh_guard *, nnh_result **);
+nnh_status nnh_game_swap(nnh_context *, const char *, const nnh_guard *, nnh_result **);
+nnh_status nnh_game_two_weapon(nnh_context *, const char *, const nnh_guard *, nnh_result **);
+nnh_status nnh_game_pay(nnh_context *, const char *, const nnh_guard *, nnh_result **);
+nnh_status nnh_game_engrave(nnh_context *, const char *, const nnh_guard *, nnh_result **);
+nnh_status nnh_game_fire(nnh_context *, const char *, const nnh_guard *, const nnh_target *, nnh_result **);
+nnh_status nnh_game_chat(nnh_context *, const char *, const nnh_guard *, const nnh_target *, nnh_result **);
+nnh_status nnh_game_dip(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
+nnh_status nnh_game_rub(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
+nnh_status nnh_game_invoke(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
+nnh_status nnh_game_quiver(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
+nnh_status nnh_game_attack(nnh_context *, const char *, const nnh_guard *, nnh_direction, nnh_result **);
+nnh_status nnh_game_move_without_attack(nnh_context *, const char *, const nnh_guard *, nnh_direction, nnh_result **);
 nnh_status nnh_game_pray(nnh_context *, const char *, const nnh_guard *, nnh_result **);
 /* NULL target asks for a genuine target decision. */
 nnh_status nnh_game_kick(nnh_context *, const char *, const nnh_guard *, const nnh_target *, nnh_result **);
@@ -106,6 +120,8 @@ nnh_status nnh_game_open(nnh_context *, const char *, const nnh_guard *, const n
 nnh_status nnh_game_close(nnh_context *, const char *, const nnh_guard *, const nnh_target *, nnh_result **);
 nnh_status nnh_game_pickup(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
 nnh_status nnh_game_eat(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
+nnh_status nnh_game_offer(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
+nnh_status nnh_game_throw(nnh_context *, const char *, const nnh_guard *, const nnh_item *, const nnh_target *, nnh_result **);
 nnh_status nnh_game_drink(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
 nnh_status nnh_game_wield(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
 nnh_status nnh_game_equip(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);

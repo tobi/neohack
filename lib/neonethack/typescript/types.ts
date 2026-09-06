@@ -44,8 +44,9 @@ export type Freshness = "current" | "lastKnown" | "unknown";
 export interface ItemRef {
   id: string; label: string; location: "inventory" | "here";
   quantity: number; category: string;
+  known?: {identity?: string; beatitude?: "blessed" | "uncursed" | "cursed"; charges?: number; recharges?: number; enchantment?: number; erosionProof?: boolean};
   /** Candidate actions from the C resolver; absent when perception is stale. Not safety guarantees. */
-  actions?: ("eat" | "equip" | "remove" | "apply" | "drink" | "read" | "zap" | "wield" | "drop" | "pickup")[];
+  actions?: ("eat" | "equip" | "remove" | "apply" | "drink" | "read" | "zap" | "wield" | "drop" | "throw" | "offer" | "dip" | "rub" | "invoke" | "quiver" | "pickup")[];
 
   usage?: ("worn" | "wielded" | "offhand" | "alternate" | "quivered" | "attached")[];
 }
@@ -58,7 +59,16 @@ export interface Cell {
   objects?: { mark: string; color: number; kind?: "boulder" }[];
 }
 /** Omitted facts are unknown; empty known lists really are empty. */
+export interface PlayerKnowledge {
+  observedTurn: number;
+  spells: {id: string; name: string; level: number; category: string; failurePercent: number; retention: string}[];
+  skills: {id: string; name: string; level: string; advancement: "available" | "needsExperience" | "peaked" | "practice"}[];
+  levels: {id: string; branch: string; depth: number; freshness: "remembered"; annotation?: string; features: {fountains: number; sinks: number; altars: number; thrones: number; shops: number; temples: number}}[];
+  conduct: Record<string, number>;
+  achievements: {id: string; name: string}[];
+}
 export interface Observation {
+  knowledge?: PlayerKnowledge;
   automaticPickup?: AutomaticPickup;
   turn: number;
   location: { id: string; depthLabel: string };
@@ -73,15 +83,15 @@ export interface Observation {
   };
   inventory: ItemRef[]; inventoryKnown: boolean;
   here: { known: boolean; items: ItemRef[] };
-  perception: { version: number; inventory: Freshness; here: Freshness; equipment: Freshness };
+  perception: { version: number; inventory: Freshness; here: Freshness; equipment: Freshness; knowledge?: Freshness };
   /** Absent on historical receipts and older packages. */
   neighborhood?: Neighborhood;
   world: Cell[]; heard: string[];
 }
 interface DecisionBase { id: string; action: string; about?: string; cancellable: boolean }
 export type Decision = DecisionBase & (
-  | { kind: "item"; options: Omit<ItemRef, "category" | "usage">[]; selection: { min: number; max: number } }
-  | { kind: "target"; allowedTargets: ("self" | "direction")[] }
+  | { kind: "item"; options: Omit<ItemRef, "category" | "usage">[]; counted?: boolean; selection: { min: number; max: number } }
+  | { kind: "target"; allowedTargets: ("self" | "direction")[]; allowedDirections?: Direction[] }
   | { kind: "confirmation"; context?: { action: string; direction?: Direction; itemId?: string } }
   | { kind: "choice"; options: { id: number; label: string; transfer?: "take" | "put" }[]; selection?: { min: number; max: number }; containerPhase?: "inspect" | "transfer" }
   | { kind: "position"; cursor: { x: number; y: number }; mode: "browse" | "select" }
@@ -92,7 +102,7 @@ export interface Outcome {
   status: "completed" | "needsChoice" | "blocked" | "cancelled" | "interrupted" | "unknown";
   reason?: string; turnsElapsed: number; positionChanged: boolean; effects: string[];
 }
-export interface End { kind: "death" | "ascended" | "escaped" | "quit" | "disconnected" | "engineError" | "unknown"; cause?: string; turn: number }
+export interface End { kind: "death" | "ascended" | "escaped" | "quit" | "disconnected" | "engineError" | "unknown"; cause?: string; turn: number; score?: number }
 export type WorldEvent =
   | { type: "doorWitness"; levelId: string; x: number; y: number; fact: "locked" | "unlocked" | "opened" | "closed" | "resisted" | "notClosed"; turn: number }
   | { type: "saw"; x: number; y: number; kind: string; mark: string; color: number }

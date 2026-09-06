@@ -8,6 +8,7 @@ class NeonethackExample extends HTMLElement {
   private api: Neonethack | null = null;
   private game: Game | null = null;
   private busy = false;
+  private movement: "move" | "attack" | "moveWithoutAttack" = "move";
   private root = this.attachShadow({ mode: 'open' });
   private lastId = localStorage.getItem('neonethack-example-session');
   private status = document.createElement('p');
@@ -75,11 +76,22 @@ class NeonethackExample extends HTMLElement {
     }, !!this.game);
     if (!this.game) return;
     const ready = !this.game.decision && !this.game.state.ended && !this.game.pendingRequest;
-    for (const direction of directions) this.button(this.controls, direction, () => this.game!.move(direction), ready);
+    const mode = document.createElement('select'); mode.setAttribute('aria-label', 'Movement mode');
+    for (const [value, label] of [['move', 'Move'], ['attack', 'Force attack'], ['moveWithoutAttack', 'Move without fighting']]) {
+      const option = document.createElement('option'); option.value = value!; option.textContent = label!; mode.append(option);
+    }
+    mode.value = this.movement; mode.disabled = !ready || this.busy;
+    mode.addEventListener('change', () => { this.movement = mode.value as typeof this.movement; }); this.controls.append(mode);
+    for (const direction of directions) this.button(this.controls, direction, () => this.game![this.movement](direction), ready);
     this.button(this.controls, 'Wait', () => this.game!.wait(), ready);
     this.button(this.controls, 'Search', () => this.game!.search(), ready);
     this.button(this.controls, 'Eat', () => this.game!.eat(), ready);
     this.button(this.controls, 'Pick up', () => this.game!.pickup(), ready);
+    for (const [label, action] of [
+      ['Throw', 'throw'], ['Fire', 'fire'], ['Quiver', 'quiver'], ['Swap weapons', 'swap'], ['Two weapons', 'twoWeapon'],
+      ['Cast', 'cast'], ['Advance skill', 'enhance'], ['Offer', 'offer'], ['Pay', 'pay'], ['Chat', 'chat'],
+      ['Dip', 'dip'], ['Rub', 'rub'], ['Invoke', 'invoke'], ['Engrave', 'engrave'], ['Apply', 'apply'], ['Read', 'read'], ['Drop', 'drop'],
+    ] as const) this.button(this.controls, label, () => this.game![action](), ready);
     this.button(this.controls, 'Pray', () => this.game!.pray(), ready);
     this.button(this.controls, 'Observe', () => this.game!.observe());
     if (this.game.pendingRequest) this.button(this.controls, 'Retrieve same receipt', () => this.game!.retry());
@@ -90,10 +102,20 @@ class NeonethackExample extends HTMLElement {
     if (decision.kind === 'confirmation') {
       for (const confirm of [true, false]) this.button(this.choices, confirm ? 'Yes' : 'No', () => this.game!.answer(decision.id, { kind: 'confirmation', confirm }));
     } else if (decision.kind === 'item') {
-      for (const item of decision.options) this.button(this.choices, item.label, () => this.game!.answer(decision.id, { kind: 'item', item: { id: item.id } }));
+      for (const item of decision.options) {
+        let quantity: HTMLInputElement | undefined;
+        if (decision.counted && item.quantity > 1) {
+          quantity = document.createElement('input'); quantity.type = 'number'; quantity.min = '1'; quantity.max = String(item.quantity); quantity.step = '1';
+          quantity.placeholder = 'Engine default'; quantity.setAttribute('aria-label', 'Quantity: ' + item.label); this.choices.append(quantity);
+        }
+        this.button(this.choices, item.label, () => {
+          if (quantity?.value && !quantity.checkValidity()) throw Error('Choose a whole quantity within this stack.');
+          return this.game!.answer(decision.id, {kind:'item', item:{id:item.id, ...(quantity?.value ? {quantity:Number(quantity.value)} : {})}});
+        });
+      }
     } else if (decision.kind === 'target') {
       if (decision.allowedTargets.includes('self')) this.button(this.choices, 'Self', () => this.game!.answer(decision.id, { kind: 'target', target: 'self' }));
-      for (const direction of directions) this.button(this.choices, direction, () => this.game!.answer(decision.id, { kind: 'target', target: { direction } }));
+      for (const direction of decision.allowedDirections ?? directions) this.button(this.choices, direction, () => this.game!.answer(decision.id, { kind: 'target', target: { direction } }));
     } else if (decision.kind === 'choice') {
       const inputs = decision.options.map(option => {
         const label = document.createElement('label'), input = document.createElement('input');
@@ -111,13 +133,18 @@ class NeonethackExample extends HTMLElement {
   }
   private show(response: Snapshot) {
     const o = response.observation;
-    this.status.textContent = `${response.sessionId} · Turn ${o.turn} · HP ${o.vitals.health ?? '?'}/${o.vitals.maxHealth ?? '?'} · ${o.location.depthLabel}${response.ended ? ` · ${response.end?.kind}` : ''}`;
+    this.status.textContent = `${response.sessionId} · Turn ${o.turn} · HP ${o.vitals.health ?? '?'}/${o.vitals.maxHealth ?? '?'} · ${o.location.depthLabel}${response.ended ? ` · ${response.end?.kind}${response.end?.score === undefined ? '' : ` · Score ${response.end.score}`}` : ''}`;
     const rows = Array.from({ length: 21 }, () => Array<string>(80).fill(' '));
     for (const cell of o.world) if (rows[cell.y] && cell.x >= 0 && cell.x < 80) {
       rows[cell.y]![cell.x] = cell.occupant?.kind === 'self' ? '@' : cell.occupant?.mark ?? cell.objects?.[0]?.mark ?? terrain[cell.terrain.type] ?? '?';
     }
     this.map.textContent = rows.map(row => row.join('')).join('\n');
     this.journal.textContent = o.heard.join('\n');
+    if (response.ended && o.knowledge) {
+      this.journal.textContent += '\nAchievements: ' + (o.knowledge.achievements.map(a => a.name).join('; ') || 'None disclosed');
+      this.journal.textContent += '\nRemembered places: ' + o.knowledge.levels.map(l => `${l.branch} ${l.depth}`).join('; ');
+      this.journal.textContent += '\nConduct counters: ' + Object.entries(o.knowledge.conduct).map(([name, count]) => `${name}: ${count}`).join('; ');
+    }
     this.frame.textContent = JSON.stringify(response, null, 2);
   }
 }

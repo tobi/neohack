@@ -1020,7 +1020,13 @@ extern void headless_door_witness(coordxy, coordxy, const char *);
 extern void headless_study_stopped(void);
 extern void headless_meal_stopped(void);
 extern void headless_lifesaved(int, long);
+extern int headless_spell_info(int, const char **, int *, const char **, int *, char *);
+extern int headless_skill_info(int, const char **, const char **, int *);
+extern const char *headless_achievement_name(int);
+extern void headless_final_score(long);
 extern void headless_menu_object(winid, const struct obj *);
+extern void headless_floor_item(const struct obj *);
+extern struct obj *headless_getobj_prompt(const char *, boolean, boolean, long *);
 extern void headless_container_menu(winid, const char *);
 extern void headless_container_item(winid, const struct obj *, const char *);
 #endif
@@ -1048,6 +1054,9 @@ extern void make_engr_at(coordxy, coordxy, const char *, const char *, long, int
 extern void del_engr_at(coordxy, coordxy);
 extern int freehand(void);
 extern int doengrave(void);
+#ifdef HEADLESS_GRAPHICS
+extern void headless_engraving_stopped(void);
+#endif
 extern void sanitize_engravings(void);
 extern void forget_engravings(void);
 extern void engraving_sanity_check(void);

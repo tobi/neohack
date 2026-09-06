@@ -83,6 +83,10 @@ int main(int argc, char **argv)
         s = nnh_game_move(x, sid, &guard, (nnh_direction)-1, &r); rejected(s, r);
         s = nnh_game_move(x, sid, &guard, (nnh_direction)99, &r); rejected(s, r);
         s = nnh_game_eat(x, sid, &guard, &ambiguous, &r); rejected(s, r);
+        { nnh_item negative = {"item-1", NULL, -1}, named_count = {NULL, "dagger", 2};
+          s = nnh_game_drop(x, sid, &guard, &negative, &r); rejected(s, r);
+          s = nnh_game_drop(x, sid, &guard, &named_count, &r); rejected(s, r); }
+        s = nnh_game_move_without_attack(x, sid, &guard, NNH_UP, &r); rejected(s, r);
         s = nnh_game_kick(x, sid, &guard, &target, &r); rejected(s, r);
         s = nnh_game_wait(x, sid, NULL, &r); rejected(s, r);
         for (i = 0; i < sizeof answers / sizeof answers[0]; i++) {
@@ -91,6 +95,13 @@ int main(int argc, char **argv)
         s = nnh_session_observe(x, sid, &r); success(s, r);
         assert(nnh_result_revision(r) == before); nnh_result_free(r);
     }
+    guard.request_id = "typed-throw"; guard.expected_revision = before;
+    { nnh_item dagger = {NULL, "dagger", 0}; nnh_target down = {NNH_TARGET_DIRECTION, NNH_DOWN};
+      s = nnh_game_throw(x, sid, &guard, &dagger, &down, &r); success(s, r);
+      assert(strstr(nnh_result_json(r), "\"action\":\"throw\"") && strstr(nnh_result_json(r), "\"turnsElapsed\":1"));
+      s = nnh_game_throw(x, sid, &guard, &dagger, &down, &retry); success(s, retry);
+      assert(!strcmp(nnh_result_json(r), nnh_result_json(retry)));before=nnh_result_revision(r);
+      nnh_result_free(r);nnh_result_free(retry); }
     guard.request_id = "prayer"; guard.expected_revision = before;
     s = nnh_game_pray(x, sid, &guard, &r); success(s, r);
     assert(strstr(nnh_result_json(r), "\"kind\":\"confirmation\""));

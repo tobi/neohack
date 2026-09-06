@@ -9,8 +9,18 @@ const object = (properties: Record<string, Schema>, required = Object.keys(prope
 const array = (items: Schema): Schema => ({ type: "array", items });
 const nullable = (s: Schema): Schema => ({ anyOf: [s, { type: "null" }] });
 const selection = object({ min: integer, max: integer });
-const item = object({ id: string, label: string, location: enumeration("inventory", "here"), quantity: integer, category: string, actions: array(enumeration("eat", "equip", "remove", "apply", "drink", "read", "zap", "wield", "drop", "pickup")), usage: array(enumeration("worn", "wielded", "offhand", "alternate", "quivered", "attached")) }, ["id", "label", "location", "quantity"]);
-const end = object({ kind: enumeration("death", "ascended", "escaped", "quit", "disconnected", "engineError", "unknown"), cause: string, turn: integer }, ["kind", "turn"]);
+const item = object({ id: string, label: string, location: enumeration("inventory", "here"), quantity: integer, category: string, actions: array(enumeration("eat", "equip", "remove", "apply", "drink", "read", "zap", "wield", "drop", "throw", "offer", "dip", "rub", "invoke", "quiver", "pickup")), usage: array(enumeration("worn", "wielded", "offhand", "alternate", "quivered", "attached")) }, ["id", "label", "location", "quantity"]);
+const knownProperties = object({identity: string, beatitude: enumeration("blessed", "uncursed", "cursed"), charges: integer, recharges: integer, enchantment: integer, erosionProof: boolean}, []);
+item.properties.known = knownProperties;
+const knowledge = object({
+ observedTurn: integer,
+ spells: array(object({id: string, name: string, level: integer, category: string, failurePercent: integer, retention: string})),
+ skills: array(object({id: string, name: string, level: string, advancement: enumeration("available", "needsExperience", "peaked", "practice")})),
+ levels: array(object({id: string, branch: string, depth: integer, freshness: {const: "remembered"}, annotation: string, features: object({fountains: integer, sinks: integer, altars: integer, thrones: integer, shops: integer, temples: integer})}, ["id", "branch", "depth", "freshness", "features"])),
+ conduct: {type: "object", additionalProperties: integer},
+ achievements: array(object({id: string, name: string})),
+});
+const end = object({ score: integer, kind: enumeration("death", "ascended", "escaped", "quit", "disconnected", "engineError", "unknown"), cause: string, turn: integer }, ["kind", "turn"]);
 const base = { id: string, action: string, about: string, cancellable: boolean };
 const decision = (kind: string, properties: Record<string, Schema> = {}, optional: string[] = []) => object({ ...base, kind: { const: kind }, ...properties }, ["id", "action", "kind", "cancellable", ...Object.keys(properties).filter(k => !optional.includes(k))]);
 const event = (type: string, properties: Record<string, Schema>) => object({ type: { const: type }, ...properties });
@@ -47,13 +57,14 @@ const neighborhood = { oneOf: [
 ] };
 const observation = object({
   automaticPickup,
+  knowledge,
   neighborhood,
   turn: integer, location: object({ id: string, depthLabel: string }),
   you: nullable(object({ x: integer, y: integer })),
   vitals: { type: "object", properties: { hunger: enumeration(...hungerStates), burden: enumeration(...burdenStates), hungerLabel: string, burdenLabel: string }, additionalProperties: { anyOf: [string, { type: "number" }, array(string)] } },
   inventory: array(item), inventoryKnown: boolean,
   here: object({ known: boolean, items: array(item) }),
-  perception: object({ version: integer, inventory: enumeration("current", "lastKnown", "unknown"), here: enumeration("current", "lastKnown", "unknown"), equipment: enumeration("current", "lastKnown", "unknown") }),
+  perception: object({ version: integer, inventory: enumeration("current", "lastKnown", "unknown"), here: enumeration("current", "lastKnown", "unknown"), equipment: enumeration("current", "lastKnown", "unknown"), knowledge: enumeration("current", "lastKnown", "unknown") }, ["version", "inventory", "here", "equipment"]),
   world: array(object({
     x: integer, y: integer, visible: boolean,
     terrain: object({ type: string, knowledge: { const: "remembered" }, freshness: enumeration("current", "remembered", "unknown"), orientation: enumeration("horizontal", "vertical") }, ["type", "knowledge"]),
@@ -72,8 +83,8 @@ export const responseSchema: Schema = {
     outcome: object({ action: string, status: enumeration("completed", "needsChoice", "blocked", "cancelled", "interrupted", "unknown"), reason: string, turnsElapsed: integer, positionChanged: boolean, effects: array(string) }, ["action", "status", "turnsElapsed", "positionChanged", "effects"]),
     observation,
     decision: nullable({ oneOf: [
-      decision("item", { options: array(item), selection }),
-      decision("target", { allowedTargets: array(enumeration("self", "direction")) }),
+      decision("item", { options: array(item), selection, counted: boolean }, ["counted"]),
+      decision("target", { allowedTargets: array(enumeration("self", "direction")), allowedDirections: array(enumeration(...compass.enum, "up", "down")) }, ["allowedDirections"]),
       decision("confirmation", { context: object({ action: string, direction: enumeration("north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest", "up", "down"), itemId: string }, ["action"]) }, ["context"]),
       decision("choice", { options: array(object({ id: integer, label: string, transfer: enumeration("take", "put") }, ["id", "label"])), selection, containerPhase: enumeration("inspect", "transfer") }, ["selection", "containerPhase"]),
       decision("text"),

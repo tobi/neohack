@@ -1544,6 +1544,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -1640,6 +1645,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -2365,6 +2375,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -2461,6 +2476,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -2951,6 +2971,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -3047,6 +3072,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -3262,6 +3292,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -3358,6 +3393,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -3573,6 +3613,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -3669,6 +3714,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -3884,6 +3934,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -3980,6 +4035,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -4195,6 +4255,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -4291,6 +4356,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -4506,6 +4576,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -4602,6 +4677,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -4817,6 +4897,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -4913,6 +4998,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -5128,6 +5218,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -5258,6 +5353,11 @@
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
                                 "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                              },
+                              "quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
                               }
                             },
                             "required": [
@@ -5820,6 +5920,173 @@
             "leaveKnownCursed"
           ],
           "additionalProperties": false
+        },
+        "knowledge": {
+          "type": "object",
+          "properties": {
+            "observedTurn": {
+              "type": "integer"
+            },
+            "spells": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "level": {
+                    "type": "integer"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "failurePercent": {
+                    "type": "integer"
+                  },
+                  "retention": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "level",
+                  "category",
+                  "failurePercent",
+                  "retention"
+                ]
+              }
+            },
+            "skills": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "level": {
+                    "type": "string"
+                  },
+                  "advancement": {
+                    "type": "string",
+                    "enum": [
+                      "available",
+                      "needsExperience",
+                      "peaked",
+                      "practice"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "level",
+                  "advancement"
+                ]
+              }
+            },
+            "levels": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "branch": {
+                    "type": "string"
+                  },
+                  "depth": {
+                    "type": "integer"
+                  },
+                  "freshness": {
+                    "const": "remembered"
+                  },
+                  "annotation": {
+                    "type": "string"
+                  },
+                  "features": {
+                    "type": "object",
+                    "properties": {
+                      "fountains": {
+                        "type": "integer"
+                      },
+                      "sinks": {
+                        "type": "integer"
+                      },
+                      "altars": {
+                        "type": "integer"
+                      },
+                      "thrones": {
+                        "type": "integer"
+                      },
+                      "shops": {
+                        "type": "integer"
+                      },
+                      "temples": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "fountains",
+                      "sinks",
+                      "altars",
+                      "thrones",
+                      "shops",
+                      "temples"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "branch",
+                  "depth",
+                  "freshness",
+                  "features"
+                ]
+              }
+            },
+            "conduct": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer"
+              }
+            },
+            "achievements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              }
+            }
+          },
+          "required": [
+            "observedTurn",
+            "spells",
+            "skills",
+            "levels",
+            "conduct",
+            "achievements"
+          ]
         },
         "neighborhood": {
           "oneOf": [
@@ -7375,6 +7642,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -7471,6 +7743,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -8196,6 +8473,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -8292,6 +8574,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -8782,6 +9069,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -8878,6 +9170,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -9093,6 +9390,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -9189,6 +9491,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -9404,6 +9711,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -9500,6 +9812,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -9715,6 +10032,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -9811,6 +10133,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -10026,6 +10353,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -10122,6 +10454,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -10337,6 +10674,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -10433,6 +10775,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -10648,6 +10995,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -10744,6 +11096,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -10959,6 +11316,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -11089,6 +11451,11 @@
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
                                               "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                            },
+                                            "quantity": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 2147483647
                                             }
                                           },
                                           "required": [
@@ -11710,6 +12077,12 @@
                     "zap",
                     "wield",
                     "drop",
+                    "throw",
+                    "offer",
+                    "dip",
+                    "rub",
+                    "invoke",
+                    "quiver",
                     "pickup"
                   ]
                 }
@@ -11727,6 +12100,35 @@
                     "attached"
                   ]
                 }
+              },
+              "known": {
+                "type": "object",
+                "properties": {
+                  "identity": {
+                    "type": "string"
+                  },
+                  "beatitude": {
+                    "type": "string",
+                    "enum": [
+                      "blessed",
+                      "uncursed",
+                      "cursed"
+                    ]
+                  },
+                  "charges": {
+                    "type": "integer"
+                  },
+                  "recharges": {
+                    "type": "integer"
+                  },
+                  "enchantment": {
+                    "type": "integer"
+                  },
+                  "erosionProof": {
+                    "type": "boolean"
+                  }
+                },
+                "required": []
               }
             },
             "required": [
@@ -11784,6 +12186,12 @@
                         "zap",
                         "wield",
                         "drop",
+                        "throw",
+                        "offer",
+                        "dip",
+                        "rub",
+                        "invoke",
+                        "quiver",
                         "pickup"
                       ]
                     }
@@ -11801,6 +12209,35 @@
                         "attached"
                       ]
                     }
+                  },
+                  "known": {
+                    "type": "object",
+                    "properties": {
+                      "identity": {
+                        "type": "string"
+                      },
+                      "beatitude": {
+                        "type": "string",
+                        "enum": [
+                          "blessed",
+                          "uncursed",
+                          "cursed"
+                        ]
+                      },
+                      "charges": {
+                        "type": "integer"
+                      },
+                      "recharges": {
+                        "type": "integer"
+                      },
+                      "enchantment": {
+                        "type": "integer"
+                      },
+                      "erosionProof": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": []
                   }
                 },
                 "required": [
@@ -11840,6 +12277,14 @@
               ]
             },
             "equipment": {
+              "type": "string",
+              "enum": [
+                "current",
+                "lastKnown",
+                "unknown"
+              ]
+            },
+            "knowledge": {
               "type": "string",
               "enum": [
                 "current",
@@ -12045,6 +12490,12 @@
                             "zap",
                             "wield",
                             "drop",
+                            "throw",
+                            "offer",
+                            "dip",
+                            "rub",
+                            "invoke",
+                            "quiver",
                             "pickup"
                           ]
                         }
@@ -12062,6 +12513,35 @@
                             "attached"
                           ]
                         }
+                      },
+                      "known": {
+                        "type": "object",
+                        "properties": {
+                          "identity": {
+                            "type": "string"
+                          },
+                          "beatitude": {
+                            "type": "string",
+                            "enum": [
+                              "blessed",
+                              "uncursed",
+                              "cursed"
+                            ]
+                          },
+                          "charges": {
+                            "type": "integer"
+                          },
+                          "recharges": {
+                            "type": "integer"
+                          },
+                          "enchantment": {
+                            "type": "integer"
+                          },
+                          "erosionProof": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": []
                       }
                     },
                     "required": [
@@ -12086,6 +12566,9 @@
                     "min",
                     "max"
                   ]
+                },
+                "counted": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -12122,6 +12605,24 @@
                     "enum": [
                       "self",
                       "direction"
+                    ]
+                  }
+                },
+                "allowedDirections": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "north",
+                      "northeast",
+                      "east",
+                      "southeast",
+                      "south",
+                      "southwest",
+                      "west",
+                      "northwest",
+                      "up",
+                      "down"
                     ]
                   }
                 }
@@ -12530,6 +13031,9 @@
           {
             "type": "object",
             "properties": {
+              "score": {
+                "type": "integer"
+              },
               "kind": {
                 "type": "string",
                 "enum": [
@@ -12569,6 +13073,9 @@
         {
           "type": "object",
           "properties": {
+            "score": {
+              "type": "integer"
+            },
             "kind": {
               "type": "string",
               "enum": [

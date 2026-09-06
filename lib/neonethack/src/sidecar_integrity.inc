@@ -8,6 +8,8 @@ pending_signature(game_t *g, char out[32])
     uint64_t hash = UINT64_C(14695981039346656037);
     mj_init(&b); mj_arr(&b);
     mj_strv(&b, g->pending.kind); mj_intv(&b, g->pending.id);
+    mj_strv(&b, g->pending.context); mj_intv(&b, g->pending.object_id);
+    mj_intv(&b, g->operation.item_object_id); mj_intv(&b, g->operation.item_count);
     mj_strv(&b, g->pending.prompt ? g->pending.prompt : "");
     mj_strv(&b, g->pending.choices ? g->pending.choices : "");
     mj_intv(&b, g->pending.def); mj_intv(&b, g->pending.window); mj_intv(&b, g->pending.how);
@@ -23,9 +25,11 @@ pending_signature(game_t *g, char out[32])
         menu_t *m = &g->menus[i];
         if (!m->used || m->window != g->pending.window) continue;
         mj_strv(&b, m->prompt ? m->prompt : "");
+        mj_intv(&b, m->item_selection); mj_intv(&b, m->counted);
         if (m->container_phase) { mj_strv(&b, "containerV1"); mj_intv(&b, m->container_phase); }
         for (k = 0; k < m->nitems; k++) {
             mj_intv(&b, m->items[k].index); mj_intv(&b, m->items[k].accel); mj_intv(&b, m->items[k].glyph);
+            mj_intv(&b, m->items[k].quantity);
             mj_strv(&b, m->items[k].text ? m->items[k].text : "");
             if (m->items[k].transfer) { mj_strv(&b, "transferV1"); mj_intv(&b, m->items[k].transfer); }
             if (m->items[k].selectable >= 0 || m->items[k].object_id > 0) {
@@ -102,7 +106,7 @@ sidecar_validate(game_t *g, const char *text)
     if (error) return error;
     if (!mj_find(text, "operation", &v)) return "missing operation state";
     if (!mj_is_null(v)) {
-        static const char *const fields[] = { "action", "args", "phase", "decisionId", "decKind", "promptSignature", "decSynthetic", "keypos", "cmdkey", "dirCode", "itemLetter", "floorIndex", "floorObjectId", "selfAllowed", "letterAnswers", NULL };
+        static const char *const fields[] = { "action", "args", "phase", "decisionId", "decKind", "promptSignature", "decSynthetic", "keypos", "cmdkey", "dirCode", "itemLetter", "itemCount", "itemObjectId", "floorIndex", "floorObjectId", "selfAllowed", "letterAnswers", NULL };
         static const char *const words[] = { "action", "phase", "decisionId", "decKind", NULL };
         static const size_t max[] = { 31, 31, 39, 15 };
         static const char *const numbers[] = { "keypos", "cmdkey", "dirCode", "itemLetter", "floorIndex", "selfAllowed", "letterAnswers", NULL };
@@ -119,6 +123,8 @@ sidecar_validate(game_t *g, const char *text)
         }
         if (modern && (!mj_find(v.p, "decSynthetic", &field) || !mj_find(v.p, "promptSignature", &field))) return "missing operation boundary fields";
         if (mj_find(v.p, "floorObjectId", &field) && !stored_integer(field, 0, 4294967295LL)) return "invalid floor object binding";
+        if (!mj_find(v.p, "itemCount", &field) || !stored_integer(field, 0, 2147483647LL)) return "invalid item count";
+        if (!mj_find(v.p, "itemObjectId", &field) || !stored_integer(field, 0, 4294967295LL)) return "invalid carried object binding";
         if (mj_find(v.p, "promptSignature", &field) && !stored_string(field, 0, 31)) return "invalid prompt fingerprint";
         if (mj_find(v.p, "decSynthetic", &field) && !mj_bool(field, &flag)) return "invalid synthetic decision flag";
         if (!mj_find(v.p, "args", &field) || *field.p != '{') return "invalid operation arguments";

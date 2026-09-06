@@ -165,6 +165,22 @@ export class Game {
   read(item?: Item, options: RevisionOptions = {}) { return this.operation("game.read", item === undefined ? {} : { item }, options); }
   apply(item?: Item, options: RevisionOptions = {}) { return this.operation("game.apply", item === undefined ? {} : { item }, options); }
   drop(item?: Item, options: RevisionOptions = {}) { return this.operation("game.drop", item === undefined ? {} : { item }, options); }
+  cast(options: RevisionOptions = {}) { return this.operation("game.cast", {}, options); }
+  enhance(options: RevisionOptions = {}) { return this.operation("game.enhance", {}, options); }
+  swap(options: RevisionOptions = {}) { return this.operation("game.swap", {}, options); }
+  twoWeapon(options: RevisionOptions = {}) { return this.operation("game.twoWeapon", {}, options); }
+  pay(options: RevisionOptions = {}) { return this.operation("game.pay", {}, options); }
+  engrave(options: RevisionOptions = {}) { return this.operation("game.engrave", {}, options); }
+  fire(target?: Target, options: RevisionOptions = {}) { return this.operation("game.fire", target ? {target} : {}, options); }
+  chat(direction?: Compass, options: RevisionOptions = {}) { return this.operation("game.chat", direction ? {target:{direction}} : {}, options); }
+  attack(direction: Compass, options: RevisionOptions = {}) { return this.operation("game.attack", {direction}, options); }
+  moveWithoutAttack(direction: Compass, options: RevisionOptions = {}) { return this.operation("game.moveWithoutAttack", {direction}, options); }
+  dip(item?: Item, options: RevisionOptions = {}) { return this.operation("game.dip", item === undefined ? {} : {item}, options); }
+  rub(item?: Item, options: RevisionOptions = {}) { return this.operation("game.rub", item === undefined ? {} : {item}, options); }
+  invoke(item?: Item, options: RevisionOptions = {}) { return this.operation("game.invoke", item === undefined ? {} : {item}, options); }
+  quiver(item?: Item, options: RevisionOptions = {}) { return this.operation("game.quiver", item === undefined ? {} : {item}, options); }
+  offer(item?: Item, options: RevisionOptions = {}) { return this.operation("game.offer", item === undefined ? {} : { item }, options); }
+  throw(item?: Item, target?: Target, options: RevisionOptions = {}) { return this.operation("game.throw", { ...(item === undefined ? {} : { item }), ...(target === undefined ? {} : { target }) }, options); }
   zap(item?: Item, target?: Target, options: RevisionOptions = {}) { return this.operation("game.zap", { ...(item === undefined ? {} : { item }), ...(target === undefined ? {} : { target }) }, options); }
   answer(decisionId: string, answer: Answer, options: RevisionOptions = {}) { return this.operation("decision.answer", { decisionId, answer }, options); }
   cancel(decisionId: string, options: RevisionOptions = {}) { return this.operation("decision.cancel", { decisionId }, options); }

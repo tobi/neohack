@@ -3504,3 +3504,24 @@ ustatusline(void)
 #undef done_stopprint
 
 /*insight.c*/
+
+#ifdef HEADLESS_GRAPHICS
+const char *headless_achievement_name(int achievement)
+{
+    int id = abs(achievement);
+    static char rank[QBUFSZ];
+    if (id >= ACH_RNK1 && id <= ACH_RNK8) {
+        /* A negative rank records the hero's gender at attainment, not
+         * undisclosed knowledge. Use the chronicle's actual title logic. */
+        Sprintf(rank, "attained the rank of %s",
+                rank_of(rank_to_xlev(id - (ACH_RNK1 - 1)), Role_switch,
+                        achievement < 0));
+        return rank;
+    }
+    if (achievement <= 0 || id >= SIZE(achieve_msg) - 1
+        || (achieve_msg[id].llflag & LL_SPOILER)) return NULL;
+    if (id == ACH_BLND) return "explored without being able to see";
+    if (id == ACH_NUDE) return "went without any armor";
+    return achieve_msg[id].msg;
+}
+#endif

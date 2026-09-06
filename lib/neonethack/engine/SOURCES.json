@@ -1194,6 +1194,7 @@
   "win/headless/cli.h",
   "win/headless/json_min.c",
   "win/headless/json_min.h",
+  "win/headless/knowledge.inc",
   "win/headless/pickup-settings.inc",
   "win/headless/play.c",
   "win/headless/play.h",

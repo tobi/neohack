@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "pickup-settings.inc"
+#include "knowledge.inc"
 
 /* ---------- local window/menu bookkeeping ---------- */
 #define HL_MAXWIN 64
@@ -631,6 +632,19 @@ headless_terminal(int how, const char *cause, long turn)
     jb_free(&jb);
 }
 
+void
+headless_final_score(long score)
+{
+    JBuf jb;
+    if (windowprocs.wp_id != wp_headless) return;
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "score"); jb_int(&jb, score);
+    hl_knowledge(&jb);
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("final_result", jb.buf);
+    jb_free(&jb);
+}
+
 static void
 headless_exit_nhwindows(const char *str)
 {
@@ -919,6 +933,7 @@ headless_menu_object(winid window, const struct obj *obj)
     jb_key(&jb, "window"); jb_int(&jb, window);
     jb_key(&jb, "index"); jb_int(&jb, hl_wins[window].nitems - 1);
     jb_key(&jb, "objectId"); jb_int(&jb, obj->o_id);
+    jb_key(&jb, "quantity"); jb_int(&jb, obj->quan);
     jb_end_obj(&jb);
     if (jb.ok) rpc_notify("menu_object", jb.buf);
     jb_free(&jb);
@@ -1040,6 +1055,52 @@ headless_select_menu(winid window, int how, MENU_ITEM_P **menu_list)
     }
     free(r);
     return n;
+}
+
+/* The ordinary getobj '*' inventory, with the engine retaining the object
+ * binding. Do not expose obj_ok rankings: some callbacks depend on unknown
+ * properties. Selection is an attempt and getobj still validates it normally. */
+struct obj *
+headless_getobj_prompt(const char *query, boolean hands, boolean counted,
+                       long *count)
+{
+    winid win = headless_create_nhwindow(NHW_MENU);
+    struct obj *o;
+    anything any;
+    menu_item *selected = NULL;
+    int n;
+    struct obj *chosen = NULL;
+    JBuf jb;
+    headless_start_menu(win, MENU_BEHAVE_STANDARD);
+    for (o = gi.invent; o; o = o->nobj) {
+        any = cg.zeroany;
+        any.a_obj = o;
+        headless_add_menu(win, &nul_glyphinfo, &any, o->invlet, 0,
+                          ATR_NONE, NO_COLOR, doname(o), MENU_ITEMFLAGS_NONE);
+        headless_menu_object(win, o);
+    }
+    if (hands) {
+        any = cg.zeroany;
+        any.a_obj = &hands_obj;
+        headless_add_menu(win, &nul_glyphinfo, &any, HANDS_SYM, 0,
+                          ATR_NONE, NO_COLOR, "Hands / no item", MENU_ITEMFLAGS_NONE);
+    }
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "window"); jb_int(&jb, win);
+    jb_key(&jb, "counted"); jb_bool(&jb, counted);
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("item_menu", jb.buf);
+    jb_free(&jb);
+    headless_end_menu(win, query);
+    n = headless_select_menu(win, PICK_ONE, &selected);
+    if (n == 1) {
+        o = selected[0].item.a_obj;
+        chosen = o;
+        if (counted) *count = selected[0].count;
+    }
+    if (selected) free(selected);
+    headless_destroy_nhwindow(win);
+    return chosen;
 }
 
 static char
@@ -1229,10 +1290,17 @@ hl_perceived_object(JBuf *jb, struct obj *o, boolean carried)
     jb_key(jb, "label"); jb_str(jb, doname(o));
     jb_key(jb, "class"); jb_str(jb, hl_object_class(o->oclass));
     jb_key(jb, "quantity"); jb_int(jb, o->quan);
+    hl_known_properties(jb, o);
     /* Apparent container shape only: all bags qualify, without revealing their
      * type, contents, lock, trap or curse. Hallucination cannot identify one. */
     jb_key(jb, "container"); jb_bool(jb, !Hallucination && o->dknown && Is_container(o));
     if (carried) {
+        /* These exceptions have a fixed, recognizable appearance. Do not
+         * expose a hidden property or infer identity from their label. */
+        jb_key(jb, "accessory");
+        jb_bool(jb, !Hallucination && o->dknown &&
+                (o->otyp == MEAT_RING || o->otyp == BLINDFOLD ||
+                 o->otyp == TOWEL || o->otyp == LENSES));
         if (o->oclass == ARMOR_CLASS) {
             /* Visible physical layering/embedding only, not curse state or
              * a claim that taking it off will be safe or successful. */
@@ -1268,6 +1336,7 @@ hl_perception(void)
     jb_begin_obj(&jb);
     jb_key(&jb, "perceptionVersion"); jb_int(&jb, 3);
     hl_emit_pickup(&jb);
+    hl_knowledge(&jb);
     jb_key(&jb, "affordanceVersion"); jb_int(&jb, 1);
     jb_key(&jb, "knowledgeEpoch"); jb_int(&jb, ++hl_knowledge_epoch);
     jb_key(&jb, "normalMap"); jb_bool(&jb, !u.uswallow);
@@ -1275,6 +1344,12 @@ hl_perception(void)
      * Do not inspect intrinsic/extrinsic bits or unidentified equipment powers.
      * Unusual forms remain unknown in resolver v1. */
     jb_key(&jb, "ordinaryLocomotion"); jb_bool(&jb, !Upolyd && !u.usteed);
+    /* The hero knows their current form. Broad attempts deliberately do not
+     * inspect material, unique identity or container contents via is_edible. */
+    jb_key(&jb, "nonFoodDiet");
+    jb_bool(&jb, metallivorous(gy.youmonst.data)
+            || gy.youmonst.data == &mons[PM_FIRE_ELEMENTAL]
+            || gy.youmonst.data == &mons[PM_GELATINOUS_CUBE]);
     jb_key(&jb, "doorDiagonals"); jb_bool(&jb, !Is_rogue_level(&u.uz));
     jb_key(&jb, "directionReliable"); jb_bool(&jb, !Confusion && !Stunned);
     jb_key(&jb, "branch"); jb_int(&jb, u.uz.dnum);
@@ -1375,6 +1450,9 @@ headless_doprev_message(void)
     return 0;
 }
 
+static const struct obj *hl_floor_prompt_item;
+void headless_floor_item(const struct obj *o) { hl_floor_prompt_item = o; }
+
 static char
 headless_yn_function(const char *query, const char *resp, char def)
 {
@@ -1389,6 +1467,10 @@ headless_yn_function(const char *query, const char *resp, char def)
     jb_str(&jb, resp ? resp : "");
     jb_key(&jb, "default");
     jb_int(&jb, def);
+    jb_key(&jb, "objectId"); jb_int(&jb, hl_floor_prompt_item ? hl_floor_prompt_item->o_id : 0);
+    jb_key(&jb, "context");
+    jb_str(&jb, hl_floor_prompt_item ? "floorItem" : program_state.input_state == getdirInp && !resp
+                  ? "direction" : "confirmationOrChoice");
     jb_end_obj(&jb);
     r = hl_input("yn", hl_frag(&jb));
     jb_free(&jb);

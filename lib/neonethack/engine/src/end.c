@@ -1292,7 +1292,11 @@ really_done(int how)
             }
         }
 
-        if (strcmp(flags.end_disclose, "none"))
+        if (strcmp(flags.end_disclose, "none")
+#ifdef HEADLESS_GRAPHICS
+            && !WINDOWPORT(headless)
+#endif
+            )
             disclose(how, taken);
 
         /* it would be better to do this after killer.name fixups but
@@ -1557,6 +1561,12 @@ really_done(int how)
         dump_forward_putstr(endwin, 0, pbuf, done_stopprint);
     }
 
+#ifdef HEADLESS_GRAPHICS
+    /* All native score contributions (including valuables and pets) are now
+     * complete. Semantic clients receive the result rather than an optional
+     * post-mortem inventory quiz. No live warning is answered here. */
+    headless_final_score(u.urexp);
+#endif
     Sprintf(pbuf, "and %ld piece%s of gold, after %ld move%s.", umoney,
             plur(umoney), svm.moves, plur(svm.moves));
     dump_forward_putstr(endwin, 0, pbuf, done_stopprint);

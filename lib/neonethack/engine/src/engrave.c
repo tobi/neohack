@@ -46,6 +46,13 @@ staticfn void doengrave_sfx_item_WAN(struct _doengrave_ctx *);
 staticfn boolean doengrave_sfx_item(struct _doengrave_ctx *);
 staticfn void doengrave_ctx_verb(struct _doengrave_ctx *);
 staticfn int engrave(void);
+#ifdef HEADLESS_GRAPHICS
+void headless_engraving_stopped(void)
+{
+    if (go.occupation == engrave)
+        headless_action_result("engrave", "interrupted");
+}
+#endif
 staticfn const char *blengr(void);
 
 char *
@@ -1508,6 +1515,9 @@ engrave(void)
         svc.context.engraving.text[0] = '\0';
         svc.context.engraving.nextc = (char *) 0;
         svc.context.engraving.stylus = (struct obj *) 0;
+#ifdef HEADLESS_GRAPHICS
+        headless_action_result("engrave", truncate ? "interrupted" : "completed");
+#endif
     }
     if (neweng)
         newsym(svc.context.engraving.pos.x, svc.context.engraving.pos.y);

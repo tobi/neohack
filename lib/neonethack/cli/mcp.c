@@ -119,7 +119,7 @@ int main(int argc, char **argv)
                     mj_key(&b,"protocolVersion"); mj_strv(&b,negotiated);
                     mj_key(&b,"capabilities"); mj_rawv(&b,"{\"tools\":{}}");
                     mj_key(&b,"serverInfo"); mj_rawv(&b,"{\"name\":\"neonethack\",\"version\":\"1.0.0-alpha.1\"}");
-                    mj_key(&b,"instructions"); mj_strv(&b,"Create or resume a session. Use named tools and answer standing decisions explicitly; never auto-confirm warnings. Keep requestId and payload unchanged on uncertain retries. Structured results only: snapshot replaces observation; delta replaces supplied fields and upserts world cells by x,y. update.remove deletes fields; update.worldRemoved deletes coordinates. Apply only if update.base equals last update.id; otherwise session_observe resynchronizes. session_actions supplies detailed action offers. Cached receipts may have older revisions.");
+                    mj_key(&b,"instructions"); mj_strv(&b,mcp_instructions);
                     mj_endobj(&b); value = take(&b); initialized = 1;
                 }
                 free(protocol);

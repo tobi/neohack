@@ -3740,8 +3740,15 @@ floorfood(
             Sprintf(qsfx, " here; %s %s?", verb, one ? "it" : "one");
             (void) safe_qbuf(qbuf, qbuf, qsfx, otmp, doname, ansimpleoname,
                              one ? something : (const char *) "things");
-            if ((c = yn_function(qbuf, ynqchars, 'n', TRUE)) == 'y')
-                return  otmp;
+#ifdef HEADLESS_GRAPHICS
+            headless_floor_item(otmp);
+#endif
+            c = yn_function(qbuf, ynqchars, 'n', TRUE);
+#ifdef HEADLESS_GRAPHICS
+            headless_floor_item(NULL);
+#endif
+            if (c == 'y')
+                return otmp;
             else if (c == 'q')
                 return (struct obj *) 0;
             ++getobj_else;

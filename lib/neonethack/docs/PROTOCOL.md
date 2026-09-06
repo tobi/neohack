@@ -32,10 +32,13 @@ protocol continues to use dotted method names.
 |---|---|
 | Discovery | `protocol.describe` |
 | Session | `session.create`, `session.observe`, `session.resume`, `session.close` |
-| Movement | `game.move`, `game.wait`, `game.climb` |
+| Movement | `game.move`, `game.moveWithoutAttack`, `game.attack`, `game.wait`, `game.climb` |
 | Environment | `game.search`, `game.kick`, `game.open`, `game.close`, `game.pray`, `game.quit` |
 | Items | `game.pickup`, `game.eat`, `game.drink`, `game.wield`, `game.equip`, `game.remove`, `game.read`, `game.apply`, `game.drop`, `game.zap` |
 | Containers | `game.loot` |
+| Ranged and weapons | `game.throw`, `game.fire`, `game.quiver`, `game.swap`, `game.twoWeapon` |
+| Spells and skills | `game.cast`, `game.enhance`; inspect `observation.knowledge` |
+| Manual interactions | `game.offer`, `game.pay`, `game.chat`, `game.dip`, `game.rub`, `game.invoke`, `game.engrave` |
 | Automatic ground pickup | `game.configurePickup`; read `observation.automaticPickup` |
 | Continuation | `decision.answer`, `decision.cancel` |
 
@@ -47,14 +50,38 @@ not a gameplay action. Unsupported actions are not advertised.
 
 `move` takes eight compass directions. `climb` takes `up`/`down`.
 `kick`/`open`/`close` accept an adjacent `{direction}` target; omitting it offers a
-choice. `zap` additionally permits `"self"` and vertical aiming. Applying a tool
+choice. `zap`, `throw` and `fire` additionally permit `"self"` and vertical aiming. Applying a tool
 accepts an item; tool-specific targets arrive as subsequent decisions.
 
-An item is `{id:"item-..."}` or a perceived-name query. Omission asks for
-candidates without an engine turn. No arbitrary first match, slot-letter
-fallback, hidden-property filter, or navigation is permitted. Eligibility does
-not imply safety. Current-schema quantities are unsupported, not silently
-ignored. IDs are opaque and session-scoped.
+An item is `{id:"item-..."}` or a perceived-name query. Omission requests this
+command's selection flow; `offer` can first ask about floor corpses, and `wield`
+and `quiver` include the explicit `hands` option. No arbitrary first match,
+slot-letter fallback, hidden-property filter, or navigation is permitted.
+Eligibility does not imply safety. IDs are opaque and session-scoped.
+
+`drop({id, quantity})` accepts an explicit positive partial-stack count. Other
+initial commands reject counts; a standing item decision accepts them only when
+`counted:true`. Its observed stack quantity is the maximum. Omission preserves
+the engine default. Counts select engine objects, never repeated requests.
+Throw/fire execute one normal engine command, including any engine-controlled
+multishot; this is not a caller-selected volley count.
+
+Engine `getobj` decisions bind real object pointers to opaque references. They
+offer the ordinary whole-inventory `*` view rather than disclosing hidden
+eligibility rankings. The engine validates the actual attempt. Applying and
+reading therefore accept non-tool/non-book uses. Equipment includes recognized
+blindfolds, towels, lenses and meat rings. A perceived non-food-eating polymorph
+form permits broad non-food attempts without revealing hidden edibility.
+Initial item/direction arguments answer only their first matching selection;
+subsequent selections remain explicit. Floor sacrifice selections use engine
+object bindings, independently of genuine danger confirmations.
+
+`cast` uses the real learned-spell menu; spell targets, failure and costs come
+from NetHack. `enhance` uses the real earned-advancement menu. `invoke` activates
+an artifact power; the invocation ritual still uses explicit candle attachment,
+Candelabrum lighting, Bell application and Book reading. `offer` executes the
+sacrifice command and can produce the genuine ascended terminal result. These
+are separate operations, with no ritual or ascension macro.
 
 ### Decisions
 
@@ -476,3 +503,43 @@ status remains unknown. Clients must not derive numerical nutrition from it.
 
 The [Hero facade](HERO.md) uses these public observations and existing named
 operations; it does not extend the request protocol or infer item identities.
+
+## Player-known information and final results
+
+`observation.knowledge` contains engine-disclosed information at `observedTurn`.
+Check `observation.perception.knowledge` before treating it as current. It is
+omitted when unavailable. Pure observe/actions queries neither refresh engine
+knowledge nor consume input or randomness.
+
+- `spells`: known name, level, category, ordinary menu failure percentage and
+  rounded retention text. Raw memory counters and unknown spells are absent.
+- `skills`: displayed skill rank and advancement state (`available`,
+  `needsExperience`, `peaked`, `practice`). No hidden practice counters.
+- `levels`: remembered dungeon overview entries with canonical level IDs,
+  branch/depth, existing annotation and remembered feature counts. Counts are
+  the overview's bounded values: **3 means three or more**. Forgotten levels
+  are omitted. This is not the current unseen map or a portal/trap oracle.
+- `conduct`: engine counters for food, unvegan, unvegetarian, gnostic,
+  weaponHits, kills, literacy, objectPolymorphs, selfPolymorphs, wishes,
+  artifactWishes, sokobanViolations and pets.
+- `achievements`: engine-issued, non-spoiler achievement names and stable IDs,
+  including attained rank titles and final roleplay achievements. Hidden prize
+  identities are withheld; this is not the entire interactive chronicle.
+
+Inventory and perceived floor objects have a `known` object. Individual fields
+are omitted when unknown: identified `identity`, known `beatitude`, identified
+`charges`/`recharges` or `enchantment`, and known `erosionProof`. Hallucination
+withholds these properties. Absence of a curse/charge field means unknown, not
+uncursed/empty. Nutrition, prayer timers, hidden traps and unseen monster state
+are never supplied by this projection or candidate filtering.
+
+`end.score`, when supplied, is the final score calculated by the engine after
+its terminal scoring phase, including its real bonuses. No score is synthesized
+from turn count or experience. A terminal observation retains the last live
+perception plus engine final knowledge; postmortem identification does not leak
+back into the live inventory. Repeated queries and exact lost-response retries
+retain the same terminal result. Clients can summarize the genuine outcome,
+score, achievements, conduct and remembered places without inventing progress.
+
+See [COMMAND_COVERAGE.md](COMMAND_COVERAGE.md) for tested scenarios, intentional
+omissions and the distinction between endgame fixtures and a completed run.

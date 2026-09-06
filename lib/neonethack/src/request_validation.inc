@@ -64,11 +64,12 @@ request_integer(mj_val v, long long min, long long max)
 static int
 request_item(mj_val v)
 {
-    static const char *const fields[] = { "id", NULL };
-    mj_val id;
+    static const char *const fields[] = { "id", "quantity", NULL };
+    mj_val id, quantity;
     if (*v.p == '"') return request_string(v, 1, 127, NULL);
     return request_fields(v.p, fields) && mj_find(v.p, "id", &id) &&
-        request_string(id, 1, 64, NULL);
+        request_string(id, 1, 64, NULL) &&
+        (!mj_find(v.p, "quantity", &quantity) || request_integer(quantity, 1, 2147483647LL));
 }
 
 /* Returns compass/vertical code, 46=self, 0=here, -1=invalid. */
@@ -207,8 +208,8 @@ validate_request(const char *args, const char *tool, const char **why)
     {
         const char *allowed[10] = { "tool", "sessionId", "requestId", "expectedRevision", "action" };
         int n = 5;
-        if (!strcmp(action, "move") || !strcmp(action, "climb")) allowed[n++] = "direction";
-        if (!strcmp(action, "inspect") || !strcmp(action, "kick") || !strcmp(action, "open") || !strcmp(action, "close") || !strcmp(action, "zap")) allowed[n++] = "target";
+        if (!strcmp(action, "move") || !strcmp(action, "attack") || !strcmp(action, "moveWithoutAttack") || !strcmp(action, "climb")) allowed[n++] = "direction";
+        if (!strcmp(action, "inspect") || !strcmp(action, "kick") || !strcmp(action, "open") || !strcmp(action, "close") || !strcmp(action, "chat") || !strcmp(action, "fire") || !strcmp(action, "throw") || !strcmp(action, "zap")) allowed[n++] = "target";
         if (action_takes_item(action)) allowed[n++] = "item";
         if (!strcmp(action, "configurePickup")) {
             allowed[n++] = "automaticPickup";
@@ -217,18 +218,18 @@ validate_request(const char *args, const char *tool, const char **why)
         allowed[n] = NULL;
         if (!request_fields(args, allowed)) REQUEST_BAD("invalidArgument", "field does not apply to this action; answer subsequent typed decisions separately");
     }
-    if (!strcmp(action, "move") || !strcmp(action, "climb")) {
+    if (!strcmp(action, "move") || !strcmp(action, "attack") || !strcmp(action, "moveWithoutAttack") || !strcmp(action, "climb")) {
         int code;
         if (!mj_find(args, "direction", &v) || !request_string(v, 1, 31, direction) || (code = move_code(direction)) < 0)
             REQUEST_BAD("badAction", "this action requires a direction");
-        if ((!strcmp(action, "move") && (code == 60 || code == 62)) ||
+        if ((strcmp(action, "climb") && (code == 60 || code == 62)) ||
             (!strcmp(action, "climb") && code != 60 && code != 62))
             REQUEST_BAD("badAction", "move takes compass directions; climb takes up/down");
     }
     if (target >= 0) {
         if (!strcmp(action, "inspect")) {
             if (target != 0 && target != 46) REQUEST_BAD("invalidTarget", "inspect takes self/here");
-        } else if (!strcmp(action, "zap")) {
+        } else if (!strcmp(action, "zap") || !strcmp(action, "throw") || !strcmp(action, "fire")) {
             if (target == 0) REQUEST_BAD("invalidTarget", "zap does not take here");
         } else if (target == 0 || target == 46 || target == 60 || target == 62)
             REQUEST_BAD("invalidTarget", "this action takes an adjacent compass direction");
