@@ -50,6 +50,14 @@
     "./mcp/tools": {
       "types": "./dist/mcp/tools.d.ts",
       "import": "./dist/mcp/tools.js"
+    },
+    "./low": {
+      "types": "./dist/typescript/low.d.ts",
+      "import": "./dist/typescript/low.js"
+    },
+    "./high": {
+      "types": "./dist/typescript/high.d.ts",
+      "import": "./dist/typescript/high.js"
     }
   },
   "files": [
@@ -74,7 +82,8 @@
     "serve:example": "node scripts/serve-example.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:wasm": "npm run build && node --test tests/wasm/runtime.test.mjs tests/wasm/semantic-perception.test.mjs tests/wasm/reference-client.test.mjs tests/wasm/self-state.test.mjs tests/wasm/warnings.test.mjs tests/wasm/position.test.mjs tests/wasm/text-decisions.test.mjs tests/wasm/manual-actions.test.mjs tests/wasm/manual-fixture.test.mjs",
-    "test:browser": "npm run build:example && node --test tests/wasm/browser.test.mjs tests/wasm/lifecycle.test.mjs"
+    "test:browser": "npm run build:example && node --test tests/wasm/browser.test.mjs tests/wasm/lifecycle.test.mjs",
+    "check:tools": "npm run build && node scripts/check-tools.mjs"
   },
   "devDependencies": {
     "@types/node": "24.10.1",

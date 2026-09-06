@@ -1,3 +1,4 @@
+import { LowLevel } from './low.js';
 import { beforeInput, accepted, scheduled } from './lifecycle.js';
 import type { AutomaticPickup, ActionTarget, ActionsResponse, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
 export type { EquipmentSlot, ItemRef, AutomaticPickup, ActionTarget, ActionsResponse, ActionOffer, ActionBasis, CellActions, Neighborhood, InputGate, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
@@ -35,13 +36,15 @@ function freeze<T>(value: T): T {
 }
 export class Neonethack {
   readonly transport: Transport;
+  readonly low: LowLevel;
   private readonly requestId: () => string;
   constructor(transport: Transport, options: { requestId?: () => string } = {}) {
+    this.low = new LowLevel(transport);
     this.transport = transport; this.requestId = options.requestId ?? (() => globalThis.crypto.randomUUID());
   }
   /** Low-level, fully typed versioned protocol. No automatic retries. */
   request<M extends Method>(method: M, params: MethodParams[M]): Promise<Response> {
-    return this.transport.send({ version: 1, method, params } as Request);
+    return this.low.request(method, params);
   }
   async describe(): Promise<Description> {
     const r = await this.request("protocol.describe", {});
@@ -77,6 +80,8 @@ export class Game {
   constructor(client: Neonethack, initial: Snapshot, requestId: () => string) {
     this.id = initial.sessionId; this.client = client; this.current = freeze(initial); this.requestId = requestId;
   }
+  /** Exact tools; callers own revisions and receipts when bypassing Game. */
+  get low(): LowLevel { return this.client.low; }
   get state(): Snapshot { return this.current; }
   get observation() { return this.current.observation; }
   get decision() { return this.current.decision; }
@@ -187,7 +192,7 @@ export class Game {
 }
 
 export { Hero, Entity, Inventory, InventoryItem, defineBot, runBot, direction, entities } from './hero.js';
-export type { BotContext, BotDefinition, Step } from './hero.js';
+export type { BotContext, BotDefinition, BotBuilder, BotHandler, Step } from './hero.js';
 
 export type { HeroEvent, HeroEventName, HeroEventDetails, HeroListener, BotResult, StopReason, CellChange, ItemSighting } from './hero-events.js';
 

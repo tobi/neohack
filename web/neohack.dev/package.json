@@ -22,6 +22,7 @@
     "@codemirror/lint": "^6.9.7",
     "@lezer/highlight": "^1.2.3",
     "@simplewebauthn/browser": "^14.0.0",
-    "codemirror": "^6.0.2"
+    "codemirror": "^6.0.2",
+    "prettier": "^3.9.6"
   }
 }

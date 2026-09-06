@@ -1,6 +1,6 @@
 import { ScriptControls, ScriptJournal, copyState, returnedState, type ScriptState, type ScriptResult, type ScriptHost } from './script.js';
 import { attachController } from './lifecycle.js';
-import { HeroEventListeners, type HeroEventName, type HeroListener, type BotResult, type StopReason, type CellChange } from './hero-events.js';
+import { HeroEventListeners, type HeroEventDetails, type HeroEventName, type HeroListener, type BotResult, type StopReason, type CellChange } from './hero-events.js';
 import type { Game } from './client.js';
 import type { AutomaticPickup, CellActions, Cell, Item, ItemRef, Snapshot } from './types.js';
 import { direction, entities } from './vocabulary.js';
@@ -14,14 +14,50 @@ export interface BotDefinition {
   readonly autoloot?: AutomaticPickup;
   initialize(context: BotContext): ScriptResult | Promise<ScriptResult>;
 }
-/** One initialization callback, with contextual types in JS and TS. Register your turn listener here. */
-export function defineBot(bot: BotDefinition): BotDefinition {
+/** Plain event payloads include the live hero, game and script logger. */
+type BotEvents = HeroEventDetails & { start: Record<never, never> };
+export type BotHandler<K extends keyof BotEvents> = (context: BotContext & BotEvents[K]) => ReturnType<HeroListener<'turn'>>;
+export interface BotBuilder extends BotDefinition {
+  /** Register in source order. Start sets up controls; turn owns awaited actions. */
+  on<K extends keyof BotEvents>(type: K, handler: BotHandler<K>): () => void;
+}
+/** Define once at the top of a script, then register bot.on("turn", ...). */
+export function defineBot(bot: Omit<BotDefinition, 'initialize'> & Partial<Pick<BotDefinition, 'initialize'>>): BotBuilder {
   if (!bot || typeof bot.name !== 'string' || !bot.name.trim() || bot.name.length > 60 || /[\u0000-\u001f\u007f]/.test(bot.name))
     throw Error('A bot needs a name of 1–60 characters without control characters.');
-  if (typeof bot.initialize !== 'function') throw Error('A bot needs an initialize function.');
+  if (bot.initialize !== undefined && typeof bot.initialize !== 'function') throw Error('Bot initialize must be a function.');
   const autoloot = bot.autoloot === undefined ? undefined : structuredClone(bot.autoloot);
   if (autoloot) { Object.freeze(autoloot.itemTypes); Object.freeze(autoloot.lootPatterns); Object.freeze(autoloot.ignorePatterns); Object.freeze(autoloot); }
-  return Object.freeze({ ...bot, name: bot.name.trim(), ...(autoloot === undefined ? {} : { autoloot }) });
+  const registrations: { type: keyof BotEvents; handler: BotHandler<any> }[] = [];
+  return Object.freeze({
+    name: bot.name.trim(),
+    ...(autoloot === undefined ? {} : { autoloot }),
+    on<K extends keyof BotEvents>(type: K, handler: BotHandler<K>) {
+      if (typeof handler !== 'function') throw Error('An event handler must be a function.');
+      if (type === 'turn' && registrations.some(entry => entry.type === 'turn')) throw Error('Use one turn listener to coordinate your strategy.');
+      const entry = { type, handler };
+      registrations.push(entry);
+      return () => { const index = registrations.indexOf(entry); if (index >= 0) registrations.splice(index, 1); };
+    },
+    async initialize(context: BotContext) {
+      const entries = [...registrations];
+      for (const entry of entries) {
+        if (entry.type !== 'start') context.hero.on(entry.type, detail => {
+          if (registrations.includes(entry)) return entry.handler({ ...detail, ...context });
+        });
+      }
+      const applySetup = async (callback: () => ReturnType<HeroListener<'turn'>>) => {
+        const revision = context.hero.stateRevision;
+        const result = await callback();
+        if (context.hero.stateRevision === revision) await context.hero.applyEventResult(result);
+      };
+      if (bot.initialize) await applySetup(() => bot.initialize!(context));
+      for (const entry of entries) {
+        if (context.hero.state === null) break;
+        if (entry.type === 'start' && registrations.includes(entry)) await applySetup(() => entry.handler(context));
+      }
+    },
+  });
 }
 /** Host a bot on an existing game; no game creation, implicit input, or retries. */
 export async function runBot(game: Game, bot: BotDefinition, log: BotContext['log'] = () => {}, host:ScriptHost = {}): Promise<BotResult> {
@@ -168,6 +204,12 @@ export class Hero {
   }
   /** Register before initialize completes. Notifications are read-only; await input in turn. */
   addEventListener<K extends HeroEventName>(type: K, listener: HeroListener<K>, options: { once?: boolean } = {}): void { this.listeners.add(type, listener, options); }
+  /** Receive the event payload directly. Returns an unsubscribe function. */
+  on<K extends HeroEventName>(type: K, listener: (detail: HeroEventDetails[K]) => ReturnType<HeroListener<K>>, options: { once?: boolean } = {}): () => void {
+    const wrapped: HeroListener<K> = event => listener(event.detail);
+    this.addEventListener(type, wrapped, options);
+    return () => this.removeEventListener(type, wrapped);
+  }
   removeEventListener<K extends HeroEventName>(type: K, listener: HeroListener<K>): void { this.listeners.remove(type, listener); }
   /** End the bot loop after the active callback. Does not quit or delete the game. */
   stop(): void { this.stopped = true; }

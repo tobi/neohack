@@ -8,7 +8,7 @@ let project: string[] = [];
 const options: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext,
   moduleResolution: ts.ModuleResolutionKind.Bundler,
-  strict: true, allowJs: true, checkJs: true, noEmit: true, skipLibCheck: true,
+  strict: true, noImplicitAny: false, allowJs: true, checkJs: true, noEmit: true, skipLibCheck: true,
   lib: ['lib.es2022.d.ts'], types: [],
 };
 const host: ts.LanguageServiceHost = {
@@ -24,6 +24,7 @@ const host: ts.LanguageServiceHost = {
   fileExists: name => sources.has(name), readFile: name => sources.get(name),
   readDirectory: () => [], directoryExists: name => ['/project', '/types', '/lib'].includes(name),
   resolveModuleNames: (names, from) => names.map(name => {
+    if (name === 'neonethack/low' || name === 'neonethack/high') return { resolvedFileName: '/types/' + name.split('/')[1] + '.d.ts', extension: ts.Extension.Dts };
     if (name === 'neonethack') return { resolvedFileName: '/types/client.d.ts', extension: ts.Extension.Dts };
     if (!name.startsWith('./')) return undefined;
     const base = from.slice(0, from.lastIndexOf('/') + 1) + name.slice(2);

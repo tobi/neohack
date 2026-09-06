@@ -220,11 +220,11 @@ export class Accounts {
         !Object.keys(body.files).length ||
         !Object.entries(body.files).every(
           ([name, code]) =>
-            /^[\w-]+\.(js|ts)$/.test(name) &&
+            /^[\w-]+\.js$/.test(name) &&
             typeof code === "string" &&
             code.length < 100000,
         ) ||
-        !Object.hasOwn(body.files, "main.ts") ||
+        !Object.hasOwn(body.files, "main.js") ||
         !/^[a-z]+$/.test(body.role) ||
         !(body.seed === "random" || /^\d{1,10}$/.test(String(body.seed)))
       )
@@ -389,15 +389,15 @@ export class Accounts {
             !Array.isArray(files) &&
             Object.keys(files).length > 0 &&
             Object.keys(files).length <= 20 &&
-            Object.hasOwn(files, "main.ts") &&
+            Object.hasOwn(files, "main.js") &&
             Object.entries(files).every(
               ([name, code]) =>
-                /^[\w-]+\.(js|ts)$/.test(name) && typeof code === "string",
+                /^[\w-]+\.js$/.test(name) && typeof code === "string",
             );
           if (
             !source ||
             source.version !== 1 ||
-            source.entrypoint !== "main.ts" ||
+            source.entrypoint !== "main.js" ||
             !validFiles(source.files) ||
             !validFiles(source.compiledFiles) ||
             JSON.stringify(source).length > 500000 ||

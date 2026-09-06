@@ -64,7 +64,8 @@ blocks new operations until uncertainty is addressed.
 
 Requirements: C99 compiler, CMake ≥3.20, pkg-config, libevent ≥2.1 development files, Make, Ninja (or CMake's Unix Makefiles
 generator), `flock` (util-linux), Lua 5.4 headers/static library, ncurses and UUID
-development files. The tested native build platform is Linux.
+development files, plus libevent ≥2.1 development files for native MCP.
+The tested native build platform is Linux.
 The library alone has no Lua or Node dependency; these are engine/tooling needs.
 
 ```sh
@@ -73,6 +74,7 @@ make                         # C library, public CLI, stdio MCP, native engine/d
 make test                    # actual C/engine integration
 npm ci                       # Node ≥22.18, only for TS/MCP tooling
 npm test                     # typecheck + real-engine protocol/client tests
+npm run check:tools           # exact cross-export tool parity (also requires Bun)
 npm run test:install          # static/shared, Debug/Release, Make/Ninja + relocation
 ```
 

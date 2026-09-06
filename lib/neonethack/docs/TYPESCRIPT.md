@@ -157,3 +157,89 @@ authentication and per-user access control are not provided. HTTP bodies are
 limited to 64 KiB and headers to 16 KiB; the existing public semantic request
 limit remains 4096 UTF-8 bytes. Libevent supplies the HTTP parser, bounded framing
 and connection handling; there is no separate HTTP gameplay engine.
+
+### Low and high APIs
+
+`neonethack/high` names the ergonomic `Neonethack`, `Game`, `Hero` and script
+lifecycle API used throughout this guide. The root `neonethack` export remains
+its convenient native entry point. `neonethack/low` exposes exact protocol calls:
+
+```ts
+import { LowLevel } from 'neonethack/low';
+
+const low = new LowLevel(transport);
+console.log(low.tools); // the same named tools and input schemas as MCP/WebMCP
+await low.call('session_observe', { sessionId });
+```
+
+Existing high-level clients and games also expose `.low`. Low-level callers
+supply exact request IDs and revisions and handle responses themselves; these
+calls do not update the high-level Game's cached observation or run its lifecycle
+hooks. Do not mix them with in-flight Game/Hero operations. Prefer Game/Hero for
+ordinary scripts, where serialization, explicit decisions and receipts matter.
+
+The workshop supports `neonethack`, `neonethack/high` and `neonethack/low` imports
+with TypeScript completion. Its tool vocabulary is complete, but its transport
+is confined to the supplied run. The host owns creation: `session_create` returns
+an explicit permission error. Other session operations require that run's ID;
+`protocol_describe` is available without a session. This is an ownership boundary,
+not a different set of game actions.
+
+### Check tool parity
+
+From the repository root, after building the native executable and installing
+library dependencies and Bun:
+
+```sh
+make -C lib/neonethack test
+npm run --prefix lib/neonethack check:tools
+npm run --prefix lib/neonethack check:tools -- --web https://neohack.dev
+node lib/neonethack/scripts/check-tools.mjs --json
+```
+
+The command exits nonzero on missing, extra or duplicate tools, differing
+schemas/descriptions/read-only annotations, dispatch mismatches or failed
+probes. It compares against the source catalog, not a hardcoded count. It
+checks package low/high exports, WebMCP registration and dispatch, real native
+stdio/HTTP discovery and the bundled workshop module loader. CI runs the same
+command. `--http URL` substitutes an existing MCP endpoint; `--web URL` additionally
+checks actual page registration in sandboxed Chromium (set `CHROMIUM` if needed).
+Remote checks only discover tools; they never create or play a run. A pinned
+older runtime may legitimately differ from current source; the report flags that
+difference without upgrading or replaying anything.
+
+## Workshop scripts in JavaScript
+
+Create a definition at the top of `main.js`, export it, and register plain event
+handlers. The workshop supplies the live session when you run the script.
+
+```js
+import { defineBot } from 'neonethack';
+
+const bot = defineBot({ name: 'First steps' });
+export default bot;
+
+bot.on('enterLevel', ({ to, log }) => {
+  log('Entered', to.depthLabel);
+});
+
+bot.on('turn', async ({ hero }) => {
+  await hero.search();
+  hero.stop();
+});
+```
+
+`bot.on()` receives the event payload plus `hero`, `game`, and `log`. Register
+handlers before running. `start` runs once before observations and is the place
+to register controls. Keep engine actions in one awaited `turn` handler; other
+observation notifications stay read-only. Event return values retain the same
+script-state behavior, including `null` to yield. `bot.on()` returns a function
+that unsubscribes the handler. A live `hero.on(event, handler)` receives the plain
+event payload and also returns an unsubscribe function; it supports `{ once: true }`.
+
+At `/bots`, choose Create a script or an example. Example source is not saved
+until Save my copy creates a private project in your account. Each saved project
+has a stable `/bots?script=<id>` URL requiring its owner's account. Subsequent
+saves update that project; opening an example again creates a separate draft.
+All workshop source filenames end in `.js`; Format uses Prettier on the current
+file. JavaScript keeps cross-file completion and documentation from the SDK types.

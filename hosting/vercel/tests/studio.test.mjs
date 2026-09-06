@@ -38,7 +38,7 @@ test('component is read-only, bot imports execute real engine, private recording
  const denied=await page.evaluate(async()=>{const w=document.querySelector('neohack-world');return w.postMessage({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'neonethack_game_wait',arguments:{}}});});assert.ok(denied.error);
  await page.waitForFunction(()=>document.querySelector('neohack-world').shadowRoot.querySelector('canvas').width>300);
  await page.screenshot({path:'/tmp/neohack-component.png',fullPage:true});
- await page.goto(url+'/bots');await page.waitForFunction(()=>document.querySelector('#author').textContent.includes('BotAuthor'));
+ await page.goto(url+'/bots?example=curious-imp');await page.waitForFunction(()=>document.querySelector('#author').textContent.includes('BotAuthor'));
  await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('#status').textContent==='Bot saved.');
  await page.locator('#role').selectOption('valkyrie');await page.locator('#seed-mode').selectOption('fixed');await page.locator('#seed').fill('42');
  await page.locator('#test').click();
@@ -53,7 +53,7 @@ test('component is read-only, bot imports execute real engine, private recording
  const actualErrors=errors.filter(e=>!e.includes('401')&&!e.includes('400')&&!e.includes('409'));assert.deepEqual(actualErrors,[]);
 });
 test('sandbox blocks network access and Stop terminates an infinite loop', {timeout:120000},async t=>{
- const {page,url,errors}=await fixture(t);await page.goto(url+'/bots');await page.waitForSelector('.cm-content');
+ const {page,url,errors}=await fixture(t);await page.goto(url+'/bots?example=curious-imp');await page.waitForSelector('.cm-content');
  await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(`export default {name:\"Test bot\",async initialize({log}) { try { await fetch('/api/account'); log('NETWORK OPEN'); } catch { log('NETWORK BLOCKED'); } while (true) {} }}`);
  await page.locator('#test').click();await page.waitForFunction(()=>document.querySelector('#output').textContent.includes('NETWORK BLOCKED'),{},{timeout:90000}).catch(async e=>{throw Error((await page.locator('#status[role=status]').textContent())+'\n'+errors.join('\n'),{cause:e});});
  await page.locator('#stop').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled);
@@ -85,7 +85,7 @@ test('signed-in human play records real frames and other accounts cannot read th
 
 test('HTTP workshop explains unavailable Web Crypto before loading the engine', {timeout:30000},async t=>{
  const {page,url,errors}=await fixture(t,{insecure:true});const requests=[];page.on('request',r=>requests.push(r.url()));
- await page.goto(url.replace('localhost','workshop-preview.test')+'/bots');await page.waitForSelector('.cm-content');
+ await page.goto(url.replace('localhost','workshop-preview.test')+'/bots?example=curious-imp');await page.waitForSelector('.cm-content');
  assert.equal(await page.evaluate(()=>!!crypto.subtle),false);
  await page.locator('#test').click();await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('HTTPS or localhost'));
  assert.equal(requests.some(u=>u.includes('/runtime/')),false);
@@ -94,7 +94,7 @@ test('HTTP workshop explains unavailable Web Crypto before loading the engine', 
 });
 
 test('IDE defaults, random project persistence, in-place top-rail login and resizing', {timeout:60000},async t=>{
- const {page,url}=await fixture(t);await page.goto(url+'/bots');await page.waitForSelector('.cm-content');
+ const {page,url}=await fixture(t);await page.goto(url+'/bots?example=curious-imp');await page.waitForSelector('.cm-content');
  assert.equal(await page.locator('#role').inputValue(),'random');assert.equal(await page.locator('#seed-mode').inputValue(),'random');assert.equal(await page.locator('#seed').isVisible(),false);assert.equal(await page.locator('#budget').count(),0);
  const code=await page.locator('.cm-content').innerText();
  await passkey(page);await page.locator('#open-login').click();await page.locator('#name').fill('WorkshopAuthor');await page.locator('#register').click();await page.waitForFunction(()=>document.querySelector('#author').textContent.includes('WorkshopAuthor'));
@@ -110,14 +110,14 @@ test('IDE defaults, random project persistence, in-place top-rail login and resi
 });
 
 test('test runner enforces its fixed 1000-call budget', {timeout:60000},async t=>{
- const {page,url}=await fixture(t);await page.goto(url+'/bots');await page.waitForSelector('.cm-content');
+ const {page,url}=await fixture(t);await page.goto(url+'/bots?example=curious-imp');await page.waitForSelector('.cm-content');
  await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText('export default {name:\"Test bot\",initialize({hero,game}) { hero.addEventListener("turn", async()=>{ for(let i=0;i<1001;i++) await game.observe(); }); }}');
  await page.locator('#test').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:50000});
  assert.equal(await page.locator('#status[role=status]').textContent(),'Test budget reached (1000 calls).');
 });
 
 test('hero API has real TypeScript completions, documentation, diagnostics and multi-file execution', {timeout:120000}, async t=>{
- const {page,url}=await fixture(t);await page.goto(url+'/bots');await page.waitForSelector('.cm-content');
+ const {page,url}=await fixture(t);await page.goto(url+'/bots?example=curious-imp');await page.waitForSelector('.cm-content');
  const replace=async code=>{await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(code);};
  const prefix="import { Hero, direction, entities, defineBot } from 'neonethack';\n";
  await replace(prefix+'direction.');await page.keyboard.press('Control+Space');
@@ -132,21 +132,22 @@ test('hero API has real TypeScript completions, documentation, diagnostics and m
  await page.waitForSelector('.cm-lintRange-error');
  const language=await page.evaluate(async()=>{
    const worker=new Worker('/build/bot-language.js',{type:'module'});
-   const files={'main.ts':"import { defineBot, Hero } from 'neonethack';\nimport { heading } from './strategy';\nexport default defineBot({name:\"Test bot\",initialize({hero}) { hero.addEventListener('turn', async()=>{await hero.go(heading);hero.stop();}); }});",'strategy.ts':"import { direction } from 'neonethack'; export const heading = direction.northWest;"};
-   const ask=(kind,position,name)=>new Promise(resolve=>{worker.onmessage=e=>resolve(e.data);worker.postMessage({id:1,kind,files,file:'main.ts',position,name});});
-   const clean=await ask('diagnostics');const original=files['main.ts'];files['main.ts']="import {defineBot} from 'neonethack'; defineBot({initialize(){}});";const unnamed=await ask('diagnostics');files['main.ts']=original;files['strategy.ts']='export const heading = 123;';const bad=await ask('diagnostics');
-   files['main.ts']="import { Hero, defineBot } from 'neonethack'; defineBot({name:\"Test bot\",initialize({hero}) { hero.";
-   const detail=await ask('detail',files['main.ts'].length,'go');
-   files['main.ts']="import {defineBot,type ScriptState} from 'neonethack'; export default defineBot({name:'Typed state',initialize({hero}){ const state:ScriptState={mode:'run'}; hero.controls.button({id:'pause',label:'Pause',onClick:()=>null}); hero.controls.checkbox({id:'bold',label:'Bold',checked:true,onChange:checked=>({state:{bold:checked}})}); hero.addEventListener('stateChange',({detail})=>{if(detail.from==='run' && detail.to===null) return false;}); hero.addEventListener('beforeLoot',async({detail})=>{await detail.select(detail.decision.options.filter(o=>o.suggested).map(o=>o.id));return {state};}); }});";
+   const files={'main.js':"import { defineBot, Hero } from 'neonethack';\nimport { heading } from './strategy';\nexport default defineBot({name:\"Test bot\",initialize({hero}) { hero.addEventListener('turn', async()=>{await hero.go(heading);hero.stop();}); }});",'strategy.js':"import { direction } from 'neonethack'; export const heading = direction.northWest;"};
+   const ask=(kind,position,name)=>new Promise(resolve=>{worker.onmessage=e=>resolve(e.data);worker.postMessage({id:1,kind,files,file:'main.js',position,name});});
+   const clean=await ask('diagnostics');const original=files['main.js'];files['main.js']="import {defineBot} from 'neonethack'; defineBot({initialize(){}});";const unnamed=await ask('diagnostics');files['main.js']=original;files['strategy.js']='export const heading = 123;';const bad=await ask('diagnostics');
+   files['main.js']="import { Hero, defineBot } from 'neonethack'; defineBot({name:\"Test bot\",initialize({hero}) { hero.";
+   const detail=await ask('detail',files['main.js'].length,'go');
+   files['main.js']="import {defineBot} from 'neonethack'; export default defineBot({name:'Typed state',initialize({hero}){ const state={mode:'run'}; hero.controls.button({id:'pause',label:'Pause',onClick:()=>null}); hero.controls.checkbox({id:'bold',label:'Bold',checked:true,onChange:checked=>({state:{bold:checked}})}); hero.addEventListener('stateChange',({detail})=>{if(detail.from==='run' && detail.to===null) return false;}); hero.addEventListener('beforeLoot',async({detail})=>{await detail.select(detail.decision.options.filter(o=>o.suggested).map(o=>o.id));return {state};}); }});";
    const stateTypes=await ask('diagnostics');
-   files['main.ts']="import {defineBot} from 'neonethack';defineBot({name:'Bad state',initialize({hero}){hero.setState(123);}});";
+   files['main.js']="import {defineBot} from 'neonethack';defineBot({name:'Bad state',initialize({hero}){hero.setState(123);}});";
    const badState=await ask('diagnostics');
    worker.terminate();return {clean,bad,detail,unnamed,stateTypes,badState};
  });
  assert.deepEqual(language.stateTypes.result,[]);assert.ok(language.badState.result.some(d=>d.message.includes('123')));assert.deepEqual(language.clean.result,[]);assert.ok(language.unnamed.result.some(d=>d.message.includes("name")));assert.ok(language.bad.result.some(d=>d.message.includes('123')));assert.match(language.detail.result.docs,/ONE step/);
- await page.locator('#tabs').getByRole('tab',{name:'strategy.ts'}).click();
+ await page.locator('#filename').fill('strategy.js');await page.locator('#add-file').click();
+ await page.locator('#tabs').getByRole('tab',{name:'strategy.js'}).click();
  await replace("import { direction } from 'neonethack'; export const heading = direction.north;");
- await page.locator('#tabs').getByRole('tab',{name:'main.ts'}).click();
+ await page.locator('#tabs').getByRole('tab',{name:'main.js'}).click();
  await replace(prefix+"import { heading } from './strategy';\nexport default defineBot({name:\"Test bot\",initialize({hero, log}){ hero.addEventListener('turn', async()=>{log('hungry',hero.isHungry()); log('enemies',hero.sense(entities.Enemy).length); await hero.go(heading); log('hero turn',hero.snapshot.observation.turn);hero.stop();}); }});");
  await page.locator('#role').selectOption('valkyrie');await page.locator('#seed-mode').selectOption('fixed');await page.locator('#seed').fill('42');await page.locator('#test').click();
  await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:90000});
@@ -157,7 +158,7 @@ test('hero API has real TypeScript completions, documentation, diagnostics and m
 
 test('automated history retains exact source, construction autoloot and executable name', {timeout:90000}, async t=>{
  const {page,url,browser}=await fixture(t);await register(page,url,'SourceAuthor');
- await page.goto(url+'/bots');await page.waitForSelector('.cm-content');
+ await page.goto(url+'/bots?example=curious-imp');await page.waitForSelector('.cm-content');
  const replace=async code=>{await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(code);};
  const main=`import {defineBot} from 'neonethack';
 import {message} from './strategy';
@@ -166,8 +167,9 @@ export default defineBot({name:'Archive imp',autoloot:{enabled:true,itemTypes:['
  hero.addEventListener('turn',async()=>{await hero.wait();hero.stop();});
 }});`;
  const helper="export const message='original helper';";
- await page.locator('#tabs').getByRole('tab',{name:'strategy.ts'}).click();await replace(helper);
- await page.locator('#tabs').getByRole('tab',{name:'main.ts'}).click();await replace(main);
+ await page.locator('#filename').fill('strategy.js');await page.locator('#add-file').click();
+ await page.locator('#tabs').getByRole('tab',{name:'strategy.js'}).click();await replace(helper);
+ await page.locator('#tabs').getByRole('tab',{name:'main.js'}).click();await replace(main);
  await page.locator('#bot-name').fill('Different project label');
  await page.locator('#test').click();await replace('// edited after Test was clicked');
  await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:60000});
@@ -176,8 +178,8 @@ export default defineBot({name:'Archive imp',autoloot:{enabled:true,itemTypes:['
  const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));
  assert.equal(runs.length,1);const run=runs[0];assert.equal(run.name,'Archive imp');assert.equal(run.automated,true);assert.equal(run.control,'bot');
  const saved=await page.evaluate(id=>fetch(`/api/account/runs/${id}/source`).then(r=>r.json()),run.id);
- const source=JSON.parse(saved.artifact);assert.equal(source.files['main.ts'],main);assert.equal(source.files['strategy.ts'],helper);
- assert.match(source.compiledFiles['main.ts'],/require\("neonethack"\)/);assert.equal(source.compiler.name,'typescript');assert.equal(source.entrypoint,'main.ts');
+ const source=JSON.parse(saved.artifact);assert.equal(source.files['main.js'],main);assert.equal(source.files['strategy.js'],helper);
+ assert.match(source.compiledFiles['main.js'],/require\("neonethack"\)/);assert.equal(source.compiler.name,'typescript');assert.equal(source.entrypoint,'main.js');
  assert.deepEqual(source.autoloot,{enabled:true,itemTypes:['gold'],arrows:false,leaveCorpses:true,leaveKnownCursed:true,lootPatterns:['ration'],ignorePatterns:['corpse']});
  const {createHash}=await import('node:crypto');assert.equal(saved.sha256,createHash('sha256').update(saved.artifact).digest('hex'));
  await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('#status').textContent==='Bot saved.');
@@ -196,7 +198,7 @@ export default defineBot({name:'Archive imp',autoloot:{enabled:true,itemTypes:['
 });
 
 test('invalid bot names and failed source persistence never initialize the bot', {timeout:90000},async t=>{
- const {page,url}=await fixture(t);await register(page,url,'SourceFailure');await page.goto(url+'/bots');await page.waitForSelector('.cm-content');
+ const {page,url}=await fixture(t);await register(page,url,'SourceFailure');await page.goto(url+'/bots?example=curious-imp');await page.waitForSelector('.cm-content');
  const replace=async code=>{await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(code);};
  await replace(`export default {initialize({log}){log('MUST NOT RUN')}}`);
  await page.locator('#test').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:60000});
@@ -212,7 +214,7 @@ test('invalid bot names and failed source persistence never initialize the bot',
 
 test('script controls, null silence and private journal survive a real workshop run', {timeout:120000},async t=>{
   const {page,context,browser,url}=await fixture(t);await register(page,url,'StateAuthor');
-  await page.goto(url+'/bots');await page.waitForSelector('.cm-content');
+  await page.goto(url+'/bots?example=curious-imp');await page.waitForSelector('.cm-content');
   await page.locator('.cm-content').click();await page.keyboard.press('Control+a');
   await page.keyboard.insertText(`import {defineBot} from 'neonethack';
 export default defineBot({name:'Stateful imp',initialize({hero,log}) {
@@ -264,4 +266,51 @@ test('plain-text platform failures explain account outage and a fresh explicit a
  await page.locator('#register').click();
  await page.waitForFunction(()=>!document.querySelector('#account').hidden);
  assert.equal(await page.locator('#handle').textContent(),'AfterOutage');assert.equal(calls,2);
+});
+
+test('workshop chooser creates JavaScript scripts and saves private example copies at stable URLs', {timeout:120000}, async t=>{
+ const {page,url,browser}=await fixture(t);await register(page,url,'ScriptAuthor');
+ await page.goto(url+'/bots');
+ await page.locator('#project-picker').waitFor({state:'visible'});
+ assert.equal(await page.locator('#project-workspace').isVisible(),false);
+ await page.locator('#new-script').click();
+ await page.locator('#tabs').getByRole('tab',{name:'main.js'}).waitFor();
+ const replace=async code=>{await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(code);};
+ await page.locator('#filename').fill('helper.ts');await page.locator('#add-file').click();
+ assert.match(await page.locator('#status[role=status]').textContent(),/ending in .js/);
+ await replace('import {defineBot} from "neonethack";const bot=defineBot({name:"Mine"});export default bot;bot.on("turn",({hero})=>{hero.stop();});');
+ await page.locator('#format-code').click();
+ await page.waitForFunction(()=>document.querySelector('#status').textContent==='JavaScript formatted.');
+ assert.match(await page.locator('.cm-content').innerText(),/\n  hero.stop\(\);\n/);
+ await page.locator('#save').click();await page.waitForURL(/\?script=/);
+ const ownUrl=page.url();
+ const own=await page.evaluate(()=>fetch('/api/account/bots').then(r=>r.json()));assert.equal(own.length,1);
+ await page.locator('#choose-project').click();await page.locator('#example-observer').click();
+ assert.match(page.url(),/example=first-steps/);
+ assert.equal(await page.locator('#save').textContent(),'Save my copy');
+ await page.locator('#bot-name').fill('My first steps');await page.locator('#save').click();
+ await page.waitForURL(/\?script=/);const firstUrl=page.url();assert.notEqual(firstUrl,ownUrl);
+ await page.locator('#bot-name').fill('Revised first steps');await page.locator('#save').click();
+ await page.waitForFunction(async()=> (await fetch('/api/account/bots').then(r=>r.json())).some(b=>b.name==='Revised first steps'));
+ assert.equal(page.url(),firstUrl);
+ await page.reload();await page.locator('#project-workspace').waitFor({state:'visible'});
+ assert.equal(await page.locator('#bot-name').inputValue(),'Revised first steps');
+ await page.locator('#choose-project').click();await page.locator('#example-observer').click();
+ assert.equal(await page.locator('#bot-name').inputValue(),'First steps');
+ await page.locator('#save').click();await page.waitForURL(/\?script=/);assert.notEqual(page.url(),firstUrl);
+ const scripts=await page.evaluate(()=>fetch('/api/account/bots').then(r=>r.json()));assert.equal(scripts.length,3);
+ assert.ok(scripts.every(b=>Object.keys(b.files).every(name=>name.endsWith('.js'))));
+ await page.locator('#test').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:60000});
+ assert.equal(await page.locator('#status[role=status]').textContent(),'Script finished.');
+ assert.match(await page.locator('#output').textContent(),/Searched once/);
+ const stranger=await browser.newPage();await stranger.goto(firstUrl);
+ await stranger.waitForFunction(()=>document.querySelector('#project-message').textContent.includes('Sign in'));
+ assert.equal(await stranger.locator('#project-workspace').isVisible(),false);
+ assert.equal((await stranger.request.get(url+'/api/account/bots')).status(),401);
+ await register(stranger,url,'OtherScriptAuthor');await stranger.goto(firstUrl);
+ await stranger.waitForFunction(()=>document.querySelector('#project-message').textContent.includes('not in your account'));
+ assert.equal(await stranger.locator('#project-workspace').isVisible(),false);
+ const invalid=await page.request.put(url+'/api/account/bots',{headers:{origin:url},data:{name:'Wrong language',role:'random',seed:'random',files:{'main.ts':'export default {};'}}});
+ assert.equal(invalid.status(),400);
+ await page.screenshot({path:'/tmp/neohack-workshop-javascript.png',fullPage:true});
 });
