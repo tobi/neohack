@@ -66,6 +66,7 @@ const OBS_F = `${STATE_DIR}/last-obs.json`;
 const DEATH_F = `${STATE_DIR}/last-death.json`;
 const LASTRUN_F = `${STATE_DIR}/last-run.json`;
 const TOKEN_LOG = `${LOG_DIR}/token-usage.jsonl`;
+const PROGRESS_F = `${STATE_DIR}/exploration-progress.json`;
 const LOG = `${LOG_DIR}/agent.log`;
 
 for (const d of [STATE_DIR, LOG_DIR, SESSIONS]) mkdirSync(d, { recursive: true });
@@ -117,6 +118,48 @@ let stalledOps = 0;   // consecutive interactions without game-turn advancement
 let lastTurnSeen = null;
 let toollessSteps = 0; // consecutive model steps without any tool call
 let observationCache = loadJson(OBS_F, null)?.observation ?? null;
+let explorationProgress = loadJson(PROGRESS_F, null);
+
+function assessExplorationProgress(observation, tool, decision) {
+  const turn = Number(observation?.turn);
+  const depth = String(observation?.vitals?.depth ?? '').trim();
+  const pos = observation?.you;
+  const world = Array.isArray(observation?.world) ? observation.world : [];
+  if (!Number.isFinite(turn) || !depth || !pos || !['game_move', 'game_moveWithoutAttack', 'game_search'].includes(tool)) return null;
+
+  const known = world.reduce((n, cell) => n + (cell.terrain?.type && cell.terrain.type !== 'dark' ? 1 : 0), 0);
+  const hasDownstairs = world.some(cell => cell.terrain?.type === 'stairsDown');
+  const creatureVisible = (observation.neighborhood?.cells ?? []).some(cell =>
+    cell.visible && cell.occupant && cell.occupant.kind !== 'self');
+
+  if (!explorationProgress || explorationProgress.depth !== depth) {
+    explorationProgress = { depth, bestKnown: known, lastProgressTurn: turn, lastSeenTurn: null, positions: [] };
+  }
+  if (known > explorationProgress.bestKnown) {
+    explorationProgress.bestKnown = known;
+    explorationProgress.lastProgressTurn = turn;
+    explorationProgress.positions = [];
+  }
+  if (explorationProgress.lastSeenTurn !== turn) {
+    explorationProgress.positions.push({ turn, key: `${pos.x},${pos.y}` });
+    explorationProgress.positions = explorationProgress.positions.slice(-24);
+    explorationProgress.lastSeenTurn = turn;
+  }
+
+  const stagnantTurns = turn - explorationProgress.lastProgressTurn;
+  const recent = explorationProgress.positions.slice(-12);
+  const uniquePositions = new Set(recent.map(p => p.key)).size;
+  const lastSix = recent.slice(-6);
+  const pingPong = lastSix.length === 6 && lastSix.every((p, i, a) => p.key === a[i % 2].key);
+  const tinyCycle = recent.length >= 8 && uniquePositions <= 3;
+  const cycleStuck = (pingPong && stagnantTurns >= 6) || (tinyCycle && stagnantTurns >= 8);
+  const noDiscoveryStuck = stagnantTurns >= 25 && !hasDownstairs;
+  const stuck = !decision && !creatureVisible && (cycleStuck || noDiscoveryStuck);
+
+  saveJson(PROGRESS_F, { ...explorationProgress, stagnantTurns, known, hasDownstairs, uniquePositions });
+  if (!stuck) return null;
+  return `${cycleStuck ? `position cycle (${uniquePositions} unique positions in ${recent.length} moves)` : `${stagnantTurns} turns without revealing a cell`} on depth ${depth}; known=${known}, downstairs=${hasDownstairs}`;
+}
 
 function mergeObservation(previous, incoming) {
   const update = incoming?.update;
@@ -261,12 +304,21 @@ for (const t of mcpTools) {
           const sc = j?.data?.output?.structuredContent ?? j;
           if (sc?.observation) {
             const merged = mergeObservation(observationCache, sc.observation);
+            const effectiveObservation = merged ?? sc.observation;
             if (merged) {
               observationCache = merged;
-              saveJson(OBS_F, { sessionId: sc.sessionId ?? lastSessionId, revision: sc.revision, decision: sc.decision ?? null, observation: merged });
             } else {
               log(`observation cache miss: delta base=${sc.observation.update?.base} local=${observationCache?.update?.id}; advisor using current delta only`);
-              saveJson(OBS_F, { sessionId: sc.sessionId ?? lastSessionId, revision: sc.revision, decision: sc.decision ?? null, observation: sc.observation });
+            }
+            saveJson(OBS_F, { sessionId: sc.sessionId ?? lastSessionId, revision: sc.revision, decision: sc.decision ?? null, observation: effectiveObservation });
+
+            const stuck = assessExplorationProgress(effectiveObservation, t.name, sc.decision);
+            if (stuck) {
+              const cause = `skills: exploration live-lock — ${stuck}`;
+              saveJson(DEATH_F, { cause, turn: effectiveObservation.turn, depth: effectiveObservation.vitals?.depth ?? null, at: new Date().toISOString() });
+              log(`op#${opCount} ${t.name} <<SKILL-DEATH>> ${cause}`);
+              advisorNote += `\n\nSTUCK DETECTED: ${stuck}. Stop this run for retrospective repair; do not continue the same route.`;
+              deathSeen = true;
             }
             try {
               const advisorSrc = existsSync(ADVISOR_F) ? ADVISOR_F : BUNDLED_ADVISOR;
@@ -304,9 +356,9 @@ for (const t of mcpTools) {
           const turnNum = Number(turn);
           if (turnNum === lastTurnSeen) stalledOps++;
           else { stalledOps = 0; lastTurnSeen = turnNum; }
-          if (stalledOps >= 10) {
-            saveJson(DEATH_F, { cause: 'skills: 10 interactions without advancing the game', turn: turnNum, depth: depth ?? null, at: new Date().toISOString() });
-            log(`op#${opCount} ${t.name} <<SKILL-DEATH>> 10 interactions without advancing`);
+          if (stalledOps >= 3) {
+            saveJson(DEATH_F, { cause: 'skills: 3 interactions without advancing the game', turn: turnNum, depth: depth ?? null, at: new Date().toISOString() });
+            log(`op#${opCount} ${t.name} <<SKILL-DEATH>> 3 interactions without advancing`);
             deathSeen = true;
           }
         }
@@ -393,7 +445,10 @@ try {
       system,
       messages,
       tools,
-      stopWhen: stepCountIs(Math.min(60, STEP_BUDGET - totalSteps)),
+      stopWhen: [
+        stepCountIs(Math.min(60, STEP_BUDGET - totalSteps)),
+        () => deathSeen,
+      ],
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       providerOptions: {
         openai: {
