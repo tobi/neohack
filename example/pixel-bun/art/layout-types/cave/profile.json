@@ -1,0 +1,26 @@
+{
+  "palettes": [
+    {
+      "floor": [
+        "#373b35",
+        "#393e37",
+        "#3c4039",
+        "#343932"
+      ],
+      "seam": "#292e29",
+      "light": "#535b4c",
+      "cap": "#626d61",
+      "edge": "#89907a",
+      "face": "#4c574e",
+      "shade": "#2b3733",
+      "moss": "#546446"
+    }
+  ],
+  "decorations": [
+    "crack",
+    "puddle",
+    "vines"
+  ],
+  "description": "Original faceted bedrock walls and unpaved earth. Shared square gameplay grid, natural surface geometry.",
+  "geometry": "rock"
+}

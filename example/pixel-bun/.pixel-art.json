@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "basePack": "modern-interiors",
+  "guide": "references/packs/modern-interiors.md",
+  "projection": "orthogonal furnished interiors",
+  "tileSize": [
+    16,
+    16
+  ],
+  "extensions": [
+    "original-creatures"
+  ],
+  "rules": {
+    "nativePixels": true,
+    "idlePlaybackRate": 1,
+    "sourceMappings": true,
+    "idlePlaybackRateMeaning": "Normal playback of the project's six-fps idle clips; do not apply the skill's 0.2 default",
+    "idleFps": 6,
+    "walkFps": 10,
+    "reducedMotion": "static directional idle frame"
+  },
+  "projectRenderer": {
+    "family": "original oblique masonry and faceted cave rock",
+    "projection": "screenX=x-0.375*z; screenY=y-0.75*z",
+    "groundTileSize": [
+      16,
+      16
+    ],
+    "characterFrameSize": [
+      16,
+      32
+    ],
+    "characterAnchor": [
+      8,
+      32
+    ]
+  }
+}

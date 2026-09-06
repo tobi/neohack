@@ -70,7 +70,7 @@ test(
       receipt.outputSha256,
     );
     assert.equal(JSON.parse(first.stdout).outputSha256, receipt.outputSha256);
-    assert.equal(receipt.rendererVersion, "masonry-3d-2");
+    assert.equal(receipt.rendererVersion, "terrain-3d-9");
     assert.equal(receipt.layouts.length, 2);
     assert.deepEqual(receipt.checks, [
       "repeatability",
@@ -410,6 +410,11 @@ test("3D masonry covers all junctions, uses cutaways, and crops raised offscreen
         rise([cell(2, 2), cell(1, 2, "floor")]),
       "east foreground wall must be cut away",
     );
+    const rearRise = rise([cell(2,2),cell(2,3,"floor")]);
+    assert(rise([cell(2,2),cell(2,3,"floor"),cell(1,3,"floor")]) === rearRise,
+      "southwest room floor must not lower a directly established rear wall");
+    assert(rise([cell(2,2),cell(3,2,"floor"),cell(3,1,"floor")]) === rise([cell(2,2),cell(3,2,"floor")]),
+      "northeast room floor must not lower a directly established west wall");
     const northCutawayRise = rise([
       cell(2, 2),
       cell(2, 1, "floor"),
@@ -417,13 +422,14 @@ test("3D masonry covers all junctions, uses cutaways, and crops raised offscreen
     for (const [dx, dy, label] of [
       [-1, -1, "northwest"],
       [1, -1, "northeast"],
-      [-1, 1, "southwest"],
     ])
       assert(
         rise([cell(2, 2), cell(2 + dx, 2 + dy, "floor")]) ===
           northCutawayRise,
         `${label} interior must lower its foreground corner`,
       );
+    assert(rise([cell(2,2),cell(1,3,"floor")]) === rise([cell(2,2),cell(1,2,"floor")]),
+      "southwest corner keeps the east wall's retained height");
     assert(
       rise([cell(2, 2), cell(3, 3, "floor")]) < northCutawayRise,
       "southeast diagonal remains a rear corner",

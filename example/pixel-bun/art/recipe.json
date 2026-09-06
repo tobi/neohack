@@ -6,7 +6,7 @@
   "scale": 2,
   "source": "../src/map.ts",
   "terrainSource": "../src/dungeon-art.ts",
-  "rendererVersion": "masonry-3d-2",
+  "rendererVersion": "terrain-3d-9",
   "structureSource": "../src/structure-sprites.ts",
   "structureGeometry": {
     "projection": "screenX=x-0.375*z; screenY=y-0.75*z",
@@ -22,7 +22,9 @@
       9,
       18
     ],
-    "cacheLimit": 256
+    "cacheLimit": 256,
+    "eastWallHeight": 14,
+    "cutawayShoulderHeight": 10
   },
   "seed": "threshold:42",
   "palette": {

@@ -2954,4 +2954,114 @@ test('nearby door controls execute the offered direction and refresh after openi
   await ready(page);
   assert.equal((await snapshot(page)).outcome.action, 'close');
   assert.ok(await open.isVisible());
+ });
+
+test('opt-in sound decodes local clips, follows real steps, and never repeats receipts', {timeout:30000}, async t => {
+  const {page, errors, requests} = await fixture(t);
+  await create(page);
+  assert.equal(requests.filter(r => r.url.endsWith('.ogg')).length, 0);
+  await page.evaluate(() => {
+    window.soundStarts = 0;
+    const start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function(...args) { window.soundStarts++; return start.apply(this,args); };
+  });
+  await page.getByLabel('Game menu',{exact:true}).click();
+  await page.getByRole('button',{name:'Sound: off',exact:true}).click();
+  await page.getByRole('button',{name:'Sound: on',exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Sound: on',exact:true}).getAttribute('aria-pressed'),'true');
+  const decoded = await page.evaluate(() => {
+    const sound = document.querySelector('pixel-nethack').map.sound;
+    return [...sound.buffers.values()].map(b => ({duration:b.duration, peak:Math.max(...b.getChannelData(0).slice(0,48000).map(Math.abs))}));
+  });
+  assert.equal(decoded.length,4);
+  assert.ok(decoded.every(b => b.duration > 0.05 && b.duration < 4 && b.peak > 0.01));
+  await page.getByLabel('Game menu',{exact:true}).click();
+  const evidence = await page.evaluate(async () => {
+    const app=document.querySelector('pixel-nethack');
+    for (const direction of ['north','east','south','west']) {
+      const before=app.game.state;
+      await app.run(() => app.game.move(direction));
+      if (window.soundStarts) {
+        const after=app.game.state, count=window.soundStarts;
+        app.map.showMessages(before,after);
+        app.map.showMessages(before,after);
+        return {count, replay:window.soundStarts, moved:after.outcome.positionChanged};
+      }
+    }
+    throw Error('Fixture did not produce an audible confirmed step');
+  });
+  assert.ok(evidence.moved);
+  assert.equal(evidence.count,evidence.replay);
+  const hidden = await page.evaluate(async () => {
+    const app=document.querySelector('pixel-nethack');
+    Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});
+    document.dispatchEvent(new Event('visibilitychange'));
+    const active=app.map.sound.active.size, before=window.soundStarts;
+    const previous=app.game.state;
+    await app.run(()=>app.game.move('south'));
+    const after=app.game.state;
+    delete document.hidden;
+    document.dispatchEvent(new Event('visibilitychange'));
+    app.map.showMessages(previous,after);
+    return {active,before,after:window.soundStarts};
+  });
+  assert.equal(hidden.active,0);
+  assert.equal(hidden.before,hidden.after);
+  await page.getByLabel('Game menu',{exact:true}).click();
+  await page.getByRole('button',{name:'Sound: on',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Sound: off',exact:true}).getAttribute('aria-pressed'),'false');
+  assert.equal(await page.evaluate(() => document.querySelector('pixel-nethack').map.sound.active.size),0);
+  assert.deepEqual(errors,[]);
+});
+
+test('failed audio loading stays muted and can retry without spending a turn', async t => {
+  const {page,errors} = await fixture(t);
+  await create(page);
+  const before=await snapshot(page);
+  await page.route('**/audio/*.ogg', route=>route.fulfill({status:503,body:'Unavailable'}));
+  await page.getByLabel('Game menu',{exact:true}).click();
+  await page.getByRole('button',{name:'Sound: off',exact:true}).click();
+  await page.getByRole('button',{name:'Sound: off',exact:true}).waitFor();
+  assert.equal((await snapshot(page)).revision,before.revision);
+  assert.equal(await page.evaluate(()=>document.querySelector('pixel-nethack').map.sound.enabled),false);
+  await page.unroute('**/audio/*.ogg');
+  await page.getByRole('button',{name:'Sound: off',exact:true}).click();
+  await page.getByRole('button',{name:'Sound: on',exact:true}).waitFor();
+  assert.equal((await snapshot(page)).revision,before.revision);
+  assert.deepEqual(errors,[]);
+});
+
+test('live map uses all seeded environment profiles and restores them on revisit', async t => {
+  const {page,errors}=await fixture(t);
+  const result=await page.evaluate(()=>{
+    const app=document.querySelector('pixel-nethack');
+    const host=document.createElement('div');host.style.cssText='position:fixed;inset:0;width:800px;height:480px;background:#171f23';
+    const canvas=document.createElement('canvas');host.append(canvas);document.body.append(host);
+    const map=new app.map.constructor(canvas,()=>{});map.zoom=2;
+    const world=[];
+    for(let y=1;y<=9;y++)for(let x=1;x<=14;x++)world.push({x,y,visible:true,terrain:{type:y===1||y===9||x===1||x===14?'wall':'floor'}});
+    world.find(c=>c.x===7&&c.y===9).terrain={type:'closedDoor',orientation:'horizontal'};
+    const observation={location:{id:'public-level',depthLabel:'Study'},you:{x:6,y:5},world};
+    const seen={}, proofs=[];
+    for(let i=0;i<40&&Object.keys(seen).length<3;i++){
+      const seed=`${i}:public-level`;
+      map.update(observation,'valkyrie',seed);
+      const type=canvas.dataset.environment, pixels=canvas.toDataURL();
+      if(seen[type])continue;
+      seen[type]=seed;
+      map.update({...observation,world:[...world].reverse()},'valkyrie',seed);
+      if(canvas.toDataURL()!==pixels)throw Error('order changed environment');
+      map.update(observation,'valkyrie','another-level');
+      map.update(observation,'valkyrie',seed);
+      if(canvas.toDataURL()!==pixels)throw Error('revisit changed environment');
+      if(type!=='dungeon'){
+        map.layoutType='dungeon';map.draw();
+        if(canvas.toDataURL()===pixels)throw Error('selected environment not used in live pixels');
+      }
+      proofs.push(type);
+    }
+    map.destroy();host.remove();return proofs.sort();
+  });
+  assert.deepEqual(result,['cave','dungeon','dungeon-damp']);
+  assert.deepEqual(errors,[]);
 });

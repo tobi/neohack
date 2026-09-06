@@ -1,19 +1,24 @@
+import { layoutProfile, type LayoutType, type SurfacePalette as Palette } from "./layout-art";
+import { ambienceHash, decorationAt, drawDecoration } from "./ambience";
 /** Original, deterministic dungeon surfaces. This module knows no game rules. */
 import {
   drawWallSprite,
+  drawRockSprite,
   drawDoorSprite,
   STRUCTURE_RISE,
   STRUCTURE_OVERHANG,
 } from "./structure-sprites";
 export { STRUCTURE_RISE, STRUCTURE_OVERHANG } from "./structure-sprites";
-export const RENDERER_VERSION = "masonry-3d-2";
+export const RENDERER_VERSION = "terrain-3d-9";
 export interface TerrainCell {
   x: number;
   y: number;
+  visible?: boolean;
   terrain: { type: string; orientation?: "horizontal" | "vertical" };
 }
 export interface TerrainOptions {
   seed: string | number;
+  layoutType?: LayoutType;
   originX: number;
   originY: number;
   columns: number;
@@ -23,6 +28,10 @@ export interface TerrainOptions {
   /** Omit raised masonry when inspecting the ground-only layer. */
   omitWalls?: boolean;
   omitDecals?: boolean;
+  /** Optional presentation clock; omitted for static/reduced-motion/workshop art. */
+  ambienceTimeMs?: number;
+  /** Current public sprite anchors; world coordinates, independent of the camera. */
+  readableCells?: readonly { x: number; y: number; rise: number }[];
 }
 
 const UNKNOWN = new Set(["unknown", "dark", "stone", "unexplored"]);
@@ -50,39 +59,6 @@ const SURFACES = new Set([
   "grave",
   "bridge",
 ]);
-const palettes = [
-  {
-    floor: ["#41483e", "#454c40", "#494f43", "#3e453c"],
-    seam: "#303a34",
-    light: "#565e4b",
-    cap: "#737765",
-    edge: "#96957b",
-    face: "#464d43",
-    shade: "#323e39",
-    moss: "#626e46",
-  },
-  {
-    floor: ["#424b4a", "#454e4d", "#4b5250", "#3f4847"],
-    seam: "#303b3d",
-    light: "#596462",
-    cap: "#737e79",
-    edge: "#979e8c",
-    face: "#475753",
-    shade: "#303f40",
-    moss: "#577360",
-  },
-  {
-    floor: ["#4e4940", "#514d43", "#575146", "#49463e"],
-    seam: "#3a3832",
-    light: "#656050",
-    cap: "#827b65",
-    edge: "#aaa084",
-    face: "#595443",
-    shade: "#3e4238",
-    moss: "#73724b",
-  },
-] as const;
-type Palette = (typeof palettes)[number];
 
 function seedHash(seed: string | number) {
   let h = 2166136261;
@@ -115,64 +91,24 @@ function rect(
   c.fillRect(x, y, w, h);
 }
 
-function districtAt(seed: number, x: number, y: number) {
-  // Coordinate-stable material districts never depend on exploration order.
-  const shiftX = hash(seed, 0, 0, 1) % 8,
-    shiftY = hash(seed, 0, 0, 2) % 6;
-  return hash(
-    seed,
-    Math.floor((x + shiftX) / 12),
-    Math.floor((y + shiftY) / 9),
-    3,
-  );
-}
-function mossDecal(
-  c: CanvasRenderingContext2D,
-  p: Palette,
-  x: number,
-  y: number,
-  h: number,
-  region: number,
-) {
-  if (h % 5 > region % 3) return;
-  rect(c, p.moss, x + 2, y + 2, 5, 2);
-  rect(c, "#45573d", x + 4, y + 4, 4, 1);
-}
-/** Cosmetic surface pass. Never creates an entity, exit or hidden terrain. */
+/** Cosmetic surface pass. Only supplied room floor supports dressing. */
 export function renderDecals(
   c: CanvasRenderingContext2D,
   cells: readonly TerrainCell[],
   options: TerrainOptions,
 ) {
-  const seed = seedHash(options.seed),
-    p = palettes[hash(seed, 0, 0, 4) % palettes.length]!;
-  const walls = new Set(
-    cells
-      .filter((cell) => cell.terrain.type === "wall")
-      .map((cell) => `${cell.x},${cell.y}`),
-  );
+  c.save();
+  c.beginPath();
+  c.rect(0, 0, options.columns * 16, options.rows * 16);
+  c.clip();
   for (const cell of cells) {
-    if (
-      !["floor", "corridor"].includes(cell.terrain.type) ||
-      !walls.has(`${cell.x},${cell.y - 1}`)
-    )
-      continue;
-    if (
-      cell.x < options.originX ||
-      cell.y < options.originY ||
-      cell.x >= options.originX + options.columns ||
-      cell.y >= options.originY + options.rows
-    )
-      continue;
-    mossDecal(
-      c,
-      p,
-      (cell.x - options.originX) * 16,
-      (cell.y - options.originY) * 16,
-      hash(seed, cell.x, cell.y, 10),
-      districtAt(seed, cell.x, cell.y),
-    );
+    if (cell.terrain.type !== "floor") continue;
+    const x = (cell.x - options.originX) * 16, y = (cell.y - options.originY) * 16;
+    if (x + 16 <= 0 || y + 16 <= 0 || x >= options.columns * 16 || y >= options.rows * 16) continue;
+    const ground = decorationAt(options.seed, cell.x, cell.y, false, options.layoutType);
+    if (ground) drawDecoration(c, ground, x, y);
   }
+  c.restore();
 }
 
 /** Ground stays inside known cells; observed masonry sprites rise above their anchors. */
@@ -182,6 +118,9 @@ export function renderTerrain(
   options: TerrainOptions,
 ): void {
   const { originX, originY, columns, rows } = options;
+  const profile = layoutProfile(options.layoutType);
+  const palettes = profile.palettes;
+  const rock = profile.geometry === "rock";
   const seed = seedHash(options.seed);
   const material = hash(seed, 0, 0, 4);
   const known = new Map(
@@ -192,22 +131,64 @@ export function renderTerrain(
   const joinsWall = (x: number, y: number, vertical: boolean) =>
     typeAt(x, y) === "wall" ||
     (DOORS.has(typeAt(x, y) ?? "") && (cellsByPosition.get(`${x},${y}`)?.terrain.orientation === "vertical") === vertical);
-  const district = (x: number, y: number) => districtAt(seed, x, y);
   const surface = (x: number, y: number) => {
     const t = typeAt(x, y);
     return Boolean(t && SURFACES.has(t) && t !== "wall" && !DOORS.has(t));
   };
-  const cutaway = (x: number, y: number) =>
-    (surface(x - 1, y) && !surface(x + 1, y)) ||
-    (surface(x, y - 1) && !surface(x, y + 1)) ||
-    // At an outer corner the room touches the wall only diagonally. Include
-    // the three viewer-facing diagonals so a foreground run keeps one height
-    // through its corner instead of stepping from 6 to 20 units.
-    surface(x - 1, y - 1) ||
-    surface(x + 1, y - 1) ||
-    surface(x - 1, y + 1);
-  const heightAt = (x: number, y: number) =>
-    DOORS.has(typeAt(x, y) ?? "") ? 24 : cutaway(x, y) ? 6 : 20;
+  const contactHeight = (x: number, y: number) => {
+    if (DOORS.has(typeAt(x,y) ?? "")) return 24;
+    // The south edge stays low; the east edge retains an enclosing wall.
+    if (surface(x, y - 1) && !surface(x, y + 1)) return 6;
+    if (surface(x - 1, y) && !surface(x + 1, y)) return 14;
+    if (surface(x + 1, y) || surface(x, y + 1)) return 20;
+    if (surface(x - 1, y - 1) || surface(x + 1, y - 1)) return 6;
+    if (surface(x - 1, y + 1)) {
+      // A disclosed northeast elbow belongs to the continuous rear cap.
+      if (typeAt(x-1,y) === "wall" && typeAt(x,y+1) === "wall") return 20;
+      return 14;
+    }
+    return 20;
+  };
+  const baseHeight = (x: number, y: number) => {
+    const height = contactHeight(x,y);
+    if (height !== 14 || typeAt(x,y) !== "wall") return height;
+    // End the raised east run one cell before the disclosed low south elbow.
+    // The preceding cell forms a shoulder. Unknown neighbors never imply an end.
+    if (typeAt(x,y+1) === "wall" && contactHeight(x,y+1) === 6) return 6;
+    if (typeAt(x,y+1) === "wall" && contactHeight(x,y+1) === 14 &&
+        typeAt(x,y+2) === "wall" && contactHeight(x,y+2) === 6) return 10;
+    // Carry the rear cap around the elbow and two complete cells down the east
+    // run before stepping to its intermediate height. Require disclosed joins.
+    for (let distance = 1; distance <= 2; distance++) {
+      const cornerY = y - distance;
+      if (Array.from({length: distance}, (_,i) => y-i).every(row =>
+          typeAt(x,row) === "wall" && contactHeight(x,row) === 14) &&
+          typeAt(x,cornerY) === "wall" && typeAt(x-1,cornerY) === "wall" &&
+          surface(x-1,cornerY+1) && contactHeight(x,cornerY) === 20) return 20;
+    }
+    return height;
+  };
+  const lowered = new Set<string>();
+  for (const cell of cells) {
+    if (cell.terrain.type !== "wall" || contactHeight(cell.x,cell.y) !== 14 || baseHeight(cell.x,cell.y) < 10) continue;
+    const retainedHeight = baseHeight(cell.x,cell.y);
+    // Bounds of the east wall's projected central band at its retained height.
+    // Never use a camera-relative player radius or unseen room membership.
+    const left = cell.x * 16 + 3 - retainedHeight * .375, right = cell.x * 16 + 13;
+    const top = cell.y * 16 - retainedHeight * .75, bottom = cell.y * 16 + 16;
+    if (options.readableCells?.some(target =>
+      target.x * 16 + 15 > left && target.x * 16 + 1 < right &&
+      target.y * 16 + 15 > top && target.y * 16 - target.rise < bottom))
+      lowered.add(`${cell.x},${cell.y}`);
+  }
+  const heightAt = (x: number, y: number) => {
+    const height = baseHeight(x,y);
+    if (height < 10 || contactHeight(x,y) !== 14 || typeAt(x,y) !== "wall") return height;
+    if (lowered.has(`${x},${y}`)) return 6;
+    // A short shoulder keeps a local notch from jumping straight to full height.
+    if (lowered.has(`${x},${y-1}`) || lowered.has(`${x},${y+1}`)) return 10;
+    return height;
+  };
   c.save();
   c.imageSmoothingEnabled = false;
   c.beginPath();
@@ -226,8 +207,7 @@ export function renderTerrain(
       continue;
     const x = (wx - originX) * 16,
       y = (wy - originY) * 16;
-    const region = district(wx, wy),
-      p = palettes[material % palettes.length]!;
+    const p = palettes[material % palettes.length]!;
     const h = hash(seed, wx, wy, 10);
     c.save();
     c.beginPath();
@@ -258,8 +238,9 @@ export function renderTerrain(
         ].map((t) => t !== undefined && !UNKNOWN.has(t) && t !== type),
       );
     } else {
-      paving(c, x, y, wx, wy, seed, h, p, material, type === "corridor");
-      if (type === "corridor") {
+      if (rock) earth(c, x, y, wx, wy, seed, p);
+      else paving(c, x, y, wx, wy, seed, h, p, material, type === "corridor");
+      if (type === "corridor" && !rock) {
         passageEdges(
           c,
           x,
@@ -284,7 +265,6 @@ export function renderTerrain(
       if (typeAt(wx, wy - 1) === "wall") {
         rect(c, "#293330", x, y, 16, 2);
         rect(c, "#354036", x + 1, y + 2, 14, 1);
-        if (!options.omitDecals) mossDecal(c, p, x, y, h, region);
       }
       if (typeAt(wx - 1, wy) === "wall") rect(c, "#303b34", x, y, 2, 16);
       if (type === "stairsUp" || type === "stairsDown")
@@ -365,6 +345,7 @@ export function renderTerrain(
     }
     c.restore();
   }
+  if (!options.omitDecals) renderDecals(c, cells, options);
   // Bake connected 3D masonry after ground. Include offscreen anchors whose
   // raised/overhanging silhouette still enters the viewport.
   const structures = [...cells].sort((a, b) => a.y - b.y || a.x - b.x);
@@ -380,7 +361,17 @@ export function renderTerrain(
       continue;
     if (cell.terrain.type === "wall" && !options.omitWalls) {
       const { x: wx, y: wy } = cell;
-      drawWallSprite(
+      const wallHeight = heightAt(wx, wy);
+      // Dress the real south/east face, using only a supplied adjoining floor.
+      // Keep fixtures away from endcaps and doorway jambs.
+      const front = typeAt(wx, wy + 1) === "floor" && [-1, 1].every(dx => typeAt(wx + dx, wy) === "wall");
+      const side = typeAt(wx + 1, wy) === "floor" && [-1, 1].every(dy => typeAt(wx, wy + dy) === "wall");
+      const floorX = front ? wx : wx + 1, floorY = front ? wy + 1 : wy;
+      const prop = wallHeight === 20 && (front || side) && !options.omitDecals
+        ? decorationAt(options.seed, front ? floorX : floorY, front ? floorY : floorX, true, options.layoutType) : undefined;
+      const flame = cell.visible === true && cellsByPosition.get(`${floorX},${floorY}`)?.visible === true && options.ambienceTimeMs !== undefined
+        ? (Math.floor(options.ambienceTimeMs / 420) + ambienceHash(options.seed, wx, wy, "flame")) % 3 : 0;
+      (rock ? drawRockSprite : drawWallSprite)(
         c,
         x,
         y,
@@ -396,11 +387,12 @@ export function renderTerrain(
             heightAt(wx - 1, wy),
           ],
         },
-        cutaway(wx, wy),
+        wallHeight,
         palettes[material % palettes.length]!,
         hash(seed, wx, wy, 10),
         wx,
         wy,
+        prop ? { kind: prop, side: front ? "front" : "side", flame } : undefined,
       );
     }
   }
@@ -467,7 +459,7 @@ function passageEdges(
       // A recessed, feathered gap is deliberately unlike a closed wall.
       // Every unknown edge is uncertain, including the sides of known runs
       // and junctions; neighboring passages cannot establish a solid boundary.
-      rect(c, p.floor[1], 5, 0, 6, 5);
+      rect(c, p.floor[1]!, 5, 0, 6, 5);
       rect(c, p.seam, 5, 0, 6, 2);
       rect(c, "#26312f", 6, 0, 4, 1);
       rect(c, p.light, 6, 4, 4, 1);
@@ -480,7 +472,7 @@ function passageEdges(
       continue;
     const cx = corner < 2 ? 12 : 0,
       cy = corner === 0 || corner === 3 ? 0 : 12;
-    rect(c, p.floor[1], x + cx, y + cy, 4, 4);
+    rect(c, p.floor[1]!, x + cx, y + cy, 4, 4);
     rect(c, p.light, x + cx + 1, y + cy + 1, 2, 1);
   }
 }
@@ -552,7 +544,9 @@ export function renderDoor(
   seedValue: string | number,
   x: number,
   y: number,
+  layoutType: LayoutType = "dungeon",
 ) {
+  const palettes = layoutProfile(layoutType).palettes;
   if (!DOORS.has(cell.terrain.type)) return;
   const seed = seedHash(seedValue),
     p = palettes[hash(seed, 0, 0, 4) % palettes.length]!;
@@ -643,4 +637,23 @@ function liquid(
     rect(c, bank, x, y + 15, 16, 1);
   }
   if (banks[3]) rect(c, bank, x, y + 1, 1, 14);
+}
+
+/** Continuous world-space soil, with no paving grid or tile-boundary seams. */
+function earth(c: CanvasRenderingContext2D,x:number,y:number,wx:number,wy:number,seed:number,p:Palette) {
+  for(let py=0;py<16;py++) for(let px=0;px<16;px++) {
+    const gx=wx*16+px, gy=wy*16+py;
+    // Jittered mineral patches cross cell boundaries without rectangular blocks.
+    let distance=Infinity, patch=0;
+    const bx=Math.floor(gx/12),by=Math.floor(gy/12);
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      const id=hash(seed,bx+dx,by+dy,73);
+      const px=(bx+dx)*12+id%12,py=(by+dy)*12+(id>>>8)%12;
+      const d=(gx-px)**2+(gy-py)**2;
+      if(d<distance){distance=d;patch=id;}
+    }
+    const grain=hash(seed,gx,gy,74);
+    const color=grain%227===0?p.light:grain%97===0?p.seam:p.floor[patch%p.floor.length]!;
+    rect(c,color,x+px,y+py,1,1);
+  }
 }

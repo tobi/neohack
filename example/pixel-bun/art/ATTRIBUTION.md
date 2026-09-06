@@ -56,3 +56,15 @@ of this source selection. Runtime files contain no JSON sidecars; portable
 provenance remains in `art/`. `tests/assets.test.mjs` checks the explicit runtime
 and source inventories, PNG geometry and recipe integrity.
 Browser tests separately exercise the selected client art.
+
+## Optional sound effects
+
+Four unmodified clips from [Kenney RPG Audio](https://kenney.nl/assets/rpg-audio)
+by Kenney Vleugels: footstep00, footstep01, creak1 and chop. These are CC0;
+[the supplied license](../public/audio/Kenney-LICENSE.txt) and
+[selection provenance](../public/audio/README.md) accompany them.
+
+Original cave environment: faceted rock sprite meshes and procedural earth in
+`src/structure-sprites.ts` and `src/dungeon-art.ts`, with editable palette under
+`art/layout-types/cave/`. Original project work; no vendor cave pixels or raw
+LimeZu environment assets are included in these generated tiles.

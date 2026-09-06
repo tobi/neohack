@@ -1,0 +1,5 @@
+# ASCII studies use spaces as explicit unknown cells, including padded borders.
+art/layouts/cavern.txt whitespace=-blank-at-eol,-blank-at-eof
+studies/archive/room.txt whitespace=-blank-at-eol,-blank-at-eof
+# Retain the selected pack's supplied license text verbatim (CRLF and spacing).
+public/audio/Kenney-LICENSE.txt whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol

@@ -1,5 +1,69 @@
 # Pixel NetHack: a place worth descending into
 
+## Selected art library — Modern Interiors by LimeZu
+
+**Modern Interiors — LimeZu is the selected asset pack for this client.**
+The user reaffirmed this choice on 2026-09-06. Use its asset discovery, contact
+sheets, scene/compose tools and character generator for room and sprite work.
+Do not choose DenPixelArt Dungeon because the game is a dungeon. Its reference
+study was a mistaken pack selection and has been removed; it is not an approved
+alternative, extension or future direction.
+
+### What comes from where
+
+- **People:** all thirteen character selections use LimeZu Modern Interiors,
+  through premade characters or its layered adult character generator. Exact
+  selections are in [art/classes.json](art/classes.json) and
+  [art/recipe.json](art/recipe.json). Frames are 16×32, anchored at (8,32).
+- **Room and prop asset work:** start with Modern Interiors and its dedicated
+  tools. Browse actual asset/contact images before choosing crops. Use composed
+  room studies to establish furniture scale, grouping, shadows and clear paths.
+  Select art appropriate to NetHack: wood, stone, fabric, books and shelving;
+  choosing this library does not make modern appliances appropriate.
+- **Dungeon geometry:** current walls, doors, floors and wear are original code
+  in `src/structure-sprites.ts`, `src/dungeon-art.ts` and `src/ambience.ts`.
+  They are not LimeZu environment tiles. Preserve the established 16px ground
+  grid and oblique projection; inspect props against these walls before
+  integration. A pack selection is not a renderer swap.
+- **Existing exceptions:** original dog/cat/bat templates and original encounter
+  pixel grids remain approved. Kenney sound effects are a separate audio source.
+  These do not authorize another environment pack.
+
+### Required workflow for visual work
+
+1. Read this selection and the pixel-art-interfaces skill's
+   `references/packs/modern-interiors.md`. Use `resources/tools/pixel`, not
+   the DenPixelArt `dungeon` or `create-entity` tools. Read the LimeZu character
+   guide for humanoids and scene-recipe guidance before composition.
+2. Search and inspect Modern Interiors assets; use contact sheets and the
+   scene/compose tools to make an editable room study. Inspect available suitable
+   authored assets before drawing replacement props by hand.
+3. Review the study at native and integer scale beside our hero and masonry.
+   Check perspective, palette, scale, layering and contact shadows.
+4. Export only selected project assets with portable recipes and existing
+   [LimeZu terms and attribution](art/ATTRIBUTION.md). Keep full vendor sheets,
+   private catalogs and exploratory exports out of public/source bundles.
+5. Keep this record and [.pixel-art.json](.pixel-art.json) consistent. Maintain
+   the runtime inventory and AGENTS.md when asset selections change.
+   A different base pack requires an explicit user-requested change.
+
+The machine-readable selection below describes the asset library; the original
+renderer geometry is recorded separately in `.pixel-art.json` and below. Idle
+playback rate 1 means normal playback of the existing six-fps clips, not a new
+animation speed. Walk clips remain ten fps; reduced motion uses static idle.
+
+## Pixel-art style selection
+
+<!-- pixel-art:style:start -->
+- Base tileset: `modern-interiors`
+- Pack guide: `references/packs/modern-interiors.md` (relative to the global skill)
+- Projection: orthogonal furnished interiors
+- Native tile size: [16, 16]
+- Approved external modules: original-creatures
+- Idle playback rate: 1
+<!-- pixel-art:style:end -->
+
+
 ## The destination
 
 A small, lovingly drawn world with real depth: heavy stone walls, worn floors,
@@ -113,17 +177,18 @@ geometry and rasterizer: volumetric walls, jambs, lintels and wooden leaves are
 baked together with per-pixel depth, stone courses and plank/iron textures.
 
 Ground anchors stay 16×16. Wall thickness is 10 units; full wall height is 20,
-foreground height is 6, and door frames reach 24. The fixed projection is
+south foreground height is 6, retained east-wall height is 14, and door frames reach 24. The fixed projection is
 `screenX = x - 0.375*z`, `screenY = y - 0.75*z`. Sprites occupy at most 25×34
 pixels with an anchor offset of (9,18). Display at integer scales with smoothing
 disabled. This is 3D geometry rendered to cached sprites, without a WebGL camera
 or another game simulation. The cache holds at most 256 sprites.
 
 Neighbor masks form continuous wall volumes and expose risers between different
-heights. Supplied surface cells north/west of a wall choose a foreground cutaway
-when the opposite side has no supplied surface. Northwest, northeast and southwest
-diagonal surfaces also lower the corresponding outer corner so foreground runs do
-not jump to full height at a turn; southeast remains a rear corner. This uses public
+heights. Supplied surface cells north of a wall choose a low south edge;
+surface cells west of a wall choose a taller retained east edge
+when the opposite side has no supplied surface. When there is no direct surface contact, northwest, northeast and southwest
+diagonal surfaces lower an outer corner. Direct rear-facing contact takes priority
+over diagonal hints, preserving full north/west runs; southeast remains a rear corner. This uses public
 observation only and may update as exploration reveals terrain.
 Door frames match the wall thickness and rotate as one mesh into the side-wall
 orientation. Closed leaves sit at the visible wall face; open leaves fold against
@@ -594,3 +659,223 @@ critical severity; condition text and the health meter retain the same informati
 Hungry adventurers get a restrained Eat glow; critical trouble also highlights
 Pray, whose first use explains possible help, punishment and unknown safety before
 the engine's own confirmation. These cues never automate an action.
+
+## Seeded room ambience pass
+
+The user requested cosmetic room history: cracks, vines, shallow damp patches,
+carpet remnants, straw, broken metal, recessed bookshelves, chains and sconces.
+These are original editable native-pixel grids in `src/ambience.ts`, matching the
+existing masonry palette; no additional vendor pack or runtime PNG is introduced.
+This expands the earlier restriction on invented props: these wall fixtures and
+worn fragments are explicitly noninteractive set dressing, never collectible
+weapons, readable books, usable torches, water terrain or operation targets.
+
+`room-ambience-1` hashes the actual stored game seed plus public location ID (already
+supplied by the map) into damp ruins, abandoned quarters, old archives or rusted
+cells. Broad 12×9 coordinate districts occasionally vary the level's dominant
+palette of decorations. Independent ground, wall and spacing hashes keep results
+stable through redraws, camera movement and input iteration order. No hidden room
+bounds, gameplay RNG, time or private engine facts are consulted.
+
+Only disclosed room floor supports dressing. Fixtures require a full-height disclosed wall run adjoining supplied floor; corridors, actual features and unknown cells receive
+none. Floor wear stays within known 16×16 floor footprints. Wall fixtures are projected
+onto the actual south/east masonry face and stay inside its declared sprite bounds,
+below live actors, loot, doors, knowledge badges and remembered-cell dimming.
+Torches have a hard-pixel amber inset, not a visibility radius. Native pixels and reduced motion
+remain unchanged. `masonry-3d-4` includes this pass in both workshop and live art;
+existing stonework seeds stay fixed. Workshop receipts hash the ambience source too.
+
+Effects direction: retain the existing confirmed impact and brief damage shake,
+respecting reduced motion. Prefer restrained local sparks and sconce flicker over
+full-screen filters that reduce map clarity. No new shader is enabled in this pass.
+
+Sound shortlist (checked 2026-09-06): [Kenney RPG Audio](https://kenney.nl/assets/rpg-audio)
+has 50 CC0 foley/footstep/weapon files; [Kenney Impact Sounds](https://kenney.nl/assets/impact-sounds)
+has 130 CC0 impact/foley files. Start by auditioning RPG Audio for dry stone steps,
+door movement and short attacks, adding Impact Sounds only for missing material
+textures. The initial RPG Audio selection is integrated below. Playback must stay opt-in, quietly
+mixed, started by a user gesture, stopped when hidden, and keyed to fresh confirmed
+receipts so resume/recovery never repeats a strike. Ambient beds must not imply
+unseen monsters or terrain. Keep selected clips and their license, not full archives.
+
+### Ambience refinement and optional sound
+
+Carpet fragments now have a muted central diamond and irregular torn border;
+shelf spines use desaturated sage and ochre within the original stonework family.
+Visible sconces vary one flame pixel and their small amber inset every 420 ms,
+with coordinate-seeded phases. Only explicitly visible cells animate. Remembered
+cells, reduced motion and workshop output use a static flame. The animation clock
+changes neither prop placement nor ground art, and the existing hidden-tab frame
+pause applies. No full-screen shader or visibility-changing glow is added.
+
+The first sound pass now includes four unmodified CC0 Kenney RPG Audio selections
+in `public/audio/`, with original license and provenance. The menu's Sound button
+is off by default and explicitly unlocks/loads Web Audio; the choice lasts for the
+current page. Steps use two subdued footfalls, observed door opening a short creak,
+and confirmed player strikes a compact impact. `src/sound.ts` consumes public
+snapshots only. Revision high-water marks suppress duplicate feedback, including
+receipts first encountered while muted. No delayed sound queue, ambient creature
+noises, inferred weapon types or hidden event locations are introduced. At most
+three clips overlap; hiding the page or disabling sound stops them. Audio failure
+leaves gameplay available and offers retry through the same button. Removing the
+client closes its audio context. Reduced motion suppresses visual animation without
+silencing explicitly enabled audio.
+
+### Renderer depth audit
+
+The wall cutaway selector now prioritizes cardinal contact before diagonal corner
+hints. Southwest floor cannot lower a rear wall already established by south floor;
+northeast floor cannot lower a west wall established by east floor. Isolated
+foreground corners still lower, and disclosed door axes remain authoritative.
+
+Floor decals render after ground and before all raised masonry. Wall dressing is
+sampled in world coordinates on the vertical face during the existing depth-buffered
+sprite bake, using the same oblique projection, cache and sprite bounds as the wall.
+It is no longer drawn at a floor-cell origin after the walls. East-facing fixtures
+use the side plane. Only full-height straight runs carry fixtures; cutaways and
+jambs stay clear. This is painted/recessed wall dressing, not protruding furniture
+meshes. Mobile actors deliberately stay above terrain for readability.
+
+Workshop output adds one cell of side/bottom padding and two cells above, recorded
+in its receipt, without changing layout coordinates. The ambience study now shows
+complete rooms with all four walls and a doorway rather than a clipped rear strip.
+Regression checks cover diagonal reveal beside established rear walls, projected
+wall-decoration bounds, full/live pass agreement, camera crop and unknown ground.
+
+### LimeZu archive composition study
+
+[studies/archive/scene.json](studies/archive/scene.json) is the first corrected
+Modern Interiors room study, composed with `resources/tools/pixel` over our real
+masonry output. It reuses the project's Ranger and dog. The selected library
+shelves, ladder, desks, chair and rug were visually inspected; grouping, shadows
+and native proportions are recorded in [the study notes](studies/archive/README.md).
+This is a study, not integrated live decoration or a final approved art target.
+The rug/books are still brighter than the dungeon palette. Keep the clear center
+and authored furniture silhouettes while refining atmosphere. All generated study
+images remain in ignored test-results; no additional runtime sprites are selected.
+
+### Furniture floor contact and shadow variants
+
+The user flagged the archive shelves' wall gap and mismatched pale flooring under
+shelves/desks. Inspection confirmed the selected normal variants contain opaque
+pale shadow pixels, not a required matching floor tile. For dark masonry, the
+archive study now uses LimeZu's authored `-black-shadow` furniture variants,
+whose shadows are translucent. Shadowless variants are also available; inspect
+alpha and in-scene contact before choosing. Do not assume the skill's default
+normal shadow works on every surface or paint additional shadows over vendor ones.
+
+Place shelving by its visible footprint, accounting for transparent frame padding,
+so its rear edge meets the actual wall/floor junction. The study shelves and ladder
+moved 14 native pixels toward the wall; free-standing desks retain their positions.
+The corrected recipe and native/3× previews are documented in the archive study.
+
+### Cosmetic dressing must not promise an interaction
+
+The user explicitly rejected desks as noninteractive background decoration. Their
+size, work surface and readable-book contents imply usable objects; scattering
+unusable desks would be frustrating. The archive study's desks and associated
+chair are removed. Do not use them in the seed-driven decoration pool. Apply this
+same affordance check to new props: prefer incidental wear and edge dressing,
+and keep significant furniture out unless its interaction is supported by the
+actual public game API. A visually compatible asset alone is not enough.
+
+The right-wall cutaway was reviewed and the user accepted retained height with local occlusion relief. With the current projection,
+height shifts northwest, so east/south walls can obscure room contents; this does
+not justify lowering every entire near wall to the same height. Evaluate retained
+wall height and localized occlusion relief before changing the default. The implemented policy is recorded below.
+
+### Retained right walls and local readability cutaways
+
+`masonry-3d-5` keeps east/right walls at 14 world units (10.5 projected vertical
+pixels), rather than six. Rear walls stay at 20; the south edge stays at six.
+The northeast elbow retains the rear cap height; the southeast elbow has a short low return. Full and partial heights use
+the same connected mesh and expose matching risers at height changes.
+
+The live map supplies current public player/occupant/item anchors and explicitly
+visible doorways to the terrain renderer. Only an east-wall segment whose projected
+bounds overlap these protected sprite footprints drops to six. Immediately adjoining
+segments use ten-unit shoulders. The rest of the run retains 14. No inferred room
+membership, hidden targets or camera-relative radius is used. Remembered occupants,
+objects and doors do not trigger new notches. Actors still render above terrain.
+
+This is a conservative sprite-bounds test rather than per-pixel visibility testing.
+Geometry updates at observation boundaries and returns to retained height when the
+protected footprint leaves; it does not animate through fractional-height meshes.
+Reduced motion gets the same readable geometry. Camera movement does not change it.
+The workshop defaults to retained walls unless explicit readable anchors are supplied;
+its archive study has the traveler in the center, away from the right wall.
+
+Tests cover local extent, unaffected distant segments, center-player stability,
+restoration and identical camera crops, alongside real browser movement/zoom.
+
+### Right-wall end transitions
+
+The user flagged the northeast corner's detached-looking height step and the east
+raised section running too close to the south corner. In masonry-3d-6, a disclosed
+northeast elbow with connected west/south walls retains the rear cap's height of
+20. Its east run then steps to 14 below the corner, keeping the rear cap continuous.
+The last east-wall cell before a disclosed low south elbow is also low (six);
+the preceding cell is a ten-unit shoulder. This ends the raised run earlier and
+leaves a short low return into the bottom wall. Unexplored neighbors cannot cause
+these end transitions. Local actor/item readability notches still apply.
+
+The user refined the top-right profile: keep the corner fully raised and continue
+that height for approximately two tiles down the right side, then step to the
+intermediate run before the earlier low bottom return. masonry-3d-7 implements
+that two-cell full-height continuation using only disclosed connected wall cells.
+Short runs still prioritize the low south return. Current readable sprites can
+still trigger local relief in the extended east section; its overlap bounds use
+its actual retained height. The rear corner itself remains continuous.
+
+### Layout-specific asset direction
+
+The user rejected the archive shelving as dissonant and supermarket-like. Shared
+LimeZu provenance does not establish dungeon suitability. Removed the shelf/ladder
+set from the study; no such raster furniture is approved for live use. Earlier
+positive notes about silhouette/scale do not override this rejection.
+
+[art/layout-types/](art/layout-types/README.md) now separates defaults, dungeon and
+cave profiles. Each type overrides shared palettes and approved decoration lists;
+missing fields inherit and explicit arrays replace. The renderer and workshop
+consume these profiles, and --layout-type selects an explicit study variant.
+Dungeon is the live default. Cave currently changes surfaces/dressing, retaining
+existing masonry geometry; natural cave structures remain future art work. Unknown
+profile names are errors. Keep future approved type-specific assets/recipes beside
+their profile and do not silently promote a local selection into shared defaults.
+
+The active renderer version is masonry-3d-8 after layout-profile resolution and
+removal of shelf dressing from defaults. Workshop receipts include the selected
+layout type and hash every profile file as well as the renderer source.
+
+The shared Modern Interiors compose tool now produces a fresh .audit.json beside
+each output: frame origins, visible alpha bounds, padding, shadow variant, opacity
+counts and source/recipe hashes. Use it to check wall contact and shadow suitability;
+a passing audit cannot establish world fit or supported interaction. The shared
+skill guide now records these distinctions and the need for layout-specific sets.
+
+### Original cave geometry — user-requested development
+
+The palette-only cave was rejected as another dungeon variant. It is preserved
+as `dungeon-damp`; `cave` now selects original rock geometry, not masonry.
+The first tileset uses faceted bedrock caps, fractured faces, inward-jittered
+exposed edges and continuous unpaved soil. Shared joins use world-coordinate
+heights; existing projection, cutaways and known-cell boundaries remain intact.
+LimeZu catalog searches for cave/rock yielded no named entries. This user-requested
+original environment extension does not authorize another vendor pack.
+
+Recipe and scope: [cave tileset](art/layout-types/cave/README.md). The organic
+cavern fixture is explicitly authored offline; it does not alter the engine map.
+Live selection remains dungeon until a public layout classification is available
+or the client explicitly selects a style. Current renderer: terrain-3d-9.
+
+### Live environment selection
+
+The user requested activation and commit of the completed environment work.
+The live map now hashes its existing game-seed/public-location key into dungeon,
+dungeon-damp or cave. This is a cosmetic seeded art choice, not an inference of
+engine branch or hidden terrain. Revisits select the same style, and camera,
+turn and cell-order changes cannot select another. Ground, raised walls, dressing
+and the separate door pass share the chosen profile. The threshold stays masonry.
+The proposed flooded ruins, mines, crypts, fungal and infernal styles are not
+implemented and are not selectable. Earlier notes that live play always defaults
+to dungeon are superseded by this activation.

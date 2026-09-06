@@ -1,8 +1,9 @@
+import { DungeonSound } from "./sound";
+import { layoutForSeed, type LayoutType } from "./layout-art";
 import type { Cell, Observation, Snapshot, Compass } from "neonethack/types";
 import {
   renderTerrain,
   renderDoor,
-  renderDecals,
   STRUCTURE_RISE,
   STRUCTURE_OVERHANG,
 } from "./dungeon-art";
@@ -309,6 +310,7 @@ export class DungeonMap {
   private observation: Observation | null = null;
   private hero = heroArt("valkyrie");
   private seed = "0";
+  private layoutType: LayoutType = "dungeon";
   private facing: "left" | "up" | "right" | "down" = "down";
   private walkStarted = -Infinity;
   private walkUntil = -Infinity;
@@ -330,6 +332,7 @@ export class DungeonMap {
     y: number;
     timer: ReturnType<typeof setTimeout>;
   }[] = [];
+  readonly sound = new DungeonSound();
   private reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   private motionChanged = () => {
     cancelAnimationFrame(this.animation);
@@ -472,6 +475,8 @@ export class DungeonMap {
     this.observation = observation;
     this.hero = hero;
     this.seed = seed;
+    this.layoutType = observation ? layoutForSeed(seed) : "dungeon";
+    this.canvas.dataset.environment = this.layoutType;
     this.draw();
   }
   private captureActorMotions(
@@ -576,6 +581,7 @@ export class DungeonMap {
     window.removeEventListener("blur", this.endDrag);
     this.cancelIntroPortal();
     this.clearMessages();
+    this.sound.dispose();
     this.observer.disconnect();
     cancelAnimationFrame(this.animation);
     this.reducedMotion.removeEventListener("change", this.motionChanged);
@@ -589,6 +595,7 @@ export class DungeonMap {
     this.bubbles = [];
   }
   showMessages(before: Snapshot, after: Snapshot) {
+    this.sound.observe(before, after, actionMessages(after));
     if (
       before.sessionId !== after.sessionId ||
       before.revision === after.revision ||
@@ -835,21 +842,23 @@ export class DungeonMap {
     c.translate(-16, -16);
     renderTerrain(c, this.observation.world, {
       seed: this.seed,
+      layoutType: this.layoutType,
       originX: this.origin.x - 1,
       originY: this.origin.y - 1,
       columns: cols + 2,
       rows: rows + 2,
       omitDoors: true,
-      omitDecals: true,
+      readableCells: [
+        ...(you ? [{ x: you.x, y: you.y, rise: 16 }] : []),
+        ...this.observation.world.filter(cell => cell.visible !== false &&
+          (cell.occupant || cell.objects?.length ||
+           (cell.visible === true && ["closedDoor", "openDoor", "doorway"].includes(cell.terrain.type))))
+          .map(cell => ({ x: cell.x, y: cell.y,
+            rise: cell.occupant ? 16 : cell.objects?.length ? 4 : STRUCTURE_RISE })),
+      ],
+      ambienceTimeMs: this.reducedMotion.matches || document.hidden ? undefined : now,
     });
     c.restore();
-    renderDecals(c, this.observation.world, {
-      seed: this.seed,
-      originX: this.origin.x,
-      originY: this.origin.y,
-      columns: cols,
-      rows,
-    });
     const fixtures: { x: number; y: number; draw: () => void }[] = [];
     const foreground: { x: number; y: number; draw: () => void }[] = [];
     for (const cell of this.observation.world) {
@@ -868,7 +877,7 @@ export class DungeonMap {
           x,
           y,
           draw: () =>
-            renderDoor(c, cell, this.observation!.world, this.seed, x, y),
+            renderDoor(c, cell, this.observation!.world, this.seed, x, y, this.layoutType),
         });
       // The player glyph covers floor glyphs. Current underfoot perception is
       // still public and lets loot survive beneath that actor, without caching.

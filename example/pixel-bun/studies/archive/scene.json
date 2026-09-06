@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "name": "LimeZu archive · original masonry and existing Ranger",
+  "width": 416,
+  "height": 272,
+  "tileSize": 16,
+  "background": "#171f23",
+  "layers": [
+    {
+      "asset": "test-results/limezu-archive/stone-room.png",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    {
+      "asset": "rug-red",
+      "x": 176,
+      "y": 152,
+      "z": 1
+    },
+    {
+      "asset": "public/art/ranger.png",
+      "x": 208,
+      "y": 184,
+      "anchor": "bottom-center",
+      "z": 184
+    },
+    {
+      "asset": "public/art/dog.png",
+      "x": 236,
+      "y": 198,
+      "anchor": "bottom-center",
+      "z": 198
+    }
+  ],
+  "spawnPoints": [
+    {
+      "id": "traveler",
+      "x": 208,
+      "y": 184
+    }
+  ],
+  "collision": []
+}

@@ -1,0 +1,25 @@
+{
+  "palettes": [
+    {
+      "floor": [
+        "#414743",
+        "#444b46",
+        "#4b514b",
+        "#3c433f"
+      ],
+      "seam": "#2e3734",
+      "light": "#555f52",
+      "cap": "#6a7467",
+      "edge": "#889280",
+      "face": "#465349",
+      "shade": "#2c3833",
+      "moss": "#526f48"
+    }
+  ],
+  "decorations": [
+    "crack",
+    "puddle",
+    "vines"
+  ],
+  "description": "Damp mineral masonry: a dungeon variant, not a cave."
+}

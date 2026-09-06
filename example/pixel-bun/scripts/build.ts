@@ -14,6 +14,7 @@ const options: ts.CompilerOptions = {
   module: ts.ModuleKind.ESNext,
   moduleResolution: ts.ModuleResolutionKind.Bundler,
   strict: true,
+  resolveJsonModule: true,
   noUncheckedIndexedAccess: true,
   noEmit: true,
   skipLibCheck: true,

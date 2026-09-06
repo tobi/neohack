@@ -1,3 +1,4 @@
+import { wallDecorationPixel, type Decoration } from "./ambience";
 /** Small 3D masonry meshes baked to native-resolution sprites. No game rules. */
 export const STRUCTURE_RISE = 18;
 export const STRUCTURE_OVERHANG = 9;
@@ -16,13 +17,15 @@ export interface WallShape {
   /** Neighbor heights expose the riser where full walls meet a cutaway. */
   heights: readonly [number, number, number, number];
 }
+interface WallDecoration { kind: Decoration; side: "front" | "side"; flame: number }
 type Point = readonly [number, number, number];
-type Material = "stone" | "wood" | "brass";
+type Material = "stone" | "wood" | "brass" | "rock";
 interface Face {
   vertices: readonly Point[];
   side: "top" | "front" | "side";
   material: Material;
   rim?: boolean;
+  tone?: number;
 }
 const WIDTH = 16 + STRUCTURE_OVERHANG;
 const HEIGHT = 16 + STRUCTURE_RISE;
@@ -89,6 +92,7 @@ function bake(
   variant: number,
   phaseX: number,
   phaseY: number,
+  decoration?: WallDecoration,
 ): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = WIDTH;
@@ -106,6 +110,14 @@ function bake(
     return rgb;
   };
   const texture = (face: Face, x: number, y: number, z: number) => {
+    if (face.material === "rock") {
+      const grain = hash(Math.floor(x + phaseX), Math.floor(y + phaseY), Math.floor(z) + variant);
+      if (grain % 109 === 0) return palette.moss;
+      if (face.side === "top") return face.tone === 0 ? palette.edge : face.tone === 1 ? palette.cap : palette.face;
+      const fracture = hash(Math.floor((x+phaseX+z*.25)/5),Math.floor((y+phaseY)/5),variant);
+      if (Math.floor(z) === 3 + fracture % 11 && grain % 3 !== 0) return palette.shade;
+      return face.side === "side" || face.tone === 2 ? palette.shade : face.tone === 0 ? palette.cap : palette.face;
+    }
     if (face.material === "brass")
       return face.side === "side" ? "#8e6f39" : "#d6b571";
     if (face.material === "wood") {
@@ -134,6 +146,11 @@ function bake(
       return hash(Math.floor((x + phaseX) / 4), row, variant) % 19 === 0
         ? palette.moss
         : palette.cap;
+    }
+    if (decoration && face.side === decoration.side &&
+        (face.side === "front" ? y >= 13 : x >= 13)) {
+      const ink = wallDecorationPixel(decoration.kind, face.side === "front" ? x : y, z, decoration.flame);
+      if (ink) return ink;
     }
     const course = Math.floor(z / 5);
     const along = face.side === "front" ? x + phaseX : y + phaseY;
@@ -201,13 +218,13 @@ export function drawWallSprite(
   x: number,
   y: number,
   shape: WallShape,
-  cutaway: boolean,
+  height: number,
   palette: StonePalette,
   variation: number,
   wx: number,
   wy: number,
+  decoration?: WallDecoration,
 ) {
-  const height = cutaway ? 6 : 20;
   const mask =
     Number(shape.n) |
     (Number(shape.e) << 1) |
@@ -216,7 +233,7 @@ export function drawWallSprite(
   const phaseX = mod(wx * 16, 30),
     phaseY = mod(wy * 16, 30),
     variant = variation % 4;
-  const key = `wall:${mask}:${height}:${shape.heights.join(",")}:${palette.cap}:${variant}:${phaseX}:${phaseY}`;
+  const key = `wall:${mask}:${height}:${shape.heights.join(",")}:${palette.cap}:${variant}:${phaseX}:${phaseY}:${decoration?.kind ?? ""}:${decoration?.side ?? ""}:${decoration?.flame ?? 0}`;
   const image = sprite(key, () => {
     const faces: Face[] = [];
     const occupied = (xx: number, yy: number): boolean => {
@@ -271,7 +288,7 @@ export function drawWallSprite(
             material: "stone",
           });
       }
-    return bake(faces, palette, variant, phaseX, phaseY);
+    return bake(faces, palette, variant, phaseX, phaseY, decoration);
   });
   c.drawImage(image, x - STRUCTURE_OVERHANG, y - STRUCTURE_RISE);
 }
@@ -313,4 +330,32 @@ export function drawDoorSprite(
     return bake(faces, palette, variation % 4, 0, 0);
   });
   c.drawImage(image, x - STRUCTURE_OVERHANG, y - STRUCTURE_RISE);
+}
+
+/** Original bedrock tile: irregular perimeter and eight sloping cap facets.
+ * Shared edge heights use world vertices, so adjacent known rocks meet exactly.
+ * All points remain inside the existing structure overhang/rise budget. */
+export function drawRockSprite(
+  c: CanvasRenderingContext2D, x: number, y: number, shape: WallShape,
+  height: number, palette: StonePalette, variation: number, wx: number, wy: number,
+) {
+  const key = `rock:${JSON.stringify([shape,height,palette,variation,wx,wy])}`;
+  const image = sprite(key, () => {
+    const faces: Face[] = [];
+    const edgeHeight = (px: number, py: number) => Math.max(3, height - 2 - hash(wx*16+px,wy*16+py,0)%3);
+    // Joined edges retain common endpoints; unjoined edges pull inward.
+    const n=shape.n?0:2+variation%2, e=shape.e?16:14-variation%2;
+    const s=shape.s?16:14-(variation>>>2)%2, w=shape.w?0:2+(variation>>>3)%2;
+    const ring: Point[] = [[3,n,0],[13,n,0],[e,3,0],[e,13,0],[13,s,0],[3,s,0],[w,13,0],[w,3,0]]
+      .map(([px,py]) => [px!,py!,edgeHeight(px!,py!)] as Point);
+    const peak: Point=[6+variation%5,6+(variation>>>4)%5,height];
+    for(let i=0;i<ring.length;i++){
+      const a=ring[i]!, b=ring[(i+1)%ring.length]!;
+      faces.push({vertices:[a,b,peak],side:'top',material:'rock',tone:i<2?((variation>>>i)%3===0?1:0):i<5?2:1});
+      // Vertical fractures descend to the footing; common-height seams occlude.
+      faces.push({vertices:[[a[0],a[1],0],[b[0],b[1],0],b,a],side:i>=2&&i<4?'side':'front',material:'rock',tone:i%3});
+    }
+    return bake(faces,palette,variation%17,wx*16,wy*16);
+  });
+  c.drawImage(image,x-STRUCTURE_OVERHANG,y-STRUCTURE_RISE);
 }

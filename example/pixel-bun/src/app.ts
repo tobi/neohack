@@ -261,7 +261,7 @@ class PixelNethack extends HTMLElement {
           <details class="hud-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
             <button id="adventures-button">Your adventures</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button>
             <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
-            <button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p>
+            <button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p>
           </div></details>
         </div>
         <div class="notices"><div class="notice error" id="error" role="alert" hidden></div>
@@ -729,6 +729,19 @@ class PixelNethack extends HTMLElement {
     });
     (this.$("#fullscreen-button") as HTMLButtonElement).disabled =
       !document.fullscreenEnabled;
+    this.$("#sound-button").onclick = async () => {
+      const button = this.$("#sound-button") as HTMLButtonElement;
+      if (this.map.sound.enabled) this.map.sound.disable();
+      else {
+        button.disabled = true;
+        button.textContent = "Loading sound…";
+        try { await this.map.sound.enable(); }
+        catch { this.map.sound.disable(); this.error(Error("Sound could not start. Try enabling it again.")); }
+        finally { button.disabled = false; }
+      }
+      button.textContent = this.map.sound.enabled ? "Sound: on" : "Sound: off";
+      button.setAttribute("aria-pressed", String(this.map.sound.enabled));
+    };
     this.$("#fullscreen-button").onclick = () => {
       const task = document.fullscreenElement
         ? document.exitFullscreen()
@@ -2231,7 +2244,7 @@ class PixelNethack extends HTMLElement {
   }
   private credits() {
     this.openMenu(
-      `<h2 id="menu-title">An old world. An open door.</h2><p>neonethack is a new, approachable window into NetHack, built on the neonethack library and its shared C engine.</p><p>NetHack by the NetHack DevTeam and its contributors, under the NetHack General Public License. Original notices remain with the engine.</p><p>Character art from Modern Interiors by <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noreferrer">LimeZu</a>. Companion and bat illustrations use original templates from the pixel-art-interfaces skill. Dungeon tiles and interface design are original to this example.</p><p>JetBrains Mono by the JetBrains Mono Project Authors, under the <a href="/fonts/OFL.txt" target="_blank" rel="noreferrer">SIL Open Font License</a>.</p><p>Gameplay runs in your browser.</p>`,
+      `<h2 id="menu-title">An old world. An open door.</h2><p>neonethack is a new, approachable window into NetHack, built on the neonethack library and its shared C engine.</p><p>NetHack by the NetHack DevTeam and its contributors, under the NetHack General Public License. Original notices remain with the engine.</p><p>Character art from Modern Interiors by <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noreferrer">LimeZu</a>. Companion and bat illustrations use original templates from the pixel-art-interfaces skill. Dungeon tiles and interface design are original to this example.</p><p>JetBrains Mono by the JetBrains Mono Project Authors, under the <a href="/fonts/OFL.txt" target="_blank" rel="noreferrer">SIL Open Font License</a>.</p><p>Sound effects: <a href="https://kenney.nl/assets/rpg-audio" target="_blank" rel="noreferrer">Kenney RPG Audio</a>, <a href="/audio/Kenney-LICENSE.txt">CC0</a>.</p><p>Gameplay runs in your browser.</p>`,
     );
   }
 }

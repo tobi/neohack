@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { layoutProfile, type LayoutType } from "../src/layout-art";
 import { resolve, dirname, join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -13,6 +14,7 @@ bun scripts/render-dungeon.ts --layout art/layouts/rooms.txt --seed 314159 --out
 bun scripts/render-dungeon.ts --compare 1,314159,8675309 --out test-results/art/comparison.png --verify
 
   --layout PATH     Explicit NetHack-style ASCII art layout (repeatable).
+  --layout-type TYPE  Art profile: dungeon (default), dungeon-damp or cave; never changes the layout.
   --seed TEXT       Surface seed, default 314159; pass the game's seed for matching art.
   --scale INTEGER   Pixel scale from 1 to 6; default 3.
   --out PATH        PNG destination; JSON receipt is written alongside it.
@@ -30,6 +32,7 @@ CHROMIUM may override /usr/bin/chromium. Browser sandboxing stays enabled.
 function args() {
   const result = {
     layouts: [] as string[],
+    layoutType: "dungeon" as LayoutType,
     seed: "314159",
     scale: 3,
     out: "test-results/art/dungeon.png",
@@ -46,12 +49,13 @@ function args() {
       result.verify = true;
       continue;
     }
-    if (!["--layout", "--seed", "--scale", "--out", "--compare"].includes(arg))
+    if (!["--layout", "--layout-type", "--seed", "--scale", "--out", "--compare"].includes(arg))
       throw new Error(`Unknown argument ${arg}. Use --help.`);
     const value = process.argv[++i];
     if (!value || value.startsWith("--"))
       throw new Error(`${arg} needs a value.`);
     if (arg === "--layout") result.layouts.push(resolve(value));
+    else if (arg === "--layout-type") { layoutProfile(value as LayoutType); result.layoutType = value as LayoutType; }
     else if (arg === "--seed") result.seed = value;
     else if (arg === "--out") result.out = resolve(value);
     else if (arg === "--scale") result.scale = Number(value);
@@ -127,7 +131,7 @@ try {
     await page.goto(`http://127.0.0.1:${server.port}/`);
     const seeds = options.compare ?? [options.seed];
     const result = await page.evaluate(
-      async ({ layouts, seeds, scale, verify }) => {
+      async ({ layouts, seeds, scale, verify, layoutType }) => {
         const rendererUrl = "/renderer.js";
         const { renderTerrain } = await import(rendererUrl);
         const background = "#171f23";
@@ -152,6 +156,7 @@ try {
             reverse ? [...layout.cells].reverse() : layout.cells,
             {
               seed,
+              layoutType,
               originX,
               originY,
               columns,
@@ -289,7 +294,7 @@ try {
           );
         }
         const panelWidth =
-          Math.max(...layouts.map((layout) => layout.columns)) * 16 * scale;
+          (Math.max(...layouts.map((layout) => layout.columns)) + 2) * 16 * scale;
         const comparison = layouts.length * seeds.length > 1;
         const gap = comparison ? 24 : 0,
           label = comparison ? 48 : 0;
@@ -297,7 +302,7 @@ try {
           panelWidth * seeds.length +
           gap * (seeds.length + (comparison ? 1 : 0));
         const height = layouts.reduce(
-          (sum, layout) => sum + layout.rows * 16 * scale + label + gap,
+          (sum, layout) => sum + (layout.rows + 3) * 16 * scale + label + gap,
           comparison ? gap : 0,
         );
         if (width > 16000 || height > 16000)
@@ -323,20 +328,20 @@ try {
               c.fillStyle = "#9cab96";
               c.font = "13px monospace";
               c.fillText(
-                `SEED ${seed} · ${layout.columns} × ${layout.rows}`,
+                `${layoutType} · SEED ${seed} · ${layout.columns} × ${layout.rows}`,
                 sx,
                 sy + 36,
               );
             }
-            const native = terrain(layout, seed);
+            const native = terrain(layout, seed, -1, -2, layout.columns + 2, layout.rows + 3);
             const n = native.getContext("2d")!;
             // Explicit ASCII @ only; this workshop has no creature inference.
             for (const actor of layout.actors) {
               n.fillStyle = "#252e29";
-              n.fillRect(actor.x * 16 + 3, actor.y * 16 + 3, 10, 10);
+              n.fillRect((actor.x + 1) * 16 + 3, (actor.y + 2) * 16 + 3, 10, 10);
               n.fillStyle = "#e9cf8b";
-              n.fillRect(actor.x * 16 + 7, actor.y * 16 + 3, 2, 10);
-              n.fillRect(actor.x * 16 + 5, actor.y * 16 + 5, 6, 6);
+              n.fillRect((actor.x + 1) * 16 + 7, (actor.y + 2) * 16 + 3, 2, 10);
+              n.fillRect((actor.x + 1) * 16 + 5, (actor.y + 2) * 16 + 5, 6, 6);
             }
             c.drawImage(
               native,
@@ -346,7 +351,7 @@ try {
               native.height * scale,
             );
           }
-          sy += layout.rows * 16 * scale + label + gap;
+          sy += (layout.rows + 3) * 16 * scale + label + gap;
         }
         return {
           image: sheet.toDataURL("image/png").split(",")[1]!,
@@ -355,15 +360,16 @@ try {
           checks,
         };
       },
-      { layouts, seeds, scale: options.scale, verify: options.verify },
+      { layouts, seeds, scale: options.scale, verify: options.verify, layoutType: options.layoutType },
     );
     const png = Buffer.from(result.image, "base64");
     const receipt = {
       rendererVersion: RENDERER_VERSION,
+      layoutType: options.layoutType,
       sourceSha256: digest(
         (
           await Promise.all(
-            ["dungeon-art.ts", "structure-sprites.ts"].map((name) =>
+            ["dungeon-art.ts", "structure-sprites.ts", "ambience.ts", "layout-art.ts", "../art/layout-types/defaults/profile.json", "../art/layout-types/dungeon/profile.json", "../art/layout-types/cave/profile.json", "../art/layout-types/dungeon-damp/profile.json"].map((name) =>
               Bun.file(join(root, "src", name)).text(),
             ),
           )
@@ -372,6 +378,7 @@ try {
       seeds,
       scale: options.scale,
       nativeCellPixels: 16,
+      previewPaddingCells: { left: 1, top: 2, right: 1, bottom: 1 },
       apparentWallRisePixels: 15,
       cutawayWallRisePixels: 4.5,
       maximumStructureRisePixels: 18,
