@@ -40,14 +40,19 @@ export type Neighborhood =
   | { version: 1; status: "available"; basis: ActionBasis; radius: 4; inputGate: InputGate; cells: CellActions[] }
   | { version: 1; status: "unavailable"; reason: "unknownPosition" | "unsupportedPerception" | "recoveryRequired" };
 export interface ActionsResponse { version: 1; kind: "actions"; sessionId: string; basis: ActionBasis; inputGate: InputGate; cell: CellActions }
+export type { EquipmentSlot } from "./equipment.js";
+import type { EquipmentSlot } from "./equipment.js";
 export type Freshness = "current" | "lastKnown" | "unknown";
 export interface ItemRef {
   id: string; label: string; location: "inventory" | "here";
   quantity: number; category: string;
-  known?: {identity?: string; beatitude?: "blessed" | "uncursed" | "cursed"; charges?: number; recharges?: number; enchantment?: number; erosionProof?: boolean};
+  known?: {appearance?: string; identity?: string; beatitude?: "blessed" | "uncursed" | "cursed"; charges?: number; recharges?: number; enchantment?: number; erosionProof?: boolean};
   /** Candidate actions from the C resolver; absent when perception is stale. Not safety guarantees. */
   actions?: ("eat" | "equip" | "remove" | "apply" | "drink" | "read" | "zap" | "wield" | "drop" | "throw" | "offer" | "dip" | "rub" | "invoke" | "quiver" | "pickup")[];
 
+  /** Observed occupied slots; [] means unassigned, absence means unknown.
+   * Freshness is observation.perception.equipment. These are not eligible destinations. */
+  equipmentSlots?: EquipmentSlot[];
   usage?: ("worn" | "wielded" | "offhand" | "alternate" | "quivered" | "attached")[];
 }
 export interface Cell {

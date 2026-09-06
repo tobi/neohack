@@ -1348,7 +1348,7 @@ class PixelNethack extends HTMLElement {
         );
       for (const item of o.inventory) {
         const b = this.button("", () => this.itemDetails(item), "item-row");
-        b.innerHTML = `<span class="item-icon" aria-hidden="true"><img src="${inventoryArt(item.category)}" alt=""></span><span class="item-copy"><span>${escape(item.label)}</span><small>${escape(item.usage?.join(" · ") || item.category || "item")}</small></span><span class="item-quantity">${item.quantity > 1 ? item.quantity : "›"}</span>`;
+        b.innerHTML = `<span class="item-icon" aria-hidden="true"><img src="${inventoryArt(item)}" alt=""></span><span class="item-copy"><span>${escape(item.label)}</span><small>${escape(item.usage?.join(" · ") || item.category || "item")}</small></span><span class="item-quantity">${item.quantity > 1 ? item.quantity : "›"}</span>`;
         const row = document.createElement("div");
         row.className = "inventory-entry";
         row.append(b);
@@ -1508,7 +1508,7 @@ class PixelNethack extends HTMLElement {
       );
       button.innerHTML =
         '<img alt="" src="' +
-        inventoryArt(item.category) +
+        inventoryArt(item) +
         '"><span>' +
         escape(item.label) +
         "</span><small>Take</small>";
@@ -1960,7 +1960,7 @@ class PixelNethack extends HTMLElement {
   }
   private itemDetails(item: ItemRef) {
     this.openMenu(
-      `<div class="large-item-icon" aria-hidden="true"><img src="${inventoryArt(item.category)}" alt=""></div><h2 id="menu-title">${escape(item.label)}</h2><p class="subtle">${escape(item.location === "here" ? "At your feet" : "In your backpack")}${item.usage?.length ? ` · ${escape(item.usage.join(", "))}` : ""}</p><p>Choose what you’d like to try. The dungeon decides what is possible.</p><div class="more-grid" id="item-actions"></div>`,
+      `<div class="large-item-icon" aria-hidden="true"><img src="${inventoryArt(item)}" alt=""></div><h2 id="menu-title">${escape(item.label)}</h2><p class="subtle">${escape(item.location === "here" ? "At your feet" : "In your backpack")}${item.usage?.length ? ` · ${escape(item.usage.join(", "))}` : ""}</p><p>Choose what you’d like to try. The dungeon decides what is possible.</p><div class="more-grid" id="item-actions"></div>`,
     );
     this.appendItemActions(this.$("#item-actions"), item);
   }

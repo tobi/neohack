@@ -1,4 +1,5 @@
 import { catalog, compass, automaticPickup, type Schema } from "./catalog.ts";
+export const equipmentSlots = ["bodyArmor", "cloak", "helmet", "shield", "gloves", "boots", "shirt", "amulet", "leftRing", "rightRing", "eyewear", "weapon", "offhand", "alternateWeapon", "quiver", "skin", "ball", "chain"];
 export const hungerStates = ["satiated", "not_hungry", "hungry", "weak", "fainting", "fainted", "starved", "unknown"];
 export const burdenStates = ["unencumbered", "burdened", "stressed", "strained", "overtaxed", "overloaded", "unknown"];
 const string = { type: "string" };
@@ -11,8 +12,9 @@ const nullable = (s: Schema): Schema => ({ anyOf: [s, { type: "null" }] });
 const selection = object({ min: integer, max: integer });
 const item = object({ id: string, label: string, location: enumeration("inventory", "here"), quantity: integer, category: string, actions: array(enumeration("eat", "equip", "remove", "apply", "drink", "read", "zap", "wield", "drop", "throw", "offer", "dip", "rub", "invoke", "quiver", "pickup")), usage: array(enumeration("worn", "wielded", "offhand", "alternate", "quivered", "attached")) }, ["id", "label", "location", "quantity"]);
 const lootItem = object({id: string, label: string, quantity: integer});
-const knownProperties = object({identity: string, beatitude: enumeration("blessed", "uncursed", "cursed"), charges: integer, recharges: integer, enchantment: integer, erosionProof: boolean}, []);
+const knownProperties = object({appearance: string, identity: string, beatitude: enumeration("blessed", "uncursed", "cursed"), charges: integer, recharges: integer, enchantment: integer, erosionProof: boolean}, []);
 item.properties.known = knownProperties;
+item.properties.equipmentSlots = { ...array(enumeration(...equipmentSlots)), uniqueItems: true };
 const knowledge = object({
  observedTurn: integer,
  spells: array(object({id: string, name: string, level: integer, category: string, failurePercent: integer, retention: string})),

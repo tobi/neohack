@@ -1,4 +1,5 @@
 import { encounterArt, type CreaturePixels } from "./encounter-art";
+import { itemPixels, itemSilhouette } from "./item-art";
 
 /** Original pixel silhouettes for public display categories, never item IDs.
  * A food token also covers remains; a canine token does not identify a species.
@@ -423,15 +424,32 @@ export function categoryMark(category: string): string {
     )[category] ?? ""
   );
 }
-export function inventoryArt(category: string): string {
-  const cached = inventoryImages.get(category);
+export function inventoryArt(item: { category: string; known?: { appearance?: string } }): string {
+  const { category } = item;
+  const silhouette = itemSilhouette(category, item.known?.appearance);
+  const key = `${category}:${silhouette ?? "category"}`;
+  const cached = inventoryImages.get(key);
   if (cached) return cached;
   const mark = categoryMark(category);
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 16;
-  drawSymbolArt(canvas.getContext("2d")!, "object", mark, "#a9b39a", 0, 0);
+  const c = canvas.getContext("2d")!;
+  if (silhouette) {
+    const palette: Record<string, string> = { '#': '#20282b', h: '#d4c8a9', o: silhouette === 'chest' ? '#a77c52' : '#a9b39a', s: '#62645a' };
+    for (const [y, row] of (itemPixels[silhouette] ?? icons[silhouette]!).entries())
+      for (const [x, pixel] of [...row].entries()) if (pixel !== '.') {
+        c.fillStyle = palette[pixel]!;
+        c.fillRect(x + 2, y + 2, 1, 1);
+      }
+  } else if (['weapon', 'armor', 'tool'].includes(category)) {
+    // A class glyph does not pretend an unsupported item is a sword or shirt.
+    c.fillStyle = '#d4c8a9';
+    c.font = 'bold 14px monospace';
+    c.textAlign = 'center';
+    c.fillText(mark, 8, 13);
+  } else drawSymbolArt(c, "object", mark, "#a9b39a", 0, 0);
   const url = canvas.toDataURL();
-  inventoryImages.set(category, url);
+  inventoryImages.set(key, url);
   return url;
 }
 

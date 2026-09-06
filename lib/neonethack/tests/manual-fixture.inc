@@ -15,6 +15,15 @@ void manual_fixture(void)
     int x, y;
     if (prepared || !isok(u.ux,u.uy)) return;
     prepared = TRUE;
+    if (!strcmp(svp.plname,"ItemAppearance")) {
+        (void)manual_object(SMALL_SHIELD,"icon-shield",1);
+        (void)manual_object(MACE,"icon-mace",1);
+        (void)manual_object(CHEST,"icon-chest",1);
+        o=manual_object(GAUNTLETS_OF_POWER,"icon-gloves",1);
+        objects[o->otyp].oc_name_known=0;
+        /* A real shuffled glove description, independent of magic identity. */
+        o->known=0;
+    }
     for (m=fmon;m;m=next) { next=m->nmon; mongone(m); }
     u.ux=40;u.uy=10;
     for(x=34;x<=46;x++)for(y=4;y<=16;y++) {
@@ -87,6 +96,25 @@ void manual_fixture(void)
     if (!strcmp(svp.plname,"DuplicateSlots")) {
         /* Overflow inventory may share '#'. Labels and slots are not identity. */
         for(o=gi.invent;o;o=o->nobj) if(o->oclass==WAND_CLASS) o->invlet=NOINVSYM;
+    }
+    if (!strcmp(svp.plname,"EquipmentSlots")) {
+        /* A real, layered worn set. Set placement through the engine's own
+         * bookkeeping; subsequent removal/quiver/swap tests use public input. */
+        for (o=gi.invent;o;o=o->nobj) if (o->owornmask) setnotworn(o);
+        o=manual_object(LEATHER_ARMOR,"slot-body",1);setworn(o,W_ARM);
+        o=manual_object(CLOAK_OF_MAGIC_RESISTANCE,"slot-cloak",1);setworn(o,W_ARMC);
+        o=manual_object(HELMET,"slot-head",1);setworn(o,W_ARMH);
+        o=manual_object(SMALL_SHIELD,"slot-shield",1);setworn(o,W_ARMS);
+        o=manual_object(LEATHER_GLOVES,"slot-hands",1);setworn(o,W_ARMG);
+        o=manual_object(LOW_BOOTS,"slot-feet",1);setworn(o,W_ARMF);
+        o=manual_object(HAWAIIAN_SHIRT,"slot-shirt",1);setworn(o,W_ARMU);
+        o=manual_object(AMULET_OF_LIFE_SAVING,"slot-neck",1);setworn(o,W_AMUL);
+        o=manual_object(RIN_ADORNMENT,"slot-left",1);setworn(o,W_RINGL);
+        o=manual_object(RIN_STEALTH,"slot-right",1);setworn(o,W_RINGR);
+        o=manual_object(LENSES,"slot-eyes",1);setworn(o,W_TOOL);
+        o=manual_object(DAGGER,"slot-weapon",1);setuwep(o);
+        o=manual_object(SHORT_SWORD,"slot-alternate",1);setuswapwep(o);
+        o=manual_object(DART,"slot-quiver",5);setuqwep(o);
     }
     vision_recalc(0);docrt();update_inventory();disp.botl=TRUE;
 }

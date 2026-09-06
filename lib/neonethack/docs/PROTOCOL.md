@@ -576,3 +576,49 @@ Display the received `heard` events as the witnessed effects; do not infer the
 potion's true identity. Answer with the normal text decision contract or cancel
 naming. Cancellation does not undo consumption or its consequences. Other text
 prompts do not acquire this meaning from the initiating action or prompt wording.
+
+### Perceived item appearance
+
+Item `known.appearance` is the engine's undecorated appearance description once
+that appearance is known (`dknown`), omitted during hallucination. It uses the
+current shuffled object description, or the base name for types without one.
+It is independent of `known.identity`: riding gloves remain riding gloves when
+their magical identity is unknown. Names, nicknames, charges and enchantments do
+not enter this field. It is presentation information, never an operation target.
+
+### Inventory equipment slots
+
+Inventory items expose optional `equipmentSlots: EquipmentSlot[]` alongside
+`usage`. These are actual observed assignments from the engine, not places the
+item could be equipped. `[]` means no assigned slot; omission means unknown.
+Read `observation.perception.equipment` for `current`, `lastKnown` or `unknown`
+freshness. Ground items do not carry this inventory-only field.
+
+| Slots | Meaning |
+| --- | --- |
+| `shirt`, `bodyArmor`, `cloak` | Separate clothing layers, including covered layers |
+| `helmet`, `gloves`, `boots`, `shield` | Worn armor positions |
+| `leftRing`, `rightRing`, `amulet`, `eyewear` | Worn accessories; eyewear includes lenses, towels and blindfolds |
+| `weapon` | Primary wielded item, which need not be a weapon |
+| `offhand`, `alternateWeapon` | Secondary item in active two-weapon use, or stored for swapping, respectively |
+| `quiver` | Readied ammunition/item |
+| `skin` | Armor merged into the hero's polymorphed skin, separate from ordinary body armor |
+| `ball`, `chain` | Attached punishment objects, if present in inventory |
+
+Arrays support multiple actual assignments. Two-handed wielding does not invent
+an `offhand` assignment. Empty assignments do not imply the hero has an available
+body part, and worn slots do not promise successful removal. Known placement is
+independent of item identification and remains available during hallucination.
+Artifact carrying/invocation property masks are never equipment slots.
+
+For an equipped shield, for example:
+
+```json
+{"id":"item-17","label":"an uncursed +3 small shield (being worn)","location":"inventory","quantity":1,"category":"armor","usage":["worn"],"equipmentSlots":["shield"]}
+```
+
+The TypeScript clients export `EquipmentSlot` and `ItemRef`. The slot vocabulary
+and driver lookup table are generated from the response contract; native JSON,
+WASM, MCP and WebMCP preserve the same inventory fields. Free observation does
+not change assignments or spend a turn. Equipment actions retain their existing
+explicit decisions, revision checks and opaque item references.

@@ -1039,3 +1039,16 @@ script author and engine turn, and signed-in users can read the private script
 journal beside saved source/replay. These annotations never appear as engine facts.
 Automatic pickup has an explicit Review before collecting toggle: the engine asks
 for a selection before transfer, preserving its suggestions without auto-selecting.
+
+## Item silhouettes follow perceived appearance
+
+Backpack, ground list and item details share appearance-based icon selection from
+`known.appearance`, supplied by the engine independently of decorated labels,
+nicknames and magical identification. Shields, gloves, boots, helmets, cloaks,
+maces and chests have distinct original 12px silhouettes in `src/item-art.ts`,
+extending the existing original item grids. Modern Interiors catalog searches
+found no named shield/chest assets; no vendor pack or runtime PNG was added.
+Unsupported weapon/armor/tool appearances use their neutral class glyph rather
+than an unrelated sword, shirt or pick. Missing appearance and hallucination
+cannot select specific shapes. Known identity does not override the appearance.
+The text remains authoritative; icons are decorative and never operation targets.

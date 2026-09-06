@@ -12132,6 +12132,9 @@
               "known": {
                 "type": "object",
                 "properties": {
+                  "appearance": {
+                    "type": "string"
+                  },
                   "identity": {
                     "type": "string"
                   },
@@ -12157,6 +12160,33 @@
                   }
                 },
                 "required": []
+              },
+              "equipmentSlots": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "bodyArmor",
+                    "cloak",
+                    "helmet",
+                    "shield",
+                    "gloves",
+                    "boots",
+                    "shirt",
+                    "amulet",
+                    "leftRing",
+                    "rightRing",
+                    "eyewear",
+                    "weapon",
+                    "offhand",
+                    "alternateWeapon",
+                    "quiver",
+                    "skin",
+                    "ball",
+                    "chain"
+                  ]
+                },
+                "uniqueItems": true
               }
             },
             "required": [
@@ -12241,6 +12271,9 @@
                   "known": {
                     "type": "object",
                     "properties": {
+                      "appearance": {
+                        "type": "string"
+                      },
                       "identity": {
                         "type": "string"
                       },
@@ -12266,6 +12299,33 @@
                       }
                     },
                     "required": []
+                  },
+                  "equipmentSlots": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "bodyArmor",
+                        "cloak",
+                        "helmet",
+                        "shield",
+                        "gloves",
+                        "boots",
+                        "shirt",
+                        "amulet",
+                        "leftRing",
+                        "rightRing",
+                        "eyewear",
+                        "weapon",
+                        "offhand",
+                        "alternateWeapon",
+                        "quiver",
+                        "skin",
+                        "ball",
+                        "chain"
+                      ]
+                    },
+                    "uniqueItems": true
                   }
                 },
                 "required": [
@@ -12545,6 +12605,9 @@
                       "known": {
                         "type": "object",
                         "properties": {
+                          "appearance": {
+                            "type": "string"
+                          },
                           "identity": {
                             "type": "string"
                           },
@@ -12570,6 +12633,33 @@
                           }
                         },
                         "required": []
+                      },
+                      "equipmentSlots": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "bodyArmor",
+                            "cloak",
+                            "helmet",
+                            "shield",
+                            "gloves",
+                            "boots",
+                            "shirt",
+                            "amulet",
+                            "leftRing",
+                            "rightRing",
+                            "eyewear",
+                            "weapon",
+                            "offhand",
+                            "alternateWeapon",
+                            "quiver",
+                            "skin",
+                            "ball",
+                            "chain"
+                          ]
+                        },
+                        "uniqueItems": true
                       }
                     },
                     "required": [

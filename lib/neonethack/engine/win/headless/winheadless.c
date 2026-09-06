@@ -1387,6 +1387,27 @@ hl_perceived_object(JBuf *jb, struct obj *o, boolean carried)
         if (o == uquiver) { jb_sep(jb); jb_str(jb, "quivered"); }
         if (o->owornmask & (W_BALL | W_CHAIN)) { jb_sep(jb); jb_str(jb, "attached"); }
         jb_end_arr(jb);
+        /* Actual placement, not eligible destinations or inferred item type.
+         * Artifact property masks are deliberately excluded. */
+        jb_key(jb, "equipmentSlots"); jb_begin_arr(jb);
+        if (o == uarm) { jb_sep(jb); jb_str(jb, "bodyArmor"); }
+        if (o == uarmc) { jb_sep(jb); jb_str(jb, "cloak"); }
+        if (o == uarmh) { jb_sep(jb); jb_str(jb, "helmet"); }
+        if (o == uarms) { jb_sep(jb); jb_str(jb, "shield"); }
+        if (o == uarmg) { jb_sep(jb); jb_str(jb, "gloves"); }
+        if (o == uarmf) { jb_sep(jb); jb_str(jb, "boots"); }
+        if (o == uarmu) { jb_sep(jb); jb_str(jb, "shirt"); }
+        if (o == uamul) { jb_sep(jb); jb_str(jb, "amulet"); }
+        if (o == uleft) { jb_sep(jb); jb_str(jb, "leftRing"); }
+        if (o == uright) { jb_sep(jb); jb_str(jb, "rightRing"); }
+        if (o == ublindf) { jb_sep(jb); jb_str(jb, "eyewear"); }
+        if (o == uwep) { jb_sep(jb); jb_str(jb, "weapon"); }
+        if (o == uswapwep) { jb_sep(jb); jb_str(jb, u.twoweap ? "offhand" : "alternateWeapon"); }
+        if (o == uquiver) { jb_sep(jb); jb_str(jb, "quiver"); }
+        if (o == uskin) { jb_sep(jb); jb_str(jb, "skin"); }
+        if (o->owornmask & W_BALL) { jb_sep(jb); jb_str(jb, "ball"); }
+        if (o->owornmask & W_CHAIN) { jb_sep(jb); jb_str(jb, "chain"); }
+        jb_end_arr(jb);
     }
     jb_end_obj(jb);
 }

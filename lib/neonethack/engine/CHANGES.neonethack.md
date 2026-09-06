@@ -91,3 +91,12 @@ headers, binaries, playgrounds, saves and optional submodule checkouts are absen
   pre-transfer choice with filter suggestions. Successful transfers report exact
   acquired quantity and post-merge stack identity; inspected containers report
   their disclosed contents. Existing warnings, traps, burden and shop rules remain.
+
+- On 2026-09-06, headless item knowledge includes the known physical appearance
+  separately from identified properties, using shuffled object descriptions and
+  suppressing it while hallucinating. No engine inputs or random draws are added.
+
+- On 2026-09-06, carried-item perception exposes actual equipment slot assignments
+  from hero equipment pointers and punishment masks. It distinguishes armor
+  layers, ring sides, alternate/offhand use and merged skin; it excludes artifact
+  property masks and introduces no input, randomness or item eligibility rules.

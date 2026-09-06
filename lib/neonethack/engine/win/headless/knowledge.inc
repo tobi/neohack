@@ -77,6 +77,13 @@ static void hl_known_properties(JBuf *jb, struct obj *o)
 {
     jb_key(jb, "known"); jb_begin_obj(jb);
     if (!Hallucination) {
+        if (o->dknown) {
+            const char *appearance = OBJ_DESCR(objects[o->otyp]);
+            /* Shuffled descriptions are perceived; true names are only safe
+             * when this object type has no unidentified appearance. */
+            jb_key(jb, "appearance");
+            jb_str(jb, appearance ? appearance : OBJ_NAME(objects[o->otyp]));
+        }
         if (o->dknown && objects[o->otyp].oc_name_known) {
             jb_key(jb, "identity"); jb_str(jb, OBJ_NAME(objects[o->otyp]));
         }

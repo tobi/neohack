@@ -189,6 +189,8 @@ typedef struct {
     char category[24];      /* perceived object class, not name heuristics */
     unsigned usage;
     int usage_known;
+    unsigned equipment_slots;
+    int equipment_slots_known;
     int accessory;
     long long object_id;
     int armor_access_known, armor_accessible;
@@ -196,6 +198,7 @@ typedef struct {
 } inv_item_t;
 
 static const char *const USAGE_NAMES[] = { "worn", "wielded", "offhand", "alternate", "quivered", "attached", NULL };
+#include "equipment-slots.inc"
 
 typedef struct {
     int waiting_answer;     /* engine prompt outstanding */
@@ -1452,6 +1455,18 @@ ingest_belongings(game_t *g, const char *params)
                     if (mj_find(obj, "accessory", &v)) mj_bool(v, &item->accessory);
                     if (mj_find(obj, "armorAccessible", &v))
                         item->armor_access_known = mj_bool(v, &item->armor_accessible);
+                    if (mj_find(obj, "equipmentSlots", &v) && *v.p == '[') {
+                        mj_arr_it slots = { 0 }; mj_val slot; slots.first = 1;
+                        item->equipment_slots_known = 1;
+                        while (mj_arr_next(v.p, &slots, &slot)) {
+                            char *word = mj_str(slot); size_t k;
+                            for (k = 0; EQUIPMENT_SLOT_NAMES[k]; k++)
+                                if (word && !strcmp(word, EQUIPMENT_SLOT_NAMES[k])) break;
+                            if (!EQUIPMENT_SLOT_NAMES[k]) item->equipment_slots_known = 0;
+                            else item->equipment_slots |= 1U << k;
+                            free(word);
+                        }
+                    }
                     if (mj_find(obj, "usage", &v) && *v.p == '[') {
                         mj_arr_it uses = { 0 }; mj_val use; uses.first = 1;
                         item->usage_known = 1;
@@ -2985,6 +3000,13 @@ emit_inventory(game_t *g, mj_Buf *b)
                 if (g->inv[i].usage & (1U << k)) mj_strv(b, USAGE_NAMES[k]);
             mj_endarr(b);
         }
+        if (g->inv[i].equipment_slots_known) {
+            size_t k;
+            mj_key(b, "equipmentSlots"); mj_arr(b);
+            for (k = 0; EQUIPMENT_SLOT_NAMES[k]; k++)
+                if (g->inv[i].equipment_slots & (1U << k)) mj_strv(b, EQUIPMENT_SLOT_NAMES[k]);
+            mj_endarr(b);
+        }
         mj_endobj(b);
     }
     mj_endarr(b);
@@ -2993,7 +3015,8 @@ emit_inventory(game_t *g, mj_Buf *b)
     {
         int equipment_known = g->structured_perception >= 2 && g->inventory_rev >= 0;
         const char *freshness = g->perception_fresh ? "current" : "lastKnown";
-        for (i = 0; i < g->ninv; i++) if (!g->inv[i].usage_known) equipment_known = 0;
+        for (i = 0; i < g->ninv; i++)
+            if (!g->inv[i].usage_known || !g->inv[i].equipment_slots_known) equipment_known = 0;
         mj_key(b, "perception"); mj_obj(b);
         mj_key(b, "version"); mj_intv(b, g->structured_perception);
         mj_key(b, "inventory"); mj_strv(b, g->inventory_rev >= 0 ? freshness : "unknown");

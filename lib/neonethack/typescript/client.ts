@@ -1,6 +1,6 @@
 import { beforeInput, accepted, scheduled } from './lifecycle.js';
 import type { AutomaticPickup, ActionTarget, ActionsResponse, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
-export type { AutomaticPickup, ActionTarget, ActionsResponse, ActionOffer, ActionBasis, CellActions, Neighborhood, InputGate, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
+export type { EquipmentSlot, ItemRef, AutomaticPickup, ActionTarget, ActionsResponse, ActionOffer, ActionBasis, CellActions, Neighborhood, InputGate, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
 
 /** A transport owns its runtime, not game semantics. It must not retry input. */
 export interface Transport {
