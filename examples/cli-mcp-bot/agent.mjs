@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // agent.mjs — LLM-driven NetHack player.
 //
-// Plays the neonethack C engine through the neonethack MCP stdio server
-// (lib/neonethack/dist/mcp/cli.js) with a Vercel AI SDK model behind any
+// Plays the neonethack C engine through the native neonethack MCP HTTP server
+// (~/.local/bin/neohack-mcp --http) with a Vercel AI SDK model behind any
 // OpenAI-compatible endpoint.
 //
 // Architecture (see README.md):
@@ -15,15 +15,13 @@
 // Configuration comes from the environment (a git-ignored .env is loaded
 // first; real environment variables win). See .env.example.
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { generateText, stepCountIs, dynamicTool, jsonSchema } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { homedir } from 'os';
 import { dirname, resolve, join } from 'path';
 import { fileURLToPath } from 'url';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawn } from 'child_process';
 
 const BOT_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -41,7 +39,6 @@ const ROOT = process.env.NEONETHACK_ROOT ?? resolve(BOT_DIR, '../..');
 const LIB = join(ROOT, 'lib/neonethack');
 const ENGINE = process.env.NEONETHACK_ENGINE ?? join(LIB, 'engine/playground/nethack');
 const DATA = process.env.NEONETHACK_DATA ?? join(LIB, 'engine/playground');
-const EXECUTABLE = process.env.NEONETHACK_EXECUTABLE ?? join(LIB, 'build/native/neonethack');
 const SESSIONS = process.env.NEONETHACK_SESSIONS ?? join(BOT_DIR, 'sessions');
 const STEP_BUDGET = parseInt(process.env.STEP_BUDGET ?? process.argv[2] ?? '1000', 10);
 const BASE_URL = process.env.OPENAI_API_BASE ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1';
@@ -69,6 +66,7 @@ for (const d of [STATE_DIR, LOG_DIR, SESSIONS]) mkdirSync(d, { recursive: true }
 
 // A second agent pointed at the same state/session causes an MCP sessionBusy
 // loop. Refuse concurrent ownership instead of wasting model calls.
+let mcpServer = null;
 const LOCK_DIR = join(STATE_DIR, 'agent.lock');
 try {
   mkdirSync(LOCK_DIR);
@@ -86,9 +84,13 @@ try {
 }
 writeFileSync(join(LOCK_DIR, 'pid'), String(process.pid));
 const releaseLock = () => rmSync(LOCK_DIR, { recursive: true, force: true });
-process.once('exit', releaseLock);
+const releaseResources = () => {
+  if (mcpServer?.exitCode === null) mcpServer.kill('SIGTERM');
+  releaseLock();
+};
+process.once('exit', releaseResources);
 for (const signal of ['SIGINT', 'SIGTERM']) {
-  process.once(signal, () => { releaseLock(); process.exit(128 + (signal === 'SIGINT' ? 2 : 15)); });
+  process.once(signal, () => { releaseResources(); process.exit(128 + (signal === 'SIGINT' ? 2 : 15)); });
 }
 
 function log(msg) {
@@ -107,27 +109,68 @@ let stalledOps = 0;   // consecutive interactions without game-turn advancement
 let lastTurnSeen = null;
 let toollessSteps = 0; // consecutive model steps without any tool call
 
-// ---- MCP: the neonethack MCP stdio server hosts the C engine directly ----
-// Prefer the compiled server at ~/.local/bin/neohack-mcp (bun build --compile
-// dist/mcp/cli.js); falls back to `node dist/mcp/cli.js` from the checkout.
-const MCP_BIN = process.env.NEONETHACK_MCP ?? (existsSync(join(homedir(), '.local/bin/neohack-mcp')) ? join(homedir(), '.local/bin/neohack-mcp') : join(LIB, 'dist/mcp/cli.js'));
-const useNodeScript = MCP_BIN.endsWith('.js');
-log(`connecting neonethack MCP stdio server (${MCP_BIN}, model ${MODEL} @ ${BASE_URL})...`);
-const transport = new StdioClientTransport({
-  command: useNodeScript ? 'node' : MCP_BIN,
-  args: useNodeScript ? [MCP_BIN, ENGINE, DATA, SESSIONS] : [ENGINE, DATA, SESSIONS],
-  env: { ...process.env, NEONETHACK_EXECUTABLE: EXECUTABLE },
-  cwd: LIB,
-});
-const client = new Client({ name: 'nethack-ai', version: '1.0.0' }, { capabilities: {} });
-await client.connect(transport);
+// ---- MCP HTTP 2026-07-28 -------------------------------------------------
+// The installed native target is stateless HTTP, not legacy stdio MCP. It
+// uses server/discover and request metadata headers that SDK 1.x does not yet
+// send, so use its small wire protocol directly.
+const MCP_BIN = process.env.NEONETHACK_MCP ?? join(homedir(), '.local/bin/neohack-mcp');
+const MCP_HTTP_PORT = parseInt(process.env.NEONETHACK_MCP_HTTP_PORT ?? '18765', 10);
+const externalMcpUrl = process.env.NEONETHACK_MCP_HTTP_URL;
+const MCP_HTTP_URL = externalMcpUrl ?? `http://127.0.0.1:${MCP_HTTP_PORT}/mcp`;
+const MCP_PROTOCOL_VERSION = '2026-07-28';
+const MCP_META = {
+  'io.modelcontextprotocol/protocolVersion': MCP_PROTOCOL_VERSION,
+  'io.modelcontextprotocol/clientCapabilities': {},
+};
+let mcpServerError = '';
+
+if (!externalMcpUrl) {
+  if (!existsSync(MCP_BIN)) throw new Error(`MCP executable not found: ${MCP_BIN}`);
+  log(`starting MCP HTTP target: ${MCP_BIN} --http ${MCP_HTTP_PORT}`);
+  mcpServer = spawn(MCP_BIN, ['--http', String(MCP_HTTP_PORT), ENGINE, DATA, SESSIONS], {
+    cwd: LIB,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  mcpServer.stderr.on('data', chunk => { mcpServerError = (mcpServerError + chunk).slice(-2000); });
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (mcpServer.exitCode !== null) throw new Error(`MCP HTTP target exited: ${mcpServerError.trim()}`);
+    try {
+      const response = await fetch(MCP_HTTP_URL);
+      if (response.status === 405) break; // Expected: HTTP MCP accepts POST only.
+    } catch {}
+    if (attempt === 49) throw new Error(`MCP HTTP target did not become ready at ${MCP_HTTP_URL}: ${mcpServerError.trim()}`);
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+}
+
+let rpcId = 0;
+async function mcpRpc(method, params = {}, name = null) {
+  const body = {
+    jsonrpc: '2.0',
+    id: ++rpcId,
+    method,
+    params: { ...params, _meta: { ...MCP_META, ...(params._meta ?? {}) } },
+  };
+  const headers = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
+    'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
+    'Mcp-Method': method,
+  };
+  if (name) headers['Mcp-Name'] = name;
+  const response = await fetch(MCP_HTTP_URL, { method: 'POST', headers, body: JSON.stringify(body) });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || payload?.error) {
+    const error = payload?.error ?? { code: `http${response.status}`, message: response.statusText };
+    throw new Error(`${error.code}: ${error.message}`);
+  }
+  return payload.result;
+}
 
 async function callBridge(tool, params) {
-  const r = await client.callTool({ name: tool, arguments: params });
+  const r = await mcpRpc('tools/call', { name: tool, arguments: params }, tool);
   const structuredContent = r?.structuredContent ?? null;
   const contentText = r?.content?.map(c => c.text ?? '').join('') ?? '';
-  // structuredContent is authoritative. Text content can be empty, prose, or
-  // a compatibility rendering and must not be regex-parsed as protocol data.
   const text = structuredContent ? JSON.stringify(structuredContent) : contentText;
   return {
     text,
@@ -137,14 +180,12 @@ async function callBridge(tool, params) {
   };
 }
 
-// The server exposes the same 27 game tools natively (session_create,
-// game_move, decision_answer, ...).
-let mcpTools = [];
-{
-  const { tools: listed } = await client.listTools();
-  mcpTools = listed;
+const discovery = await mcpRpc('server/discover');
+if (!discovery?.supportedVersions?.includes(MCP_PROTOCOL_VERSION)) {
+  throw new Error(`MCP target does not support ${MCP_PROTOCOL_VERSION}`);
 }
-log(`tools discovered: ${mcpTools.length}`);
+const { tools: mcpTools = [] } = await mcpRpc('tools/list');
+log(`connected MCP HTTP ${MCP_PROTOCOL_VERSION} at ${MCP_HTTP_URL}; tools discovered: ${mcpTools.length}`);
 
 // A new MCP server has no in-memory active session. Load the saved recording
 // before asking the model to act. Stale IDs are cleared; contention is fatal.
@@ -155,7 +196,7 @@ if (lastSessionId) {
     const message = resumed.error?.message ?? resumed.text.slice(0, 300);
     if (code === 'sessionBusy') {
       log(`startup failed: ${code}: ${message}`);
-      await client.close();
+      if (mcpServer) mcpServer.kill('SIGTERM');
       process.exitCode = 2;
       throw new Error(`Session ${lastSessionId} is busy; stop the other agent before retrying`);
     }
@@ -329,5 +370,11 @@ try {
   log(`run complete: ${totalSteps} steps, session=${lastSessionId}`);
   state.gameId = lastSessionId;
   saveJson(STATE_F, state);
-  try { await client.close(); } catch {}
+  if (mcpServer && mcpServer.exitCode === null) {
+    mcpServer.kill('SIGTERM');
+    await new Promise(resolve => {
+      const timer = setTimeout(() => { mcpServer.kill('SIGKILL'); resolve(); }, 2000);
+      mcpServer.once('exit', () => { clearTimeout(timer); resolve(); });
+    });
+  }
 }
