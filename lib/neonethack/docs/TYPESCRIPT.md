@@ -65,14 +65,16 @@ NEONETHACK_EXECUTABLE=/path/to/build/native/neonethack \
 The stdio server uses the official MCP SDK for framing/initialization. stdout is
 protocol-only. It advertises one tool per method:
 
-- `neonethack_session_create`, `neonethack_session_observe`, etc.;
-- `neonethack_game_move`, `neonethack_game_eat`, etc.;
-- `neonethack_decision_answer` and `neonethack_decision_cancel`;
-- `neonethack_protocol_describe`.
+- `session_create`, `session_observe`, etc.;
+- `game_move`, `game_eat`, etc.;
+- `decision_answer` and `decision_cancel`;
+- `protocol_describe`.
 
-Tools expose the same strict schemas used at the C boundary, plus the full
-response schema. Results are available as `structuredContent` and equivalent
-JSON text for older clients. Structured rejections set `isError`; a blocked
+Tools expose the same strict input schemas used at the C boundary, plus a compact
+response schema. Results are available in `structuredContent`, with an empty
+`content` array. `session_observe` returns the entire perceived state;
+ordinary observation responses are deltas. `session_create` accepts no arguments
+to randomize the character and generate a name in C. Structured rejections set `isError`; a blocked
 in-game attempt is not automatically a protocol error.
 
 Only discovery/observation are marked read-only. Gameplay/decision idempotency

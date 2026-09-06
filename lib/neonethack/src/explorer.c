@@ -5206,6 +5206,34 @@ identity_index(const char *args, const char *field, const char *const *list,
     return -2;
 }
 
+/* Names use a separate seed mixer, never the engine or host's global RNG.
+ * ASCII and no hyphens: NetHack interprets name suffixes as identity choices.
+ * The resolved name is journaled with new_game, so resume never generates one.
+ */
+static char *
+generated_hero_name(long long seed)
+{
+    static const char *const given[] = {
+        "Ada", "Ari", "Ash", "Aster", "Briar", "Cedar", "Cleo", "Dara",
+        "Eira", "Ellis", "Ember", "Fenn", "Finch", "Gale", "Hollis", "Indra",
+        "Iris", "Jules", "Kai", "Kit", "Lark", "Linden", "Mira", "Morgan",
+        "Neri", "Nova", "Quinn", "Ren", "Robin", "Rowan", "Sage", "Wren"
+    };
+    static const char *const family[] = {
+        "Ashbrook", "Bramble", "Brightwood", "Cinder", "Cloudward", "Copperleaf", "Dawnfield", "Dewfall",
+        "Embermere", "Fairwind", "Fernwood", "Flint", "Foxglove", "Glenwick", "Goldfern", "Greenbriar",
+        "Hawthorn", "Ironwood", "Kestrel", "Larkspur", "Mossvale", "Nightwell", "Oakfall", "Reedwater",
+        "Rookwood", "Silverpine", "Starling", "Stonebrook", "Thistle", "Thornfield", "Willow", "Wintermere"
+    };
+    uint64_t mixed = (uint64_t) seed + UINT64_C(0x9e3779b97f4a7c15);
+    char name[32];
+    mixed = (mixed ^ (mixed >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
+    mixed = (mixed ^ (mixed >> 27)) * UINT64_C(0x94d049bb133111eb);
+    mixed ^= mixed >> 31;
+    snprintf(name, sizeof name, "%s %s", given[mixed & 31], family[(mixed >> 5) & 31]);
+    return strdup(name);
+}
+
 /* Confirm the pinned executable actually honored the recorded runtime before
  * sending new_game (including during replay). Never assume an old executable
  * understands new bootstrap flags/fields. No user input is answered here. */
@@ -5281,6 +5309,8 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
         return fail_envelope(id, req_id, "badIdentity",
                              "role archeologist..wizard, race human..orc, gender male/female, align lawful/neutral/chaotic");
     }
+    if (!name && !(name = generated_hero_name(seed)))
+        return fail_envelope(id, req_id, "outOfMemory", "cannot generate a hero name");
     if (runtime_epoch < 0 || runtime_epoch > 4102444799LL) {
         free(name);
         return fail_envelope(id, req_id, "runtimeUnavailable", "runtime profile 1 requires a creation date between 1970 and 2099");

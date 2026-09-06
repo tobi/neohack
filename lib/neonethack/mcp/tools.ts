@@ -1,13 +1,13 @@
 // Browser-safe definitions shared by stdio MCP and WebMCP. No native imports.
-import { catalog, responseSchema } from "./protocol-data.js";
+import { catalog, compactResponseSchema } from "./protocol-data.js";
 import type { Method } from "../typescript/types.js";
 
 /** Tool definitions and C validation are generated from the same catalog. */
 export const tools = catalog.methods.map((method) => ({
-  name: `neonethack_${method.name.replaceAll(".", "_")}`,
-  description: method.description,
+  name: method.name.replaceAll(".", "_"),
+  description: method.description + (method.name === "session.observe" ? " Returns the complete perceived state, including neighborhood/action offers, as a standalone snapshot. No baseline required. Other observations are deltas: replace supplied fields, upsert world by x,y; update.remove/worldRemoved delete fields/cells. Match update.base to last update.id. Query session.actions for neighborhood offers." : ""),
   inputSchema: method.schema,
-  outputSchema: responseSchema,
+  outputSchema: compactResponseSchema,
   annotations: {
     readOnlyHint: method.readOnly === true,
     destructiveHint: method.readOnly !== true,

@@ -1,3 +1,4 @@
+import { CompactObservationReader } from "../../../lib/neonethack/dist/mcp/compact.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -81,6 +82,24 @@ async function fixture(
 // Current Chrome exposes agent automation through the CDP WebMCP domain;
 // Chromium 148 exposes its earlier native testing interface instead.
 async function nativeWebMcp(page, t) {
+  const native = await rawNativeWebMcp(page, t);
+  const reader = new CompactObservationReader();
+  return { ...native, call: async (...args) => {
+    const result = await native.call(...args);
+    if (result.structuredContent) {
+      assert.deepEqual(result.content, []);
+      if (args[0] !== "session.observe") assert.equal(result.structuredContent.observation?.neighborhood, undefined);
+      result.structuredContent = reader.apply(result.structuredContent);
+    }
+    return result;
+  } };
+}
+async function agentSnapshot(page) {
+  const state = await snapshot(page);
+  if (state?.observation) delete state.observation.neighborhood;
+  return state;
+}
+async function rawNativeWebMcp(page, t) {
   const cdp = await page.context().newCDPSession(page);
   t.after(() => cdp.detach().catch(() => {}));
   const registered = new Map();
@@ -102,7 +121,7 @@ async function nativeWebMcp(page, t) {
         ({ ...tool, inputSchema: JSON.parse(tool.inputSchema) }))),
       call: (method, args = {}) => page.evaluate(async ({ method, args }) =>
         JSON.parse(await navigator.modelContextTesting.executeTool(
-          "neonethack_" + method.replaceAll(".", "_"), JSON.stringify(args))), { method, args }),
+          method.replaceAll(".", "_"), JSON.stringify(args))), { method, args }),
     };
   }
   return {
@@ -112,7 +131,7 @@ async function nativeWebMcp(page, t) {
       return [...registered.values()];
     },
     call: async (method, args = {}) => {
-      const name = "neonethack_" + method.replaceAll(".", "_");
+      const name = method.replaceAll(".", "_");
       const tool = [...registered.values()].find(tool => tool.name === name);
       if (!tool) throw Error("Tool not found: " + name);
       let invocationId, timer, listener;
@@ -1527,7 +1546,7 @@ test(
     }
     const call = native.call;
     assert.equal((await call("protocol.describe")).isError, false);
-    assert.equal(await snapshot(page), null);
+    assert.equal(await agentSnapshot(page), null);
     const created = await call("session.create", {
       name: "Mira",
       role: "valkyrie",
@@ -1538,7 +1557,7 @@ test(
     });
     assert.equal(created.isError, false);
     let state = created.structuredContent;
-    assert.deepEqual(await snapshot(page), state);
+    assert.deepEqual(await agentSnapshot(page), state);
     assert.equal(await page.locator("#hero-name").textContent(), "Mira");
     assert.equal(
       await page.locator(".map-viewport").evaluate((el) => el.clientHeight),
@@ -1560,7 +1579,7 @@ test(
     await page.locator("#decision[open]").waitFor();
     await page.waitForTimeout(200);
     assert.deepEqual(
-      await snapshot(page),
+      await agentSnapshot(page),
       state,
       "warnings await an explicit answer",
     );
@@ -1582,7 +1601,7 @@ test(
       "exact receipt retry",
     );
     assert.deepEqual(
-      await snapshot(page),
+      await agentSnapshot(page),
       next,
       "old receipts never rewind the HUD",
     );
@@ -1592,14 +1611,14 @@ test(
       expectedRevision: 0,
     });
     assert.equal(stale.isError, true);
-    assert.equal((await snapshot(page)).revision, state.revision);
+    assert.equal((await agentSnapshot(page)).revision, state.revision);
     const actions = await call("session.actions", {
       sessionId: state.sessionId,
       expectedRevision: state.revision,
       target: "here",
     });
     assert.equal(actions.isError, false);
-    assert.equal((await snapshot(page)).revision, state.revision);
+    assert.equal((await agentSnapshot(page)).revision, state.revision);
     await page.evaluate(async () => {
       const { WasmTransport } = await import("/runtime/typescript/wasm.js");
       const original = WasmTransport.prototype.send;
@@ -1625,7 +1644,7 @@ test(
       state.observation.turn + 1,
     );
     state = recovered.structuredContent;
-    assert.deepEqual(await snapshot(page), state);
+    assert.deepEqual(await agentSnapshot(page), state);
     await page.locator("#recovery").waitFor({ state: "hidden" });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({
@@ -1638,13 +1657,13 @@ test(
       true,
     );
     await call("session.close", { sessionId: state.sessionId });
-    assert.equal(await snapshot(page), null);
+    assert.equal(await agentSnapshot(page), null);
     const resumed = await call("session.resume", {
       sessionId: state.sessionId,
     });
     assert.equal(resumed.isError, false);
     assert.equal(
-      (await snapshot(page)).observation.turn,
+      (await agentSnapshot(page)).observation.turn,
       state.observation.turn,
     );
     await page.evaluate(() => document.querySelector("pixel-nethack").remove());
@@ -2562,9 +2581,9 @@ test("idle WebMCP discovery and closed adventures release storage for another ta
   await peer.getByRole("button", { name: /^Continue previous run/ }).click();
   await peer.locator("#decision[open]").waitFor();
   await ready(peer);
-  assert.equal((await snapshot(peer)).sessionId, sid);
-  assert.deepEqual((await snapshot(peer)).decision, warning.structuredContent.decision);
-  assert.deepEqual((await snapshot(peer)).observation, warning.structuredContent.observation);
+  assert.equal((await agentSnapshot(peer)).sessionId, sid);
+  assert.deepEqual((await agentSnapshot(peer)).decision, warning.structuredContent.decision);
+  assert.deepEqual((await agentSnapshot(peer)).observation, warning.structuredContent.observation);
   assert.deepEqual(errors, []);
 });
 

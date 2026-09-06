@@ -97,3 +97,17 @@ export const responseSchema: Schema = {
     { required: ["libraryVersion", "backend", "catalog", "capabilities"] },
   ],
 };
+
+/** MCP presentation envelope; full engine schema remains separate. */
+export const compactResponseSchema: Schema = {
+  type: "object", required: ["version"],
+  properties: {
+    version: { const: 1 }, sessionId: string, revision: integer,
+    requestId: nullable(string), observation: { type: "object" },
+    update: closed({ kind: enumeration("snapshot", "delta"), id: integer, base: integer,
+      remove: array(string), worldRemoved: array({ type: "array", items: integer, minItems: 2, maxItems: 2 }) }, ["kind", "id"]),
+    decision: nullable({ type: "object" }), events: array({ type: "object" }),
+    outcome: { type: "object" }, ended: boolean, end: nullable({ type: "object" }),
+    error: object({ code: string, message: string }),
+  },
+};

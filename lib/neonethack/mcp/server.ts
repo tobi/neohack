@@ -1,3 +1,4 @@
+import { CompactResponses } from "./compact.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
@@ -10,9 +11,10 @@ import { tools } from "./tools.js";
 export { tools } from "./tools.js";
 
 export function createMcpServer(transport: Transport): Server {
+  const compact = new CompactResponses();
   const server = new Server({ name: "neonethack", version: "1.0.0-alpha.1" }, {
     capabilities: { tools: {} },
-    instructions: "NetHack through a perception-limited world API, not a terminal. Create or resume a session. Use one named game tool per intent; use decision_answer or decision_cancel for a returned choice. Never automatically confirm a warning. Each gameplay/decision request requires a unique requestId and the latest expectedRevision. If a call times out, retry the exact requestId and payload, never a new action. Observation and eligibility do not reveal hidden properties. Returned full observations replace earlier observations; a cached retry receipt may describe an earlier revision.",
+    instructions: "NetHack through a perception-limited world API, not a terminal. Create or resume a session. Use one named game tool per intent; use decision_answer or decision_cancel for a returned choice. Never automatically confirm a warning. Each gameplay/decision request requires a unique requestId and the latest expectedRevision. If a call times out, retry the exact requestId and payload, never a new action. Observation and eligibility do not reveal hidden properties. Observation updates: snapshot replaces state; delta replaces supplied fields and upserts world cells by x,y, removes update.remove fields and update.worldRemoved coordinates. Apply only when update.base equals your last update.id; otherwise call session_observe. Neighborhood offers are available via session_actions. A cached retry receipt may describe an earlier revision.",
   });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
   server.setRequestHandler(CallToolRequestSchema, async request => {
@@ -24,8 +26,8 @@ export function createMcpServer(transport: Transport): Server {
       const response = await transport.send({ version: 1, method: method.name, params: request.params.arguments ?? {} } as Request);
       return {
         isError: "error" in response && response.error != null,
-        structuredContent: response as unknown as Record<string, unknown>,
-        content: [{ type: "text" as const, text: JSON.stringify(response) }],
+        structuredContent: compact.project(response, method.name),
+        content: [],
       };
     } catch (error) {
       return { isError: true, content: [{ type: "text" as const, text: `Transport failed; execution may be uncertain. Do not repeat with a new requestId. ${error instanceof Error ? error.message : String(error)}` }] };
@@ -40,3 +42,5 @@ export async function serveStdio(options: NativeOptions): Promise<void> {
   server.onclose = () => { void core.close(); };
   await server.connect(new StdioServerTransport());
 }
+
+export { CompactObservationReader } from "./compact.js";

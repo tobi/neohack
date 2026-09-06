@@ -88,3 +88,32 @@ See [DISTRIBUTION.md](DISTRIBUTION.md) for the checked preview/archive audit.
   make an error disappear. Preserve original files/runtimes for inspection.
 - Serialize all C calls in a process, even across contexts. Native executables,
   data and stores are trusted resources, not an authorization/sandbox boundary.
+
+## Native stdio MCP (no Node runtime)
+
+`make -C lib/neonethack native` also compiles `build/native/neonethack-mcp`, linked
+against the public C library. CMake install includes the executable and its runtime
+library path. Configure an MCP client with absolute paths:
+
+```json
+{
+  "mcpServers": {
+    "neonethack": {
+      "command": "/checkout/lib/neonethack/build/native/neonethack-mcp",
+      "args": [
+        "/checkout/lib/neonethack/engine/playground/nethack",
+        "/checkout/lib/neonethack/engine/playground",
+        "/private/new-neonethack-sessions"
+      ]
+    }
+  }
+}
+```
+
+The native executable implements newline-delimited JSON-RPC initialization,
+ping, tools/list, and tools/call. Stdout contains only protocol frames; diagnostics
+use stderr. Calls execute serially through `nnh_dispatch`, preserving the native
+filesystem ownership, pins, reservations, and receipts. MCP notifications never
+execute game inputs. Transport cancellation cannot undo already submitted input.
+The Node MCP wrapper remains available for embedding a custom TypeScript transport.
+Both return [compact observation updates](PROTOCOL.md#mcp-observation-presentation).

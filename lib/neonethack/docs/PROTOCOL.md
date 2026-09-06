@@ -15,6 +15,17 @@ The exact supported methods and their descriptions are in
 These artifacts and C validation data are generated together by
 `node scripts/generate.ts`; CI must reject stale generated files.
 
+`session.create` accepts `{}`: C selects a random seed and generates a hero name,
+and the engine selects a compatible role, race, gender and alignment. Supplied
+fields remain explicit choices. An omitted name is derived from the seed using
+a separate mixer, without consuming the engine or host's global random stream.
+The concrete name and seed are recorded before `new_game`; resume reuses them.
+Generated names are ASCII, at most 31 bytes, and contain no identity suffixes.
+
+MCP/WebMCP names use underscores without a product prefix: `session_create`,
+`session_observe`, `game_move`, `decision_answer`, etc. The underlying library
+protocol continues to use dotted method names.
+
 ## Method families
 
 | Family | Methods |
@@ -282,3 +293,58 @@ class and equipment accessibility as explicit operations. The list is omitted fo
 stale perception. It is eligibility, not a safety guarantee or an input gate; clients
 must still respect decisions, recovery and the observation revision, and send the
 opaque item ID unchanged. No hidden curse, potion effect or corpse safety is exposed.
+
+## MCP observation presentation
+
+The C/TS/WASM API and durable receipts retain full observations. WebMCP and both
+stdio MCP servers project those responses into the compact envelope defined in
+`protocol/mcp-response.schema.json`. Successful calls return `structuredContent`
+and an empty `content` array: consumers must read structured results. There is no
+second JSON text copy. Errors, decisions, events, outcomes, request IDs, revisions,
+and storage/recovery information remain present and are never inferred.
+
+`session.observe` returns the entire current perceived state, including
+`observation.neighborhood`, as a standalone snapshot. It requires no baseline,
+request ID, or revision guard and spends no turn:
+
+```json
+{"name":"session_observe","arguments":{"sessionId":"YOUR_SESSION_ID"}}
+```
+
+Read the complete result from `structuredContent`. This includes the full known
+map, inventory, vitals, neighborhood/action offers, standing decision, and current
+revision; it does not reveal hidden game state. In TypeScript use
+`await game.observe()`; in C use `nnh_session_observe(context, session_id, &result)`.
+
+Other MCP observations omit `observation.neighborhood`; use `session.actions` for
+the C driver's detailed offers at a target. The next ordinary delta explicitly
+removes any neighborhood from a preceding full snapshot, preventing stale offers.
+`protocol.describe` retains backend guarantees but
+omits the redundant catalog, which MCP tool discovery already supplies.
+
+Each observation response carries `update`:
+
+- `{"kind":"snapshot","id":1}`: replace the whole observation.
+- `{"kind":"delta","id":2,"base":1}`: apply only to observation update 1 on
+  this connection and session. Replace each supplied observation field in full,
+  except `world`, whose cells replace/upsert by `(x,y)`. An omitted field/cell is
+  unchanged. `update.remove` deletes named observation fields;
+  `update.worldRemoved` deletes `[x,y]` coordinates. Replacement cells can remove
+  occupants, objects, or visibility; do not merge their individual properties.
+
+An empty list is a real replacement, not omission. Inventory item IDs remain
+opaque. Observation update IDs are connection-local counters, independent of
+game revisions and turns. Errors and responses without observations do not
+advance them. Top-level fields always describe this response, not a patch.
+
+Create/first observation, session switches, level changes, explicit observe/resume,
+and historical receipts with a lower revision produce snapshots. Exact request
+retries still use the original full engine receipt, but their presentation may
+be a different delta or snapshot. Never use presentation equality to decide
+whether an input ran. Historical receipts must not rewind an independent UI.
+
+After lost/out-of-order results or reconnecting, call `session.observe` for a
+fresh snapshot. Do not manufacture a new action ID to recover. The exported
+`CompactObservationReader` from `neonethack/webmcp` or `neonethack/mcp` materializes
+observations and rejects a delta without its baseline. It does not authorize
+input, auto-answer warnings, or reconstruct neighborhood offers.

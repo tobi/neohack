@@ -29,7 +29,7 @@ export AGENT_BROWSER_PROFILE="$HOME/.neonethack-agent-profile"
 agent-browser open https://neohack.dev
 agent-browser wait 'pixel-nethack[data-webmcp="ready"]'
 agent-browser webmcp list
-agent-browser webmcp invoke neonethack_protocol_describe --params '{}'
+agent-browser webmcp invoke protocol_describe --params '{}'
 ```
 
 Add `--headed` to `open` to watch the game. Use the same profile, origin and WASM
@@ -42,13 +42,16 @@ Pass `--cdp PORT` on every agent-browser command. Keep Chrome's sandbox enabled.
 
 ## Create a game and inspect it
 
+For a fully random character with a generated name, invoke `session_create`
+with `--params '{}'`. Supply only the identity fields you want to choose.
+
 The examples below use `jq` and keep request/response files in a new temporary
 directory. Tool arguments are the schema's parameters directly, with no enclosing
 `method` or `params` object.
 
 ```sh
 PLAY_DIR=$(mktemp -d)
-agent-browser --json webmcp invoke neonethack_session_create \
+agent-browser --json webmcp invoke session_create \
   --params '{"name":"Ada","seed":42,"role":"valkyrie"}' > "$PLAY_DIR/create.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/create.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/create.json" > "$PLAY_DIR/frame.json"
@@ -71,7 +74,7 @@ GAME_ID=$(agent-browser get attr pixel-nethack data-session-id)
 Read the current world for free, including any standing decision:
 
 ```sh
-agent-browser --json webmcp invoke neonethack_session_observe \
+agent-browser --json webmcp invoke session_observe \
   --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid}')" > "$PLAY_DIR/observe.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/observe.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/observe.json" > "$PLAY_DIR/frame.json"
@@ -89,7 +92,7 @@ REQUEST_FILE="$PLAY_DIR/$REQUEST_ID.json"
 jq --arg rid "$REQUEST_ID" \
   '{sessionId, expectedRevision:.revision, requestId:$rid}' \
   "$PLAY_DIR/frame.json" > "$REQUEST_FILE"
-agent-browser --json webmcp invoke neonethack_game_search \
+agent-browser --json webmcp invoke game_search \
   --params "@$REQUEST_FILE" > "$PLAY_DIR/search.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/search.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/search.json" > "$PLAY_DIR/frame.json"
@@ -101,7 +104,7 @@ For movement, first inspect `observation.neighborhood` or query a direction:
 ```sh
 jq '{sessionId, expectedRevision:.revision, target:{direction:"east"}}' \
   "$PLAY_DIR/frame.json" > "$PLAY_DIR/actions.json"
-agent-browser webmcp invoke neonethack_session_actions --params "@$PLAY_DIR/actions.json"
+agent-browser webmcp invoke session_actions --params "@$PLAY_DIR/actions.json"
 ```
 
 This query costs no turn. Choose a direction from perceived information; an
@@ -113,7 +116,7 @@ REQUEST_FILE="$PLAY_DIR/$REQUEST_ID.json"
 jq --arg rid "$REQUEST_ID" \
   '{sessionId, expectedRevision:.revision, requestId:$rid, direction:"east"}' \
   "$PLAY_DIR/frame.json" > "$REQUEST_FILE"
-agent-browser --json webmcp invoke neonethack_game_move \
+agent-browser --json webmcp invoke game_move \
   --params "@$REQUEST_FILE" > "$PLAY_DIR/move.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/move.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/move.json" > "$PLAY_DIR/frame.json"
@@ -122,8 +125,8 @@ jq '.data.output.structuredContent' "$PLAY_DIR/move.json" > "$PLAY_DIR/frame.jso
 A move attempts one adjacent step and can bump a creature or door. Read the
 resulting observation before choosing the next input.
 
-Other tools include `neonethack_game_wait`, `neonethack_game_pickup`,
-`neonethack_game_apply` and `neonethack_game_pray`. Use `webmcp list` for exact
+Other tools include `game_wait`, `game_pickup`,
+`game_apply` and `game_pray`. Use `webmcp list` for exact
 schemas. Pass returned item IDs, not inventory letters or labels. Execute one
 input at a time; turns and revisions are different counters.
 
@@ -143,9 +146,9 @@ For a confirmation that you choose to decline, write a new request file with:
 ```
 
 Replace all IDs and the illustrative revision with the latest response values,
-then invoke `neonethack_decision_answer`. Other answers are typed item, target,
+then invoke `decision_answer`. Other answers are typed item, target,
 choice or text values; follow the discovered schema and returned choices.
-`neonethack_decision_cancel` takes the same guards and `decisionId`, without
+`decision_cancel` takes the same guards and `decisionId`, without
 `answer`, and is valid only for a cancellable decision. Inspect the next result:
 an answer can produce another decision.
 
@@ -165,7 +168,7 @@ from the game's `requestId`. `webmcp cancel` cannot undo submitted engine input.
 Close the game engine while preserving its journal and any standing decision:
 
 ```sh
-agent-browser webmcp invoke neonethack_session_close \
+agent-browser webmcp invoke session_close \
   --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid}')"
 agent-browser close
 ```
@@ -176,7 +179,7 @@ the key to the saved vault. Opening that bookmark resumes the selected run
 through the C engine. See [cloud saves](CLOUD_SAVES.md) for details.
 
 Keep `GAME_ID` for the next visit. Reopen the same origin/profile/package and use
-`neonethack_session_resume` with `{"sessionId":"YOUR_SAVED_GAME_ID"}`, or choose
+`session_resume` with `{"sessionId":"YOUR_SAVED_GAME_ID"}`, or choose
 **Continue previous run** in the UI. Closing is not an in-game quit.
 
 ## Connect an MCP agent
@@ -209,3 +212,8 @@ CLI flags, and [WebMCP](WEBMCP.md) for the adapter and storage contract.
 For development, [build and start the pixel client](../../../example/pixel-bun/README.md#run-locally)
 and replace `https://neohack.dev` in the commands with `http://127.0.0.1:3333`.
 Local and live sites have separate browser storage and saves.
+
+Read `structuredContent` from tool results. Ordinary observation responses are
+[compact deltas](PROTOCOL.md#mcp-observation-presentation); `session.observe`
+resynchronizes a lost baseline. Full action offers are available via
+`session.actions`. Do not assume omitted fields or map cells disappeared.

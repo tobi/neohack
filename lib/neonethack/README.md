@@ -15,6 +15,10 @@ calendar and isolated user options. Incompatible historical worlds are refused.
 Start with the [first-five-minutes guide](docs/QUICKSTART.md) for runnable
 source, browser and installed-preview paths.
 
+WebMCP and stdio MCP return [compact observation deltas](docs/PROTOCOL.md#mcp-observation-presentation).
+The native build includes a [C stdio MCP server](docs/QUICKSTART.md#native-stdio-mcp-no-node-runtime),
+`neonethack-mcp ENGINE DATA SESSIONS`, with no JavaScript runtime requirement.
+
 Try the [live pixel client](https://neohack.dev) or follow the
 [agent-browser/WebMCP walkthrough](docs/AGENT_BROWSER.md) without a local build.
 The rest of this guide covers using the library in your own application.
@@ -60,7 +64,7 @@ The library alone has no Lua or Node dependency; these are engine/tooling needs.
 
 ```sh
 # From this directory:
-make                         # C library, public CLI, native engine/data
+make                         # C library, public CLI, stdio MCP, native engine/data
 make test                    # actual C/engine integration
 npm ci                       # Node ≥22.18, only for TS/MCP tooling
 npm test                     # typecheck + real-engine protocol/client tests

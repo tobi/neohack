@@ -22,7 +22,9 @@ partial failure, and unregisters via the registration AbortSignal (or legacy
 remote MCP service or global JavaScript tool registry is installed.
 
 The current WebMCP interface accepts `readOnlyHint`; the adapter preserves that
-hint from MCP. Calls return MCP-style text plus `structuredContent` and `isError`.
+hint from MCP. Calls return `structuredContent`, `isError`, and an empty `content` array. Read
+[compact observation updates](PROTOCOL.md#mcp-observation-presentation) before
+consuming them: ordinary turns carry changed fields/cells, not a full map.
 All input arguments, including unknown properties, reach C validation unchanged.
 Supplied request IDs, revisions, item IDs and decision answers are never rewritten.
 A signal aborted before submission prevents input. Aborting after submission
@@ -30,7 +32,7 @@ cannot undo an engine action: the transport still settles the original receipt.
 
 ## Pixel client
 
-The fullscreen client registers all 26 current tools after establishing its
+The fullscreen client registers all 27 current tools after establishing its
 persistent WASM transport. Open the game menu to see WebMCP availability. Agent
 calls and human input share a reservation: concurrent calls receive a busy error
 before submission. Close a human menu before agent input. Returned standing
@@ -46,7 +48,7 @@ here. Do not clear site data to resolve ownership.
 Agent-created games appear immediately in the HUD and browser adventure list.
 Operations use the same origin-owned IndexedDB journal as human input. Exact
 uncertain requests are retained in display metadata as well as the engine store;
-a different request cannot bypass them. Old cached receipts are returned intact,
+a different request cannot bypass them. Old cached receipts retain their original semantics in compact presentation,
 and a free observation keeps the visible world from rewinding. Resume selects the
 saved engine package. A query never silently resumes or upgrades another package.
 The visible custom element exposes `data-session-id` and `data-revision` for agents

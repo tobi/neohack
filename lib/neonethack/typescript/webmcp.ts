@@ -1,3 +1,4 @@
+import { CompactResponses } from "../mcp/compact.js";
 import { tools, toolMethods } from "../mcp/tools.js";
 import type { Request } from "./types.js";
 import type { Transport } from "./client.js";
@@ -45,6 +46,7 @@ export async function registerWebMcp(
 ): Promise<WebMcpRegistration> {
   if (!context?.registerTool)
     return { supported: false, toolCount: 0, dispose() {} };
+  const compact = new CompactResponses();
   const controller = new AbortController();
   const registered: string[] = [];
   const dispose = () => {
@@ -68,10 +70,11 @@ export async function registerWebMcp(
                 method: toolMethods.get(tool.name)!,
                 params: structuredClone(input),
               } as Request);
+              const projected = compact.project(response, toolMethods.get(tool.name)!);
               return {
                 isError: "error" in response && response.error != null,
-                structuredContent: response,
-                content: [{ type: "text", text: JSON.stringify(response) }],
+                structuredContent: projected,
+                content: [],
               };
             } catch (error) {
               return {
@@ -96,3 +99,5 @@ export async function registerWebMcp(
   }
   return { supported: true, toolCount: registered.length, dispose };
 }
+
+export { CompactObservationReader } from "../mcp/compact.js";

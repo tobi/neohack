@@ -33,7 +33,7 @@ typedef struct {
 } nnh_guard;
 
 typedef struct {
-    const char *name, *role, *race, *gender, *align; /* NULL means omitted */
+    const char *name, *role, *race, *gender, *align; /* NULL: generated name / engine-selected identity */
     int has_seed;
     int64_t seed;
 } nnh_identity;
