@@ -21,6 +21,9 @@
 /hosting/cloudflare/site/
 /hosting/cloudflare/node_modules/
 /hosting/cloudflare/.wrangler/
+/hosting/vercel/public/
+/hosting/vercel/node_modules/
+/hosting/vercel/.vercel/
 /.wrangler/
 *.o
 *.a

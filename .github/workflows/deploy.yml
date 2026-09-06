@@ -1,15 +1,15 @@
-name: Deploy neohack.dev
+name: Deploy neohack.dev and play.neohack.dev
 on:
   push:
     branches: [main]
 permissions:
   contents: read
 concurrency:
-  group: deploy-neohack-dev
+  group: deploy-neohack
   cancel-in-progress: true
 jobs:
   deploy:
-    name: Cloudflare Workers
+    name: Cloudflare + Vercel
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -58,3 +58,12 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: hosting/cloudflare
           command: deploy
+      - run: bun install --frozen-lockfile --cwd hosting/vercel
+      - run: node hosting/vercel/scripts/stage.mjs
+      - name: Deploy Vercel
+        working-directory: hosting/vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: bunx vercel deploy --yes --prod --scope tobi-projects

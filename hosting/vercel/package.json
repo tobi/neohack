@@ -1,0 +1,16 @@
+{
+  "name": "neohack-vercel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "stage": "node scripts/stage.mjs",
+    "deploy": "node scripts/stage.mjs && vercel deploy --yes --prod=false"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "vercel": "^50.0.1"
+  }
+}
