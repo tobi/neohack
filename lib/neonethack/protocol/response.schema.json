@@ -172,12 +172,54 @@
                 "creature",
                 "ally"
               ]
+            },
+            "mark": {
+              "type": "string"
+            },
+            "color": {
+              "type": "integer"
+            },
+            "appearance": {
+              "type": "string"
+            },
+            "attitude": {
+              "type": "string",
+              "enum": [
+                "hostile",
+                "peaceful",
+                "tame"
+              ]
             }
           },
           "required": [
             "kind"
           ],
           "additionalProperties": false
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "mark": {
+                "type": "string"
+              },
+              "color": {
+                "type": "integer"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "boulder"
+                ]
+              }
+            },
+            "required": [
+              "mark",
+              "color"
+            ],
+            "additionalProperties": false
+          }
         },
         "hazards": {
           "type": "array",
@@ -5961,12 +6003,54 @@
                               "creature",
                               "ally"
                             ]
+                          },
+                          "mark": {
+                            "type": "string"
+                          },
+                          "color": {
+                            "type": "integer"
+                          },
+                          "appearance": {
+                            "type": "string"
+                          },
+                          "attitude": {
+                            "type": "string",
+                            "enum": [
+                              "hostile",
+                              "peaceful",
+                              "tame"
+                            ]
                           }
                         },
                         "required": [
                           "kind"
                         ],
                         "additionalProperties": false
+                      },
+                      "objects": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "mark": {
+                              "type": "string"
+                            },
+                            "color": {
+                              "type": "integer"
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "boulder"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "mark",
+                            "color"
+                          ],
+                          "additionalProperties": false
+                        }
                       },
                       "hazards": {
                         "type": "array",
@@ -11538,6 +11622,39 @@
         },
         "vitals": {
           "type": "object",
+          "properties": {
+            "hunger": {
+              "type": "string",
+              "enum": [
+                "satiated",
+                "not_hungry",
+                "hungry",
+                "weak",
+                "fainting",
+                "fainted",
+                "starved",
+                "unknown"
+              ]
+            },
+            "burden": {
+              "type": "string",
+              "enum": [
+                "unencumbered",
+                "burdened",
+                "stressed",
+                "strained",
+                "overtaxed",
+                "overloaded",
+                "unknown"
+              ]
+            },
+            "hungerLabel": {
+              "type": "string"
+            },
+            "burdenLabel": {
+              "type": "string"
+            }
+          },
           "additionalProperties": {
             "anyOf": [
               {
@@ -11761,6 +11878,14 @@
                   "knowledge": {
                     "const": "remembered"
                   },
+                  "freshness": {
+                    "type": "string",
+                    "enum": [
+                      "current",
+                      "remembered",
+                      "unknown"
+                    ]
+                  },
                   "orientation": {
                     "type": "string",
                     "enum": [
@@ -11818,6 +11943,12 @@
                     },
                     "color": {
                       "type": "integer"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "boulder"
+                      ]
                     }
                   },
                   "required": [
@@ -12020,6 +12151,35 @@
                 },
                 "kind": {
                   "const": "confirmation"
+                },
+                "context": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string"
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "north",
+                        "northeast",
+                        "east",
+                        "southeast",
+                        "south",
+                        "southwest",
+                        "west",
+                        "northwest",
+                        "up",
+                        "down"
+                      ]
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "action"
+                  ]
                 }
               },
               "required": [

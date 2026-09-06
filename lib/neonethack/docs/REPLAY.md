@@ -80,3 +80,64 @@ journals would not repair the missing information.
 
 Preserve original packages, pins and damaged history. Never recover a world by
 inventing answers or automatically replaying it with upgraded code.
+
+## Optional public traces
+
+`neonethack/public-trace` exports `PublicTrace`, an opt-in recorder for public
+requests and replies. It is disabled unless a caller constructs it and wraps a
+transport. It stores gzip JSONL chunks in bounded memory and returns a manifest
+plus byte arrays for an explicit export. There is no upload or automatic save.
+
+```ts
+import { Neonethack } from 'neonethack';
+import { WasmTransport } from 'neonethack/wasm';
+import { PublicTrace } from 'neonethack/public-trace';
+
+const transport = await WasmTransport.create({ storage: { kind: 'memory' } });
+const description = await new Neonethack(transport).describe();
+const trace = new PublicTrace({
+  runId: 'public-run-label',       // Same logical run across process restarts.
+  processId: crypto.randomUUID(), // New player process, not necessarily a new life.
+  codeVersion: 'YOUR_CLIENT_REVISION',
+  runtime: { backend: 'wasm', packageId: transport.buildId,
+    libraryVersion: description.libraryVersion,
+    runtimeProfile: description.capabilities.runtimeProfile },
+}, { maxChunkBytes: 1024 * 1024, maxTotalBytes: 16 * 1024 * 1024,
+  maxRecords: 10000 });
+const api = new Neonethack(trace.wrap(transport));
+// Explicit play through api; wait for each invocation to settle.
+const exported = trace.export(); // Review before writing/sharing chunks + manifest.
+```
+
+The package ID must identify the runtime actually used. `libraryVersion` alone
+is not that identity. WASM exposes its verified complete-package `buildId`.
+Installed native clients should use the matching release manifest identity;
+local tests label digests of their measured native binaries and static data explicitly. Do not fill
+this field with the newest source revision or upgrade a package for recording.
+
+Each entry retains the copied immutable request, full public response/events
+(or a null response with `transportUncertain`), session ID, sequence number,
+revision, turn, intended method, actual outcome, ended/end, runtime identity and
+client code version. Sequence counts invocations, including queries and receipt
+recovery; it is not elapsed turns or an assertion that engine input executed.
+Run labels, actual session IDs and player-process IDs have separate meanings.
+An interrupted recorder cannot fabricate missing results. Exports are explicitly
+partial public evidence, never a complete history or an engine replay journal.
+
+Each chunk contains one complete pair; a frame larger than the raw/compressed
+chunk limit stops recording rather than truncating a response. The total
+compressed byte and record limits bound storage; `trace.status.stopped` and the
+manifest report a limit or recording failure. Gameplay responses still settle
+normally if tracing fails. A trace failure never retries input or converts a
+successful engine reply into transport uncertainty. Export is refused while an
+invocation is outstanding.
+
+Exports redact URL/path/credential fields, URLs and recognizable bearer/API-token
+strings, and report redaction count plus whether public pairs were unchanged.
+They are always marked non-replayable, including unredacted exports. The original
+immutable in-memory request stays separate for exact receipt recovery; never use
+a redacted export as retry input. Pattern redaction cannot recognize arbitrary
+secrets in player-entered text: do not put credentials in game text, and review
+before sharing. Public character names and perceived game text are retained.
+Vault keys/URLs, private journals, saves and browser profiles are never trace
+inputs. Keep retrospective traces out of a live player's information channel.

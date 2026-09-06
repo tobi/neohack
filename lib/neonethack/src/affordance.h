@@ -17,6 +17,8 @@ typedef struct {
     int terrain, in_bounds, visible; /* visible -1 means unavailable */
     int door_orientation; /* disclosed frame axis: 0 unknown, 1 horizontal, 2 vertical */
     int occupant; /* 0 none, 1 self, 2 creature, 3 ally: perceived, not hidden */
+    char appearance[128], mark[8], attitude[16];
+    int color, object; /* rendered object/remains; never a hidden object lookup */
     int boulder, trap;
     int lock; /* 0 unknown, 1 witnessed locked, 2 witnessed unlocked */
     int witnessed; /* latest input boundary disclosed this fact */
@@ -50,5 +52,7 @@ void nnh_resolve_cell(const nnh_knowledge *, int, nnh_cell_actions *);
 void nnh_emit_basis(const nnh_knowledge *, mj_Buf *);
 void nnh_emit_gate(const nnh_knowledge *, mj_Buf *);
 void nnh_emit_cell_actions(const nnh_cell_actions *, mj_Buf *);
+void nnh_emit_display(const nnh_known_cell *, mj_Buf *);
+const char *nnh_terrain_freshness(int, int);
 void nnh_emit_neighborhood(const nnh_knowledge *, mj_Buf *);
 #endif

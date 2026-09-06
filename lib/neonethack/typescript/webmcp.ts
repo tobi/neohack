@@ -82,7 +82,9 @@ export async function registerWebMcp(
                 content: [
                   {
                     type: "text",
-                    text: `Tool failed; execution may be uncertain. Retry only the exact requestId and payload, never a new action. ${error instanceof Error ? error.message : String(error)}`,
+                    text: toolMethods.get(tool.name) === "session.create"
+                      ? `Creation reply unavailable; a session may already exist. Do not resubmit session.create: it has no retry ID. Recover the detached invocation or discover the current session in the owning page, then observe it. ${error instanceof Error ? error.message : String(error)}`
+                      : `Tool failed; execution may be uncertain. Retry only the exact requestId and payload, never a new action. ${error instanceof Error ? error.message : String(error)}`,
                   },
                 ],
               };

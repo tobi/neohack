@@ -25,7 +25,7 @@ int main(int argc, char **argv)
 {
     char directory[] = "/tmp/neonethack-api-XXXXXX", sid[65], json[1024];
     nnh_config config = {sizeof config, NULL, NULL, NULL};
-    nnh_identity identity = {"Library", "valkyrie", "dwarf", "female", "lawful", 1, 42};
+    nnh_identity identity = {"Library", "valkyrie", "dwarf", "female", "lawful", 1, 42, NULL};
     nnh_context *x = NULL;
     nnh_result *r = NULL, *retry = NULL;
     nnh_status s;

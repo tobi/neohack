@@ -217,3 +217,109 @@ Read `structuredContent` from tool results. Ordinary observation responses are
 [compact deltas](PROTOCOL.md#mcp-observation-presentation); `session.observe`
 resynchronizes a lost baseline. Full action offers are available via
 `session.actions`. Do not assume omitted fields or map cells disappeared.
+
+## Creation timeout checklist
+
+Creation is not an idempotent input operation. A successful CLI envelope only
+means the browser command was handled: `data.status: "timed_out"` is not a game
+result, and `data.output.isError: true` is not a validated frame. Before using a
+result, require a completed invocation, non-error output, no structured `error`,
+and a materialized snapshot with `sessionId`, numeric `revision`, `observation`, `outcome`,
+`decision` and `ended`. MCP/WebMCP may return a compact delta: resolve its
+baseline first, or use `session.observe` for a standalone full snapshot before
+replanning. Never treat omitted delta fields as missing game facts or feed a
+compact response directly to the full-frame reference consumer. Never extract
+an ID from an error or empty output.
+
+For a slow creation, invoke once with `--detach`, retain the returned invocation
+ID and retrieve it with `webmcp result INVOCATION_ID`. If that result is missing,
+read the owning page's `pixel-nethack[data-session-id]` and observe that session.
+Check the saved-adventure UI on the same origin/profile if the page restarted.
+An empty DOM identifier while startup is in flight proves nothing. Wait for the
+original invocation or stop for investigation; do not submit another creation.
+A rejected or cancelled supervisor command cannot prove that the engine received
+no input. Coordinate one input owner, including keyboard, touch and other agents.
+
+For diagnosis, record the public library version, backend, capability profile,
+client code revision and actual `WasmTransport.buildId` (the complete package
+identity checked at initialization). Keep vault URLs, keys, profile paths and
+journals private. Discovery on an old package may omit capabilities: do not infer
+support or load newer binaries to repair it. Memory storage cannot survive worker
+loss. Durable recovery requires the same origin, explicit IndexedDB name and
+original complete package, with its Web Lock released by the previous owner.
+
+The focused `tests/wasm/lifecycle.test.mjs` scenario creates in a fresh browser
+store, delays or drops the reply after the page owns the frame, observes the
+public ID, and reopens the same package/store. This tests recovery mechanics;
+it does not reproduce every CDP/agent-browser timeout or prove an old package's
+startup performance.
+
+## Manual reference consumer
+
+The optional `neonethack/reference-client` module demonstrates a deliberately
+small manual consumer of `Game`. It is not an autoplayer or a complete command
+palette. It never starts a new life, selects food/equipment, consents, repeats a
+search or resumes an occupation for the player. Other named library operations
+remain available to a separately implemented capable client. The [command coverage audit](COMMAND_COVERAGE.md) documents current endgame
+limits; this example does not demonstrate ascension.
+
+```ts
+import { ReferenceClient } from 'neonethack/reference-client';
+
+const player = new ReferenceClient(game); // Give it exclusive ownership of Game.
+render(player.view); // Render the entire perceived state, including vitals.
+
+// Bind each handler to a separate explicit player choice. Neither calls the other.
+async function declineWarning() {
+  const decision = player.view.state.decision;
+  if (decision?.kind !== 'confirmation') throw Error('No confirmation to decline.');
+  await player.choose({ kind: 'answer', decisionId: decision.id,
+    answer: { kind: 'confirmation', confirm: false } });
+  render(player.view); // Complete returned observation: stop and replan here.
+}
+
+async function deliberatelyRequestPrayer() {
+  await player.choose({ kind: 'pray' });
+  render(player.view); // A reattempt has a new decision.id; it still needs a choice.
+}
+```
+
+Display the confirmation's exact `about` text and optional `context` as returned.
+Context identifies the initiating public action and any supplied direction/item
+ID; it does not infer a hazard reason or promise safety. Older packages may omit
+it. After declining, inspect the complete returned snapshot before choosing a
+different plan or deliberately requesting the action again. A reattempt is new
+input with a new request ID, allowed only after the original result is settled;
+it is distinct from exact receipt recovery after a lost reply. Never reuse an
+old decision ID or automatically invoke the reattempt handler to clear a warning.
+
+`view.state` retains world appearances, visibility, freshness, hunger, burden,
+conditions, events and `ended/end` without deriving identity or safety from text.
+A remembered floor is still a known floor. Render hunger/conditions alongside
+nearby creatures before asking for another choice; combat must not hide them.
+The sample never calls a corpse safe, infers attitude from `kind:creature`, or
+computes a prayer cooldown. The player owns those uncertain decisions.
+
+`choose({kind:'retreatStep', direction})` queries the current public movement
+intent and accepts only an attemptable ordinary step with no disclosed occupant,
+restriction or hazard. It rejects creature/ally bumps, possible pushes, unknown
+terrain and stale queries. This excludes disclosed attack steps; it cannot
+promise a safe retreat, reveal hidden threats or guarantee the eventual outcome.
+Always read the returned outcome and elapsed turns. A normal manual `move`
+remains an explicit choice to accept the engine's ordinary risks.
+
+The last 16 attempts are bounded diagnostic memory. `noProgress` never writes a
+wall into the map. Repeated A-B movement stops further movement until the player
+reviews and calls `acknowledgeAttempts()`. Search has no permanent counter: each
+explicit selection searches once, including after earlier bursts. No timer or
+loop supplies input during paralysis; only a returned ready `inputGate` permits
+a new ordinary operation. Known standing decisions use their actual IDs;
+unsupported decisions and absent/inconsistent gates stop the sample.
+
+A lost reply retains `game.pendingRequest`; `player.recover()` retries that exact
+request, then observes the current state. It never replaces the request ID. If
+the transport itself died, retain the original request outside this object,
+retire the old owner, reopen the original package/store, resume the same ID and
+use the low-level transport to recover the exact receipt before handing a fresh
+`Game` to this consumer. An unknown receipt, damaged storage or missing history
+remains a stop. Neither an observation nor a new consumer resolves uncertainty.

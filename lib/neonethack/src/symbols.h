@@ -36,6 +36,8 @@
 #define nnh_emit_basis nnh_private_emit_basis
 #define nnh_emit_gate nnh_private_emit_gate
 #define nnh_emit_cell_actions nnh_private_emit_cell_actions
+#define nnh_emit_display nnh_private_emit_display
+#define nnh_terrain_freshness nnh_private_terrain_freshness
 #define nnh_emit_neighborhood nnh_private_emit_neighborhood
 #define nhx_open nnh_private_open
 #define nhx_call nnh_private_call

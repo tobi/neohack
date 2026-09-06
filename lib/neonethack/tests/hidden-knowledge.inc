@@ -49,6 +49,18 @@ static void fixture_begin(void)
             }
         }
     }
+    if (!strcmp(variant,"monster")) {
+        struct monst *undisclosed = NULL;
+        int old_x = -1, old_y = -1;
+        for (x = 1; x < COLNO && !undisclosed; x++) for (y = 0; y < ROWNO; y++)
+            if (!cansee(x,y) && fixture_monsters[x][y]) {
+                undisclosed = fixture_monsters[x][y]; old_x = x; old_y = y; break;
+            }
+        for (x = 1; x < COLNO && undisclosed; x++) for (y = 0; y < ROWNO; y++)
+            if (!cansee(x,y) && (x != old_x || y != old_y)) {
+                svl.level.monsters[x][y] = undisclosed; undisclosed = NULL; break;
+            }
+    }
     fixture_item = NULL;
     for (o = gi.invent; o; o = o->nobj) if (o->oclass == TOOL_CLASS) { fixture_item = o; break; }
     if (fixture_item) {
@@ -58,6 +70,28 @@ static void fixture_begin(void)
         if (!strcmp(variant,"curse")) { fixture_item->blessed=0; fixture_item->cursed=!fixture_cursed; }
     }
     if (!strcmp(variant,"property")) HFire_resistance ^= FROMOUTSIDE;
+    /* Exercise the real display renderer and headless callback with a known
+     * displayed glyph. This is a perception fixture, not a monster oracle or
+     * a production input operation. Sensed glyphs deliberately lack sight. */
+    if (!strncmp(variant, "display-", 8)) {
+        int chosen = 0, sensed = !strcmp(variant, "display-sensed");
+        for (y = u.uy - 4; y <= u.uy + 4 && !chosen; y++)
+            for (x = u.ux - 4; x <= u.ux + 4 && !chosen; x++)
+                if (isok(x,y) && (x != u.ux || y != u.uy)
+                    && (!!cansee(x,y) != sensed)) {
+                    glyph_info displayed;
+                    int glyph = !strcmp(variant, "display-invisible") ? GLYPH_INVISIBLE
+                        : !strcmp(variant, "display-clear") && svm.moves > 1 ? GLYPH_UNEXPLORED
+                        : !strcmp(variant, "display-disguise") ? cmap_to_glyph(S_hcdoor)
+                        : !strcmp(variant, "display-boulder") ? objnum_to_glyph(BOULDER)
+                        : !strcmp(variant, "display-trap") ? cmap_to_glyph(S_arrow_trap)
+                        : sensed ? GLYPH_DETECT_MALE_OFF : 0;
+                    memset(&displayed, 0, sizeof displayed);
+                    map_glyphinfo(x, y, glyph, 0, &displayed);
+                    headless_print_glyph(hl_map_win, x, y, &displayed, NULL);
+                    chosen = 1;
+                }
+    }
     if (report) {
         FILE *f = fopen(report,"w");
         if (f) { fprintf(f,"%d %d %d %d %d\n",doors,walls,unseen,fixture_item != NULL,unseen_floor); fclose(f); }

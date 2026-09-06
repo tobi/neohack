@@ -12,6 +12,7 @@
 #include "explorer.h"
 #include "minjson.h"
 #include "session.h"
+#include "perceived_status.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -59,6 +60,39 @@ typedef struct {
     char appearance[128];
     char attitude[16];
 } cell_t;
+
+/* Display evidence only: zero is valid, NO_GLYPH/unexplored/nothing are not
+ * occupants. World and local offers must classify the same sanitized cell. */
+static int
+perceived_band(const cell_t *c)
+{
+    int glyph = c->glyph;
+    if (!c->present || glyph < 0 || glyph >= NO_GLYPH_NUM - 2) return -1;
+    if (glyph < ALLY_LO) return 0;
+    if (glyph < INVIS_LO) return 1;
+    if (glyph < BODY_LO) return 0;
+    if (glyph < RIDDEN_LO) return 2;
+    if (glyph < OBJ_LO) return 0;
+    if (glyph < CMAP_LO) return 3;
+    if (glyph < STRANGE_LO) return 4;
+    if (glyph < EFFECT_LO) return 5;
+    return 3;
+}
+
+static void
+perceived_display(const cell_t *source, int self, nnh_known_cell *cell)
+{
+    int band = perceived_band(source);
+    cell->occupant = self ? 1 : band == 0 ? 2 : band == 1 ? 3 : 0;
+    cell->object = band == 2 || band == 3;
+    cell->boulder = source->present && source->boulder;
+    cell->color = source->color;
+    snprintf(cell->attitude, sizeof cell->attitude, "%s", source->attitude);
+    snprintf(cell->appearance, sizeof cell->appearance, "%s", source->appearance);
+    if (source->ch >= 32 && source->ch < 127) {
+        cell->mark[0] = (char) source->ch; cell->mark[1] = '\0';
+    } else snprintf(cell->mark, sizeof cell->mark, "\\u%04x", source->ch & 0xffff);
+}
 
 typedef struct {
     int index;
@@ -1455,7 +1489,7 @@ ingest(game_t *g, const char *line)
                     if (mj_find(ecpy, "x", &xv) && mj_int(xv, &x) &&
                         mj_find(ecpy, "y", &yv) && mj_int(yv, &y) &&
                         x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) {
-                        long long gg = 0, cc = 0, fc = 7;
+                        long long gg = NO_GLYPH_NUM, cc = 0, fc = 7;
                         mj_val gv2, cv2, fv2;
                         if (mj_find(ecpy, "glyph", &gv2))
                             mj_int(gv2, &gg);
@@ -2654,40 +2688,6 @@ turn_of(game_t *g)
     return 0;
 }
 
-static const char *const HUNGER_MAP[][2] = {
-    { "", "not_hungry" }, { "satiated", "satiated" }, { "not hungry", "not_hungry" },
-    { "hungry", "hungry" }, { "weak", "weak" },
-    { "fainting", "fainting" }, { "fainted", "fainted" },
-    { NULL, NULL },
-};
-
-static const char *const BURDEN_MAP[][2] = {
-    { "unencumbered", "unencumbered" }, { "burdened", "burdened" },
-    { "stressed", "stressed" }, { "strained", "strained" },
-    { "overtaxed", "overtaxed" }, { "overloaded", "overloaded" },
-    { NULL, NULL },
-};
-
-static void
-emit_lower_map(mj_Buf *b, const char *sense, const char *v,
-               const char *const map[][2])
-{
-    char low[64], *p;
-    size_t i;
-    snprintf(low, sizeof low, "%s", v);
-    for (p = low; *p; p++)
-        *p = (char) tolower((unsigned char) *p);
-    /* Stock status words are padded for terminal alignment. */
-    while (p > low && isspace((unsigned char) p[-1])) *--p = '\0';
-    mj_key(b, sense);
-    for (i = 0; map[i][0]; i++)
-        if (!strcmp(low, map[i][0])) {
-            mj_strv(b, map[i][1]);
-            return;
-        }
-    mj_strv(b, low);
-}
-
 /* condition bitmask to words (BL_MASK_* in upstream/include/botl.h). */
 static void
 emit_condition(mj_Buf *b, const char *v)
@@ -2751,10 +2751,10 @@ emit_vitals(game_t *g, mj_Buf *b)
         const char *v = g->status[f];
         if (!v || !strcmp(sense, "version"))
             continue;
-        if (!strcmp(sense, "hunger")) {
-            emit_lower_map(b, sense, v, HUNGER_MAP);
-        } else if (!strcmp(sense, "burden")) {
-            emit_lower_map(b, sense, v, BURDEN_MAP);
+        if (!strcmp(sense, "hunger") || !strcmp(sense, "burden")) {
+            int hunger = !strcmp(sense, "hunger");
+            mj_key(b, sense); mj_strv(b, nnh_perceived_status(v, hunger));
+            mj_key(b, hunger ? "hungerLabel" : "burdenLabel"); mj_strv(b, v);
         } else if (!strcmp(sense, "condition")) {
             emit_condition(b, v);
         } else if (!strcmp(sense, "depth")) {
@@ -2815,38 +2815,15 @@ emit_world(game_t *g, mj_Buf *b)
     for (y = 0; y < MAP_H; y++)
         for (x = 0; x < MAP_W; x++) {
             cell_t *c = &g->cells[y][x];
-            int glyph, band;
-            char mark[8];
+            int band = perceived_band(c);
+            nnh_known_cell displayed = {0};
             int is_you;
-            if ((!c->present || (!c->glyph && !c->ch)) &&
+            if (band < 0 &&
                 (g->terrain[y][x] == T_UNKNOWN || g->terrain[y][x] == T_DARK))
                 continue;
-            glyph = c->glyph;
-            if (glyph < ALLY_LO)
-                band = 0;               /* creature */
-            else if (glyph < INVIS_LO)
-                band = 1;               /* ally */
-            else if (glyph < BODY_LO)
-                band = 0;
-            else if (glyph < RIDDEN_LO)
-                band = 2;               /* remains */
-            else if (glyph < OBJ_LO)
-                band = 0;
-            else if (glyph < CMAP_LO)
-                band = 3;               /* object */
-            else if (glyph < STRANGE_LO)
-                band = 4;               /* terrain */
-            else if (glyph < EFFECT_LO)
-                continue;               /* transient */
-            else
-                band = 3;
-            if (c->ch >= 32 && c->ch < 127) {
-                mark[0] = (char) c->ch;
-                mark[1] = '\0';
-            } else {
-                snprintf(mark, sizeof mark, "\\u%04x", c->ch & 0xffff);
-            }
+            if (band == 5) continue;      /* transient */
             is_you = g->have_you && x == g->you_x && y == g->you_y;
+            perceived_display(c, is_you, &displayed);
             mj_obj(b);
             mj_key(b, "x"); mj_intv(b, x);
             mj_key(b, "y"); mj_intv(b, y);
@@ -2857,31 +2834,12 @@ emit_world(game_t *g, mj_Buf *b)
             mj_key(b, "type");
             mj_strv(b, TERRAIN_NAMES[g->terrain[y][x] <= T_BRIDGE ? g->terrain[y][x] : T_UNKNOWN]);
             mj_key(b, "knowledge"); mj_strv(b, "remembered");
+            mj_key(b, "freshness"); mj_strv(b, nnh_terrain_freshness(g->terrain[y][x], c->visibility_known ? c->visible : -1));
             if ((g->terrain[y][x] == T_DOOR_CLOSED || g->terrain[y][x] == T_DOOR_OPEN) && c->door_orientation) {
                 mj_key(b, "orientation"); mj_strv(b, c->door_orientation == 1 ? "horizontal" : "vertical");
             }
             mj_endobj(b);
-            if (is_you) {
-                mj_key(b, "occupant"); mj_obj(b);
-                mj_key(b, "kind"); mj_strv(b, "self");
-                mj_key(b, "mark"); mj_strv(b, mark);
-                mj_endobj(b);
-            } else if (c->present && (band == 0 || band == 1)) {
-                mj_key(b, "occupant"); mj_obj(b);
-                mj_key(b, "kind"); mj_strv(b, band ? "ally" : "creature");
-                if (c->attitude[0]) { mj_key(b, "attitude"); mj_strv(b, c->attitude); }
-                if (c->appearance[0]) { mj_key(b, "appearance"); mj_strv(b, c->appearance); }
-                mj_key(b, "mark"); mj_strv(b, mark);
-                mj_key(b, "color"); mj_intv(b, c->color);
-                mj_endobj(b);
-            } else if (c->present && (band == 2 || band == 3)) {
-                mj_key(b, "objects"); mj_arr(b);
-                mj_obj(b);
-                mj_key(b, "mark"); mj_strv(b, mark);
-                mj_key(b, "color"); mj_intv(b, c->color);
-                mj_endobj(b);
-                mj_endarr(b);
-            }
+            nnh_emit_display(&displayed, b);
             mj_endobj(b);
         }
     mj_endarr(b);
@@ -3010,11 +2968,7 @@ build_knowledge(game_t *g, nnh_knowledge *k, int recovery)
         c->trap = c->terrain == T_TRAP;
         /* Preserve a previously perceived base beneath a known trap. */
         if (c->trap && source->trap_base) c->terrain = source->trap_base;
-        c->boulder = source->present && source->boulder;
-        if (i == 40) c->occupant = 1;
-        else if (source->present && source->glyph >= 0 && source->glyph < BODY_LO)
-            c->occupant = source->glyph >= ALLY_LO && source->glyph < INVIS_LO ? 3 : 2;
-        else if (source->present && source->glyph >= RIDDEN_LO && source->glyph < OBJ_LO) c->occupant = 2;
+        perceived_display(source, i == 40, c);
         d = g->door_index[y][x];
         if (d >= 0 && (size_t) d < g->ndoor_facts) {
             c->lock = g->door_facts[d].lock;
@@ -3127,6 +3081,30 @@ decisions_available(game_t *g)
         !g->request_index_corrupt && !g->recording_gap && !g->recording_error[0];
 }
 
+/* Context describes the initiating public request, not the engine's hidden
+ * reason for warning. Omit unspecified/name-only items rather than inventing
+ * an identity from a label, inventory slot or subsequent menu position. */
+static void
+emit_warning_context(game_t *g, mj_Buf *b)
+{
+    mj_val value, id;
+    char *text;
+    const char *args = g->operation.args_json;
+    mj_key(b, "context"); mj_obj(b);
+    mj_key(b, "action"); mj_strv(b, g->operation.action);
+    if (mj_find(args, "direction", &value) && (text = mj_str(value)) != NULL) {
+        mj_key(b, "direction"); mj_strv(b, text); free(text);
+    } else if (mj_find(args, "target", &value) && value.p && *value.p == '{'
+               && mj_find(value.p, "direction", &id) && (text = mj_str(id)) != NULL) {
+        mj_key(b, "direction"); mj_strv(b, text); free(text);
+    }
+    if (mj_find(args, "item", &value) && value.p && *value.p == '{'
+        && mj_find(value.p, "id", &id) && (text = mj_str(id)) != NULL) {
+        mj_key(b, "itemId"); mj_strv(b, text); free(text);
+    }
+    mj_endobj(b);
+}
+
 /* Emit the pending prompt as a typed decision. want_item: the in-flight
  * operation is resolving an item (menu options become item refs).
  * Returns 1 with *kind_out set when offerable, 0 otherwise. */
@@ -3212,6 +3190,7 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
             mj_key(b, "kind");
             mj_strv(b, "confirmation");
             snprintf(kind_out, kind_cap, "%s", "confirmation");
+            emit_warning_context(g, b);
             mj_key(b, "action");
             mj_strv(b, g->operation.action[0] ? g->operation.action : "act");
             if (g->pending.prompt && g->pending.prompt[0]) {
@@ -3251,6 +3230,7 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
             mj_key(b, "kind");
             mj_strv(b, "confirmation");
             snprintf(kind_out, kind_cap, "confirmation");
+            emit_warning_context(g, b);
         } else {
             mj_strv(b, offer_id(g, "choice"));
             mj_key(b, "kind");
@@ -6257,6 +6237,8 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
                 }
             }
             op_start(g, action);
+            if (strlen(args) < sizeof g->operation.args_json)
+                snprintf(g->operation.args_json, sizeof g->operation.args_json, "%s", args);
             g->operation.cmdkey = code;
             out = drive_loop(x, g, req_id, turn0, you0_x, you0_y, had_you,
                              ev_from, &bumped, 0);

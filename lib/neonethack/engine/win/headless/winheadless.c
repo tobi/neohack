@@ -126,6 +126,20 @@ static int hl_snapshot_sent = 0;
 static long long hl_knowledge_epoch;
 
 static void
+hl_clear_map(void)
+{
+    int x, y;
+    memset(hl_map, 0, sizeof hl_map);
+    /* Zero is a real monster glyph. An undisclosed cell has no glyph or
+     * terrain symbol, including after changing levels or clearing the map. */
+    for (y = 0; y < ROWNO; y++)
+        for (x = 0; x < COLNO; x++) {
+            hl_map[y][x].glyph = NO_GLYPH;
+            hl_map[y][x].cmap = hl_map[y][x].background_cmap = -1;
+        }
+}
+
+static void
 hl_emit_glyph_obj(JBuf *jb, const glyph_info *glyph, const glyph_info *bg)
 {
     jb_begin_obj(jb);
@@ -429,7 +443,7 @@ headless_init_nhwindows(int *argcp, char **argv)
 {
     rpc_init();
     memset(hl_wins, 0, sizeof hl_wins);
-    memset(hl_map, 0, sizeof hl_map);
+    hl_clear_map();
     /* argv was already consumed by hl_cli_parse in main() (before
      * early_options); parsing again here would reset preset slots. */
     (void) argcp;
@@ -674,7 +688,7 @@ headless_clear_nhwindow(winid window)
 {
     JBuf jb;
     if (window == hl_map_win) {
-        memset(hl_map, 0, sizeof hl_map);
+        hl_clear_map();
         hl_snapshot_sent = 0;
         hl_map_dirty = 1;
     }

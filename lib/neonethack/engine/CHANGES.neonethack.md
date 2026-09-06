@@ -69,3 +69,10 @@ headers, binaries, playgrounds, saves and optional submodule checkouts are absen
   early overrides so the advertised filters apply consistently. Active settings
   are emitted with perception and recovered by the existing input journal.
   Original shop, burden, warning and manual pickup rules are retained.
+
+- On 2026-09-06, the NEO-19 semantic review changes `win/headless/winheadless.c`
+  to initialize and clear map cells with `NO_GLYPH` and absent background
+  sentinels. Glyph zero remains a valid displayed creature. Display clearing
+  also clears apparent species, preventing stale labels after hallucination or
+  disappearance. Shared C projection now uses these perceived display facts
+  consistently; monster behavior, hidden knowledge and action costs are unchanged.

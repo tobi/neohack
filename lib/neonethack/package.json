@@ -39,6 +39,14 @@
       "types": "./dist/typescript/webmcp.d.ts",
       "import": "./dist/typescript/webmcp.js"
     },
+    "./reference-client": {
+      "types": "./dist/typescript/reference-client.d.ts",
+      "import": "./dist/typescript/reference-client.js"
+    },
+    "./public-trace": {
+      "types": "./dist/typescript/public-trace.d.ts",
+      "import": "./dist/typescript/public-trace.js"
+    },
     "./mcp/tools": {
       "types": "./dist/mcp/tools.d.ts",
       "import": "./dist/mcp/tools.js"
@@ -68,8 +76,8 @@
     "build:example": "npm run build && node scripts/build-example.mjs",
     "serve:example": "node scripts/serve-example.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "test:wasm": "npm run build && node --test tests/wasm/runtime.test.mjs",
-    "test:browser": "npm run build:example && node --test tests/wasm/browser.test.mjs"
+    "test:wasm": "npm run build && node --test tests/wasm/runtime.test.mjs tests/wasm/semantic-perception.test.mjs tests/wasm/reference-client.test.mjs tests/wasm/self-state.test.mjs tests/wasm/warnings.test.mjs tests/wasm/position.test.mjs tests/wasm/text-decisions.test.mjs",
+    "test:browser": "npm run build:example && node --test tests/wasm/browser.test.mjs tests/wasm/lifecycle.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0"

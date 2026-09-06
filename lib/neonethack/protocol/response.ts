@@ -1,4 +1,6 @@
 import { catalog, compass, automaticPickup, type Schema } from "./catalog.ts";
+export const hungerStates = ["satiated", "not_hungry", "hungry", "weak", "fainting", "fainted", "starved", "unknown"];
+export const burdenStates = ["unencumbered", "burdened", "stressed", "strained", "overtaxed", "overloaded", "unknown"];
 const string = { type: "string" };
 const integer = { type: "integer" };
 const boolean = { type: "boolean" };
@@ -33,7 +35,9 @@ const cellActions = closed({
   x: integer, y: integer, dx: integer, dy: integer, inBounds: boolean, visible: nullable(boolean),
   terrain: closed({ type: string, freshness: enumeration("current", "remembered", "unknown"), orientation: enumeration("horizontal", "vertical") }, ["type", "freshness"]),
   door: closed({ lock: enumeration("locked", "unlocked", "unknown"), freshness: enumeration("witnessed", "remembered", "unknown"), observedTurn: integer }, ["lock", "freshness"]),
-  occupant: closed({ kind: enumeration("self", "creature", "ally") }), hazards: array(enumeration("trap", "water", "lava")),
+  occupant: closed({ kind: enumeration("self", "creature", "ally"), mark: string, color: integer, appearance: string, attitude: enumeration("hostile", "peaceful", "tame") }, ["kind"]),
+  objects: array(closed({ mark: string, color: integer, kind: enumeration("boulder") }, ["mark", "color"])),
+  hazards: array(enumeration("trap", "water", "lava")),
   walkable: nullable(boolean), movement: closed({ relation: enumeration("here", "adjacent", "distant"), intent: enumeration("step", "attemptOpen", "attemptObstacle", "creatureBump", "allyBump", "possiblePush", "unknown"), knownRestriction: enumeration("intactDoorDiagonal", "lockedDoor", "knownTerrainObstacle") }, ["relation"]),
   actions: { ...array(actionOffer), maxItems: 16 },
 }, ["x", "y", "dx", "dy", "inBounds", "walkable", "movement", "actions"]);
@@ -46,15 +50,15 @@ const observation = object({
   neighborhood,
   turn: integer, location: object({ id: string, depthLabel: string }),
   you: nullable(object({ x: integer, y: integer })),
-  vitals: { type: "object", additionalProperties: { anyOf: [string, { type: "number" }, array(string)] } },
+  vitals: { type: "object", properties: { hunger: enumeration(...hungerStates), burden: enumeration(...burdenStates), hungerLabel: string, burdenLabel: string }, additionalProperties: { anyOf: [string, { type: "number" }, array(string)] } },
   inventory: array(item), inventoryKnown: boolean,
   here: object({ known: boolean, items: array(item) }),
   perception: object({ version: integer, inventory: enumeration("current", "lastKnown", "unknown"), here: enumeration("current", "lastKnown", "unknown"), equipment: enumeration("current", "lastKnown", "unknown") }),
   world: array(object({
     x: integer, y: integer, visible: boolean,
-    terrain: object({ type: string, knowledge: { const: "remembered" }, orientation: enumeration("horizontal", "vertical") }, ["type", "knowledge"]),
+    terrain: object({ type: string, knowledge: { const: "remembered" }, freshness: enumeration("current", "remembered", "unknown"), orientation: enumeration("horizontal", "vertical") }, ["type", "knowledge"]),
     occupant: object({ kind: enumeration("self", "creature", "ally"), mark: string, color: integer, appearance: string, attitude: enumeration("hostile", "peaceful", "tame") }, ["kind", "mark"]),
-    objects: array(object({ mark: string, color: integer })),
+    objects: array(object({ mark: string, color: integer, kind: enumeration("boulder") }, ["mark", "color"])),
   }, ["x", "y", "terrain"])), heard: array(string),
 }, ["turn", "location", "you", "vitals", "inventory", "inventoryKnown", "here", "perception", "world", "heard"]);
 /** Responses are additive within v1. Clients replace observations, ignore
@@ -70,7 +74,7 @@ export const responseSchema: Schema = {
     decision: nullable({ oneOf: [
       decision("item", { options: array(item), selection }),
       decision("target", { allowedTargets: array(enumeration("self", "direction")) }),
-      decision("confirmation"),
+      decision("confirmation", { context: object({ action: string, direction: enumeration("north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest", "up", "down"), itemId: string }, ["action"]) }, ["context"]),
       decision("choice", { options: array(object({ id: integer, label: string, transfer: enumeration("take", "put") }, ["id", "label"])), selection, containerPhase: enumeration("inspect", "transfer") }, ["selection", "containerPhase"]),
       decision("text"),
       decision("position", { cursor: closed({ x: integer, y: integer }), mode: enumeration("browse", "select") }),

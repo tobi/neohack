@@ -83,6 +83,24 @@ text, or a confirmation default. It cannot undo time already spent. Wrong
 answer shapes and stale IDs do not advance the engine. No client should restart
 the initiating action to continue a pending decision.
 
+Use the returned `decision.id` as `decision.answer.params.decisionId` or
+`decision.cancel.params.decisionId`; the standing neighborhood
+`inputGate.decisionId` matches it. An explicit `confirm:false` answers the
+engine's yes/no question; `decision.cancel` cancels the standing decision and
+reports `cancelled`. Both preserve any time the initiating operation already
+spent. Declining does not request the initiating action again. Observe/replan,
+then choose a new operation deliberately; a later reattempt can raise a new
+genuine warning with a different ID. Never convert repeated declines or an
+unrecognized decision kind into consent.
+
+Confirmation decisions may include `context: {action, direction?, itemId?}`.
+These are only fields from the initiating public request, retained across
+close/resume. Unspecified directions and name-selected or subsequently selected
+item IDs are omitted. Context does not infer a warning reason or promise safety;
+`about` preserves the original engine warning. No hidden trap, curse, nutrition
+prediction or teleport destination is added. See the explicit decline and
+deliberate-reattempt handlers in the [manual reference example](AGENT_BROWSER.md#manual-reference-consumer).
+
 ## Responses
 
 Every accepted gameplay operation/answer returns:
@@ -130,6 +148,20 @@ absence of a creature perceived through another sense. Older engine packages
 omit this field: clients must not guess visibility from distance or map updates.
 Darkness does not erase previously perceived terrain. Undiscovered terrain
 remains unknown, including on invisible squares.
+`terrain.freshness` in world, neighborhood and cell-action views is `current`
+when known terrain is in sight, `remembered` when known but out of sight, and
+`unknown` for undisclosed/dark terrain. World `terrain.knowledge` still records
+the terrain-memory layer; it is not a visibility test. A known trap is the world
+terrain overlay (`type: "trap"`); local views additionally retain a previously
+perceived base beneath it and include `hazards: ["trap"]`. Those layers need not
+have identical terrain types. Neither layer infers terrain from failed movement.
+
+World, neighborhood and `session.actions` share displayed occupant
+`kind`, `appearance`, `mark`, `color` and disclosed `attitude`, plus displayed `objects`. An already
+perceived boulder carries `objects[].kind: "boulder"`, independently of any
+`movement.intent: "possiblePush"` offer. This does not reveal whether a push will
+succeed or what is beyond it. Generic objects have no inferred identity or
+category. Optional display fields may be absent on an older pinned package.
 The map is not a query of undiscovered level state. Replace the full observation
 on each response; never carry future terrain backward through a replay. Labels,
 marks and colors are presentation data, not object identity or game rules.
@@ -141,6 +173,26 @@ does not. Existing engine pins can have fewer perception capabilities.
 
 Health/energy/etc. are numeric where the engine supplies numeric values. Some
 legacy/formatted vitals can be strings; exceptional strength is not flattened.
+`vitals.hunger` is a canonical `HungerState`: `satiated`, `not_hungry`,
+`hungry`, `weak`, `fainting`, `fainted`, `starved` or `unknown`.
+`vitals.burden` is a `BurdenState`: `unencumbered`, `burdened`, `stressed`,
+`strained`, `overtaxed`, `overloaded` or `unknown`. Display padding and case are
+normalized; the engine's empty normal labels mean `not_hungry` and
+`unencumbered`. Missing perception stays absent and unfamiliar text is `unknown`.
+`hungerLabel` and `burdenLabel` preserve the original display strings. The public
+types are generated from the response schema. These states disclose no exact
+nutrition, prayer timer, piety or undiscovered intrinsic properties.
+
+An operation can spend many turns without another opportunity for input.
+`turnsElapsed` reports the complete interval to the returned input boundary,
+including sleep or paralysis. Read ordered `heard` and `felt` events to narrate
+disclosed loss and recovery of control; the final ready state does not mean the
+hero could act during those intervening turns. For example a sleeping-potion
+drink can include “You suddenly fall asleep!”, intervening turn events, then
+“You wake up.” Do not attribute every long interval to paralysis or infer a
+remaining-duration countdown. Multi-turn meals and interruptions retain their
+existing authoritative activity events. See [outcomes and safe recovery](SEMANTIC_OUTCOMES.md)
+for deliberate waiting, guarded waiting, time spent and uncertain receipts.
 `lifeSaved` is a witnessed event, not game over. Only engine terminal facts
 establish death, escape or ascent; process failure is never a victory or death.
 
@@ -268,7 +320,7 @@ has an unresolved request.
 
 ### Perceived creature appearance
 
-`observation.world[].occupant.appearance`, when present, names the monster type
+`occupant.appearance` in world, neighborhood and cell-action views, when present, names the monster type
 represented by the engine's displayed glyph (for example `kitten` or `newt`). This
 is available without spending a turn or attacking. It is an apparent description,
 not proof of a shapeshifter's true form, an unseen monster lookup, or an entity ID.
@@ -412,7 +464,7 @@ input, auto-answer warnings, or reconstruct neighborhood offers.
 
 ### Perceived attitude and normalized hunger
 
-`observation.world[].occupant.attitude` is optional: `hostile`, `peaceful`, or
+`occupant.attitude` in world, neighborhood and cell-action views is optional: `hostile`, `peaceful`, or
 `tame`. The shared headless engine discloses it only for a currently visible,
 spotted, undisguised creature while not hallucinating or swallowed. Omission means
 unknown, not hostile. Remembered glyphs and hidden monsters disclose no attitude.

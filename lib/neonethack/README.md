@@ -123,6 +123,8 @@ See [WASM build, persistence and resume](docs/WASM.md).
 
 ## Read next
 
+- [Command coverage and ascension limits](docs/COMMAND_COVERAGE.md): supported
+  manual choices, missing offering operation, and unverified endgame paths.
 - [Protocol](docs/PROTOCOL.md): lifecycle, requests, results and guarantees.
 - [C API](docs/C_API.md): ownership, errors, threading and typed calls.
 - [Typed Hero API](docs/HERO.md): direction/species enums, sensing, inventory and workshop completion.

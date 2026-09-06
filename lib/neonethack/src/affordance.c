@@ -114,9 +114,32 @@ void nnh_emit_gate(const nnh_knowledge *k, mj_Buf *b)
     if (k->decision_id && *k->decision_id) { mj_key(b, "decisionId"); mj_strv(b, k->decision_id); }
     mj_endobj(b);
 }
+const char *nnh_terrain_freshness(int terrain, int visible)
+{
+    return terrain == T_UNKNOWN || terrain == T_DARK ? "unknown" :
+        visible == 1 ? "current" : "remembered";
+}
+void nnh_emit_display(const nnh_known_cell *c, mj_Buf *b)
+{
+    if (c->occupant) {
+        mj_key(b, "occupant"); mj_obj(b);
+        mj_key(b, "kind"); mj_strv(b, c->occupant == 1 ? "self" : c->occupant == 3 ? "ally" : "creature");
+        if (c->occupant != 1 && c->attitude[0]) { mj_key(b, "attitude"); mj_strv(b, c->attitude); }
+        if (c->occupant != 1 && c->appearance[0]) { mj_key(b, "appearance"); mj_strv(b, c->appearance); }
+        mj_key(b, "mark"); mj_strv(b, c->mark);
+        if (c->occupant != 1) { mj_key(b, "color"); mj_intv(b, c->color); }
+        mj_endobj(b);
+    } else if (c->object) {
+        mj_key(b, "objects"); mj_arr(b); mj_obj(b);
+        mj_key(b, "mark"); mj_strv(b, c->mark);
+        mj_key(b, "color"); mj_intv(b, c->color);
+        if (c->boulder) { mj_key(b, "kind"); mj_strv(b, "boulder"); }
+        mj_endobj(b); mj_endarr(b);
+    }
+}
 void nnh_emit_cell_actions(const nnh_cell_actions *c, mj_Buf *b)
 {
-    int i, known = c->known.terrain != T_UNKNOWN && c->known.terrain != T_DARK;
+    int i;
     mj_obj(b);
     mj_key(b, "x"); mj_intv(b, c->x); mj_key(b, "y"); mj_intv(b, c->y);
     mj_key(b, "dx"); mj_intv(b, c->dx); mj_key(b, "dy"); mj_intv(b, c->dy);
@@ -128,7 +151,7 @@ void nnh_emit_cell_actions(const nnh_cell_actions *c, mj_Buf *b)
         if ((c->known.terrain == T_DOOR_CLOSED || c->known.terrain == T_DOOR_OPEN) && c->known.door_orientation) {
             mj_key(b, "orientation"); mj_strv(b, c->known.door_orientation == 1 ? "horizontal" : "vertical");
         }
-        mj_key(b, "freshness"); mj_strv(b, !known ? "unknown" : c->known.visible == 1 ? "current" : "remembered");
+        mj_key(b, "freshness"); mj_strv(b, nnh_terrain_freshness(c->known.terrain, c->known.visible));
         mj_endobj(b);
         if (c->known.terrain == T_DOOR_CLOSED || c->known.terrain == T_DOOR_OPEN) {
             mj_key(b, "door"); mj_obj(b);
@@ -137,10 +160,7 @@ void nnh_emit_cell_actions(const nnh_cell_actions *c, mj_Buf *b)
             if (c->known.lock) { mj_key(b, "observedTurn"); mj_intv(b, c->known.observed_turn); }
             mj_endobj(b);
         }
-        if (c->known.occupant) {
-            mj_key(b, "occupant"); mj_obj(b); mj_key(b, "kind");
-            mj_strv(b, c->known.occupant == 1 ? "self" : c->known.occupant == 3 ? "ally" : "creature"); mj_endobj(b);
-        }
+        nnh_emit_display(&c->known, b);
         mj_key(b, "hazards"); mj_arr(b);
         if (c->known.trap || c->known.terrain == T_TRAP) mj_strv(b, "trap");
         if (c->known.terrain == T_WATER) mj_strv(b, "water");

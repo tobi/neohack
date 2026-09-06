@@ -1,4 +1,6 @@
 import type { MethodParams } from "./requests.js";
+import type { HungerState, BurdenState } from "./self-state.js";
+export type { HungerState, BurdenState } from "./self-state.js";
 export type { Method, MethodParams, Request } from "./requests.js";
 export type Identity = MethodParams["session.create"];
 export type AutomaticPickup = NonNullable<Identity["automaticPickup"]>;
@@ -27,7 +29,8 @@ export interface CellActions {
   visible?: boolean | null;
   terrain?: { type: string; freshness: "current" | "remembered" | "unknown"; orientation?: "horizontal" | "vertical" };
   door?: { lock: "locked" | "unlocked" | "unknown"; freshness: "witnessed" | "remembered" | "unknown"; observedTurn?: number };
-  occupant?: { kind: "self" | "creature" | "ally" };
+  occupant?: { kind: "self" | "creature" | "ally"; mark?: string; color?: number; appearance?: string; attitude?: "hostile" | "peaceful" | "tame" };
+  objects?: { mark: string; color: number; kind?: "boulder" }[];
   hazards?: ("trap" | "water" | "lava")[];
   walkable: boolean | null;
   movement: { relation: "here" | "adjacent" | "distant"; intent?: "step" | "attemptOpen" | "attemptObstacle" | "creatureBump" | "allyBump" | "possiblePush" | "unknown"; knownRestriction?: "intactDoorDiagonal" | "lockedDoor" | "knownTerrainObstacle" };
@@ -50,9 +53,9 @@ export interface Cell {
   x: number; y: number;
   /** Engine sight at this boundary. Omitted by older engine packages. */
   visible?: boolean;
-  terrain: { type: string; knowledge: "remembered"; orientation?: "horizontal" | "vertical" };
+  terrain: { type: string; knowledge: "remembered"; freshness?: "current" | "remembered" | "unknown"; orientation?: "horizontal" | "vertical" };
   occupant?: { kind: "self" | "creature" | "ally"; mark: string; color?: number; appearance?: string; attitude?: "hostile" | "peaceful" | "tame" };
-  objects?: { mark: string; color: number }[];
+  objects?: { mark: string; color: number; kind?: "boulder" }[];
 }
 /** Omitted facts are unknown; empty known lists really are empty. */
 export interface Observation {
@@ -64,7 +67,8 @@ export interface Observation {
     health?: number | string; maxHealth?: number | string;
     energy?: number | string; maxEnergy?: number | string;
     armor?: number | string; gold?: number | string; level?: number | string;
-    strength?: string; hunger?: string; burden?: string; condition?: string[] | string;
+    strength?: string; hunger?: HungerState; burden?: BurdenState; condition?: string[] | string;
+    hungerLabel?: string; burdenLabel?: string;
     [sense: string]: string | number | string[] | undefined;
   };
   inventory: ItemRef[]; inventoryKnown: boolean;
@@ -78,7 +82,7 @@ interface DecisionBase { id: string; action: string; about?: string; cancellable
 export type Decision = DecisionBase & (
   | { kind: "item"; options: Omit<ItemRef, "category" | "usage">[]; selection: { min: number; max: number } }
   | { kind: "target"; allowedTargets: ("self" | "direction")[] }
-  | { kind: "confirmation" }
+  | { kind: "confirmation"; context?: { action: string; direction?: Direction; itemId?: string } }
   | { kind: "choice"; options: { id: number; label: string; transfer?: "take" | "put" }[]; selection?: { min: number; max: number }; containerPhase?: "inspect" | "transfer" }
   | { kind: "position"; cursor: { x: number; y: number }; mode: "browse" | "select" }
   | { kind: "text" }

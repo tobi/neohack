@@ -6,7 +6,7 @@ int main(int argc, char **argv)
     nnh_context *worlds = NULL;
     nnh_result *result = NULL;
     nnh_config config = {sizeof config, NULL, NULL, NULL};
-    nnh_identity hero = {"C explorer", "valkyrie", "dwarf", "female", "lawful", 1, 42};
+    nnh_identity hero = {"C explorer", "valkyrie", "dwarf", "female", "lawful", 1, 42, NULL};
     nnh_guard guard = {"first-wait", 0};
     char session[65];
     int status = 1;
