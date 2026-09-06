@@ -245,7 +245,7 @@ $('test').onclick=()=>void (async()=>{
     // Test sessions are intentionally volatile. Runtime package identity is retained in the recording.
     const api=await wasm.createWasm({storage:{kind:'memory'},workerUrl:new URL(pkg.base+'core-worker.mjs',location.href)});
     run.api=api;if(run.cancelled){await api.close();return;}
-    const game=await api.create({...chosen.identity,name:'Bot test',seed});
+    const game=await api.create({...chosen.identity,seed});
     if(run.cancelled){await api.close();return;}
     const world=$('bot-world') as NeohackWorld;world.setAttribute('role',chosen.id);world.setAttribute('seed',String(seed));world.snapshot=game.state;
     let ready=false, started=false;

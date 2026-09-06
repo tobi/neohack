@@ -4,6 +4,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- New adventures suggest editable, rerollable names instead of always using Ada.
+- Short journal notices stay inline; readable scrolls require at least four lines.
+
 - Restored missing ledger history after the hosting move. Storage outages now show
   an explicit notice; fresh adventures can still start and resume in this browser.
 

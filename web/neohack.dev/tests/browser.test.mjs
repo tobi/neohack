@@ -3359,6 +3359,48 @@ test('character sheet follows actual equipment changes and distinguishes unknown
   assert.equal(await page.getByText('Your backpack is empty.',{exact:true}).count(),0);
 });
 
+test('journal scrolls require four non-empty source lines, not trailing blanks or visual wrapping', async t=>{
+  const {page}=await fixture(t);await create(page);
+  const before=await snapshot(page);
+  const entries=[
+    'The bolt of lightning hits you!\n',
+    'You swap places with your kitten.\n\n\n\n',
+    'One\nTwo\nThree',
+    'A very long single line '.repeat(30),
+    'One\n\nTwo\nThree\nFour\n',
+  ];
+  await page.evaluate(entries=>{
+    const app=document.querySelector('pixel-nethack');
+    app.journal=entries.map((text,i)=>({text,turn:i+1,lastTurn:i+1,count:1}));
+    app.panel='journal';app.renderPanel();app.showPanel();
+  },entries);
+  const rows=page.locator('.journal-entry');
+  assert.equal(await rows.count(),5);
+  assert.equal(await rows.locator('.journal-scroll-link').count(),1);
+  const scroll=page.getByRole('button',{name:'Read journal scroll · turn 5',exact:true});
+  await scroll.click();
+  assert.equal(await page.locator('#scroll-text').textContent(),entries[4]);
+  await page.getByRole('button',{name:'Close scroll',exact:true}).click();
+  assert.match(await rows.nth(4).textContent(),/The bolt of lightning hits you!/);
+  assert.equal((await snapshot(page)).revision,before.revision);
+});
+
+test('new adventures suggest rerollable names and retain the chosen name across resume', async t=>{
+  const {page}=await fixture(t);
+  await page.getByRole('button',{name:'Begin your adventure'}).click();
+  const input=page.getByLabel('YOUR NAME',{exact:true});
+  const first=await input.inputValue();
+  assert.match(first,/^[A-Z][a-z]+ [A-Z][a-z]+$/);assert.ok(first.length<=24);
+  await page.getByRole('button',{name:'Generate another adventurer name',exact:true}).click();
+  const chosen=await input.inputValue();assert.notEqual(chosen,first);
+  await page.getByRole('button',{name:'Enter the dungeon →'}).click();
+  await page.waitForFunction(()=>!!document.querySelector('pixel-nethack').snapshot);await ready(page);
+  assert.equal(await page.locator('#hero-name').textContent(),chosen);
+  if(await page.locator('#journal-scroll').isVisible())await page.getByRole('button',{name:'Close scroll',exact:true}).click();
+  await page.reload();await page.waitForFunction(()=>!!document.querySelector('pixel-nethack').snapshot);await ready(page);
+  assert.equal(await page.locator('#hero-name').textContent(),chosen);
+});
+
 test('a suspended cloud store does not block a fresh local adventure or erase its local resume', async t=>{
   const {page}=await fixture(t);let journalReads=0;
   await page.route('**/api/health',route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":"Storage unavailable"}'}));

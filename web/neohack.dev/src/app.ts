@@ -1,5 +1,6 @@
 import './component';
 import { PublicReplayRecorder, embedCode, replayLink } from './public-replay';
+import { adventurerName } from './adventurer-names';
 import { renderCharacterSheet, equipmentDescription } from './character-sheet';
 import { actionIcon } from "./action-icons";
 import { accountApi, RunRecorder } from './account-client';
@@ -286,7 +287,7 @@ class PixelNethack extends HTMLElement {
 <span class="code-keyword">const</span> nethack = <span class="code-keyword">new</span> Nethack();
 <span class="code-keyword">try</span> {
   <span class="code-keyword">const</span> game = <span class="code-keyword">await</span> nethack.create({
-    name: <span class="code-string">'Ada'</span>, role: <span class="code-string">'valkyrie'</span>, seed: <span class="code-number">42</span>,
+    role: <span class="code-string">'valkyrie'</span>, seed: <span class="code-number">42</span>,
   });
   <span class="code-keyword">const</span> step = <span class="code-keyword">await</span> game.move(<span class="code-string">'south'</span>);
   console.log(step.outcome, step.observation);
@@ -1060,7 +1061,7 @@ class PixelNethack extends HTMLElement {
       this.busy = false;
       if (!this.game?.decision) this.map.context = null;
       this.render();
-      if (completed && entry && !entry.resume && this.game && !this.game.decision && this.journal.length)
+      if (completed && entry && !entry.resume && this.game && !this.game.decision && this.journal.length && this.isJournalScroll(this.journal[0]!.text))
         this.openJournalScroll(this.journal[0]!);
       if (completed && before && game === this.game && !this.uncertain())
         this.map.showMessages(before, this.game!.state);
@@ -1502,8 +1503,11 @@ class PixelNethack extends HTMLElement {
       body.append(note);
     }
   }
+  private isJournalScroll(text: string) {
+    return text.split("\n").filter(line => line.trim().length > 0).length >= 4;
+  }
   private appendJournalContent(host: HTMLElement, entry: {turn: number; text: string; count: number}) {
-    if (!entry.text.includes("\n")) {
+    if (!this.isJournalScroll(entry.text)) {
       host.insertAdjacentHTML("beforeend", this.journalText(entry));
       return;
     }
@@ -1522,7 +1526,7 @@ class PixelNethack extends HTMLElement {
     this.controls();
   }
   private journalText(entry: { text: string; count: number }) {
-    return escape(entry.text) + (entry.count > 1
+    return escape(entry.text.trim()).replaceAll("\n", "<br>") + (entry.count > 1
       ? ` <span class="journal-repeat" aria-label="Repeated ${entry.count} times">×${entry.count}</span>` : "");
   }
   private climbLabel(direction: "up" | "down") {
@@ -1806,9 +1810,13 @@ class PixelNethack extends HTMLElement {
   }
   private newAdventure() {
     this.openMenu(
-      `<h2 id="menu-title">Every story needs an adventurer.</h2><p class="subtle">Choose a starting path. The rest is up to you.</p><form id="create-form"><div class="create-fields"><label class="field-label" for="adventurer-name">YOUR NAME</label><input id="adventurer-name" name="name" required maxlength="24" autocomplete="off" placeholder="What should we call you?" value="Ada"><fieldset class="class-picker"><legend>YOUR STARTING PATH · ${roles.length} CLASSES</legend>${roles.map((r, i) => `<label class="role-card"><input type="radio" name="role" value="${r.id}" ${i === 0 ? "checked" : ""}><img src="/art/${r.art}.png" alt=""><span><strong>${r.title}${i === 0 ? "<small>FIRST ADVENTURE PICK</small>" : ""}</strong><span>${r.description}</span></span></label>`).join("")}</fieldset><details class="seed-details"><summary>Choose a world seed (optional)</summary><label for="world-seed">A number for a repeatable starting world</label><input id="world-seed" name="seed" type="number" min="0" max="4294967295" step="1" placeholder="Surprise me"></details><p class="save-explanation">Progress is saved on this browser and address. Clearing site data deletes it. Each life is an adventure of its own.</p></div><footer class="create-footer"><button data-operation class="primary" type="submit">Enter the dungeon →</button></footer></form>`,
+      `<h2 id="menu-title">Every story needs an adventurer.</h2><p class="subtle">Choose a starting path. The rest is up to you.</p><form id="create-form"><div class="create-fields"><label class="field-label" for="adventurer-name">YOUR NAME</label><div class="adventurer-name-field"><input id="adventurer-name" name="name" required maxlength="24" autocomplete="off" placeholder="What should we call you?" value="${adventurerName()}"><button type="button" id="generate-adventurer-name" title="Suggest another name" aria-label="Generate another adventurer name">↻</button></div><fieldset class="class-picker"><legend>YOUR STARTING PATH · ${roles.length} CLASSES</legend>${roles.map((r, i) => `<label class="role-card"><input type="radio" name="role" value="${r.id}" ${i === 0 ? "checked" : ""}><img src="/art/${r.art}.png" alt=""><span><strong>${r.title}${i === 0 ? "<small>FIRST ADVENTURE PICK</small>" : ""}</strong><span>${r.description}</span></span></label>`).join("")}</fieldset><details class="seed-details"><summary>Choose a world seed (optional)</summary><label for="world-seed">A number for a repeatable starting world</label><input id="world-seed" name="seed" type="number" min="0" max="4294967295" step="1" placeholder="Surprise me"></details><p class="save-explanation">Progress is saved on this browser and address. Clearing site data deletes it. Each life is an adventure of its own.</p></div><footer class="create-footer"><button data-operation class="primary" type="submit">Enter the dungeon →</button></footer></form>`,
     );
     const form = this.querySelector<HTMLFormElement>("#create-form")!;
+    this.$("#generate-adventurer-name").onclick = () => {
+      const input=this.querySelector<HTMLInputElement>("#adventurer-name")!;
+      input.value=adventurerName(input.value);input.setCustomValidity("");input.focus();input.select();
+    };
     const preferences = loadPickupPreferences();
     const pickup = pickupEditor(preferences.settings, preferences.rememberable);
     const details = document.createElement("details"); details.className = "pickup-creation";

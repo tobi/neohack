@@ -1122,3 +1122,13 @@ worn equipment) plus Drop, intersected with the engine's candidates. Selecting a
 item opens all named candidate actions. All actions retain opaque IDs, revision
 checks and real standing decisions; no drag-to-equip or automatic confirmation.
 No new art pack, PNGs or generated character sprites were introduced.
+
+Journal scroll links require at least four non-empty source lines. Short combat
+notices, pet swaps and other one-to-three-line entries remain inline, regardless
+of trailing blank lines or viewport wrapping. Opening-story auto-display uses the
+same threshold; a full scroll preserves its original text and paragraph breaks.
+
+New-character forms suggest a random, editable adventurer name with an explicit
+reroll button. Suggestions use browser randomness independently of the world
+seed. The chosen name is stored with the run and never regenerated on resume.
+Workshop runs omit an explicit name and use the engine's existing name generator.

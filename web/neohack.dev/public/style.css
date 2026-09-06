@@ -1728,3 +1728,6 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
 .sheet-attributes { font-size: 12px; color: #aebc9f; margin: -6px 0 14px; }
 .sheet-attributes summary { cursor: pointer; padding: 10px 0; }
 .sheet-attributes .sheet-stats { margin-bottom: 8px; }
+.adventurer-name-field { display: flex; align-items: stretch; gap: 8px; }
+.adventurer-name-field input { flex: 1; min-width: 0; width: 0; }
+.adventurer-name-field button { flex: 0 0 48px; min-height: 48px; padding: 8px; font-size: 24px; }
