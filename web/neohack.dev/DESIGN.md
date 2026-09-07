@@ -705,7 +705,7 @@ straight to two lists: Inside container and Your backpack. Checkboxes stage whol
 stacks in either direction; Take everything selects all contents without engine
 input, Clear selection resets the draft, and Apply transfers submits both sides
 once. Show selection counts and disable Apply until something is selected.
-Use two columns on desktop, stacked on phones. C supplies the container phase
+Use two independently scrolling item columns on desktop and phones. C supplies the container phase
 and each option's take/put side; the UI never classifies labels. Engine transfer
 rules run take-first, preserving warnings and interruptions rather than promising
 rollback. Cancel discards the draft; reload restores the standing decision and
@@ -1251,14 +1251,20 @@ last published frame count until publication catches up.
 
 Selecting a map square opens its perceived description and a free, revision-bound
 C route preview. Sage ground markers show only returned known route steps. Walk
-here requests one bounded leg (at most eight actions) through the same library
+here, or double-clicking a map square, requests one bounded leg (at most eight actions) through the same library
 navigator used by agents. Reaching a destination never overrides a standing
 choice, changed creature scene, damage, uncertainty or a level change. Each
 executed step updates the human view and recording. Escape, blur, a hidden page,
 opening a dialog or removing the component aborts subsequent steps. The final
-stop reason remains visible; continuing requires another deliberate selection.
+unexpected stop reason remains visible; normal arrival is silent. Continuing requires another deliberate selection.
 
 Distant tile descriptions come from the public actions query rather than invented
 local affordances. Adjacent direct movement/interaction buttons remain distinct
 from the walking policy. Arrows, WASD and the direction pad still issue direct
 single-step movement. Inspecting and previewing consume no game turn or randomness.
+
+Cloud upload failures stay in the compact save status, with detail available on its tooltip. They never open the central gameplay error overlay.
+
+### Bounded decision dialogs
+
+Decision dialogs keep their title and cancellation controls visible; the shell never scrolls. Container transfers use compact 44px item rows in two independently scrolling lists, with selection counts, Clear selection and Apply transfers fixed below. Inspection messages expand in a bounded region. Reduce framing and spacing before shrinking readable text or touch targets.

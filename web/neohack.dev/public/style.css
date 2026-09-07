@@ -1748,3 +1748,39 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
 }
 #navigation-status[hidden], #navigation-stop[hidden] { display: none; }
 #navigation-stop { white-space: nowrap; min-height: 44px; }
+
+/* Dialog shells stay still; only their content regions scroll. */
+#decision[open] { display:flex; flex-direction:column; overflow:hidden; padding:16px; max-height:calc(100dvh - 24px); }
+#decision > :not(#decision-body) { flex-shrink:0; }
+#decision > .eyebrow { display:none; }
+#decision h2 { font-size:26px; margin:0 0 6px; }
+#decision-about { margin:0 0 10px; line-height:1.4; max-height:15dvh; overflow:auto; }
+#decision-body { min-height:0; overflow:auto; align-content:start; }
+#decision-footer { display:flex; flex-wrap:wrap; gap:4px 10px; border-top:1px solid #4a5740; margin-top:10px; padding-top:8px; }
+#decision-footer .text-button { min-height:44px; margin:0; padding:6px 10px; width:auto; border:0; }
+#decision:has(.container-transfer) { width:min(800px, calc(100% - 24px)); height:min(560px, calc(100dvh - 24px)); }
+#decision:has(.container-transfer) #decision-body { flex:1; display:flex; flex-direction:column; flex-wrap:nowrap; overflow:hidden; gap:6px; }
+#decision .container-notes { flex:0 0 auto; padding:0 8px; margin:0; max-height:18dvh; }
+.container-notes summary { min-height:44px; display:list-item; align-content:center; cursor:pointer; }
+#decision-body .container-transfer { flex:1; display:flex; flex-direction:column; min-height:0; }
+.container-transfer > p { flex-shrink:0; margin:0 0 8px; line-height:1.4; }
+.container-columns { flex:1; min-height:0; gap:10px; }
+.container-columns fieldset { min-height:0; display:flex; flex-direction:column; overflow:hidden; padding:6px; }
+.container-items { min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+.container-columns fieldset > button { flex-shrink:0; min-height:44px; padding:6px 10px; margin:0 0 4px; }
+.container-columns .menu-choice { display:flex; flex-shrink:0; margin:0 0 3px; padding:6px 8px; gap:8px; min-height:44px; line-height:1.35; font-size:14px; }
+.container-columns .menu-choice input { flex:0 0 18px; margin:0; }
+.transfer-actions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; width:100%; }
+.transfer-actions p { margin:0 auto 0 0; font-size:13px; }
+.transfer-actions button { min-height:44px; padding:8px 12px; }
+@media(max-width:600px) {
+ .container-columns { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+ .container-columns fieldset { padding:4px; }
+ .container-columns .menu-choice { font-size:13px; padding:6px 4px; gap:5px; }
+ .transfer-actions p { flex-basis:100%; }
+ #decision-footer .text-button { font-size:12px; }
+}
+
+#menu[open]:not(:has(#create-form)) { display:flex; flex-direction:column; overflow:hidden; padding:16px; }
+#menu:not(:has(#create-form)) > .dialog-top { flex-shrink:0; margin:0 0 6px; }
+#menu:not(:has(#create-form)) #menu-content { min-height:0; overflow:auto; overscroll-behavior:contain; }

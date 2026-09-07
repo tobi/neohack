@@ -3201,6 +3201,23 @@ test('underfoot chest opens a container dialog, shows contents and transfers cho
   await page.screenshot({path: root + '/test-results/chest-inspect.png'});
   const taking = await snapshot(page);
   assert.equal(taking.decision.containerPhase, 'transfer');
+  // Stress the presentation with a long list; cloned rows never submit input.
+  await page.evaluate(()=>{const list=document.querySelector('.container-items');for(let i=0;i<40;i++){const row=list.querySelector('label').cloneNode(true);row.dataset.layoutProbe='';list.append(row);}});
+  for(const viewport of [{width:1100,height:650},{width:390,height:640},{width:740,height:390}]) {
+    await page.setViewportSize(viewport);
+    const layout=await page.evaluate(()=>{
+      const dialog=document.querySelector('#decision'),button=document.querySelector('.transfer-actions .primary');
+      const rect=button.getBoundingClientRect(),list=document.querySelector('.container-items');
+      list.scrollTop=list.scrollHeight;
+      return {outerOverflow:dialog.scrollHeight-dialog.clientHeight,top:rect.top,bottom:rect.bottom,height:innerHeight,innerScroll:list.scrollTop};
+    });
+    assert.ok(layout.outerOverflow<=1,JSON.stringify(layout));
+    assert.ok(layout.top>=0&&layout.bottom<=layout.height,JSON.stringify(layout));
+    assert.ok(layout.innerScroll>0,'long list scrolls without moving the dialog');
+  }
+  await page.evaluate(()=>document.querySelectorAll('[data-layout-probe]').forEach(row=>row.remove()));
+  await page.setViewportSize({width:1440,height:1050});
+
   assert.equal(await page.getByRole('button', {name:'Apply transfers', exact:true}).isDisabled(), true);
   await page.reload();
   await page.locator('#decision[open]').waitFor();
@@ -3497,5 +3514,28 @@ for(const touch of [false,true])test(`destination selection previews a free C ro
   }
   assert.ok(after.observation.turn>1);
   assert.equal(await page.evaluate(()=>document.querySelector('pixel-nethack').map.route.length),0);
+  assert.deepEqual(errors,[]);
+});
+
+test('double-clicking a known square starts one bounded walking leg',async t=>{
+  const {page,errors}=await fixture(t);await create(page);
+  const target=await page.evaluate(async()=>{
+    const app=document.querySelector('pixel-nethack'),game=app.game;
+    for(const cell of game.observation.world){
+      const route=await game.route({x:cell.x,y:cell.y});
+      if(route.distance>=2&&route.distance<=4){
+        const bounds=app.map.canvas.getBoundingClientRect(),shift=app.map.travel(performance.now());
+        const original=game.go.bind(game);app.walkCalls=0;
+        game.go=(...args)=>{app.walkCalls++;return original(...args);};
+        return {revision:game.state.revision,x:bounds.left+((cell.x-app.map.origin.x)*16+8+shift.x)*app.map.zoom,y:bounds.top+((cell.y-app.map.origin.y)*16+8+shift.y)*app.map.zoom};
+      }
+    }
+    throw Error('No known walking target');
+  });
+  await page.mouse.dblclick(target.x,target.y);
+  await page.waitForFunction(()=>document.querySelector('pixel-nethack').walkCalls===1);
+  await ready(page);
+  assert.ok((await snapshot(page)).revision>target.revision);
+  assert.equal(await page.evaluate(()=>document.querySelector('pixel-nethack').walkCalls),1);
   assert.deepEqual(errors,[]);
 });

@@ -4,6 +4,11 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Container dialogs keep transfer actions visible while compact item lists scroll independently.
+- Double-click a map square to walk there; successful arrival stays quiet.
+- Large cloud saves upload in bounded chunks, and sync failures stay in the save status instead of covering the game.
+- Browser agents can connect using older WebMCP implementations.
+
 - Select a map square to preview a known route and walk one bounded leg. Stop walking or Escape cancels further steps; new circumstances and choices pause the journey.
 
 - Account owners can make a recorded run public and share its replay while keeping saves, script source and notes private.

@@ -357,13 +357,13 @@ class PixelNethack extends HTMLElement {
       <dialog id="dungeon-loading" aria-labelledby="loading-title" aria-describedby="loading-detail"><div class="descent-scene" aria-hidden="true"><div class="descent-arch arch-far"></div><div class="descent-arch arch-mid"></div><div class="descent-arch arch-near"></div><div class="descent-path"></div><i class="descent-torch torch-left"></i><i class="descent-torch torch-right"></i><img id="loading-traveler" src="/art/${heroArt("ranger")}.png" alt=""></div><h2 id="loading-title">Entering the dungeon</h2><p id="loading-detail" role="status"></p><div class="descent-dots" aria-hidden="true"><i></i><i></i><i></i></div></dialog>
       <dialog id="menu" aria-labelledby="menu-title"><div class="dialog-top"><span class="eyebrow">NEONETHACK</span><button aria-label="Close dialog" class="close-dialog">×</button></div><div id="menu-content"></div></dialog>
       <dialog id="journal-scroll" aria-labelledby="scroll-title"><div class="dialog-top"><span class="eyebrow">FROM YOUR JOURNAL</span><button id="close-scroll" aria-label="Close scroll">×</button></div><h2 id="scroll-title">A page from your adventure</h2><p id="scroll-turn" class="eyebrow"></p><div id="scroll-text" role="region" aria-label="Journal passage" tabindex="0"></div><button id="finish-scroll" class="primary">Return to the adventure</button></dialog>
-      <dialog id="decision" aria-labelledby="decision-title"><div class="eyebrow">ONE MOMENT, ADVENTURER</div><h2 id="decision-title"></h2><p id="decision-about"></p><p id="decision-error" class="notice error" role="alert" hidden></p><div id="decision-body"></div></dialog>`;
-    this.map = new DungeonMap(this.querySelector("#dungeon")!, (text, x, y) => {
+      <dialog id="decision" aria-labelledby="decision-title"><div class="eyebrow">ONE MOMENT, ADVENTURER</div><h2 id="decision-title"></h2><p id="decision-about"></p><p id="decision-error" class="notice error" role="alert" hidden></p><div id="decision-body"></div><div id="decision-footer"></div></dialog>`;
+    this.map = new DungeonMap(this.querySelector("#dungeon")!, (text, x, y, walk) => {
       this.text("#inspect-text", text);
       const decision = this.game?.decision;
       if (decision?.kind === "position") {
         if (!this.busy && x >= 1 && x <= 79 && y >= 0 && y <= 20) void this.run(() => this.game!.answer(decision.id, {kind: "position", position: {x, y}}));
-      } else this.inspectTile(x, y);
+      } else this.inspectTile(x, y, false, walk);
     });
     this.bind();
     this.hudLayout = new ResizeObserver(() => {
@@ -1604,7 +1604,7 @@ class PixelNethack extends HTMLElement {
     this.tilePanel = null;
     if (focused) (this.querySelector("#dungeon") as HTMLElement)?.focus();
   }
-  private async inspectTile(x: number, y: number, obstruction = false) {
+  private async inspectTile(x: number, y: number, obstruction = false, walkImmediately = false) {
     this.closeTile();
     this.movement.stop();
     const game = this.game,
@@ -1739,13 +1739,14 @@ class PixelNethack extends HTMLElement {
                 const at=route.steps.findIndex(p=>p.x===frame.observation.you?.x&&p.y===frame.observation.you?.y);
                 this.map.route=at<0?[]:route.steps.slice(at+1);this.map.draw();
               }});
-              this.navigationNotice=result.reason==="arrived"?"You reached the selected square.":"Walking stopped: "+result.reason+".";
+              this.navigationNotice=result.reason==="arrived"?"":"Walking stopped: "+result.reason+".";
             } finally {
               if(this.navigationAbort===controller)this.navigationAbort=null;
               this.map.route=[];this.map.draw();
             }
           });
         };
+        if(walkImmediately && !walk.disabled)walk.click();
       }).catch(error=>{
         if(this.tilePanel===panel){walk.textContent="Route unavailable";routeText.textContent=String(error);}
       });
@@ -2201,6 +2202,7 @@ class PixelNethack extends HTMLElement {
     );
     const body = this.$("#decision-body");
     body.replaceChildren();
+    const footer = this.$("#decision-footer"); footer.replaceChildren();
     const add = (
       label: string,
       action: () => Promise<unknown>,
@@ -2266,9 +2268,10 @@ class PixelNethack extends HTMLElement {
       this.text("#decision-title", "Container & backpack");
       const form = document.createElement("form");
       form.className = "container-transfer";
+      form.id = "container-transfer-form";
       const help = document.createElement("p");
       help.className = "subtle";
-      help.textContent = "Choose what to take and put in, then apply. Items are taken out first; the game may ask you about individual transfers.";
+      help.textContent = "Select items to transfer. Taking happens first; warnings still ask for your answer.";
       form.append(help);
       const columns = document.createElement("div");
       columns.className = "container-columns";
@@ -2290,6 +2293,7 @@ class PixelNethack extends HTMLElement {
         const legend = document.createElement("legend");
         legend.textContent = transfer === "take" ? "Inside container" : "Your backpack";
         section.append(legend);
+        const list = document.createElement("div"); list.className = "container-items";
         const options = d.options.filter(o => o.transfer === transfer);
         if (transfer === "take" && options.length) {
           const all = this.button("Take everything", () => {
@@ -2301,22 +2305,25 @@ class PixelNethack extends HTMLElement {
         if (!options.length) {
           const empty = document.createElement("p"); empty.className = "subtle";
           empty.textContent = transfer === "take" ? "The container is empty." : "Nothing available to put in.";
-          section.append(empty);
+          list.append(empty);
         }
         for (const option of options) {
           const label = document.createElement("label"); label.className = "menu-choice";
           const input = document.createElement("input"); input.type = "checkbox";
           input.onchange = update;
-          label.append(input, document.createTextNode(option.label)); section.append(label);
+          label.append(input, document.createTextNode(option.label)); list.append(label);
           inputs.push({input, id:option.id, transfer});
         }
-        columns.append(section);
+        section.append(list); columns.append(section);
       }
       const clear = this.button("Clear selection", () => {
         inputs.forEach(v => { v.input.checked = false; }); update();
       }, "secondary");
       clear.type = "button";
-      form.append(columns, summary, clear, submit); body.append(form); update();
+      form.append(columns); body.append(form);
+      submit.setAttribute("form", form.id);
+      const actions = document.createElement("div"); actions.className = "transfer-actions";
+      actions.append(summary, clear, submit); footer.append(actions); update();
       form.onsubmit = e => {
         e.preventDefault();
         const choose = inputs.filter(v => v.input.checked).map(v => v.id);
@@ -2426,6 +2433,13 @@ class PixelNethack extends HTMLElement {
       () => this.returnToDoorway(),
       "text-button",
     );
+    for (const form of body.querySelectorAll<HTMLFormElement>(":scope > form:not(.container-transfer)")) {
+      form.id = "decision-answer-form";
+      for (const button of form.querySelectorAll<HTMLButtonElement>(":scope > .primary")) {
+        button.setAttribute("form", form.id); footer.append(button);
+      }
+    }
+    for (const button of body.querySelectorAll(":scope > .text-button")) footer.append(button);
     if (!dialog.open) dialog.showModal();
     body.querySelector<HTMLElement>("button,input")?.focus();
   }

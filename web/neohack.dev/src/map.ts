@@ -379,7 +379,7 @@ export class DungeonMap {
   };
   constructor(
     private canvas: HTMLCanvasElement,
-    private inspect: (text: string, x: number, y: number) => void,
+    private inspect: (text: string, x: number, y: number, walk: boolean) => void,
   ) {
     this.observer = new ResizeObserver(() => this.draw());
     this.observer.observe(canvas.parentElement!);
@@ -394,8 +394,11 @@ export class DungeonMap {
     canvas.addEventListener("lostpointercapture", this.endDrag);
     canvas.addEventListener("auxclick", this.auxiliary);
     window.addEventListener("blur", this.endDrag);
+    let clickedObservation: Observation | null = null;
     canvas.addEventListener("click", (e) => {
       if (!this.observation || e.button !== 0) return;
+      if(e.detail > 1 && clickedObservation !== this.observation)return;
+      clickedObservation = this.observation;
       const bounds = canvas.getBoundingClientRect();
       const shift = this.travel(performance.now());
       const x =
@@ -411,6 +414,7 @@ export class DungeonMap {
           : cell ? cellDescription(cell) : `${x}, ${y}: Unexplored`,
         x,
         y,
+        e.detail === 2,
       );
     });
   }
