@@ -4,7 +4,8 @@ import { vaults } from "../src/vaults.ts";
 import { replay } from '../src/replays.ts';
 import { board } from "../src/board.ts";
 import { configured, Conflict, read } from "../src/storage.ts";
-async function dispatch(request: Request) {
+import { logFailure, failureKind, type Failure } from '../src/observability.ts';
+async function dispatch(request: Request, failure: Failure) {
   const url = new URL(request.url);
   const path = url.searchParams.get("__path");
   if (path) {
@@ -15,9 +16,14 @@ async function dispatch(request: Request) {
   const pathname = url.pathname;
   const json = (body: unknown, status = 200) =>
     Response.json(body, { status, headers: { "cache-control": "no-store" } });
-  if (!configured())
-    return json({ error: "Private Vercel Blob is not configured" }, 503);
   try {
+    // Client diagnostics must still reach Vercel when Blob is unavailable.
+    if (pathname === '/api/errors') return request.method === 'POST'
+      ? await board(request) : json({ error: 'method not allowed' }, 405);
+    if (!configured()) {
+      failure.code = 'storage_unconfigured';
+      return json({ error: "Private Vercel Blob is not configured" }, 503);
+    }
     const publicReplay=pathname.match(/^\/api\/runs\/([\w-]{1,64})\/replay$/);
     if(publicReplay)return await replay(request,publicReplay[1]);
     if (pathname === "/api/health") {
@@ -37,14 +43,17 @@ async function dispatch(request: Request) {
   } catch (error) {
     if (error instanceof Conflict)
       return json({ error: "Concurrent storage update; retry" }, 409);
-    console.error("request_failed", { code: "server" });
+    failure.code = 'storage_unavailable';
+    failure.kind = failureKind(error);
     return json({ error: "Storage unavailable" }, 503);
   }
 }
 // Document navigations get a readable fallback; programmatic clients retain
 // their structured error and the original HTTP status.
 export async function handler(request: Request) {
-  const response = await dispatch(request);
+  const started = performance.now(), failure: Failure = {};
+  const response = await dispatch(request, failure);
+  logFailure(request, response.status, started, failure);
   if (!request.headers.get('accept')?.includes('text/html')) return response;
   const file = response.status >= 500 ? new URL('../public/500.html', import.meta.url)
     : response.status === 400 ? new URL('../public/400.html', import.meta.url)

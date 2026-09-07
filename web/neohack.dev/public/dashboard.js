@@ -56,13 +56,6 @@ async function refresh() {
       const node=element("div","");node.className="role";const label=element("label",role.role);label.append(element("span",format(role.count)));
       const bar=element("div","");bar.className="bar";const fill=element("i","");fill.style.width=(100*role.count/Math.max(1,data.totals.runs))+"%";bar.append(fill);node.append(label,bar);return node;
     }));
-    const reportCount=data.errors.reduce((sum,error)=>sum+error.count,0);
-    $('#error-summary').hidden=reportCount===0;
-    $('#error-summary-count').textContent=format(reportCount)+' reports in the displayed groups · last 14 days';
-    $("#errors").replaceChildren(...data.errors.map(error=>{
-      const row=document.createElement("tr");for(const value of [error.day,error.code.replaceAll("_"," "),format(error.count),error.build ? error.build.slice(0,12) : "Unavailable"]) row.append(element("td",value));return row;
-    }));
-    if(!data.errors.length){const row=element("tr","");const cell=element("td","No error reports in this window.");cell.colSpan=4;row.append(cell);$("#errors").append(row);}
     $("#freshness").textContent="Updated "+new Date(data.generatedAt).toLocaleString()+". Refreshes every minute.";
   } catch(error) {
     $("#freshness").textContent=data ? "Showing the last successfully loaded ledger." : "Ledger could not be loaded.";

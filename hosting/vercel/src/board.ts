@@ -1,10 +1,8 @@
 import {
   ledgerStats,
-  ledgerErrors,
   ledgerRun,
   ledgerRuns,
   saveLedgerRun,
-  recordLedgerError,
 } from "./ledger-store.ts";
 
 const RUN_ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -110,10 +108,6 @@ export async function board(request: Request) {
       return json({
         generatedAt: Date.now(),
         ...(await ledgerStats()),
-        errors: await ledgerErrors(),
-        errorSince: new Date(Date.now() - 13 * 86400000)
-          .toISOString()
-          .slice(0, 10),
       });
     if (path.startsWith("/api/runs/")) {
       const run = await ledgerRun(path.slice("/api/runs/".length));
@@ -145,17 +139,11 @@ export async function board(request: Request) {
   if (path === "/api/errors") {
     if (
       !codes.has(body.code) ||
-      (body.buildId && !/^[a-f0-9]{64}$/.test(body.buildId))
+      (body.buildId !== undefined && (typeof body.buildId !== 'string' || (body.buildId !== '' && !/^[a-f0-9]{64}$/.test(body.buildId))))
     )
       return json({ error: "invalid diagnostic" }, 400);
-    const accepted = await recordLedgerError(
-      body.code,
-      body.buildId || "",
-      now,
-    );
-    return accepted
-      ? new Response(null, { status: 204 })
-      : json({ error: "diagnostic capacity reached" }, 429);
+    console.warn(JSON.stringify({ event: "client_diagnostic", code: body.code, buildId: body.buildId || undefined }));
+    return new Response(null, { status: 204 });
   }
   if (!Array.isArray(body.runs) || body.runs.length > 50)
     return json({ error: "invalid runs" }, 400);

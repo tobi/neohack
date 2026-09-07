@@ -117,21 +117,6 @@ async function initialize() {
             entries.length ? indexEntries(i + n, entries) : Promise.resolve(),
           ),
       );
-    for (const entry of original?.errors ?? []) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.day)) continue;
-      await update<any, void>(
-        "ledger/errors/" + entry.day + ".json",
-        () => ({ entries: [] }),
-        (doc) => {
-          if (
-            !doc.entries.some(
-              (e: any) => e.code === entry.code && e.build === entry.build,
-            )
-          )
-            doc.entries.push(entry);
-        },
-      );
-    }
     await update(
       "ledger/initialized.json",
       () => ({ ready: false }),
@@ -212,47 +197,6 @@ export async function ledgerStats() {
       .sort(rank)
       .slice(0, 100),
   };
-}
-export async function ledgerErrors() {
-  await initialize();
-  const days = Array.from({ length: 14 }, (_, n) =>
-    new Date(Date.now() - n * 86400000).toISOString().slice(0, 10),
-  );
-  return (
-    await Promise.all(
-      days.map((day) =>
-        read<{ entries: any[] }>("ledger/errors/" + day + ".json"),
-      ),
-    )
-  )
-    .flatMap((d) => d?.entries ?? [])
-    .sort((a, b) => b.day.localeCompare(a.day) || b.count - a.count)
-    .slice(0, 500);
-}
-export async function recordLedgerError(
-  code: string,
-  build: string,
-  now: number,
-) {
-  await initialize();
-  const day = new Date(now).toISOString().slice(0, 10);
-  return update<any, boolean>(
-    "ledger/errors/" + day + ".json",
-    () => ({ entries: [] }),
-    (doc) => {
-      const entry = doc.entries.find(
-        (e: any) => e.code === code && e.build === build,
-      );
-      if (entry) {
-        entry.count = Math.min(entry.count + 1, 1000000);
-        entry.last = now;
-      } else {
-        if (doc.entries.length >= 512) return false;
-        doc.entries.push({ day, code, build, count: 1, last: now });
-      }
-      return true;
-    },
-  );
 }
 export async function rebuildLedgerSummaries() {
   await initialize();

@@ -158,7 +158,7 @@ test('cloud saving waits five idle seconds, resets on play, and flushes on close
   await page.close();
 });
 
-test('ledger ranks all runs, preserves progress, bounds diagnostics and renders safely on mobile', {timeout:30000}, async t => {
+test('ledger ranks all runs, preserves progress, keeps diagnostics private and renders safely on mobile', {timeout:30000}, async t => {
   const {url,browser}=await fixture(t);
   const post=(path,body)=>fetch(url+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
   const winner={id:'g-winning-run',name:'<img src=x onerror=alert(1)>',role:'valkyrie',turn:5000,maxLevel:20,ended:true,endKind:'ascended',vault:'PRIVATE',pending:{secret:'PRIVATE'}};
@@ -177,18 +177,19 @@ test('ledger ranks all runs, preserves progress, bounds diagnostics and renders 
   await page.waitForFunction(()=>document.querySelector('#runs').children.length===100);
   assert.ok((await page.locator('#runs tr').first().textContent()).includes(winner.name));
   assert.equal(await page.locator('#runs img').count(),0);
+  assert.equal(await page.locator('#errors, #dungeon-health, #error-summary').count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.selectOption('#status','ascended');assert.equal(await page.locator('#runs tr').count(),1);
   await page.goto(url);
   await page.waitForFunction(()=>!document.querySelector('#new-adventure').disabled);
   // Hold the background report to prove the ledger is checked after its commit.
   // waitForFunction treats an async predicate's Promise as truthy immediately.
-  let releaseReport, reportEntered;
+  let releaseReport, reportEntered, reportCount=0;
   const reportGate = new Promise(resolve => { releaseReport = resolve; });
   const reportStarted = new Promise(resolve => { reportEntered = resolve; });
   t.after(() => releaseReport());
   await page.route('**/api/errors', async route => {
-    reportEntered(); await reportGate; await route.continue();
+    reportCount++; reportEntered(); await reportGate; await route.continue();
   });
   const reported = page.waitForResponse(response => new URL(response.url()).pathname === '/api/errors' && response.request().method() === 'POST');
   await page.evaluate(()=>{
@@ -197,12 +198,13 @@ test('ledger ranks all runs, preserves progress, bounds diagnostics and renders 
   });
   await reportStarted;
   stats=await (await fetch(url+'/api/stats')).json();
-  assert.equal(stats.errors.find(row=>row.code==='module_load').count,1,'held report has not committed yet');
+  assert.equal('errors' in stats,false,'diagnostics are not public');
   releaseReport();
   const response = await reported;
   assert.equal(response.status(),204);
   stats=await (await fetch(url+'/api/stats')).json();
-  assert.equal(stats.errors.find(row=>row.code==='module_load').count,2,'one browser report per category despite repeat errors');
+  assert.equal('errors' in stats,false);
+  assert.equal(reportCount,1,'one browser report per category despite repeat errors');
   assert.ok(!JSON.stringify(stats).includes('PRIVATE'));
   await page.goto(url+'/dashboard');
   await page.waitForFunction(()=>document.querySelector('#runs').children.length>0);

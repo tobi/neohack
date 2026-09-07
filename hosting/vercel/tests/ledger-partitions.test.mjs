@@ -1,15 +1,14 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {MemoryStorage} from './server.mjs';import {storageContext} from '../src/storage.ts';
-import {ledgerStats,ledgerRun,saveLedgerRun,recordLedgerError,rebuildLedgerSummaries} from '../src/ledger-store.ts';
+import {ledgerStats,ledgerRun,saveLedgerRun,rebuildLedgerSummaries} from '../src/ledger-store.ts';
 const run=(id,turn)=>({id,name:'Hero',role:'wizard',turn,ended:false,maxLevel:1,updatedAt:turn});
-test('partitioned ledger preserves published records, separates diagnostics and rebuilds bounded summaries',async()=>{
+test('partitioned ledger preserves published records and rebuilds bounded summaries',async()=>{
  const store=new MemoryStorage();await store.write('board/index.json',{runs:[run('published',100)],errors:[]});const original=await store.read('board/index.json');
  await storageContext.run(store,async()=>{
   await ledgerStats();
   await Promise.all(Array.from({length:24},(_,i)=>saveLedgerRun(run('new-'+i,i+1))));
   const stats=await ledgerStats();assert.equal(stats.totals.runs,25);assert.equal(stats.totals.longest,100);
   assert.deepEqual(await store.read('board/index.json'),original);
-  await recordLedgerError('network','',Date.now());assert.deepEqual(await store.read('board/index.json'),original);
   await saveLedgerRun({...run('published',120),ended:true});await saveLedgerRun(run('published',121));
   assert.equal((await ledgerRun('published')).turn,120);assert.equal((await ledgerRun('published')).ended,true);
   for(const path of await store.list('ledger/summaries/'))store.docs.delete(path);

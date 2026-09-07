@@ -21,8 +21,7 @@ test('ledger replay availability comes from public recordings and reaches outsid
  await page.waitForFunction(()=>document.querySelectorAll('#runs tr').length===100);
  assert.equal(await page.locator('#runs .run-replay').count(),0);
  assert.equal(await page.locator('#runs [aria-label="No public recording"]').count(),100);
- assert.equal(await page.locator('#error-summary').isVisible(),true);
- assert.match(await page.locator('#error-summary').textContent(),/Errors encountered.*7 reports/);
+ assert.equal(await page.locator('#error-summary, #dungeon-health').count(),0);
  const row=await page.locator('#runs tr').first().boundingBox();assert.ok(row.height<65,'rows stay compact');
  await page.getByLabel('Show',{exact:false}).selectOption('recorded');
  assert.equal(await page.locator('#runs tr').count(),1);
