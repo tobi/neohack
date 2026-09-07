@@ -399,7 +399,7 @@ class PixelNethack extends HTMLElement {
       })
       .catch((error) => this.error(error));
     this.preparation = this.prepareRuntime();
-    void this.preparation.then(() => this.openLinkedRun()).catch((error) => this.error(error));
+    void this.preparation.then(() => this.openLinkedRun()).catch((error) => { reportError(error,this.runtimeBuildId,{kind:"boot",local:!!requestedRun()?.local}); this.error(error); this.entryRecovery(requestedRun()?.id); });
     this.controls();
   }
   private async openLinkedRun() {
@@ -414,7 +414,7 @@ class PixelNethack extends HTMLElement {
       this.journal = [];
       this.lastFrame = "";
       this.map.center();
-    }, { name: "Your adventurer", role: "ranger", resume: true });
+    }, { name: "Your adventurer", role: "ranger", resume: true, sessionId:linked.id });
   }
   private readSaves() {
     const raw = localStorage.getItem(this.indexKey);
@@ -627,6 +627,8 @@ class PixelNethack extends HTMLElement {
         throw error;
       }
     });
+    const entryError = response && "error" in response ? response.error : undefined;
+    if ((request.method === "session.create" || request.method === "session.resume") && (failure || entryError)) reportError(failure ?? entryError?.code,this.runtimeBuildId,{kind:request.method === "session.create" ? "create" : "resume",local:!!requestedRun()?.local});
     if (failure) throw failure;
     if (!response) throw Error("Tool was not submitted.");
     if (
@@ -648,10 +650,11 @@ class PixelNethack extends HTMLElement {
     this.storeName = `${STORE}-${this.vault}`;
     this.indexKey = `${this.storeName}:adventures`;
     rememberPlayer(this.vault);
+    const localOnly = !!requestedRun()?.local;
     let buildId: string | undefined;
     if (sessionId) {
       let saved = this.saves.find(save => save.id === sessionId);
-      if (!saved) {
+      if (!saved && !localOnly) {
         const remote = await restoreAdventures(this.vault);
         if (remote) { this.saves = remote; saved = this.saves.find(save=>save.id===sessionId); }
       }
@@ -664,8 +667,8 @@ class PixelNethack extends HTMLElement {
     await this.warm(selected.buildId);
     this.assertConnected();
     ++this.cloudStatusGeneration;
-    this.cloudEnabled = await cloudReady();
-    this.text("#cloud-status", this.cloudEnabled ? "Connecting online save…" : "Online saves unavailable · saving in this browser");
+    this.cloudEnabled = !localOnly && await cloudReady();
+    this.text("#cloud-status", localOnly ? "Local copy · cloud sync off" : this.cloudEnabled ? "Connecting online save…" : "Online saves unavailable · saving in this browser");
     const replica = this.cloudEnabled ? journalUrl(this.vault) : undefined;
     if (requestedRun() && !replica && !this.saves.some(save => save.id === requestedRun()!.id)) throw Error("The cloud save could not be reached. Retry this bookmark when connected; no new game was started.");
     const transportPackage = buildId ? await runtimePackage(undefined, this.preloadAbort.signal) : selected;
@@ -1032,7 +1035,7 @@ class PixelNethack extends HTMLElement {
       )
     );
   }
-  private async run(action: () => Promise<unknown>, entry?: { name: string; role: string; resume?: boolean }) {
+  private async run(action: () => Promise<unknown>, entry?: { name: string; role: string; resume?: boolean; sessionId?:string }) {
     if (this.busy) return;
     this.closeTile();
     const game = this.game;
@@ -1060,6 +1063,7 @@ class PixelNethack extends HTMLElement {
       await action();
       completed = true;
     } catch (e) {
+      if(entry) { reportError(e,this.runtimeBuildId,{kind:entry.resume?"resume":"create",local:!!requestedRun()?.local}); this.entryRecovery(entry.sessionId); }
       this.error(e);
     } finally {
       // A discovery call, rejected start or agent session.close can finish on
@@ -1919,6 +1923,15 @@ class PixelNethack extends HTMLElement {
     this.querySelector<HTMLInputElement>("#adventurer-name")!.oninput = (e) =>
       (e.target as HTMLInputElement).setCustomValidity("");
   }
+  private openLocalCopy(id:string) {
+    const url=new URL(location.href);url.hash=new URLSearchParams({run:id,vault:this.vault,local:"1"}).toString();
+    location.replace(url.href);location.reload();
+  }
+  private entryRecovery(id?:string) {
+    if(!id || requestedRun()?.local)return;
+    this.openMenu('<h2 id="menu-title">Return to your local adventure</h2><p>Online recovery could not open this run. Try the copy stored in this browser, with cloud sync switched off. Its original engine and save checks still apply.</p><p>Your cloud copy and pending upload will be kept.</p><div id="entry-recovery"></div>');
+    this.$("#entry-recovery").append(this.button("Open local copy",()=>this.openLocalCopy(id),"primary"));
+  }
   private resume(save: Adventure) {
     if (!save) return;
     showRunUrl(save.id, this.vault);
@@ -1936,7 +1949,7 @@ class PixelNethack extends HTMLElement {
       this.lastFrame = "";
       this.map.center();
       this.$("#dungeon").focus();
-    }, { name: save.name, role: save.role, resume: true });
+    }, { name: save.name, role: save.role, resume: true, sessionId:save.id });
   }
   private async returnToDoorway() {
     await this.game?.close();

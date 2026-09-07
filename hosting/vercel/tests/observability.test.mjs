@@ -45,3 +45,12 @@ test('ledger summaries never return or read diagnostic documents',async()=>{
   assert.equal((await store.list('ledger/errors/')).length,0);
   assert.deepEqual(await store.read('board/index.json'),before);
 });
+
+test('every failed game entry produces a bounded private log event',async t=>{
+ const logs=[];t.mock.method(console,'warn',entry=>logs.push(JSON.parse(entry)));
+ for(let i=0;i<2;i++){
+  const response=await handler(new Request('https://neohack.dev/api/errors',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:'network',entry:{kind:'resume',local:false,secret:'never logged'},message:'private save data'})}));
+  assert.equal(response.status,204);
+ }
+ assert.deepEqual(logs,[0,1].map(()=>({event:'game_entry_failed',code:'network',kind:'resume',local:false})));
+});

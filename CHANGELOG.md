@@ -4,6 +4,8 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Failed resumes offer Open local copy, keeping cloud sync off so conflicting online progress cannot prevent local recovery.
+
 - Destination walking follows known routes across the level instead of stopping after eight actions. Real decisions and changed circumstances still pause movement.
 
 - Container dialogs keep transfer actions visible while compact item lists scroll independently.

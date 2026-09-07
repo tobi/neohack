@@ -6,11 +6,11 @@ export function requestedRun() {
   const id = values.get("run"), vault = values.get("vault");
   if (!id && !vault) return null;
   if (!id || !vault || !/^[A-Za-z0-9_-]{1,64}$/.test(id) || !UUID.test(vault)) throw Error("This adventure link is incomplete or invalid.");
-  return { id, vault };
+  return { id, vault, local: values.get("local") === "1" };
 }
 export function showRunUrl(id: string, vault = playerId()) {
   const url = new URL(location.href);
-  url.hash = new URLSearchParams({ run: id, vault }).toString();
+  url.hash = new URLSearchParams({ run: id, vault, ...(new URLSearchParams(url.hash.slice(1)).get("local") === "1" ? {local:"1"} : {}) }).toString();
   history.replaceState(null, "", url);
 }
 export function clearRunUrl() {

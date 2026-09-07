@@ -92,6 +92,7 @@ const json = (value: unknown, status = 200) =>
   Response.json(value, { status, headers: { "cache-control": "no-store" } });
 const codes = new Set([
   "store_owned",
+  "cloud_conflict",
   "runtime_unavailable",
   "module_load",
   "network",
@@ -142,7 +143,8 @@ export async function board(request: Request) {
       (body.buildId !== undefined && (typeof body.buildId !== 'string' || (body.buildId !== '' && !/^[a-f0-9]{64}$/.test(body.buildId))))
     )
       return json({ error: "invalid diagnostic" }, 400);
-    console.warn(JSON.stringify({ event: "client_diagnostic", code: body.code, buildId: body.buildId || undefined }));
+    if (body.entry !== undefined && (!body.entry || !["create","resume","boot"].includes(body.entry.kind) || typeof body.entry.local !== "boolean")) return json({error:"invalid entry diagnostic"},400);
+    console.warn(JSON.stringify({ event: body.entry ? "game_entry_failed" : "client_diagnostic", code: body.code, buildId: body.buildId || undefined, ...(body.entry ? {kind:body.entry.kind,local:body.entry.local} : {}) }));
     return new Response(null, { status: 204 });
   }
   if (!Array.isArray(body.runs) || body.runs.length > 50)

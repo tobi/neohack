@@ -207,3 +207,10 @@ commit before advancing its revision. Local pending data remains until an exact
 acknowledgement; a lost response retries without duplicating input. Downloads
 fetch a manifest and bounded blocks at a fixed revision. A concurrent update
 rejects the read rather than mixing revisions.
+
+Failed game entry emits `game_entry_failed` in Vercel Runtime Logs with a safe
+category, entry kind (`boot`, `create`, `resume`), local-only mode and available
+runtime hash. Each failed attempt is reported, rather than deduplicated per page.
+The endpoint does not depend on Blob availability; client delivery remains best
+effort when the network itself is unavailable. Filter these events in Vercel
+Observability; they never appear on the public ledger.

@@ -1268,3 +1268,13 @@ Cloud upload failures stay in the compact save status, with detail available on 
 ### Bounded decision dialogs
 
 Decision dialogs keep their title and cancellation controls visible; the shell never scrolls. Container transfers use compact 44px item rows in two independently scrolling lists, with selection counts, Clear selection and Apply transfers fixed below. Inspection messages expand in a bounded region. Reduce framing and spacing before shrinking readable text or touch targets.
+
+### Failed-entry recovery
+
+A failed resume offers Open local copy. This explicit mode keeps the bookmark
+marked local, skips cloud reads and writes, and resumes the existing IndexedDB
+copy with its original engine. Cloud data and pending uploads remain untouched.
+It does not bypass damaged journals, missing runtime pins or another tab’s lock.
+Every create/resume failure reports a bounded category and entry mode to private
+Vercel logs; repeated attempts are not suppressed. Raw messages and save links
+are never transmitted.

@@ -276,20 +276,54 @@ test('cloud rejection stays in save status and never opens the gameplay error ov
 });
 
 test('updated network worker resumes an older package without changing its engine pin',{timeout:30000},async t=>{
+  const {readFile,writeFile,cp,rm}=await import('node:fs/promises');
+  const {createHash}=await import('node:crypto');
+  const directory=resolve(import.meta.dirname,'../public/runtime/wasm');
+  const current=JSON.parse(await readFile(directory+'/current.json','utf8'));
+  const manifest=JSON.parse(await readFile(directory+'/'+current.buildId+'/manifest.json','utf8'));
+  const worker=await readFile(directory+'/'+current.buildId+'/core-worker.mjs','utf8')+'\n// Distinct pinned host fixture.\n';
+  manifest.files['core-worker.mjs']=createHash('sha256').update(worker).digest('hex');
+  manifest.buildId=createHash('sha256').update(JSON.stringify(manifest.files)).digest('hex');
+  const fixtureDirectory=directory+'/'+manifest.buildId;
+  await cp(directory+'/'+current.buildId,fixtureDirectory,{recursive:true});
+  t.after(()=>rm(fixtureDirectory,{recursive:true,force:true}));
+  await writeFile(fixtureDirectory+'/core-worker.mjs',worker);await writeFile(fixtureDirectory+'/manifest.json',JSON.stringify(manifest));
   const {url,browser}=await fixture(t),page=await browser.newPage();await page.goto(url);
-  const result=await page.evaluate(async()=>{
+  const result=await page.evaluate(async oldId=>{
     const {createWasm}=await import('/runtime/typescript/wasm.js');
     const current=await (await fetch('/runtime/wasm/current.json')).json();
-    const registry=await (await fetch('/runtime/wasm/registry.json')).json();
-    const head=registry.packages[current.buildId];
-    const old=Object.entries(registry.packages).find(([id,m])=>id!==current.buildId&&m.files['neonethack-core.wasm']===head.files['neonethack-core.wasm']);
-    if(!old)throw Error('Staged production fixture must include a previous host package');
+    const old=[oldId];
     const base=id=>new URL('/runtime/wasm/'+id+'/',location.href).href;
     const storage={kind:'indexeddb',name:'pinned-network-update'};
     let api=await createWasm({storage,workerUrl:new URL('core-worker.mjs',base(old[0]))});let id,observation;
     try{const game=await api.create({name:'Pinned',seed:42,role:'wizard'});id=game.id;observation=structuredClone(game.observation);}finally{await api.close();}
     api=await createWasm({storage,workerUrl:new URL('core-worker.mjs',base(current.buildId)),runtimeUrl:base(old[0])});
     try{const game=await api.resume(id);return {pin:api.transport.buildId,expected:old[0],observation,resumed:game.observation};}finally{await api.close();}
-  });
+  },manifest.buildId);
   assert.equal(result.pin,result.expected);assert.deepEqual(result.resumed,result.observation);
+});
+
+test('conflicting cloud upload offers local resume and logs each failed entry',{timeout:60000},async t=>{
+ const {url,browser}=await fixture(t),page=await browser.newPage();const reports=[];
+ page.on('request',r=>{if(r.url().endsWith('/api/errors'))reports.push(JSON.parse(r.postData()));});
+ await create(page,url);await synced(page);
+ const endpoint=url+'/api/vaults/'+new URLSearchParams(new URL(page.url()).hash.slice(1)).get('vault');
+ await page.route('**/api/vaults/*',route=>route.request().method()==='PUT'?route.fulfill({status:503,body:'temporary outage'}):route.continue());
+ await page.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});
+ await page.waitForFunction(()=>document.querySelector('#cloud-status').textContent.includes('retrying'));
+ const local=await snapshot(page),head=await (await fetch(endpoint)).json();
+ const remote={version:1,base:head.revision,commit:crypto.randomUUID(),files:head.files,blocks:[]};
+ assert.equal((await fetch(endpoint,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(remote)})).status,200);
+ for(let i=0;i<2;i++){
+  await page.reload();await page.getByRole('button',{name:'Open local copy',exact:true}).waitFor();
+ }
+ assert.equal(reports.filter(r=>r.entry?.kind==='resume'&&!r.entry.local).length,2);
+ const recovery=page.getByRole('button',{name:'Open local copy',exact:true});await recovery.click();
+ await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId);
+ assert.equal((await snapshot(page)).sessionId,local.sessionId);assert.deepEqual((await snapshot(page)).observation,local.observation);
+ assert.match(await page.locator('#cloud-status').textContent(),/Local copy/);
+ await page.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});
+ assert.equal((await snapshot(page)).observation.turn,local.observation.turn+1);
+ assert.equal((await (await fetch(endpoint)).json()).revision,remote.commit,'local recovery never overwrites the other cloud head');
+ assert.equal(await page.locator('#error').textContent(),'');
 });
