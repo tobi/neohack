@@ -33,7 +33,8 @@ uncertain, and replay must not treat it as a new action.
 
 C pre-input `fsync` boundaries still wait for strict IndexedDB transactions.
 Remote latency is outside that boundary. After a completed protocol request, a
-five-second inactivity debounce batches the latest committed journal data for upload. One upload
+five-second inactivity debounce batches the latest committed journal data for upload,
+with a thirty-second maximum delay during continuous play. One upload
 runs at a time; new input can continue while it is in flight. Unchanged
 content-addressed blocks are not resent. Vercel stores immutable blocks separately
 in private Blob storage and conditionally commits the file manifest, exact request
@@ -48,9 +49,15 @@ no game action is executed to recover a transport acknowledgement.
 
 A browser whose local journal still matches its last acknowledged copy can
 refresh from a newer cloud revision after validation. Unsynced or conflicting
-local progress is retained instead of overwritten. A conflict pauses cloud sync
-and is shown to the player. Hash, manifest or reference failures reject the
-journal before installing it.
+local progress is retained instead of overwritten. The website gives each browser
+copy a durable random backup-stream ID, stored alongside its local journal.
+Streams use separate conditional Blob manifests under the same private vault.
+A new stream starts with a full verified snapshot; later commits send only changed
+blocks. A returning browser keeps its stream. A fresh browser restores the
+acknowledged stream named in the adventure directory, then backs up independently.
+Neither browser overwrites the other’s history. The former shared vault head and
+any uncertain pre-stream outbox are retained. No engine journal is rewritten.
+Hash, manifest or reference failures reject the journal before installing it.
 
 **Saved online** means the cloud journal and adventure metadata were acknowledged.
 **Saving online…** means local progress is durable but newer changes may not yet
@@ -61,12 +68,15 @@ errors retry in the background with exponential backoff capped at one minute.
 The durable outbox retains the exact commit ID, base and body across retries and
 reloads; newer local work waits behind that acknowledgement. The UI says
 “Saved here · retrying online”, without an error toast for temporary failures.
-Conflicts, refused access and invalid acknowledgement identities stop replication
+Within one stream, conflicting writers, refused access and invalid acknowledgement identities stop replication
 and retain local progress for explicit recovery. Close makes a bounded flush
 attempt; abrupt termination can still leave pending local work.
 
-This behavior belongs to the new pinned runtime package. Existing published
-packages retain their exact bytes and are not silently upgraded.
+Network-worker updates are independent of the pinned C/WASM package. Existing
+runs retain their exact engine and static-data identity. Adventure metadata and
+ledger updates retry independently in batches of at most fifty, so a long history
+or a temporary ledger outage cannot stop journal uploads. Only acknowledged
+backup streams are advertised for remote resumption.
 
 WASM resumption requires the same package identity. Incompatible development
 packages are refused, not silently substituted or migrated.

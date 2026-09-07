@@ -215,7 +215,17 @@ The endpoint does not depend on Blob availability; client delivery remains best
 effort when the network itself is unavailable. Filter these events in Vercel
 Observability; they never appear on the public ledger.
 
-A conflicting remote head pauses replication at startup; it does not reject local
-creation or resume. The local outbox and remote head remain unchanged. The client
-records a `cloud_conflict` diagnostic for this nonfatal state; it only records
-`game_entry_failed` when entry actually fails.
+The website uses one persistent backup-stream UUID per local browser store.
+`/api/vaults/:vault?branch=:stream` stores its conditional manifest at
+`vaults/:vault/copies/:stream.json`; existing shared `journal.json` remains intact.
+Opening a cloud copy in a fresh browser restores its exact files and pin, then
+starts a separate stream. The acknowledged stream ID travels in private adventure
+metadata, not public ledger records. Initial copies upload all blocks; later
+commits upload only changes. Conflicting pre-stream outboxes remain in IndexedDB
+as `previous-copy`, alongside their former acknowledgement. No progress is merged
+across two engine histories, and no deployment deletes an older copy.
+
+Uploads run after five idle seconds or thirty seconds of continuous requests,
+with bounded retries. Ledger/private adventure batches are additive and limited
+to fifty entries; older or terminal progress cannot be downgraded. A failed
+health probe never disables the uploader for the rest of the visit.

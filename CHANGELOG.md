@@ -1,5 +1,7 @@
 # Changelog
 
+- Online saves recover into independent browser backup streams, preserving old copies. Continuous play syncs within 30 seconds; long adventure histories and temporary ledger failures no longer block new run publication.
+
 Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased

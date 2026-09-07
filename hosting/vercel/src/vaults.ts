@@ -10,7 +10,9 @@ export async function vaults(
   adventures: boolean,
 ) {
   if (!UUID.test(id)) return json({ error: "invalid vault" }, 400);
-  const path = `vaults/${id}/${adventures ? "adventures" : "journal"}.json`;
+  const branch=new URL(request.url).searchParams.get("branch");
+  if(branch && !UUID.test(branch))return json({error:"invalid backup stream"},400);
+  const path = `vaults/${id}/${adventures ? "adventures" : branch ? "copies/"+branch : "journal"}.json`;
   if (request.method === "GET") {
     const doc = await read(path);
     if (!doc) return json(adventures ? [] : { error: "not found" }, 404);
@@ -78,7 +80,13 @@ if(query.get('manifest')==='1')return json({version:1,revision:doc.revision,file
       path,
       () => ({}),
       (doc) => {
-        doc.values = data;
+        const values=new Map((doc.values??[]).map((v:any)=>[v.id,v]));
+        for(const value of data) {
+          if(!value || typeof value.id!=="string")continue;
+          const old:any=values.get(value.id);
+          if(!old || ((!old.ended || value.ended) && (value.turn??0)>=(old.turn??0)))values.set(value.id,value);
+        }
+        doc.values=[...values.values()];
       },
     );
     return new Response(null, { status: 204 });
@@ -131,10 +139,10 @@ if(query.get('manifest')==='1')return json({version:1,revision:doc.revision,file
         return doc.digest === digest
           ? json({ revision: doc.revision })
           : json({ error: "commit differs" }, 409);
-      if (doc.revision !== data.base)
-        return json({ error: "cloud progress changed" }, 409);
+      if(doc.revision!==data.base)return json({error:"cloud progress changed"},409);
+      const files=data.files;
       const supplied = new Map<string, any>(data.blocks),
-        live = new Set<string>(data.files.flatMap(([, f]: any) => f.blocks));
+        live = new Set<string>(files.flatMap(([, f]: any) => f.blocks));
       for (const id of live)
         if (!supplied.has(id) && !doc.blocks[id])
           return json({ error: "missing block" }, 400);
@@ -150,7 +158,7 @@ if(query.get('manifest')==='1')return json({version:1,revision:doc.revision,file
       Object.assign(doc, {
         revision: data.commit,
         digest,
-        files: data.files,
+        files,
         blocks,
       });
       return json({ revision: data.commit });

@@ -4,7 +4,7 @@ import { worker, type WorkerPort } from "../wasm/worker-port.mjs";
 
 export type WasmStorage =
   | { kind: "memory" }
-  | { kind: "indexeddb"; name: string; replicaUrl?: string };
+  | { kind: "indexeddb"; name: string; replicaUrl?: string; replicaBranches?: boolean };
 export interface WasmOptions {
   /** Exact pinned compiler/data package; network-worker updates do not change this identity. */
   runtimeUrl?: string;
@@ -15,7 +15,7 @@ export interface WasmOptions {
   timeoutMs?: number;
   onDiagnostic?: (message: string) => void;
   /** Remote replication is asynchronous; local durability remains awaited. */
-  onReplicaStatus?: (status: { state: "queued" | "pending" | "saved" | "retrying" | "error"; message: string }) => void;
+  onReplicaStatus?: (status: { state: "queued" | "pending" | "saved" | "retrying" | "error"; message: string; branch?: string; sessions?: string[] }) => void;
 }
 /** The worker boundary is private. All gameplay uses the same C ABI as native. */
 export class WasmTransport implements Transport {
@@ -32,7 +32,7 @@ export class WasmTransport implements Transport {
     this.timeoutMs = options.timeoutMs ?? 150_000;
     if (!Number.isFinite(this.timeoutMs) || this.timeoutMs <= 0) throw Error("timeoutMs must be positive");
     this.worker = worker(options.workerUrl ?? new URL("../wasm/core-worker.mjs", import.meta.url), message => {
-      if (message.type === "replica") { options.onReplicaStatus?.({ state: message.state, message: message.message }); return; }
+      if (message.type === "replica") { options.onReplicaStatus?.({ state: message.state, message: message.message, branch:message.branch, sessions:message.sessions }); return; }
       if (message.type === "diagnostic") { options.onDiagnostic?.(message.text); return; }
       if (message.type === "fatal") { this.fail(Error(message.message)); return; }
       const pending = this.pending.get(message.id);

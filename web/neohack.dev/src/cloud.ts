@@ -21,6 +21,7 @@ export function clearRunUrl() {
 
 export type PlayControl = "manual" | "webmcp" | "bot" | "script" | "playground";
 export type CloudAdventure = {
+  branch?: string;
   buildId?: string;
   id: string;
   vaultId?: string;
@@ -83,8 +84,21 @@ try {
 }
 }
 
+type Pending = {saves:CloudAdventure[]; since:number; timer?:ReturnType<typeof setTimeout>; attempts:number; saved?:()=>void};
+const pending = new Map<string,Pending>();
+function schedule(vault:string,delay:number) {const p=pending.get(vault)!;clearTimeout(p.timer);p.timer=setTimeout(()=>{
+  const copy=p.saves;
+  void publishCloud(copy,vault).then(()=>{if(p.saves===copy){pending.delete(vault);p.saved?.();}else {p.since=Date.now();schedule(vault,5000);}},()=>{p.attempts++;schedule(vault,Math.min(60000,1000*2**Math.min(p.attempts,6)));});
+},delay);}
+export function queueCloud(saves:CloudAdventure[],vault=playerId(),saved?:()=>void) {
+  const p=pending.get(vault)??{saves:[],since:Date.now(),attempts:0};p.saves=structuredClone(saves);pending.set(vault,p);if(saved){p.saved=saved;schedule(vault,0);return;}
+  if(!p.attempts)schedule(vault,Math.max(0,Math.min(5000,p.since+30000-Date.now())));
+}
+window.addEventListener('online',()=>{for(const vault of pending.keys())schedule(vault,0);});
+
 let publication: Promise<void> = Promise.resolve();
 const published = new Map<string, string>();
+const publishedRuns=new Map<string,string>();
 export function publishCloud(saves: CloudAdventure[], vault = playerId()) {
   const copy = structuredClone(saves);
   const next = publication.then(() => writeCloud(copy, vault));
@@ -95,22 +109,22 @@ async function writeCloud(saves: CloudAdventure[], vault: string) {
   const serialized = JSON.stringify(saves);
   if (published.get(vault) === serialized) return;
   const headers = { "content-type": "application/json" };
-  const publicRuns = saves.map((save) => {
-    const { pending: _pending, ...meta } = save as CloudAdventure & { pending?: unknown };
-    return meta;
-  });
-  const responses = await Promise.all([
-    fetch(`/api/vaults/${vault}/adventures`, {
-      method: "PUT",
-      headers,
-      body: serialized,
-    }),
-    fetch("/api/runs", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ runs: publicRuns }),
-    }),
-  ]);
-  if (responses.some(response => !response.ok)) throw Error("Cloud adventure metadata was not saved.");
-  published.set(vault, serialized);
+  // Both endpoints accept bounded additive batches; a long adventure history
+  // cannot reject publication of the newest run.
+  const batches:CloudAdventure[][]=[];let batch:CloudAdventure[]=[];
+  for(const save of saves){
+    if(publishedRuns.get(vault+":"+save.id)===JSON.stringify(save))continue;
+    if(batch.length && (batch.length>=50 || new TextEncoder().encode(JSON.stringify([...batch,save])).length>60000)){batches.push(batch);batch=[];}
+    batch.push(save);
+  }
+  if(batch.length)batches.push(batch);
+  for(const runs of batches) {
+    const responses=await Promise.all([
+      fetch(`/api/vaults/${vault}/adventures`,{method:'PUT',headers,body:JSON.stringify(runs),signal:AbortSignal.timeout(10000)}),
+      fetch('/api/runs',{method:'POST',headers,body:JSON.stringify({runs:runs.map(save=>{const {pending:_pending,...meta}=save as CloudAdventure & {pending?:unknown};return meta;})}),signal:AbortSignal.timeout(10000)}),
+    ]);
+    if(responses.some(r=>!r.ok))throw Error('Cloud adventure metadata was not saved.');
+    for(const run of runs)publishedRuns.set(vault+':'+run.id,JSON.stringify(run));
+  }
+  published.set(vault,serialized);
 }

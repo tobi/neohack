@@ -1271,11 +1271,16 @@ Decision dialogs keep their title and cancellation controls visible; the shell n
 
 ### Failed-entry recovery
 
-A cloud conflict automatically pauses cloud sync while allowing local creation
-and resume. It does not overwrite either copy or discard the queued upload.
+Browsers back up independently into durable streams within the private vault.
+Opening a run on another device does not stop the original device’s sync. Old
+shared-head conflicts recover into a separate stream while preserving both the
+original cloud head and uncertain upload. The directory selects acknowledged
+progress; gameplay and ledger publication do not wait for each other.
 Other failed resumes offer Open local copy. This explicit mode keeps the bookmark
 marked local, skips cloud reads and writes, and resumes the existing IndexedDB
 copy with its original engine. Cloud data and pending uploads remain untouched.
+The game menu offers Enable online backup to leave explicit local-only mode
+without deleting or resetting the run.
 It does not bypass damaged journals, missing runtime pins or another tab’s lock.
 Every create/resume failure reports a bounded category and entry mode to private
 Vercel logs; repeated attempts are not suppressed. Raw messages and save links

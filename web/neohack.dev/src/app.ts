@@ -38,6 +38,7 @@ import {
   playerId, rememberPlayer, requestedRun, showRunUrl, clearRunUrl,
   journalUrl,
   publishCloud,
+  queueCloud,
   restoreAdventures,
   type PlayControl,
 } from "./cloud";
@@ -56,6 +57,7 @@ const directions: [Compass, string][] = [
   ["southeast", "↘"],
 ];
 type Adventure = {
+  branch?: string;
   id: string;
   buildId?: string;
   vaultId?: string;
@@ -109,7 +111,6 @@ class PixelNethack extends HTMLElement {
   private navigationAbort: AbortController | null = null;
   private cloudStatusGeneration = 0;
   private cloudEnabled = false;
-  private cloudMetadataTimer: ReturnType<typeof setTimeout> | undefined;
   private saves: Adventure[] = [];
   private metadataHealthy = true;
   private current: Adventure | null = null;
@@ -322,7 +323,7 @@ class PixelNethack extends HTMLElement {
           <details class="hud-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
             <button id="adventures-button">Your adventures</button><button id="pickup-settings" data-game>Automatic pickup</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button>
             <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
-            <button id="copy-embed">Copy run embed</button><p id="public-recording" role="status">Public replays record observed scenes from this visit.</p><button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p><p id="account-recording" role="status"></p><a class="menu-github" href="/component" target="_blank" rel="noopener">Embed the world ↗</a><a class="menu-github" href="/bots" target="_blank" rel="noopener">Ascender workshop ↗</a><a class="menu-github" href="/login" target="_blank" rel="noopener">Your account & replays ↗</a>
+            <button id="copy-embed">Copy run embed</button><p id="public-recording" role="status">Public replays record observed scenes from this visit.</p><button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><button id="enable-cloud-backup" hidden>Enable online backup</button><p id="webmcp-status"></p><p id="account-recording" role="status"></p><a class="menu-github" href="/component" target="_blank" rel="noopener">Embed the world ↗</a><a class="menu-github" href="/bots" target="_blank" rel="noopener">Ascender workshop ↗</a><a class="menu-github" href="/login" target="_blank" rel="noopener">Your account & replays ↗</a>
           </div></details>
         </div>
         <div class="notices"><div class="notice error" id="error" role="alert" hidden></div>
@@ -651,12 +652,14 @@ class PixelNethack extends HTMLElement {
     this.indexKey = `${this.storeName}:adventures`;
     rememberPlayer(this.vault);
     const localOnly = !!requestedRun()?.local;
-    let buildId: string | undefined;
+    this.$("#enable-cloud-backup").hidden=!localOnly;
+    this.$("#enable-cloud-backup").onclick=()=>{const url=new URL(location.href),values=new URLSearchParams(url.hash.slice(1));values.delete("local");url.hash=values.toString();location.replace(url.href);location.reload();};
+    let buildId: string | undefined, remoteBranch: string | undefined;
     if (sessionId) {
       let saved = this.saves.find(save => save.id === sessionId);
-      if (!saved && !localOnly) {
+      if (!localOnly) {
         const remote = await restoreAdventures(this.vault);
-        if (remote) { this.saves = remote; saved = this.saves.find(save=>save.id===sessionId); }
+        if (remote) { remoteBranch=remote.find(save=>save.id===sessionId)?.branch;if(!saved){this.saves = remote; saved = this.saves.find(save=>save.id===sessionId);} }
       }
       if (!saved?.buildId) throw Error("This development run has no saved runtime identity. Start a new adventure; its journal has been retained.");
       buildId = saved.buildId;
@@ -667,29 +670,33 @@ class PixelNethack extends HTMLElement {
     await this.warm(selected.buildId);
     this.assertConnected();
     ++this.cloudStatusGeneration;
-    this.cloudEnabled = !localOnly && await cloudReady();
+    this.cloudEnabled = !localOnly;
     this.text("#cloud-status", localOnly ? "Local copy · cloud sync off" : this.cloudEnabled ? "Connecting online save…" : "Online saves unavailable · saving in this browser");
-    const replica = this.cloudEnabled ? journalUrl(this.vault) : undefined;
+    const sourceBranch=remoteBranch ?? this.saves.find(save=>save.id===sessionId)?.branch ?? this.saves.find(save=>save.branch)?.branch;
+    const sourceUrl=new URL(journalUrl(this.vault));if(sourceBranch)sourceUrl.searchParams.set('branch',sourceBranch);
+    const replica = this.cloudEnabled ? sourceUrl.href : undefined;
     if (requestedRun() && !replica && !this.saves.some(save => save.id === requestedRun()!.id)) throw Error("The cloud save could not be reached. Retry this bookmark when connected; no new game was started.");
     const transportPackage = buildId ? await runtimePackage(undefined, this.preloadAbort.signal) : selected;
     const wasm = await this.runtime.wasm.createWasm({
       runtimeUrl: new URL(selected.base, location.href).href,
       storage: replica
-        ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica }
+        ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica, replicaBranches: true }
         : { kind: "indexeddb", name: this.storeName },
       workerUrl: new URL(`${transportPackage.base}core-worker.mjs`, location.href),
-      onReplicaStatus: async ({ state, message }) => {
+      onReplicaStatus: async ({ state, message, branch, sessions }) => {
         if (!this.isConnected) return;
         if (state === "error" && message.includes("conflicts with remote progress")) {
-          this.cloudEnabled = false; reportError(Error(message),this.runtimeBuildId);
+          reportError(Error(message),this.runtimeBuildId);
         }
         const generation = ++this.cloudStatusGeneration;
         if (state === "saved") {
-          try { await publishCloud(this.saves, this.vault); }
-          catch { this.text("#cloud-status", "Saved here · online save pending"); return; }
+          if(branch){for(const save of this.saves)if(sessions?.includes(save.id))save.branch=branch;localStorage.setItem(this.indexKey,JSON.stringify(this.saves));}
+          this.text("#cloud-status","Saved here · online save pending");
+          queueCloud(this.saves, this.vault,()=>{if(this.isConnected && generation===this.cloudStatusGeneration)this.text("#cloud-status","Saved online");});
+          return;
         }
         if (generation !== this.cloudStatusGeneration) return;
-        this.text("#cloud-status", state === "saved" ? "Saved online" : state === "pending" ? "Saving online…" : state === "queued" ? "Saved here" : state === "retrying" ? "Saved here · retrying online" : "Saved here · cloud sync paused");
+        this.text("#cloud-status", state === "pending" ? "Saving online…" : state === "queued" ? "Saved here" : state === "retrying" ? "Saved here · retrying online" : "Saved here · cloud sync paused");
         this.$("#cloud-status").title = state === "error" ? message : "";
       },
     });
@@ -1157,10 +1164,7 @@ class PixelNethack extends HTMLElement {
       );
     localStorage.setItem(this.indexKey, JSON.stringify(this.saves));
     if (this.cloudEnabled) {
-      clearTimeout(this.cloudMetadataTimer);
-      this.cloudMetadataTimer = setTimeout(() => {
-        void publishCloud(this.saves, this.vault).catch(() => {});
-      }, 5000);
+      queueCloud(this.saves,this.vault);
     }
 
   }

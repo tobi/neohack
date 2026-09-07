@@ -303,31 +303,72 @@ test('updated network worker resumes an older package without changing its engin
   assert.equal(result.pin,result.expected);assert.deepEqual(result.resumed,result.observation);
 });
 
-test('conflicting cloud upload permits local resume and new games without overwriting the cloud',{timeout:60000},async t=>{
- const {url,browser}=await fixture(t),page=await browser.newPage();const reports=[];
- page.on('request',r=>{if(r.url().endsWith('/api/errors'))reports.push(JSON.parse(r.postData()));});
- await create(page,url);await synced(page);
+test('old conflicted vault receives a separate acknowledged backup without losing either copy',{timeout:90000},async t=>{
+ const {url,browser}=await fixture(t),page=await browser.newPage();await create(page,url);await synced(page);
  const endpoint=url+'/api/vaults/'+new URLSearchParams(new URL(page.url()).hash.slice(1)).get('vault');
+ const branch=await page.evaluate(()=>document.querySelector('pixel-nethack').saves[0].branch);
+ const head=await(await fetch(endpoint+'?branch='+branch)).json();
+ assert.equal((await fetch(endpoint,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({...head,base:null,commit:head.revision})})).status,200);
  await page.route('**/api/vaults/*',route=>route.request().method()==='PUT'?route.fulfill({status:503,body:'temporary outage'}):route.continue());
  await page.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});
  await page.waitForFunction(()=>document.querySelector('#cloud-status').textContent.includes('retrying'));
- const pending=()=>page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('/neonethack/'+document.querySelector('pixel-nethack').storeName);r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,q=db.transaction('replica').objectStore('replica').get('outbox');q.onsuccess=()=>{resolve(q.result);db.close();};q.onerror=()=>{reject(q.error);db.close();};};}));
- const retained=await pending();assert.ok(retained);
- const local=await snapshot(page),head=await (await fetch(endpoint)).json();
+ const retained=await page.evaluate(()=>new Promise((resolve,reject)=>{
+   const a=document.querySelector('pixel-nethack'),r=indexedDB.open('/neonethack/'+a.storeName);r.onerror=()=>reject(r.error);r.onsuccess=()=>{
+     const db=r.result,tx=db.transaction('replica','readwrite'),store=tx.objectStore('replica'),q=store.get('outbox');store.delete('branch');
+     tx.oncomplete=()=>{resolve(q.result);db.close();};
+     for(const save of a.saves)delete save.branch;localStorage.setItem(a.indexKey,JSON.stringify(a.saves));
+   };
+ }));assert.ok(retained);
  const remote={version:1,base:head.revision,commit:crypto.randomUUID(),files:head.files,blocks:[]};
  assert.equal((await fetch(endpoint,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(remote)})).status,200);
- await page.reload();
- await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId);
- assert.equal((await snapshot(page)).sessionId,local.sessionId);assert.deepEqual((await snapshot(page)).observation,local.observation);
- assert.match(await page.locator('#cloud-status').textContent(),/cloud sync paused/);
- assert.equal(reports.filter(r=>r.entry).length,0,'cloud conflicts no longer cause failed entry');
- await page.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});
- assert.equal((await snapshot(page)).observation.turn,local.observation.turn+1);
- assert.equal((await (await fetch(endpoint)).json()).revision,remote.commit,'local recovery never overwrites the other cloud head');
+ await page.unroute('**/api/vaults/*');await page.reload();
+ await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId);await synced(page);
+ assert.equal((await(await fetch(endpoint)).json()).revision,remote.commit,'original cloud progress never overwritten');
+ const archived=await page.evaluate(()=>new Promise(resolve=>{const a=document.querySelector('pixel-nethack'),r=indexedDB.open('/neonethack/'+a.storeName);r.onsuccess=()=>{const db=r.result,q=db.transaction('replica').objectStore('replica').get('previous-copy');q.onsuccess=()=>{resolve(q.result);db.close();};};}));
+ assert.deepEqual(archived.outbox,retained,'previous uncertain upload retained exactly');
+ const newBranch=await page.evaluate(()=>document.querySelector('pixel-nethack').saves[0].branch);assert.notEqual(newBranch,branch);
+ assert.equal((await fetch(endpoint+'?branch='+newBranch)).status,200);
  assert.equal(await page.locator('#error').textContent(),'');
- await page.goto(url);await create(page,url);
- assert.notEqual((await snapshot(page)).sessionId,local.sessionId,'same conflicted browser store can create a new run');
- assert.deepEqual(await pending(),retained,'conflicted upload stays intact for later recovery');
- assert.equal(await page.locator('#error').textContent(),'');
- assert.equal((await (await fetch(endpoint)).json()).revision,remote.commit);
+});
+
+test('metadata retries independently, batches long histories and publishes new runs',{timeout:60000},async t=>{
+ const {url,browser}=await fixture(t);const page=await browser.newPage();
+ await page.route('**/api/health',r=>r.fulfill({status:503,body:'temporary outage'}));
+ let deny=true;const batches=[];
+ await page.route('**/api/runs',r=>{if(r.request().method()!=='POST')return r.continue();batches.push(JSON.parse(r.request().postData()).runs);return deny?r.fulfill({status:503,body:'retry later'}):r.continue();});
+ await create(page,url);const id=(await snapshot(page)).sessionId;
+ await page.evaluate(()=>{const a=document.querySelector('pixel-nethack');a.saves.push(...Array.from({length:105},(_,i)=>({id:'history-'+i,name:'History',role:'wizard',turn:i,ended:true,pending:{requestId:'PRIVATE-REQUEST'}})));a.persist();});
+ await page.waitForTimeout(6000);deny=false;
+ await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+ for(let i=0;i<40;i++){if((await(await fetch(url+'/api/runs?limit=1000')).json()).length===106)break;await page.waitForTimeout(500);}
+ const runs=await (await fetch(url+'/api/runs?limit=1000')).json();assert.equal(runs.length,106);assert.ok(runs.some(r=>r.id===id));
+ assert.ok(batches.every(b=>b.length<=50));assert.ok(!JSON.stringify(batches).includes('PRIVATE-REQUEST'));
+ const vault=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('vault');
+ const privateRuns=await (await fetch(url+'/api/vaults/'+vault+'/adventures')).json();assert.equal(privateRuns.length,106);
+ assert.ok(privateRuns.some(r=>r.pending?.requestId==='PRIVATE-REQUEST'),'private pending receipt context stays in private metadata');
+ await synced(page);assert.equal(await page.locator('#error').textContent(),'');
+});
+
+test('two browsers can upload different runs in one vault without pausing sync',{timeout:90000},async t=>{
+ const {url,browser}=await fixture(t);const first=await browser.newPage();await create(first,url);await synced(first);
+ const a=await snapshot(first),bookmark=first.url();
+ const testVault=new URLSearchParams(new URL(bookmark).hash.slice(1)).get('vault');const metas=await(await fetch(url+'/api/vaults/'+testVault+'/adventures')).json();assert.ok(metas[0].branch,'acknowledged metadata includes branch');
+ const uploaded=await(await fetch(url+'/api/vaults/'+testVault+'?branch='+metas[0].branch)).json();assert.ok(uploaded.files.some(([p])=>p.endsWith('/meta.json')),'cloud branch includes semantic metadata');
+ const second=await browser.newPage();await second.goto(bookmark);await second.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId||document.querySelector('#error').textContent);assert.equal(await second.locator('#error').textContent(),'');await synced(second);
+ await second.goto(url);await create(second,url);await synced(second);const b=await snapshot(second);assert.notEqual(a.sessionId,b.sessionId);
+ await first.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});await synced(first);
+ const endpoint=url+'/api/vaults/'+new URLSearchParams(new URL(bookmark).hash.slice(1)).get('vault');
+ const copy=await first.evaluate(()=>document.querySelector('pixel-nethack').saves[0].branch);
+ const head=await(await fetch(endpoint+'?manifest=1&branch='+copy)).json();
+ assert.ok(head.files.some(([p])=>p.includes('/'+a.sessionId+'/')));const secondCopy=await second.evaluate(()=>document.querySelector('pixel-nethack').saves[0].branch);assert.notEqual(copy,secondCopy);
+ const other=await(await fetch(endpoint+'?manifest=1&branch='+secondCopy)).json();assert.ok(other.files.some(([p])=>p.includes('/'+b.sessionId+'/')));
+ const third=await browser.newPage();await third.goto(bookmark);await third.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId||document.querySelector('#error').textContent);assert.equal(await third.locator('#error').textContent(),'');
+ assert.equal((await snapshot(third)).observation.turn,(await snapshot(first)).observation.turn);
+});
+
+ test('local-only recovery can enable online backups without resetting the run',{timeout:60000},async t=>{
+ const {url,browser}=await fixture(t),page=await browser.newPage();await create(page,url);await synced(page);const before=await snapshot(page);
+ const local=new URL(page.url()),hash=new URLSearchParams(local.hash.slice(1));hash.set('local','1');local.hash=hash.toString();await page.goto(local.href);await page.reload();await page.waitForFunction(()=>document.querySelector('#cloud-status').textContent.includes('cloud sync off'));
+ await page.evaluate(()=>document.querySelector('#enable-cloud-backup').click());await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId);await synced(page);
+ assert.equal((await snapshot(page)).sessionId,before.sessionId);assert.equal((await snapshot(page)).observation.turn,before.observation.turn);assert.ok(!page.url().includes('local=1'));
 });
