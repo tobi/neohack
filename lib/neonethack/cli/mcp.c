@@ -1,7 +1,7 @@
 /* Native MCP transport. Only the public C driver owns gameplay semantics. */
 #define _GNU_SOURCE
 #include "mcp.h"
-#include "mcp-tools.inc"
+#include "mcp-agent.h"
 #ifdef NNH_BUNDLE_MCP
 #include "mcp-bundle.h"
 #endif
@@ -14,25 +14,7 @@
 #include <string.h>
 #include <unistd.h>
 
-const char *mcp_tools_json = mcp_tools, *mcp_guidance = mcp_instructions;
-char *mcp_take(mj_Buf *b) { if (!b->ok) { mj_free(b); return NULL; } return mj_take(b); }
-mj_val mcp_field(const char *s, const char *key) { mj_val v = {NULL}; if (s) mj_find(s,key,&v); return v; }
-char *mcp_string(mj_val value) { return value.p ? mj_str(value) : NULL; }
-void mcp_raw(mj_Buf *b, mj_val v)
-{
-    size_t n; char *s;
-    if (!v.p) { mj_nullv(b); return; }
-    mj_raw(v,&n); s = strndup(v.p,n);
-    if (!s) { b->ok = 0; return; }
-    mj_rawv(b,s); free(s);
-}
-char *mcp_failure(int code, const char *message)
-{
-    mj_Buf b; mj_init(&b); mj_obj(&b);
-    mj_key(&b,"code"); mj_intv(&b,code);
-    mj_key(&b,"message"); mj_strv(&b,message);
-    mj_endobj(&b); return mcp_take(&b);
-}
+const char *mcp_tools_json, *mcp_guidance;
 void mcp_maybe_stop(mcp_server *s)
 {
     if (s->stopping && !s->pending && !evbuffer_get_length(s->output)) {
@@ -86,16 +68,12 @@ void mcp_reject(mcp_job *j, int status, int code, const char *message) { mcp_fin
 
 static void tool_request(mcp_job *j, const char *params)
 {
-    mj_val args = mcp_field(params,"arguments"), item, list = mcp_field(mcp_tools,"tools");
-    char *tool = mcp_string(mcp_field(params,"name")); mj_arr_it it = {NULL,1};
-    if (tool) while (mj_arr_next(list.p,&it,&item)) {
-        char *candidate = mcp_string(mcp_field(item.p,"name"));
-        int match = candidate && !strcmp(candidate,tool); free(candidate);
-        if (match) { j->method = strdup(tool); break; }
-    }
+    mj_val args = mcp_field(params,"arguments");
+    char *tool = mcp_string(mcp_field(params,"name"));
+    mj_val definition = mcp_agent_method(tool);
+    if (mcp_agent_valid(definition,args)) j->method = mcp_string(mcp_field(definition.p,"method"));
     free(tool);
-    if (!j->method || (args.p && *args.p != '{')) { mcp_reject(j,400,-32602,"Unknown tool or invalid arguments"); return; }
-    char *separator = strchr(j->method,'_'); if (separator) *separator = '.';
+    if (!j->method) { mcp_reject(j,400,-32602,"Unknown tool or invalid arguments"); return; }
     mj_Buf b; mj_init(&b); mj_obj(&b);
     mj_key(&b,"version"); mj_intv(&b,1);
     mj_key(&b,"method"); mj_strv(&b,j->method);
@@ -134,7 +112,7 @@ void mcp_request(mcp_server *s, const char *line, size_t length, struct evhttp_r
             mj_key(&b,"protocolVersion"); mj_strv(&b,negotiated);
             mj_key(&b,"capabilities"); mj_rawv(&b,"{\"tools\":{}}");
             mj_key(&b,"serverInfo"); mj_rawv(&b,"{\"name\":\"neonethack\",\"version\":\"1.0.0-alpha.1\"}");
-            mj_key(&b,"instructions"); mj_strv(&b,mcp_instructions);
+            mj_key(&b,"instructions"); mj_strv(&b,mcp_guidance);
             mj_endobj(&b); s->initialized = 1; mcp_finish(j,mcp_take(&b),0,200);
         }
         free(protocol);
@@ -144,9 +122,9 @@ void mcp_request(mcp_server *s, const char *line, size_t length, struct evhttp_r
         mj_Buf b; mj_init(&b); mj_obj(&b);
         mj_key(&b,"supportedVersions"); mj_rawv(&b,"[\"" MCP_HTTP_VERSION "\"]");
         mj_key(&b,"capabilities"); mj_rawv(&b,"{\"tools\":{}}");
-        mj_key(&b,"instructions"); mj_strv(&b,mcp_instructions);
+        mj_key(&b,"instructions"); mj_strv(&b,mcp_guidance);
         mj_endobj(&b); mcp_finish(j,mcp_take(&b),0,200);
-    } else if (!strcmp(method,"tools/list")) mcp_finish(j,strdup(mcp_tools),0,200);
+    } else if (!strcmp(method,"tools/list")) mcp_finish(j,strdup(mcp_tools_json),0,200);
     else if (!strcmp(method,"tools/call")) tool_request(j,params.p);
     else mcp_reject(j,404,-32601,"Method not found; HTTP supports 2026-07-28 via server/discover");
     free(method); free(version);
@@ -213,6 +191,7 @@ int main(int argc, char **argv)
     if (count != 3 || (worker && s.port)) goto usage;
     s.config.engine_path = paths[0]; s.config.data_path = paths[1]; s.config.sessions_path = paths[2];
     signal(SIGPIPE,SIG_IGN); /* Executable only; never installed by the C library. */
+    mcp_tools_json = mcp_agent_tools; mcp_guidance = mcp_agent_instructions;
     if (worker) return mcp_worker_main(&s.config);
     ssize_t self_length = readlink("/proc/self/exe",self,sizeof self-1);
     if (self_length >= 0) snprintf(self,sizeof self,"/proc/self/exe");
@@ -243,7 +222,7 @@ int main(int argc, char **argv)
     if (s.input_event) event_free(s.input_event);
     if (s.output_event) event_free(s.output_event);
     event_free(sigint); event_free(sigterm); event_free(sigchild); evbuffer_free(s.input); evbuffer_free(s.output);
-    free(s.compact.previous); event_base_free(s.base);
+    event_base_free(s.base);
     return s.failed;
 usage:
 #ifdef NNH_BUNDLE_MCP

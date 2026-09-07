@@ -2,7 +2,6 @@
 #define NNH_MCP_H
 #include "neonethack.h"
 #include "minjson.h"
-#include "compact.h"
 #include <event2/event.h>
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
@@ -14,6 +13,11 @@
 #define MCP_HTTP_VERSION "2026-07-28"
 typedef struct mcp_server mcp_server;
 typedef struct mcp_worker mcp_worker;
+typedef struct mcp_recovery {
+    struct mcp_recovery *next;
+    char *session, *request;
+    int unresolved;
+} mcp_recovery;
 typedef struct mcp_job {
     struct mcp_job *next;
     mcp_server *server;
@@ -29,7 +33,7 @@ struct mcp_server {
     struct event *input_event, *output_event;
     struct evbuffer *input, *output;
     mcp_worker *workers, *retired;
-    compact_state compact;
+    mcp_recovery *recoveries;
     int port, initialized, stopping, failed, oversized;
     size_t pending;
 };

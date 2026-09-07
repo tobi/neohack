@@ -301,6 +301,7 @@
   "include/monflag.h",
   "include/monst.h",
   "include/monsters.h",
+  "include/nh_sha256.h",
   "include/nhmd4.h",
   "include/nhregex.h",
   "include/obj.h",

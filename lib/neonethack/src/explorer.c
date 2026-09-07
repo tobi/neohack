@@ -10,6 +10,7 @@
 #define _XOPEN_SOURCE 700
 
 #include "explorer.h"
+#include "choice-names.h"
 #include "minjson.h"
 #include "session.h"
 #include "perceived_status.h"
@@ -249,6 +250,11 @@ typedef struct {
     long long epoch, turn;
 } door_fact_t;
 
+typedef struct {
+    char level[80];
+    unsigned char stood[NNH_MAP_CELLS];
+} walked_level_t;
+
 typedef struct game {
     char id[65];
     long long runtime_epoch;     /* validated profile-1 UTC creation time */
@@ -267,6 +273,9 @@ typedef struct game {
     long long final_score;
     int final_score_known;
     char location_id[80];
+    walked_level_t *walked;
+    size_t nwalked;
+    int walked_unavailable;
     int structured_perception; /* engine perception version; zero = legacy peeks */
     char pickup_settings[16384]; /* actual engine configuration, restored by replay */
     int affordance_version, ordinary_locomotion, normal_map, door_diagonals, direction_reliable;
@@ -313,6 +322,12 @@ typedef struct game {
     long long input_bytes, sidecar_input_bytes;
     size_t input_count;
     int input_ready;
+    int rng_version, rng_have_stat;
+    size_t rng_replay_position;
+    FILE *rng_reader;
+    struct stat rng_stat;
+    char rng_error[192];
+    char rng_last[512];
     struct stat sidecar_stat, input_stat;
     operation_t operation;
     int have_operation;
@@ -557,6 +572,7 @@ failed:
 }
 
 /* ---------------- sidecar (revision, idempotency, operation) ---------------- */
+#include "rng-integrity.inc"
 #include "sidecar_integrity.inc"
 
 static int
@@ -595,6 +611,7 @@ sidecar_save(game_t *g)
         mj_key(&b, "inputBytes"); mj_intv(&b, g->sidecar_input_bytes);
         mj_key(&b, "boundaryComplete"); mj_boolv(&b, g->boundary_complete && !g->recovery_required);
     }
+    if(g->rng_version){mj_key(&b,"rngIntegrityVersion");mj_intv(&b,g->rng_version);}
     mj_key(&b, "revision"); mj_intv(&b, g->revision);
     mj_key(&b, "frameCount"); mj_intv(&b, g->frame_count);
     mj_key(&b, "recordingGap"); mj_boolv(&b, g->recording_gap);
@@ -739,6 +756,7 @@ sidecar_load(game_t *g)
         long long n;
         if (mj_int(v, &n)) g->frame_count = n;
     }
+    if (mj_find(text,"rngIntegrityVersion",&v)) { long long version; if(mj_int(v,&version))g->rng_version=(int)version; }
     if (mj_find(text, "recordingGap", &v)) mj_bool(v, &g->recording_gap);
     if (mj_find(text, "recordingOnly", &v)) {
         int flag = 0;
@@ -925,6 +943,9 @@ semantic_reload(game_t *g)
     g->revision = g->frame_count = 0;
     g->recording_ready = g->recording_gap = 0;
     g->recording_error[0] = 0;
+    (void)rng_replay_close(g,0);
+    g->rng_version = g->rng_have_stat = 0;
+    g->rng_error[0] = 0;
     g->sidecar_present = g->sidecar_corrupt = g->recovery_required = g->input_ready = 0;
     g->sidecar_error[0] = g->input_error[0] = 0;
     g->sidecar_input_bytes = -1; g->boundary_complete = 1;
@@ -1341,6 +1362,19 @@ invalid:
     snprintf(g->input_error, sizeof g->input_error, "Door knowledge evidence is invalid or exceeds its bounded capacity; no hidden state was used to repair it");
 }
 
+/* Derived exclusively from disclosed hero positions; replay rebuilds it.
+ * Cursor motion is deliberately excluded: a targeting cursor is not walking. */
+static walked_level_t *walked_level(game_t *g, int create)
+{
+    size_t i; walked_level_t *next;
+    for (i = 0; i < g->nwalked; i++) if (!strcmp(g->walked[i].level, g->location_id)) return &g->walked[i];
+    if (!create || g->walked_unavailable) return NULL;
+    next = realloc(g->walked, (g->nwalked + 1) * sizeof *next);
+    if (!next) { g->walked_unavailable = 1; return NULL; }
+    g->walked = next; next = &g->walked[g->nwalked++]; memset(next, 0, sizeof *next);
+    snprintf(next->level, sizeof next->level, "%s", g->location_id); return next;
+}
+
 /* Read non-mutating object perceptions emitted by the engine itself. */
 static void
 ingest_belongings(game_t *g, const char *params)
@@ -1378,6 +1412,11 @@ ingest_belongings(game_t *g, const char *params)
     if (mj_find(params, "x", &v) && mj_int(v, &n)) g->you_x = (int) n;
     if (mj_find(params, "y", &v) && mj_int(v, &n)) g->you_y = (int) n;
     g->have_you = 1;
+    if (g->normal_map && g->affordance_version == 1 && branch >= 0 && level > 0 &&
+        g->you_x >= 1 && g->you_x < MAP_W && g->you_y >= 0 && g->you_y < MAP_H) {
+        walked_level_t *walked = walked_level(g, 1);
+        if (walked) walked->stood[g->you_y * MAP_W + g->you_x] = 1;
+    }
     if (g->you_x >= 0 && g->you_x < MAP_W && g->you_y >= 0 && g->you_y < MAP_H &&
         mj_find(params, "hereCmap", &v) && mj_int(v, &n)) {
         g->terrain[g->you_y][g->you_x] = (unsigned char) terrain_from_cmap((int) n);
@@ -2463,6 +2502,7 @@ await_prompt(game_t *g, int timeout_ms)
                     }
                 }
                 (void) kv;
+                if(rng_boundary(g,id,kind,params)<0){free(method);free(line);return -1;}
                 {
                     int automatic = auto_answer(g, id, kind, params);
                     if (automatic) {
@@ -2476,13 +2516,20 @@ await_prompt(game_t *g, int timeout_ms)
                 free(line);
                 return 1;
             }
+            if (!strcmp(method,"final_result") && g->rng_version) {
+                mj_val final_params;
+                if (!mj_find(line,"params",&final_params) ||
+                    rng_boundary(g,0,"terminal",final_params.p)<0) {
+                    free(method);free(line);return -1;
+                }
+            }
             ingest(g, line);
             free(method);
             free(line);
             /* Life saving has already been ruled out. Optional post-game
              * disclosures need no invented answers; teardown closes the UI.
              * Historical answers still replay verbatim. */
-            if (g->terminal_kind[0] && g->final_score_known && !g->replaying) {
+            if (g->terminal_kind[0] && g->final_score_known && (!g->replaying || g->rng_version)) {
                 g->ended = 1;
                 pending_clear(g);
                 return 0;
@@ -2591,6 +2638,7 @@ game_free(game_t *g)
     for (i = 0; i < g->nfloor; i++)
         free(g->floor[i].label);
     free(g->floor);
+    free(g->walked);
     free(g->door_facts);
     free(g);
 }
@@ -2790,6 +2838,7 @@ tracked_clear(game_t *g)
     g->terminal_turn = 0;
     g->final_score = 0; g->final_score_known = 0; g->knowledge[0] = 0;
     g->location_id[0] = '\0';
+    free(g->walked); g->walked = NULL; g->nwalked = 0; g->walked_unavailable = 0;
     free(g->door_facts); g->door_facts = NULL; g->ndoor_facts = g->door_capacity = 0;
     memset(g->door_index, -1, sizeof g->door_index);
     g->affordance_version = 0; g->knowledge_epoch = 0;
@@ -3107,6 +3156,30 @@ emit_provenance(game_t *g, mj_Buf *b)
 static void item_knowledge(game_t *, nnh_knowledge *);
 
 static void
+build_known_cell(game_t *g, int x, int y, nnh_known_cell *c)
+{
+    int d; cell_t *source;
+    memset(c, 0, sizeof *c);
+    c->in_bounds = x >= 1 && x < MAP_W && y >= 0 && y < MAP_H;
+    c->visible = -1;
+    if (!c->in_bounds) return;
+    source = &g->cells[y][x];
+    c->terrain = g->terrain[y][x];
+    c->door_orientation = g->cells[y][x].door_orientation;
+    c->visible = source->visibility_known ? source->visible : -1;
+    c->trap = c->terrain == T_TRAP;
+    /* Preserve a previously perceived base beneath a known trap. */
+    if (c->trap && source->trap_base) c->terrain = source->trap_base;
+    perceived_display(source, x == g->you_x && y == g->you_y, c);
+    d = g->door_index[y][x];
+    if (d >= 0 && (size_t) d < g->ndoor_facts) {
+        c->lock = g->door_facts[d].lock;
+        c->witnessed = g->door_facts[d].epoch == g->knowledge_epoch;
+        c->observed_turn = g->door_facts[d].turn;
+    }
+}
+
+static void
 build_knowledge(game_t *g, nnh_knowledge *k, int recovery)
 {
     int i; size_t j;
@@ -3130,27 +3203,8 @@ build_knowledge(game_t *g, nnh_knowledge *k, int recovery)
     k->floor_items = g->nfloor > 0;
     for (j = 0; j < g->nfloor; j++) if (g->floor[j].container) k->floor_containers++;
     item_knowledge(g, k);
-    for (i = 0; i < NNH_NEIGHBORHOOD_CELLS; i++) {
-        int x = k->origin_x + i % 9 - 4, y = k->origin_y + i / 9 - 4, d;
-        nnh_known_cell *c = &k->cells[i]; cell_t *source;
-        c->in_bounds = x >= 1 && x < MAP_W && y >= 0 && y < MAP_H;
-        c->visible = -1;
-        if (!c->in_bounds) continue;
-        source = &g->cells[y][x];
-        c->terrain = g->terrain[y][x];
-        c->door_orientation = g->cells[y][x].door_orientation;
-        c->visible = source->visibility_known ? source->visible : -1;
-        c->trap = c->terrain == T_TRAP;
-        /* Preserve a previously perceived base beneath a known trap. */
-        if (c->trap && source->trap_base) c->terrain = source->trap_base;
-        perceived_display(source, i == 40, c);
-        d = g->door_index[y][x];
-        if (d >= 0 && (size_t) d < g->ndoor_facts) {
-            c->lock = g->door_facts[d].lock;
-            c->witnessed = g->door_facts[d].epoch == g->knowledge_epoch;
-            c->observed_turn = g->door_facts[d].turn;
-        }
-    }
+    for (i = 0; i < NNH_NEIGHBORHOOD_CELLS; i++)
+        build_known_cell(g, k->origin_x + i % 9 - 4, k->origin_y + i / 9 - 4, &k->cells[i]);
 }
 
 static void
@@ -3378,6 +3432,8 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
             mj_obj(b);
             mj_key(b, "id"); mj_intv(b, m->items[i].index);
             mj_key(b, "label"); mj_strv(b, m->items[i].text ? m->items[i].text : "");
+            char name[128]; nnh_choice_name(m->items[i].text,name,sizeof name);
+            mj_key(b, "name"); mj_strv(b,name);
             if (m->pickup_review) { mj_key(b, "suggested"); mj_boolv(b, m->items[i].suggested); }
             if (m->items[i].transfer) {
                 mj_key(b, "transfer"); mj_strv(b, m->items[i].transfer == 1 ? "take" : "put");
@@ -3465,6 +3521,8 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
                 mj_obj(b);
                 mj_key(b, "id"); mj_intv(b, (long long) i);
                 mj_key(b, "label"); mj_strv(b, label);
+                char name[128]; nnh_choice_name(label,name,sizeof name);
+                mj_key(b, "name"); mj_strv(b,name);
                 mj_endobj(b);
             }
             mj_endarr(b);
@@ -3504,6 +3562,8 @@ emit_decision(game_t *g, mj_Buf *b, int want_item, char *kind_out, size_t kind_c
             mj_obj(b);
             mj_key(b, "id"); mj_intv(b, (long long) i);
             mj_key(b, "label"); mj_strv(b, g->pending.commands[i]);
+            char name[128]; nnh_choice_name(g->pending.commands[i],name,sizeof name);
+            mj_key(b, "name"); mj_strv(b,name);
             mj_endobj(b);
         }
         mj_endarr(b);
@@ -4609,6 +4669,7 @@ cmdkey_of(const char *action)
     if (extended_command(action)) return '#';
     if (!strcmp(action, "attack")) return 'F';
     if (!strcmp(action, "moveWithoutAttack")) return 'm';
+    if (!strcmp(action, "rest")) return 46;
     if (!strcmp(action, "search"))
         return 115;
     if (!strcmp(action, "kick"))
@@ -4664,6 +4725,19 @@ answer_key(game_t *g, long long id, int code)
              "{\"jsonrpc\":\"2.0\",\"id\":%lld,\"result\":{\"key\":%d}}",
              id, code);
     return send_engine(g, line);
+}
+
+/* One counted engine command, not repeated semantic calls. */
+static int
+answer_command_key(game_t *g, long long id, int code)
+{
+    if (!strcmp(g->operation.action,"search") || !strcmp(g->operation.action,"rest")) {
+        mj_val v; long long count = 1; char line[160];
+        if (mj_find(g->operation.args_json,"turns",&v)) mj_int(v,&count);
+        snprintf(line,sizeof line,"{\"jsonrpc\":\"2.0\",\"id\":%lld,\"result\":{\"key\":%d,\"count\":%lld}}",id,code,count);
+        return send_engine(g,line);
+    }
+    return answer_key(g,id,code);
 }
 
 /* Heard-message patterns, matched case-insensitively on new narration.
@@ -4870,7 +4944,7 @@ drive_settle(nhx_t *x, game_t *g, const char *req_id,
         fx[nfx++] = "kicked";
     if (heard_has(g, msg_start0, msg_count0, FX_PRAY) && nfx < 14)
         fx[nfx++] = "prayed";
-    if (!strcmp(action, "search") && nfx < 14)
+    if (!strcmp(action, "search") && activity_result_since(g, ev_from, "search") && nfx < 14)
         fx[nfx++] = "searched";
     if (g->operation.item_letter && nfx < 14) {
         size_t i;
@@ -5053,7 +5127,7 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
         (!strcmp(g->pending.kind, "key") ||
          !strcmp(g->pending.kind, "poskey")) &&
         g->operation.keypos == 0 && cmd >= 0) {
-        if (answer_key(g, g->pending.id, cmd) < 0)
+        if (answer_command_key(g, g->pending.id, cmd) < 0)
             return envelope_error(g, req_id, action, "engineError",
                                   "write failed");
         pending_clear(g);
@@ -5075,7 +5149,7 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
         if (!strcmp(g->pending.kind, "key") ||
             !strcmp(g->pending.kind, "poskey")) {
             if (g->operation.keypos == 0 && cmd >= 0) {
-                if (answer_key(g, g->pending.id, cmd) < 0)
+                if (answer_command_key(g, g->pending.id, cmd) < 0)
                     return envelope_error(g, req_id, action, "engineError",
                                           "write failed");
                 pending_clear(g);
@@ -5501,15 +5575,33 @@ args_key_of(const char *args, mj_Buf *b)
 
 /* ---------------- tools ---------------- */
 
-static void
+static int
 gen_session_id(char *out, size_t cap)
 {
-    static unsigned counter = 0;
-    unsigned long t = (unsigned long) time(NULL);
-    uint32_t entropy = (uint32_t) clock() ^ (uint32_t) getpid();
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
+    unsigned char entropy[12];
+    size_t used = 0, i, j;
     int fd = open("/dev/urandom", O_RDONLY);
-    if (fd >= 0) { ssize_t n = read(fd, &entropy, sizeof entropy); (void) n; close(fd); }
-    snprintf(out, cap, "g-%lx-%x-%x-%08x", t, (unsigned) getpid(), counter++, entropy);
+    if (fd < 0) return -1;
+    while (used < sizeof entropy) {
+        ssize_t n = read(fd, entropy + used, sizeof entropy - used);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) { close(fd); return -1; }
+        used += (size_t) n;
+    }
+    close(fd);
+    if (cap < 17) return -1;
+    /* 96 independent random bits, without touching the game RNG. */
+    for (i = 0, j = 0; i < sizeof entropy; i += 3) {
+        unsigned bits = ((unsigned) entropy[i] << 16) |
+                        ((unsigned) entropy[i + 1] << 8) | entropy[i + 2];
+        out[j++] = alphabet[(bits >> 18) & 63];
+        out[j++] = alphabet[(bits >> 12) & 63];
+        out[j++] = alphabet[(bits >> 6) & 63];
+        out[j++] = alphabet[bits & 63];
+    }
+    out[j] = '\0';
+    return 0;
 }
 
 static int
@@ -5614,7 +5706,8 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
         snprintf(id, sizeof id, "%s", s);
         free(s);
     } else {
-        gen_session_id(id, sizeof id);
+        if (gen_session_id(id, sizeof id) < 0)
+            return fail_envelope("", req_id, "runtimeUnavailable", "cannot generate a random session id");
     }
     if (mj_find(args, "name", &v) && !mj_is_null(v)) {
         name = mj_str(v);
@@ -5682,6 +5775,7 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
     }
     tracked_clear(g);
     g->revision = 0;
+    g->rng_version=1;g->rng_have_stat=0;g->rng_error[0]=0;
     g->boundary_complete = 0; g->recovery_required = 0; g->sidecar_input_bytes = 0; g->input_ready = 0;
     g->have_operation = 0;
     g->operation.decision_id[0] = '\0';
@@ -5720,7 +5814,7 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
         return fail_envelope(id, req_id, "engineError", "cannot start engine");
     }
     snprintf(line, sizeof line,
-             "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"0.1\",\"runtimeProfile\":1,\"calendarEpoch\":%lld}}",
+             "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"0.1\",\"runtimeProfile\":1,\"rngIntegrityVersion\":1,\"calendarEpoch\":%lld}}",
              g->runtime_epoch);
     if (send_engine(g, line) < 0 || runtime_ack(g)) {
         free(name);
@@ -5828,12 +5922,170 @@ run_actions(game_t *g, const char *args)
         for (i = 0; i < 8; i++) if (!strcmp(name, nnh_compass_names[i])) index += offsets[i];
         free(name);
     }
+    if (mj_find(target.p, "x", &v)) {
+        long long tx, ty; mj_int(v, &tx); mj_find(target.p, "y", &v); mj_int(v, &ty);
+        if (llabs(tx-k.origin_x)>1 || llabs(ty-k.origin_y)>1)
+            return fail_envelope(g->id, NULL, "outOfReach", "choose an adjacent square for a direct attempt");
+        index = 40 + (int)(tx-k.origin_x) + 9*(int)(ty-k.origin_y);
+    }
     nnh_resolve_cell(&k, index, &cell);
     mj_init(&b); mj_obj(&b);
     mj_key(&b, "kind"); mj_strv(&b, "actions"); mj_key(&b, "sessionId"); mj_strv(&b, g->id);
     nnh_emit_basis(&k, &b); nnh_emit_gate(&k, &b);
     mj_key(&b, "cell"); nnh_emit_cell_actions(&cell, &b);
     mj_endobj(&b); return mj_take(&b);
+}
+
+/* Out-of-band reference query: neither log_append nor ingest is involved.
+ * The engine remains suspended at the very same genuine input boundary. */
+static char *
+run_lookup(game_t *g, const char *args)
+{
+    mj_val name, result, kind, id; long long response_id;
+    mj_Buf b; char *request, *line, *out;
+    if (!g || !g->eng || g->ended) return fail_envelope(g ? g->id : "", NULL, "noGame", "Resume a live run to query its pinned encyclopedia");
+    if (g->recovery_required) return fail_envelope(g->id,NULL,"recoveryRequired","Restore the interrupted runtime before querying");
+    if (!g->pending.kind[0]) return fail_envelope(g->id,NULL,"inputUnavailable","No stable engine input boundary");
+    mj_find(args,"name",&name);
+    mj_init(&b); mj_obj(&b); mj_key(&b,"id"); mj_intv(&b,-33);
+    mj_key(&b,"method"); mj_strv(&b,"lore"); mj_key(&b,"params"); mj_obj(&b);
+    mj_key(&b,"name"); { char *n = mj_str(name); mj_strv(&b,n); free(n); } mj_endobj(&b); mj_endobj(&b); request = mj_take(&b);
+    if (!request) return fail_envelope(g->id,NULL,"engineError","Cannot allocate lore query");
+    if (nh_session_write(g->eng,request) < 0) { free(request); nh_session_abort(g->eng); g->eng=NULL; return fail_envelope(g->id,NULL,"engineError","Cannot send lore query; restore the runtime before more input"); }
+    free(request); line = nh_session_read_line(g->eng, ACT_TIMEOUT_MS);
+    if (!line || !mj_valid(line) || !mj_find(line,"id",&id) || !mj_int(id,&response_id) || response_id != -33) {
+        free(line); nh_session_abort(g->eng); g->eng=NULL; return fail_envelope(g->id,NULL,"recoveryRequired","Lore reply unavailable; restore the runtime before more input");
+    }
+    {
+        mj_val found_value, lines, item, integrity;
+        mj_arr_it it = {NULL,1};
+        int found, valid = mj_find(line,"result",&result) &&
+            mj_find(result.p,"kind",&kind) && record_is(kind,"lore") &&
+            mj_find(result.p,"found",&found_value) && mj_bool(found_value,&found) &&
+            mj_find(result.p,"lines",&lines) && *lines.p=='[';
+        if (valid) while (mj_arr_next(lines.p,&it,&item)) {
+            if (*item.p!='"') { valid=0; break; }
+        }
+        if (valid && g->rng_version) {
+            char *actual=NULL;
+            valid=mj_find(result.p,"rngIntegrity",&integrity) && rng_shape(integrity) &&
+                (actual=mj_canonical(integrity)) && g->rng_last[0] && !strcmp(actual,g->rng_last);
+            free(actual);
+        }
+        if (!valid) {
+            free(line); nh_session_abort(g->eng); g->eng=NULL;
+            return fail_envelope(g->id,NULL,"recoveryRequired","Invalid lore reply or changed private RNG evidence; restore the runtime before more input");
+        }
+    }
+    mj_init(&b); mj_obj(&b); mj_key(&b,"kind"); mj_strv(&b,"lore");
+    mj_key(&b,"sessionId"); mj_strv(&b,g->id); mj_key(&b,"name"); { char *n = mj_str(name); mj_strv(&b,n); free(n); }
+    mj_val value; int found = 0; mj_key(&b,"found"); mj_find(result.p,"found",&value); mj_bool(value,&found); mj_boolv(&b,found);
+    mj_key(&b,"lines"); mj_find(result.p,"lines",&value);
+    { size_t len; const char *raw = mj_raw(value,&len); char *copy = raw ? strndup(raw,len) : NULL;
+      if (copy) mj_rawv(&b,copy); else b.ok = 0; free(copy); }
+    mj_endobj(&b); out = mj_take(&b); free(line); return out;
+}
+
+static char *
+run_route(game_t *g, const char *args)
+{
+    mj_val v, to; long long revision, tx, ty;
+    nnh_knowledge k; nnh_known_cell *map;
+    int steps[NNH_MAP_CELLS], n, i;
+    mj_Buf b;
+    if (!g) return fail_envelope("", NULL, "unknownSession", "unknown loaded session; resume explicitly");
+    mj_find(args, "expectedRevision", &v); mj_int(v, &revision);
+    if (revision != g->revision) return fail_envelope(g->id, NULL, "staleRevision", "query is based on a different revision");
+    build_knowledge(g, &k, 0);
+    if (k.unavailable_reason) return fail_envelope(g->id, NULL, k.unavailable_reason, "perceived map is unavailable");
+    if (!g->eng && !g->ended) return fail_envelope(g->id, NULL, "noGame", "no live engine; resume explicitly");
+    if (!k.ordinary_locomotion || !k.direction_reliable)
+        return fail_envelope(g->id, NULL, "unsupportedMovement", "known-walking routes require ordinary, direction-reliable movement");
+    tx = ty = 0;
+    if (mj_find(args, "to", &to)) {
+        mj_find(to.p, "x", &v); mj_int(v, &tx); mj_find(to.p, "y", &v); mj_int(v, &ty);
+    }
+    map = calloc(NNH_MAP_CELLS, sizeof *map);
+    if (!map) return fail_envelope(g->id, NULL, "outOfMemory", "cannot allocate perceived route map");
+    for (i = 0; i < NNH_MAP_CELLS; i++) build_known_cell(g, i % MAP_W, i / MAP_W, &map[i]);
+    if (!mj_find(args, "to", &to)) {
+        int parent[NNH_MAP_CELLS], start = nnh_known_paths(&k, map, parent), which;
+        walked_level_t *walked = walked_level(g, 0);
+        if (g->walked_unavailable || !walked || start < 0) {
+            free(map); return fail_envelope(g->id, NULL, "navigationUnavailable", "complete witnessed position history is unavailable");
+        }
+        mj_init(&b); mj_obj(&b); mj_key(&b, "kind"); mj_strv(&b, "navigation");
+        mj_key(&b, "sessionId"); mj_strv(&b, g->id); nnh_emit_basis(&k, &b); nnh_emit_gate(&k, &b);
+        mj_key(&b, "policy"); mj_strv(&b, "knownWalking");
+        for (which = 0; which < 2; which++) {
+            mj_key(&b, which ? "waysDown" : "frontiers"); mj_arr(&b);
+            for (i = 0; i < NNH_MAP_CELLS; i++) {
+                int at, distance = 0, frontier = 0, j;
+                static const int dx[] = {0,1,0,-1}, dy[] = {-1,0,1,0};
+                if (!map[i].in_bounds) continue;
+                if (which) { if (map[i].terrain != T_STAIRS_DOWN) continue; }
+                else {
+                    if (walked->stood[i] || parent[i] < 0) continue;
+                    for (j = 0; j < 4; j++) {
+                        int x = i % MAP_W + dx[j], y = i / MAP_W + dy[j];
+                        if (x >= 1 && x < MAP_W && y >= 0 && y < MAP_H &&
+                            (map[y*MAP_W+x].terrain == T_UNKNOWN || map[y*MAP_W+x].terrain == T_DARK)) frontier = 1;
+                    }
+                    if (!frontier) continue;
+                }
+                if (parent[i] >= 0) for (at = i; at != start; at = parent[at]) distance++;
+                mj_obj(&b); mj_key(&b, "x"); mj_intv(&b, i % MAP_W); mj_key(&b, "y"); mj_intv(&b, i / MAP_W);
+                mj_key(&b, "distance"); if (parent[i] < 0) mj_nullv(&b); else mj_intv(&b, distance);
+                mj_endobj(&b);
+            }
+            mj_endarr(&b);
+        }
+        mj_key(&b, "doors"); mj_arr(&b);
+        for (i = 0; i < NNH_MAP_CELLS; i++) if (map[i].terrain == T_DOOR_CLOSED) {
+            static const int dx[] = {0,1,0,-1}, dy[] = {-1,0,1,0};
+            int best = -1, best_distance = NNH_MAP_CELLS, direction = 0, j;
+            for (j = 0; j < 4; j++) {
+                int x = i % MAP_W + dx[j], y = i / MAP_W + dy[j], at, distance = 0;
+                if (x < 1 || x >= MAP_W || y < 0 || y >= MAP_H || parent[y*MAP_W+x] < 0) continue;
+                for (at = y*MAP_W+x; at != start; at = parent[at]) distance++;
+                if (distance < best_distance) { best = y*MAP_W+x; best_distance = distance; direction = (2*j+4)%8; }
+            }
+            mj_obj(&b); mj_key(&b, "x"); mj_intv(&b, i%MAP_W); mj_key(&b, "y"); mj_intv(&b, i/MAP_W);
+            mj_key(&b, "lock"); mj_strv(&b, map[i].lock == 1 ? "locked" : map[i].lock == 2 ? "unlocked" : "unknown");
+            mj_key(&b, "distance"); if (best < 0) mj_nullv(&b); else mj_intv(&b, best_distance);
+            if (best >= 0) {
+                mj_key(&b, "approach"); mj_obj(&b); mj_key(&b, "x"); mj_intv(&b, best%MAP_W);
+                mj_key(&b, "y"); mj_intv(&b, best/MAP_W); mj_endobj(&b);
+                mj_key(&b, "direction"); mj_strv(&b, nnh_compass_names[direction]);
+            }
+            mj_endobj(&b);
+        }
+        mj_endarr(&b);
+        mj_endobj(&b); free(map); return mj_take(&b);
+    }
+    n = nnh_known_route(&k, map, (int)ty * MAP_W + (int)tx, steps);
+    free(map);
+    mj_init(&b); mj_obj(&b);
+    mj_key(&b, "kind"); mj_strv(&b, "route");
+    mj_key(&b, "sessionId"); mj_strv(&b, g->id);
+    nnh_emit_basis(&k, &b); nnh_emit_gate(&k, &b);
+    mj_key(&b, "policy"); mj_strv(&b, "knownWalking");
+    mj_key(&b, "to"); mj_obj(&b); mj_key(&b, "x"); mj_intv(&b, tx); mj_key(&b, "y"); mj_intv(&b, ty); mj_endobj(&b);
+    mj_key(&b, "distance"); if (n < 0) mj_nullv(&b); else mj_intv(&b, n);
+    mj_key(&b, "steps"); mj_arr(&b);
+    for (i = 0; i < n; i++) {
+        mj_obj(&b); mj_key(&b, "x"); mj_intv(&b, steps[i] % MAP_W);
+        mj_key(&b, "y"); mj_intv(&b, steps[i] / MAP_W);
+        {
+            static const int xs[] = {0,1,1,1,0,-1,-1,-1}, ys[] = {-1,-1,0,1,1,1,0,-1};
+            int prev = i ? steps[i-1] : k.origin_y * MAP_W + k.origin_x, d;
+            for (d = 0; d < 8; d++) if (steps[i] % MAP_W - prev % MAP_W == xs[d] && steps[i] / MAP_W - prev / MAP_W == ys[d]) {
+                mj_key(&b, "direction"); mj_strv(&b, nnh_compass_names[d]); break;
+            }
+        }
+        mj_endobj(&b);
+    }
+    mj_endarr(&b); mj_endobj(&b); return mj_take(&b);
 }
 
 static char *
@@ -5888,6 +6140,17 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
             return fail_envelope(g->id, req_id, "runtimeUnavailable", "unprofiled history requires its original runtime; original calendar/options were not recorded and were not invented");
         }
     }
+    {
+        mj_val params, integrity;
+        long long version=0;
+        if (mj_find(log[0],"params",&params) && mj_find(params.p,"rngIntegrityVersion",&integrity))
+            (void)mj_int(integrity,&version);
+        if (version != g->rng_version) {
+            for (i=0;i<nlog;i++) free(log[i]);
+            free(log);
+            return fail_envelope(g->id,req_id,"replayIntegrityError","RNG verification version disagrees with the creation journal");
+        }
+    }
     if (record_prepare(g, 1)) {
         for (i = 0; i < nlog; i++) free(log[i]);
         free(log);
@@ -5918,6 +6181,7 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
         goto replay_failed;
     }
     ev_from = g->event_seq;
+    if(rng_replay_open(g)<0){code="replayIntegrityError";message=g->rng_error;goto replay_failed;}
     g->replaying = 1;
     g->deadline_ms = monotonic_ms() + 120000;
     if (send_raw(g, log[0]) || runtime_ack(g)) {
@@ -5926,13 +6190,15 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
     }
     if (send_raw(g, log[1])) goto replay_failed;
     for (i = 2; ; i++) {
+        g->rng_replay_position=i;
         int r = await_prompt(g, ACT_TIMEOUT_MS);
-        if (r < 0) { code = "replayTimeout"; message = "pinned replay did not reach a bounded input point"; goto replay_failed; }
+        if (r < 0) { code = g->rng_error[0]?"replayIntegrityError":"replayTimeout"; message = g->rng_error[0]?g->rng_error:"pinned replay did not reach a bounded input point"; goto replay_failed; }
         if (i == nlog) break;
         if (r != 1 || !input_matches_prompt(g, log[i]) || replay_unsafe_answer(g, log[i])) goto replay_failed;
         if (send_raw(g, log[i])) goto replay_failed;
         pending_clear(g);
     }
+    if(rng_replay_close(g,1)<0){code="replayIntegrityError";message=g->rng_error;goto replay_failed;}
     g->replaying = 0; g->deadline_ms = 0;
     for (i = 0; i < nlog; i++) free(log[i]);
     free(log); log = NULL;
@@ -5986,6 +6252,7 @@ run_resume(nhx_t *x, game_t *g, const char *req_id)
     return envelope(g, req_id, "resume", "needsChoice", NULL, 0, 0,
                     NULL, 0, ev_from, 1, 0, NULL, NULL);
 replay_failed:
+    (void)rng_replay_close(g,0);
     g->replaying = 0; g->deadline_ms = 0;
     for (i = 0; i < nlog; i++) free(log[i]);
     free(log);
@@ -6279,7 +6546,7 @@ run_scripted(nhx_t *x, game_t *g, const char *action, const char *args,
             return envelope_synth(g, req_id, action, "blocked", ev_from, 0,
                                   "noPerceivedContainers", "no perceived container is underfoot");
     }
-    if (extended_command(action) || !strcmp(action, "search"))
+    if (extended_command(action) || !strcmp(action, "search") || !strcmp(action,"rest"))
         return drive_loop(x, g, req_id, turn0, you0_x, you0_y, had_you,
                           ev_from, &bumped, 0);
     if (!strcmp(action, "unlock"))
@@ -6518,7 +6785,7 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
             goto remember;
         }
         /* fresh deeds need a free prompt */
-        if ((!strcmp(action, "configurePickup") && g->have_operation && g->operation.decision_id[0]) ||
+        if ((g->have_operation && g->operation.decision_id[0]) ||
             (g->pending.waiting && (g->pending.position_mode || (strcmp(g->pending.kind, "key") &&
             strcmp(g->pending.kind, "poskey"))))) {
             out = envelope_error(g, req_id, action, "pendingDecision",
@@ -6748,8 +7015,20 @@ nhx_call(nhx_t *x, const char *request_json)
             return out;
         }
     }
+    if (tool && !strcmp(tool, "lookup")) {
+        out = run_lookup(g,request_json); free(tool); free(sid); free(rid); return out;
+    }
     if (tool && !strcmp(tool, "actions")) {
         out = run_actions(g, request_json); free(tool); free(sid); free(rid); return out;
+    }
+    if (tool && (!strcmp(tool, "route") || !strcmp(tool, "navigation"))) {
+        out = run_route(g, request_json); free(tool); free(sid); free(rid); return out;
+    }
+    if (tool && !strcmp(tool, "receipt")) {
+        req_entry_t *entry = g && rid ? req_lookup(g, rid) : NULL;
+        out = g && !g->request_index_corrupt && entry ? req_saved_result(g, entry) : NULL;
+        if (!out) out = fail_envelope(sid ? sid : "", rid, "receiptUnavailable", "no verified receipt is available; missing receipt is uncertainty, not permission to execute again");
+        free(tool); free(sid); free(rid); return out;
     }
     was_ended = g && g->ended;
     if (g && rid && tool && !strcmp(tool, "act") && req_lookup(g, rid)) retry = 1;

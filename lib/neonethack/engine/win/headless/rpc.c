@@ -158,6 +158,12 @@ rpc_input(const char *kind, const char *params_json)
             jb_raw(&jb, kb.buf);
         jb_free(&kb);
     }
+    {
+        char integrity[512];
+        if (headless_rng_integrity(integrity,sizeof integrity)) {
+            jb_raw(&jb,",\"rngIntegrity\":"); jb_raw(&jb,integrity);
+        }
+    }
     if (params_json) {
         /* merge caller params into the same object (params_json holds
          *     ,"name":value, ...  fragments, leading comma included) */
@@ -173,7 +179,11 @@ rpc_input(const char *kind, const char *params_json)
     /* json_read_line serves --play answers from the keyboard (and logs
      * them) via its own play branch; the request was already rendered
      * by hl_play_on_line above. */
-    line = json_read_line(rpc_in);
+    for (;;) {
+        line = json_read_line(rpc_in);
+        if (!line || !headless_lore_request(line)) break;
+        free(line);
+    }
     if (!line) {
         rpc_session_ended("eof");
         return NULL;

@@ -141,3 +141,59 @@ secrets in player-entered text: do not put credentials in game text, and review
 before sharing. Public character names and perceived game text are retained.
 Vault keys/URLs, private journals, saves and browser profiles are never trace
 inputs. Keep retrospective traces out of a live player's information channel.
+
+## Private RNG verification work
+
+The current engine instruments ISAAC64's core and display streams with decimal
+64-bit output-word counters, seed-operation counters, and SHA-256 fingerprints.
+The fingerprint encodes the stream index, result-buffer position, complete
+result/state arrays, and accumulator words as fixed little-endian 64-bit values.
+It does not hash C struct padding, pointers, or native `unsigned long` storage.
+Counters measure consumed output words, not the number of internal generator
+mixing rounds. Counters remain cumulative across reseeding.
+
+This metadata is confined to private engine input-boundary, final-result and lore-reply
+transport and the session's private `rng.jsonl`. It is not a semantic operation, public observation, public receipt,
+or MCP field. Keep fingerprints private even though they are hashes: they can
+support guesses about deterministic state. The same pinned runtime and calendar
+remain necessary; this does not promise native/WASM state equality.
+
+New sessions mark RNG verification version 1 in private metadata and in the
+creation journal; resume rejects disagreement between them. Before answering
+an engine input, the driver durably appends its input-history position, input ID,
+prompt kind and RNG evidence. Final results record a terminal boundary. Resume
+compares these records in order without rewriting them; missing, torn, changed or
+extra evidence fails with `replayIntegrityError`. Supported older runs without the
+marker do not acquire invented historical evidence.
+
+**Validation status:** native private replay scenarios compare every captured
+boundary. Native and browser WASM damaged-record scenarios verify fail-closed
+resumption, including evidence persisted through IndexedDB reload and exact
+receipt recovery without fingerprint disclosure.
+Repeated lore queries preserve both counters and state fingerprints. The driver
+compares each lore reply with the last private input boundary and retires the
+runtime on a mismatch. Native fault scenarios cover lost replies, wrong IDs,
+malformed JSON, malformed result fields and changed RNG evidence; verified resume
+preserves the original journal and standing decision. Free public
+queries append no boundary records. Native/WASM SHA-256 comparisons cover padding
+and streaming boundaries. A native query-volume scenario compares the next exact
+RNG boundary after 400 observation, action-offer and navigation queries with an
+unqueried control. Stronger receipt binding remains pending. Equal RNG evidence is not proof that
+all non-random hidden engine state is equal.
+
+To measure local costs, build the native engine and run:
+
+```sh
+node lib/neonethack/scripts/measure-rng-overhead.mjs
+```
+
+This creates a disposable instrumented engine and fresh run, calls the actual
+fingerprint function 2,000 times while checking that its evidence stays unchanged,
+and reports local durability and whole-search timings separately. It never prints
+RNG state or reads an existing run. On Linux x64 / Ryzen Threadripper PRO 7975WX
+(2026-09-07), fingerprint generation averaged 0.099 ms; the 100-sample local
+file-and-directory sync probe had a 0.893 ms median and 1.482 ms p95. A full
+one-turn search had a 15.541 ms median over 30 samples. The durability probe
+includes Node asynchronous overhead, and full search includes all driver/engine
+work. These are not incremental total-latency, WASM, or remote-storage measurements;
+rerun on the target host rather than treating them as performance guarantees.

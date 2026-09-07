@@ -305,6 +305,10 @@ extern boolean status_hilite_menu(void);
 /* ### calendar.c ### */
 
 #ifdef HEADLESS_GRAPHICS
+extern void headless_count_step(const char *);
+extern void headless_isolated_names(void (*)(void *), void *);
+extern boolean headless_lore_lookup(char *, void (*)(const char *, void *),
+                                    void *, boolean *);
 extern long long headless_runtime_epoch(void);
 #endif
 extern time_t getnow(void);

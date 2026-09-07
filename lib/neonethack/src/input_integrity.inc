@@ -23,7 +23,7 @@ stored_integer(mj_val v, long long min, long long max)
 static int
 input_result_shape(const char *result)
 {
-    static const char *const fields[] = { "key", "x", "y", "mod", "answer", "line", "index", "picks", "counts", "cancelled", NULL };
+    static const char *const fields[] = { "key", "x", "y", "mod", "answer", "line", "index", "picks", "counts", "cancelled", "count", NULL };
     mj_val v;
     size_t i;
     if (mj_find(result, "automaticPickup", &v)) {
@@ -45,6 +45,10 @@ input_result_shape(const char *result)
                 if (++n > 1024 || !stored_integer(item, i == 7 ? 0 : -1, 2147483647)) return 0;
         }
         if (i == 9) { int flag; if (!mj_bool(v, &flag)) return 0; }
+    }
+    if (mj_find(result,"count",&v)) {
+        mj_val key; long long code;
+        if (!stored_integer(v,1,1000) || !mj_find(result,"key",&key) || !mj_int(key,&code) || (code != 115 && code != 46)) return 0;
     }
     {
         mj_val key, answer, text, index, picks, counts, cancelled;
@@ -77,7 +81,7 @@ input_validate_range(char **lines, size_t count, size_t start)
 {
     static const char *const header[] = { "jsonrpc", "id", "method", "params", NULL };
     static const char *const reply[] = { "jsonrpc", "id", "result", NULL };
-    static const char *const init[] = { "protocolVersion", "runtimeProfile", "calendarEpoch", NULL };
+    static const char *const init[] = { "protocolVersion", "runtimeProfile", "calendarEpoch", "rngIntegrityVersion", NULL };
     static const char *const game[] = { "role", "race", "gender", "align", "name", "seed", "automaticPickup", NULL };
     size_t i;
     if (count > INPUT_MAX_LINES || start > INPUT_MAX_LINES - count) return "unsupported input count";
@@ -104,6 +108,8 @@ input_validate_range(char **lines, size_t count, size_t start)
                 compatible = protocol && protocol[0] == '0' && (!protocol[1] || protocol[1] == '.');
                 free(protocol);
                 if (!compatible) return "unsupported recorded protocol version";
+                if (mj_find(params.p,"rngIntegrityVersion",&v) && !stored_integer(v,1,1))
+                    return "unsupported recorded RNG integrity version";
                 {
                     mj_val profile, epoch;
                     int have_profile = mj_find(params.p, "runtimeProfile", &profile);
@@ -133,7 +139,7 @@ static int
 input_matches_prompt(game_t *g, const char *line)
 {
     static const char *const empty[] = { NULL };
-    static const char *const key[] = { "key", "x", "y", "mod", NULL };
+    static const char *const key[] = { "key", "x", "y", "mod", "count", NULL };
     static const char *const answer[] = { "answer", NULL };
     static const char *const text[] = { "line", NULL };
     static const char *const command[] = { "index", NULL };
@@ -148,6 +154,7 @@ input_matches_prompt(game_t *g, const char *line)
             static const char *const settings[] = { "automaticPickup", NULL };
             return !g->pending.position_mode && request_fields(v.p, settings) && request_pickup_settings(value);
         }
+        if (g->pending.position_mode && mj_find(v.p,"count",&value)) return 0;
         return request_fields(v.p, key) && mj_find(v.p, "key", &value);
     }
     if (!strcmp(g->pending.kind, "yn")) {

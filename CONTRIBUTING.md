@@ -84,3 +84,9 @@ CI uses read-only permissions and commit-pinned actions. Review upstream changes
 before updating their hashes; keep dependency lockfiles in sync. The workflow builds
 and audits preview archives; preview publication remains separate. The Vercel deployment workflow also deploys
 main to neohack.dev; a push to main can therefore publish website changes.
+
+When changing the pinned engine, update its dated change notes and run the
+[engine fork audit](lib/neonethack/docs/ENGINE_FORK.md). Reuse the window port
+where it preserves the actual perceived facts and input boundaries. Removing
+a runtime hook requires native/WASM behavioral evidence; successful symbol
+wrapping alone does not prove timezone, startup or replay equivalence.

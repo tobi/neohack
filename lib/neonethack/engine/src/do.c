@@ -2362,6 +2362,9 @@ donull(void)
                           "Are you waiting to get hit?",
                           &gd.did_nothing_flag))
         return ECMD_OK;
+#ifdef HEADLESS_GRAPHICS
+    headless_count_step("rest");
+#endif
     return ECMD_TIME; /* Do nothing, but let other things happen */
 }
 

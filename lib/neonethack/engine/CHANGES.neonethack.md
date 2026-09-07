@@ -6,6 +6,42 @@ Original copyright, no-warranty and `dat/license` notices remain intact.
 These notes identify changes; they do not grant a new license for independently
 owned project code. The repository's publication/license review remains open.
 
+## 2026-09-07 — private RNG integrity instrumentation
+
+- src/rnd.c: count core/display ISAAC64 output words and seed operations,
+  with overflow checks; fingerprint canonical state with SHA-256. Counters
+  do not call either RNG and do not change its output. The encoding excludes
+  pointers, padding, host endianness and unsigned-long width.
+- include/nh_sha256.h: allocation-free byte-oriented SHA-256 used only for
+  private integrity fingerprints, tested against host crypto at native/WASM
+  padding and streaming boundaries.
+- win/headless/rpc.c and winheadless.c: attach private integrity metadata to
+  engine input boundaries and the out-of-band lore reply. The semantic driver
+  does not forward this metadata into public gameplay frames or receipts.
+  Durable boundary storage/comparison is a separate driver integration step.
+
+## 2026-09-07 — native counted search and rest
+
+- win/headless/winheadless.c: an explicit bounded count supplies only the
+  digits and one search/rest command to NetHack's existing count parser.
+  Timed occupations, refusals, interruptions and elapsed game time stay in
+  the engine. No repeated-command loop or automatic warning answer is added.
+- src/detect.c and src/do.c: witness actual search/rest executions so a counted
+  occupation's completion or interruption is reported without inferring it
+  from intended input or elapsed time. A refused search emits no searched fact.
+
+## 2026-09-07 — pinned encyclopedia query
+
+- src/pager.c: reuse the actual encyclopedia matcher with a text sink that
+  bypasses UI windows, messages and input. Exposes only typed-name lookup;
+  no observed or hidden creature identity is supplied to the matcher.
+- src/objnam.c: preserve the rotating object-name buffer pool across a free
+  lore query, including its allocation index, so suspended prompts retain
+  their strings. include/extern.h declares these headless-only hooks.
+- win/headless/rpc.c and winheadless.c: handle an out-of-band lore query while
+  retaining the existing input ID and suspended callback. These queries do
+  not enter the deterministic gameplay input journal or advance game time.
+
 ## 2026-09-07 — equipment intent and displayed passages
 
 - Headless perception supplies physical wearable destinations without revealing

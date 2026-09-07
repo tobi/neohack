@@ -14,6 +14,7 @@ calendar and isolated user options. Incompatible historical worlds are refused.
 
 Start with the [first-five-minutes guide](docs/QUICKSTART.md) for runnable
 source, browser and installed-preview paths.
+For the playing loop, read [How an agent plays](docs/AGENT_PLAY.md).
 
 WebMCP and stdio MCP return [compact observation deltas](docs/PROTOCOL.md#mcp-observation-presentation).
 The [native C MCP CLI](docs/TYPESCRIPT.md#streamable-http) also supports concurrent
@@ -156,3 +157,7 @@ NetHack retains its original license in [`engine/dat/license`](engine/dat/licens
 See [notices](NOTICE.md) for project and dependency licensing.
 
 Browser agents can use the complete MCP catalog through [`neonethack/webmcp`](docs/WEBMCP.md). The adapter uses native WebMCP and the application’s public transport; the pixel client shares its persistent engine and HUD with agent calls.
+
+For engine changes, the [fork audit](docs/ENGINE_FORK.md) explains retained
+hooks and provides a pinned-upstream comparison tool and native/WASM wrapper
+probe. A linker probe alone does not establish game or replay equivalence.

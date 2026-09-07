@@ -49,7 +49,7 @@ pending_signature(game_t *g, char out[32])
 static const char *
 sidecar_validate(game_t *g, const char *text)
 {
-    static const char *const fields[] = { "format", "version", "sessionId", "inputBytes", "boundaryComplete", "revision", "frameCount", "recordingGap", "recordingOnly", "inventoryRev", "nextDecision", "nextRef", "requests", "operation", NULL };
+    static const char *const fields[] = { "format", "version", "sessionId", "inputBytes", "boundaryComplete", "rngIntegrityVersion", "revision", "frameCount", "recordingGap", "recordingOnly", "inventoryRev", "nextDecision", "nextRef", "requests", "operation", NULL };
     static const char *const numeric[] = { "revision", "inventoryRev", "nextDecision", "nextRef", NULL };
     static const char *const boolean[] = { "recordingOnly", "recordingGap", "boundaryComplete", NULL };
     mj_val v, item;
@@ -59,6 +59,7 @@ sidecar_validate(game_t *g, const char *text)
     int modern = 0;
     mj_arr_it it = { 0 };
     if (!request_fields(text, fields)) return "unknown or escaped metadata field";
+    if(mj_find(text,"rngIntegrityVersion",&v)&&!stored_integer(v,1,1))return "invalid private RNG integrity version";
     if (mj_find(text, "format", &v)) {
         modern = 1;
         if (!record_is(v, "neonethack.session") || !mj_find(text, "version", &v) || !stored_integer(v, 1, 1) ||

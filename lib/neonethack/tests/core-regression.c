@@ -247,6 +247,9 @@ main(int argc, char **argv)
     CHECK(decision_id(r, dec, sizeof dec), "listing has an id");
     nhx_free(r);
 
+    snprintf(req, sizeof req,"{\"tool\":\"act\",\"sessionId\":\"%s\",\"replyTo\":\"%s\",\"cancel\":true}",sid,dec);
+    r=call(x,req); CHECK(has(r,"\"decision\":null"),"explicitly cancel item selection"); nhx_free(r);
+
     /* A miss reports noMatch without spending a turn. */
     snprintf(req, sizeof req,
              "{\"tool\":\"act\",\"sessionId\":\"%s\",\"action\":\"drink\","
@@ -264,7 +267,12 @@ main(int argc, char **argv)
     CHECK(has(r, "\"status\":\"needsChoice\""), "ambiguous drink lists");
     CHECK(jcount(r, "\"location\":\"inventory\"") >= 2,
           "both potions offered");
+    CHECK(decision_id(r,dec,sizeof dec),"ambiguous listing has an id");
     nhx_free(r);
+    snprintf(req, sizeof req,"{\"tool\":\"act\",\"sessionId\":\"%s\",\"replyTo\":\"%s\",\"cancel\":true}",sid,dec);
+    r=call(x,req); CHECK(has(r,"\"decision\":null"),"explicitly cancel item selection"); nhx_free(r);
+
+
 
     /* Prayer raises a typed confirmation; declining never restarts it. */
     snprintf(req, sizeof req,

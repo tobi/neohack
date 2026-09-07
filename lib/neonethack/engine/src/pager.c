@@ -827,11 +827,13 @@ ia_checkfile(struct obj *otmp)
  * Returns True if an entry is found, False otherwise.
  */
 staticfn boolean
-checkfile(
+checkfile_text(
     char *inp, /* string to look up */
     struct permonst *pm, /* monster type to look up (overrides 'inp') */
     unsigned chkflags,
-    char *supplemental_name)
+    char *supplemental_name,
+    void (*text_sink)(const char *, void *), void *sink_context,
+    boolean *lookup_error)
 {
     dlb *fp;
     char buf[BUFSZ], newstr[BUFSZ], givenname[BUFSZ];
@@ -845,12 +847,14 @@ checkfile(
 
     fp = dlb_fopen(DATAFILE, "r");
     if (!fp) {
-        pline("Cannot open 'data' file!");
+        if (lookup_error) *lookup_error = TRUE;
+        if (!text_sink) pline("Cannot open 'data' file!");
         return res;
     }
     /* If someone passed us garbage, prevent fault. */
     if (!inp || strlen(inp) > (BUFSZ - 1)) {
-        impossible("bad do_look buffer passed (%s)!",
+        if (lookup_error) *lookup_error = TRUE;
+        if (!text_sink) impossible("bad do_look buffer passed (%s)!",
                    !inp ? "null" : "too long");
         goto checkfile_done;
     }
@@ -995,12 +999,14 @@ checkfile(
             found_in_file = skipping_entry = FALSE;
             txt_offset = 0L;
             if (dlb_fseek(fp, txt_offset, SEEK_SET) < 0 ) {
-                impossible("can't get to start of 'data' file");
+                if (lookup_error) *lookup_error = TRUE;
+                if (!text_sink) impossible("can't get to start of 'data' file");
                 goto checkfile_done;
             }
             /* skip first record; read second */
             if (!dlb_fgets(buf, BUFSZ, fp) || !dlb_fgets(buf, BUFSZ, fp)) {
-                impossible("can't read 'data' file");
+                if (lookup_error) *lookup_error = TRUE;
+                if (!text_sink) impossible("can't read 'data' file");
                 goto checkfile_done;
             } else if (sscanf(buf, "%8lx\n", &txt_offset) < 1
                        || txt_offset == 0L)
@@ -1070,14 +1076,15 @@ checkfile(
 
                 if (user_typed_name || without_asking || yes_to_moreinfo) {
                     if (dlb_fseek(fp, fseekoffset, SEEK_SET) < 0) {
-                        pline("? Seek error on 'data' file!");
+                        if (lookup_error) *lookup_error = TRUE;
+                        if (!text_sink) pline("? Seek error on 'data' file!");
                         goto checkfile_done;
                     }
                     res = TRUE;
                     if (ia_checking)
                         goto checkfile_done;
 
-                    datawin = create_nhwindow(NHW_MENU);
+                    if (!text_sink) datawin = create_nhwindow(NHW_MENU);
                     for (i = 0; i < entry_count; i++) {
                         /* room for 1-tab or 8-space prefix + BUFSZ-1 + \0 */
                         char tabbuf[BUFSZ + 8], *tp;
@@ -1107,26 +1114,65 @@ checkfile(
                            at the end of quotes typically have them */
                         if (strchr(tp, '\t') != 0)
                             (void) tabexpand(tp);
-                        putstr(datawin, 0, tp);
+                        if (text_sink) text_sink(tp, sink_context);
+                        else putstr(datawin, 0, tp);
                     }
-                    display_nhwindow(datawin, FALSE);
-                    destroy_nhwindow(datawin), datawin = WIN_ERR;
+                    if (!text_sink) {
+                        display_nhwindow(datawin, FALSE);
+                        destroy_nhwindow(datawin), datawin = WIN_ERR;
+                    }
                 }
             } else if (user_typed_name && pass == 0 && !pass1found_in_file) {
-                pline("You don't have any information on those things.");
+                if (!text_sink) pline("You don't have any information on those things.");
             }
         }
     }
     goto checkfile_done; /* skip error feedback */
 
  bad_data_file:
-    impossible("'data' file in wrong format or corrupted");
+    if (lookup_error) *lookup_error = TRUE;
+    if (!text_sink) impossible("'data' file in wrong format or corrupted");
  checkfile_done:
     if (datawin != WIN_ERR)
         destroy_nhwindow(datawin);
     (void) dlb_fclose(fp);
     return res;
 }
+
+/* The ordinary UI and headless lore channel share the exact matcher/data. */
+staticfn boolean
+checkfile(char *inp, struct permonst *pm, unsigned flags, char *supplemental)
+{
+    return checkfile_text(inp, pm, flags, supplemental, 0, 0, 0);
+}
+
+#ifdef HEADLESS_GRAPHICS
+struct hl_lore_query {
+    char *name;
+    void (*sink)(const char *, void *);
+    void *context;
+    boolean found, error;
+};
+static void
+hl_lore_isolated(void *context)
+{
+    struct hl_lore_query *q = context;
+    q->found = checkfile_text(q->name, (struct permonst *) 0,
+                             chkfilUsrTyped | chkfilDontAsk, (char *) 0,
+                             q->sink, q->context, &q->error);
+}
+boolean
+headless_lore_lookup(char *name, void (*sink)(const char *, void *),
+                     void *context, boolean *error)
+{
+    struct hl_lore_query q = { name, sink, context, FALSE, FALSE };
+    char *p = name;
+    while (*p == ' ') p++;
+    if (*p) headless_isolated_names(hl_lore_isolated, &q);
+    *error = q.error;
+    return q.found;
+}
+#endif
 
 /* extracted from do_screen_description() */
 staticfn int

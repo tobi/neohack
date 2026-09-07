@@ -3,8 +3,9 @@
 NetHack's engine, exposed through a semantic protocol, with an approachable web
 UX. Humans and agents play the same game through the same perceived information
 and explicit decisions. Improving access to that information is the goal; the
-interface must not become a strategy advisor, hidden-state oracle or forgiving
-rescue service.
+low-level protocol must not become a hidden-state oracle or change the game's
+rules. Higher-level interfaces may provide clearly labelled navigation and agent
+conveniences computed from perceived knowledge, while preserving real decisions.
 
 ## Project map
 
@@ -47,9 +48,15 @@ Keep current guidance consistent across these documents:
 - hosting/vercel/README.md owns deployment and production-storage operations;
   CLOUD_SAVES.md and WASM.md explain persistence and exact runtime pins. Disposable
   development fixtures never authorize wiping published runs or the ledger.
-- Tool surfaces share the catalog. Run check:tools rather than maintaining
-  independent tool counts or lists in adapter guides. The low API is the complete
-  protocol client; high adds Hero/script conveniences without widening knowledge.
+- The low API exposes the complete semantic catalog. MCP/WebMCP and the high API
+  may offer a different, higher-level vocabulary, with explicit mappings to the
+  low-level operations. Run check:tools and evolve it to verify operation coverage
+  and meaning, rather than requiring identical high/low tool counts. WebMCP
+  and native stdio/HTTP MCP expose the navigation vocabulary generated from
+  `protocol/agent.ts`. There is no MCP profile switch. Precise operations remain
+  available through the low library, C API and NDJSON.
+- Prefer replacing an awkward method and updating its consumers over adding a
+  compatibility layer. Keep introductions short and link to the exact contract.
 
 ## Perceptual parity and UX
 
@@ -83,6 +90,13 @@ interaction and visual decisions, and update DESIGN.md when those decisions chan
 
 - Keep game semantics in the shared C implementation. TS, workers, MCP adapters,
   rendering and hosting must not acquire independent game rules or hidden state.
+- Shared C navigation may compute routes from remembered perception. Label its
+  policies (such as avoiding known traps) separately from physical movement
+  eligibility. Higher-level adapters may execute explicitly requested bounded
+  legs, stopping for genuine decisions, interruptions and changed conditions.
+- MCP may own request IDs, revision tracking and response reconstruction; the
+  engine still enforces exact receipts and stale-input checks. Require explicit
+  run tokens, and never treat an uncertain response as permission to act again.
 - Use opaque item references. Never infer item identity from display labels,
   inventory slots or menu order.
 - Preserve input journals, request reservations, exact receipts, engine/static

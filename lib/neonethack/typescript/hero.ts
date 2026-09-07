@@ -2,6 +2,7 @@ import { ScriptControls, ScriptJournal, copyState, returnedState, type ScriptSta
 import { attachController } from './lifecycle.js';
 import { HeroEventListeners, type HeroEventDetails, type HeroEventName, type HeroListener, type BotResult, type StopReason, type CellChange } from './hero-events.js';
 import type { Game } from './client.js';
+import type { GoOptions, NavigationResult, Point } from './navigator.js';
 import type { AutomaticPickup, CellActions, Cell, Item, ItemRef, Snapshot } from './types.js';
 import { direction, entities } from './vocabulary.js';
 export { direction, entities } from './vocabulary.js';
@@ -408,24 +409,30 @@ export class Hero {
       .sort((a, b) => a.distance - b.distance || a.position[1] - b.position[1] || a.position[0] - b.position[0]);
   }
   senseClosest(filter: entities = entities.Creature): Entity | undefined { return this.sense(filter)[0]; }
-  /** Attempt ONE step in a direction or toward a freshly sensed entity. No pathfinding.
-   * Normal engine bump behavior applies, including doors, attacks, and warnings. */
-  go(target: direction | Entity): Promise<Snapshot> {
+  /** Reference text from the pinned encyclopedia; never observed identity. */
+  lookup(name:string) { this.assertActive(); return this.game.lookup(name); }
+  /** Navigate to a perceived destination. Force is only an adjacent ordinary move. */
+  go(options: Omit<GoOptions,'to'> & {to:Point|Entity}): Promise<NavigationResult> {
     this.assertActive();
-    const options = target instanceof Entity ? current(target, this.game) : { expectedRevision: this.snapshot.revision };
-    const heading = target instanceof Entity ? offsets.get(target.offset.map(Math.sign).join(',')) : target;
-    if (!heading || !Object.values(direction).includes(heading)) throw Error('A compass direction or a distinct visible entity is required.');
-    return this.game.move(heading, options);
+    const target=options.to;
+    if(target instanceof Entity) current(target,this.game);
+    return this.game.go({...options,to:target instanceof Entity ? {x:target.position[0],y:target.position[1]} : {...target}});
   }
-  /** Attempt one melee bump against a freshly perceived adjacent hostile creature.
-   * Never force-attacks or confirms a warning. Inspect the returned outcome. */
-  attack(target: Entity): Promise<Snapshot> {
-    current(target, this.game);
-    if (target.attitude !== 'hostile') throw Error('Attack requires a perceived hostile creature.');
-    if (target.distance !== 1) throw Error('Melee attack requires an adjacent enemy.');
-    return this.go(target);
+  /** Force one engine attack at an adjacent square or a fresh perceived creature.
+   * Does not infer hostility or answer any engine confirmation. */
+  attack({target}:{target:Entity|Point}): Promise<Snapshot> {
+    this.assertActive();
+    const options=target instanceof Entity ? current(target,this.game) : {expectedRevision:this.snapshot.revision};
+    const to=target instanceof Entity ? {x:target.position[0],y:target.position[1]} : {...target};
+    return this.game.actions(to,options).then(query=>{
+      const move=query.cell.actions.find(a=>a.method==='game.move');
+      if(query.cell.movement.relation!=='adjacent' || !move?.arguments || !('direction' in move.arguments))
+        throw Error('Choose an adjacent square for an attack');
+      return this.game.attack(move.arguments.direction!,options);
+    });
   }
   wait(): Promise<Snapshot> { this.assertActive(); return this.game.wait({ expectedRevision: this.snapshot.revision }); }
-  search(): Promise<Snapshot> { this.assertActive(); return this.game.search({ expectedRevision: this.snapshot.revision }); }
+  search(options:{turns?:number}={}): Promise<Snapshot> { this.assertActive(); return this.game.search({ ...options, expectedRevision: this.snapshot.revision }); }
+  rest(options:{turns?:number}={}): Promise<Snapshot> { this.assertActive(); return this.game.rest({ ...options, expectedRevision: this.snapshot.revision }); }
   climb(target: 'up' | 'down'): Promise<Snapshot> { this.assertActive(); return this.game.climb(target, { expectedRevision: this.snapshot.revision }); }
 }

@@ -18,6 +18,10 @@ static int direction(int dx, int dy)
     for (i = 0; i < 8; i++) if (xs[i] == dx && ys[i] == dy) return i;
     return -1;
 }
+static int known_rock(const nnh_known_cell *c)
+{
+    return c->in_bounds && (c->terrain == T_WALL || c->terrain == T_TREE);
+}
 static void offer(nnh_cell_actions *out, const char *key, const char *method,
                   const char *availability, int dir, const char *reason, const char *next, int context)
 {
@@ -60,6 +64,9 @@ void nnh_resolve_cell(const nnh_knowledge *k, int index, nnh_cell_actions *out)
     diagonal = adjacent && out->dx && out->dy;
     door = terrain == T_DOOR_CLOSED || terrain == T_DOOR_OPEN;
     if (adjacent) {
+        out->requires_squeeze = diagonal && k->ordinary_locomotion &&
+            known_rock(&k->cells[40 + out->dx]) &&
+            known_rock(&k->cells[40 + 9 * out->dy]);
         out->intent = !k->direction_reliable ? "unknown" : out->known.occupant >= 2 ?
             (out->known.occupant == 3 ? "allyBump" : "creatureBump") : out->known.boulder ? "possiblePush" :
             terrain == T_DOOR_CLOSED ? "attemptOpen" : out->walkable == 1 ? "step" :
@@ -171,6 +178,7 @@ void nnh_emit_cell_actions(const nnh_cell_actions *c, mj_Buf *b)
     mj_key(b, "movement"); mj_obj(b); mj_key(b, "relation"); mj_strv(b, c->relation);
     if (c->intent) { mj_key(b, "intent"); mj_strv(b, c->intent); }
     if (c->restriction) { mj_key(b, "knownRestriction"); mj_strv(b, c->restriction); }
+    if (c->requires_squeeze) { mj_key(b, "requiresSqueeze"); mj_boolv(b, 1); }
     mj_endobj(b);
     mj_key(b, "actions"); mj_arr(b);
     for (i = 0; i < c->action_count; i++) {
@@ -215,4 +223,60 @@ void nnh_emit_neighborhood(const nnh_knowledge *k, mj_Buf *b)
         mj_endarr(b);
     }
     mj_endobj(b);
+}
+
+int nnh_known_paths(const nnh_knowledge *basis, const nnh_known_cell *map, int *parent)
+{
+    static const int dx[] = {0,1,1,1,0,-1,-1,-1}, dy[] = {-1,-1,0,1,1,1,0,-1};
+    int queue[NNH_MAP_CELLS];
+    int start = basis->origin_y * NNH_MAP_WIDTH + basis->origin_x;
+    int head = 0, tail = 0, i;
+    nnh_knowledge k = *basis;
+    if (!basis->have_origin || !basis->ordinary_locomotion || !basis->direction_reliable ||
+        start < 0 || start >= NNH_MAP_CELLS || !map[start].in_bounds) return -1;
+    for (i = 0; i < NNH_MAP_CELLS; i++) parent[i] = -1;
+    queue[tail++] = start; parent[start] = start;
+    while (head < tail) {
+        int at = queue[head++], x = at % NNH_MAP_WIDTH, y = at / NNH_MAP_WIDTH;
+        int ox, oy;
+        k.origin_x = x; k.origin_y = y;
+        memset(k.cells, 0, sizeof k.cells);
+        for (oy = -1; oy <= 1; oy++) for (ox = -1; ox <= 1; ox++) {
+            int nx = x + ox, ny = y + oy;
+            if (nx >= 1 && nx < NNH_MAP_WIDTH && ny >= 0 && ny < NNH_MAP_HEIGHT)
+                k.cells[40 + ox + 9 * oy] = map[ny * NNH_MAP_WIDTH + nx];
+        }
+        for (i = 0; i < 8; i++) {
+            nnh_cell_actions edge;
+            int nx = x + dx[i], ny = y + dy[i], next;
+            if (nx < 1 || nx >= NNH_MAP_WIDTH || ny < 0 || ny >= NNH_MAP_HEIGHT) continue;
+            next = ny * NNH_MAP_WIDTH + nx;
+            if (parent[next] >= 0) continue;
+            nnh_resolve_cell(&k, 40 + dx[i] + 9 * dy[i], &edge);
+            /* Unknown diagonal corners also cannot establish a known route. */
+            if (dx[i] && dy[i] &&
+                (k.cells[40 + dx[i]].terrain == T_UNKNOWN || k.cells[40 + dx[i]].terrain == T_DARK ||
+                 k.cells[40 + 9 * dy[i]].terrain == T_UNKNOWN || k.cells[40 + 9 * dy[i]].terrain == T_DARK)) continue;
+            /* Do not infer push/squeeze feasibility around boulder corners. */
+            if (dx[i] && dy[i] &&
+                (known_rock(&k.cells[40 + dx[i]]) || k.cells[40 + dx[i]].boulder) &&
+                (known_rock(&k.cells[40 + 9 * dy[i]]) || k.cells[40 + 9 * dy[i]].boulder)) continue;
+            if (edge.walkable != 1 || !edge.intent || strcmp(edge.intent, "step") ||
+                edge.restriction || edge.requires_squeeze || edge.known.trap) continue;
+            parent[next] = at; queue[tail++] = next;
+        }
+    }
+    return start;
+}
+
+int nnh_known_route(const nnh_knowledge *basis, const nnh_known_cell *map, int target, int *steps)
+{
+    int parent[NNH_MAP_CELLS], i, n = 0;
+    int start = nnh_known_paths(basis, map, parent);
+    if (start < 0 || target < 0 || target >= NNH_MAP_CELLS || parent[target] < 0) return -1;
+    for (i = target; i != start; i = parent[i]) steps[n++] = i;
+    for (i = 0; i < n / 2; i++) {
+        int swap = steps[i]; steps[i] = steps[n - 1 - i]; steps[n - 1 - i] = swap;
+    }
+    return n;
 }

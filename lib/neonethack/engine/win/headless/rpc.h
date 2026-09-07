@@ -26,6 +26,10 @@ void rpc_notify(const char *method, const char *params_json);
  * and parses fields) or NULL on EOF/parse failure. Emits session_ended
  * first on EOF. */
 char *rpc_input(const char *kind, const char *params_json);
+/* Free out-of-band lore request while a genuine input remains suspended. */
+int headless_lore_request(const char *line);
+/* Private verification metadata, not a gameplay query. */
+int headless_rng_integrity(char *out, size_t capacity);
 /* read one client->engine request line; splits into malloc'd method text and
  * raw params text. Returns request id, or -1 on EOF, -2 on parse error. */
 long long rpc_read_request(char **method_out, char **params_out);

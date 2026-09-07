@@ -52,7 +52,7 @@ const cellActions = closed({
   occupant: closed({ kind: enumeration("self", "creature", "ally"), mark: string, color: integer, appearance: string, attitude: enumeration("hostile", "peaceful", "tame") }, ["kind"]),
   objects: array(closed({ mark: string, color: integer, kind: enumeration("boulder") }, ["mark", "color"])),
   hazards: array(enumeration("trap", "water", "lava")),
-  walkable: nullable(boolean), movement: closed({ relation: enumeration("here", "adjacent", "distant"), intent: enumeration("step", "attemptOpen", "attemptObstacle", "creatureBump", "allyBump", "possiblePush", "unknown"), knownRestriction: enumeration("intactDoorDiagonal", "lockedDoor", "knownTerrainObstacle") }, ["relation"]),
+  walkable: nullable(boolean), movement: closed({ relation: enumeration("here", "adjacent", "distant"), intent: enumeration("step", "attemptOpen", "attemptObstacle", "creatureBump", "allyBump", "possiblePush", "unknown"), knownRestriction: enumeration("intactDoorDiagonal", "lockedDoor", "knownTerrainObstacle"), requiresSqueeze: boolean }, ["relation"]),
   actions: { ...array(actionOffer), maxItems: 16 },
 }, ["x", "y", "dx", "dy", "inBounds", "walkable", "movement", "actions"]);
 const neighborhood = { oneOf: [
@@ -82,7 +82,10 @@ export const responseSchema: Schema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   title: "libneonethack response v1",
   ...object({
-    kind: { const: "actions" }, basis, inputGate, cell: cellActions,
+    kind: enumeration("actions", "route", "navigation", "lore"), name:string, found:boolean, lines:array(string), basis, inputGate, cell: cellActions,
+    doors: array(closed({x:integer,y:integer,lock:enumeration("locked","unlocked","unknown"),distance:nullable(integer),approach:closed({x:integer,y:integer}),direction:compass}, ["x","y","lock","distance"])),
+    frontiers: array(closed({x:integer,y:integer,distance:integer})), waysDown: array(closed({x:integer,y:integer,distance:nullable(integer)})),
+    policy: { const: "knownWalking" }, to: closed({x: integer, y: integer}), distance: nullable(integer), steps: array(closed({x: integer, y: integer, direction:compass})),
     version: { const: 1 }, sessionId: string, requestId: nullable(string), revision: integer,
     outcome: object({ action: string, status: enumeration("completed", "needsChoice", "blocked", "cancelled", "interrupted", "unknown"), reason: string, turnsElapsed: integer, positionChanged: boolean, effects: array(string) }, ["action", "status", "turnsElapsed", "positionChanged", "effects"]),
     observation,
@@ -90,7 +93,7 @@ export const responseSchema: Schema = {
       decision("item", { options: array(item), selection, counted: boolean }, ["counted"]),
       decision("target", { allowedTargets: array(enumeration("self", "direction")), allowedDirections: array(enumeration(...compass.enum, "up", "down")) }, ["allowedDirections"]),
       decision("confirmation", { context: object({ action: string, direction: enumeration("north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest", "up", "down"), itemId: string }, ["action"]) }, ["context"]),
-      decision("choice", { options: array(object({ id: integer, label: string, transfer: enumeration("take", "put"), suggested: boolean }, ["id", "label"])), selection, containerPhase: enumeration("inspect", "transfer"), pickupReview: boolean }, ["selection", "containerPhase", "pickupReview"]),
+      decision("choice", { options: array(object({ id: integer, label: string, name: string, transfer: enumeration("take", "put"), suggested: boolean }, ["id", "label", "name"])), selection, containerPhase: enumeration("inspect", "transfer"), pickupReview: boolean }, ["selection", "containerPhase", "pickupReview"]),
       decision("text", { purpose: enumeration("consumedPotionNickname") }, ["purpose"]),
       decision("position", { cursor: closed({ x: integer, y: integer }), mode: enumeration("browse", "select") }),
     ] }),
@@ -113,7 +116,10 @@ export const responseSchema: Schema = {
     catalog: object({ version: { const: 1 }, methods: array(object({ name: string, description: string, schema: { type: "object" } })) }),
   }, ["version"]),
   anyOf: [
-    { required: ["kind", "sessionId", "basis", "inputGate", "cell"] },
+    {required:["kind","sessionId","name","found","lines"],properties:{kind:{const:"lore"}}},
+    {required:["kind","sessionId","basis","inputGate","policy","frontiers","waysDown","doors"],properties:{kind:{const:"navigation"}}},
+    { required: ["kind", "sessionId", "basis", "inputGate", "cell"], properties: {kind: {const: "actions"}} },
+    { required: ["kind", "sessionId", "basis", "inputGate", "policy", "to", "distance", "steps"], properties: {kind: {const: "route"}} },
     { required: ["sessionId", "requestId", "revision", "outcome", "observation", "events", "decision", "ended", "end"] },
     { required: ["error"] },
     { required: ["libraryVersion", "backend", "catalog", "capabilities"] },

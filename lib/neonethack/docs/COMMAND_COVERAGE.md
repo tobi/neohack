@@ -140,7 +140,7 @@ This preserves NEO-26's inventory of every non-debug/non-internal extcmdlist ent
 | `rush` | Excluded | One explicit operation at a time; no repeat/travel/prefix surface. |
 | `save` | Partial | session.close/resume use durable journals and pinned package; not engine save command. |
 | `saveoptions` | Partial | Ground-pickup subset via game.configurePickup. Other general options and persistence commands are excluded. |
-| `search` | Shipped | Named game operation; success, time and decisions remain engine-owned. |
+| `search` | Shipped | Native counted search (1–1000, default 1), with executed-search witnesses and engine interruptions. |
 | `seeall` | Partial | Public observation/actions cover only part of manual information; no complete view parity claim. |
 | `seeamulet` | Partial | Public observation/actions cover only part of manual information; no complete view parity claim. |
 | `seearmor` | Partial | Public observation/actions cover only part of manual information; no complete view parity claim. |
@@ -170,7 +170,7 @@ This preserves NEO-26's inventory of every non-debug/non-internal extcmdlist ent
 | `vanquished` | Partial | Public observation/actions cover only part of manual information; no complete view parity claim. |
 | `version` | Excluded | Docs/discovery/pinned identity replace engine command-entry UI; no raw command string. |
 | `versionshort` | Excluded | Docs/discovery/pinned identity replace engine command-entry UI; no raw command string. |
-| `wait` | Shipped | Named game operation; success, time and decisions remain engine-owned. |
+| `wait` | Shipped | One waiting attempt; `game.rest` requests a bounded native counted occupation. |
 | `wear` | Supported | game.equip/remove selects exact carried equipment, including recognizable blindfold/towel/lenses/meat ring exceptions; real layering and hand choices. |
 | `whatdoes` | Excluded | Docs/discovery/pinned identity replace engine command-entry UI; no raw command string. |
 | `whatis` | Partial | Public observation/actions cover only part of manual information; no complete view parity claim. |
@@ -201,3 +201,16 @@ This preserves NEO-26's inventory of every non-debug/non-internal extcmdlist ent
 | `runsoutheast` | Excluded | No automatic running/rushing or repeated moves. |
 | `runsouth` | Excluded | No automatic running/rushing or repeated moves. |
 | `runsouthwest` | Excluded | No automatic running/rushing or repeated moves. |
+
+### Encyclopedia query
+
+`session.lookup` exposes typed-name encyclopedia matching from the pinned
+engine. Native/WASM scenarios verify entry text, article/singular matching,
+missing names, queries during a standing decision, unchanged input journals
+(native), and identical subsequent seeded turns. This is lore, not complete
+discovery history, hidden identity, or a claim of universal name matching.
+
+Counted search/rest are verified by shared [native/WASM scenarios](../tests/counted-contracts.mjs):
+completion, real interruption, explicit pending decisions, count limits, exact
+receipts and replay on resume. Native journal inspection proves one count input
+instead of a client repetition loop. Counts do not override engine safety refusals.

@@ -6,6 +6,11 @@
 
 #ifdef USE_ISAAC64
 #include "isaac64.h"
+#ifdef HEADLESS_GRAPHICS
+#include "nh_sha256.h"
+#include <inttypes.h>
+static uint64_t hl_rng_draws[2], hl_rng_seeds[2];
+#endif
 
 staticfn int whichrng(int (*fn)(int));
 staticfn int RND(int);
@@ -53,6 +58,11 @@ init_isaac64(unsigned long seed, int (*fn)(int))
         new_rng_state[i] = (unsigned char) (seed & 0xFF);
         seed >>= 8;
     }
+
+#ifdef HEADLESS_GRAPHICS
+    if (hl_rng_seeds[rngindx] == UINT64_MAX) panic("RNG reseed counter overflow");
+    hl_rng_seeds[rngindx]++;
+#endif
     isaac64_init(&rnglist[rngindx].rng_state, new_rng_state,
                  (int) sizeof seed);
 }
@@ -60,6 +70,10 @@ init_isaac64(unsigned long seed, int (*fn)(int))
 staticfn int
 RND(int x)
 {
+#ifdef HEADLESS_GRAPHICS
+    if (hl_rng_draws[CORE] == UINT64_MAX) panic("Core RNG counter overflow");
+    hl_rng_draws[CORE]++;
+#endif
     return (isaac64_next_uint64(&rnglist[CORE].rng_state) % x);
 }
 
@@ -69,10 +83,48 @@ RND(int x)
 int
 rn2_on_display_rng(int x)
 {
+#ifdef HEADLESS_GRAPHICS
+    if (hl_rng_draws[DISP] == UINT64_MAX) panic("Display RNG counter overflow");
+    hl_rng_draws[DISP]++;
+#endif
     return (isaac64_next_uint64(&rnglist[DISP].rng_state) % x);
 }
 
+#ifdef HEADLESS_GRAPHICS
+static void
+hl_rng_word(nh_sha256 *hash, uint64_t word)
+{
+    unsigned char bytes[8]; unsigned i;
+    for (i=0;i<8;i++) bytes[i]=(unsigned char)(word>>(8*i));
+    nh_sha_update(hash,bytes,sizeof bytes);
+}
+static void
+hl_rng_hash(int index, char out[65])
+{
+    const isaac64_ctx *state=&rnglist[index].rng_state;
+    nh_sha256 hash; unsigned i;
+    nh_sha_init(&hash); nh_sha_update(&hash,"neonethack-isaac64-v1",sizeof "neonethack-isaac64-v1"-1);
+    hl_rng_word(&hash,(uint64_t)index); hl_rng_word(&hash,state->n);
+    for(i=0;i<ISAAC64_SZ;i++)hl_rng_word(&hash,state->r[i]);
+    for(i=0;i<ISAAC64_SZ;i++)hl_rng_word(&hash,state->m[i]);
+    hl_rng_word(&hash,state->a);hl_rng_word(&hash,state->b);hl_rng_word(&hash,state->c);
+    nh_sha_final(&hash,out);
+}
+/* Private transport metadata only. Never a public observation or receipt. */
+int
+headless_rng_integrity(char *out, size_t capacity)
+{
+    char core[65],display[65]; int n;
+    hl_rng_hash(CORE,core);hl_rng_hash(DISP,display);
+    n=snprintf(out,capacity,"{\"algorithm\":\"isaac64-sha256-v1\",\"core\":{\"draws\":\"%" PRIu64 "\",\"seeds\":\"%" PRIu64 "\",\"state\":\"%s\"},\"display\":{\"draws\":\"%" PRIu64 "\",\"seeds\":\"%" PRIu64 "\",\"state\":\"%s\"}}",hl_rng_draws[CORE],hl_rng_seeds[CORE],core,hl_rng_draws[DISP],hl_rng_seeds[DISP],display);
+    return n>=0 && (size_t)n<capacity;
+}
+#endif
+
 #else   /* USE_ISAAC64 */
+#ifdef HEADLESS_GRAPHICS
+int headless_rng_integrity(char *out, size_t capacity) { (void)out; (void)capacity; return 0; }
+#endif
 
 /* "Rand()"s definition is determined by [OS]conf.h */
 #if defined(UNIX) || defined(RANDOM)

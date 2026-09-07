@@ -270,6 +270,26 @@
                     "direction"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 79
+                    },
+                    "y": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 20
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -278,6 +298,191 @@
             "sessionId",
             "expectedRevision",
             "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "session.lookup"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Session ID from create/resume."
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "x-maxBytes": 255,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+            }
+          },
+          "required": [
+            "sessionId",
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "session.navigation"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Session ID from create/resume."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "sessionId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "session.route"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Session ID from create/resume."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "to": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 79
+                },
+                "y": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 20
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "sessionId",
+            "expectedRevision",
+            "to"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "session.receipt"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Session ID from create/resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId"
           ],
           "additionalProperties": false
         }
@@ -562,6 +767,66 @@
               "minimum": 0,
               "maximum": 9007199254740991,
               "description": "Latest observation revision, not game time."
+            },
+            "turns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
+          "const": "game.rest"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Session ID from create/resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID; retry only with the same ID and payload."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Latest observation revision, not game time."
+            },
+            "turns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
             }
           },
           "required": [

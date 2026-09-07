@@ -1,77 +1,53 @@
 # Play with agent-browser and WebMCP
 
-Use agent-browser to play [NetHack at neohack.dev](https://neohack.dev) through
-its WebMCP tools. You do not need to clone this repository or run a game server.
-The game runs in the browser, and each tool result updates the same visible HUD
-and durable save used by keyboard and touch input.
+Open [neohack.dev](https://neohack.dev) and play through the browser’s WebMCP
+tools. The agent shares the human’s visible game, explicit decisions and save.
+No repository checkout or gameplay server is needed.
 
-## Open the live game
+## Open and discover
 
 Install [agent-browser](https://github.com/vercel-labs/agent-browser#installation)
-and its Chrome for Testing browser:
+and its managed browser. Use a version supporting `webmcp list` and `webmcp invoke`;
+previous browser integration was checked with agent-browser 0.36.0 and Chrome for
+Testing 152.0.7977.82. Keep Chrome’s sandbox enabled.
 
 ```sh
 npm install -g agent-browser
 agent-browser install
-```
-
-Use a version with `webmcp list` and `webmcp invoke`. The walkthrough was checked
-with **agent-browser 0.36.0 and Chrome for Testing 152.0.7977.82**. WebMCP is
-experimental; older Chrome versions may lack its CDP domain even when page-level
-WebMCP APIs exist. Upgrade both the CLI and browser if needed.
-
-Managed Chrome enables WebMCP by default. In one shell, select a dedicated browser
-session and a persistent profile outside the repository:
-
-```sh
 export AGENT_BROWSER_SESSION=neonethack
 export AGENT_BROWSER_PROFILE="$HOME/.neonethack-agent-profile"
 agent-browser open https://neohack.dev
 agent-browser wait 'pixel-nethack[data-webmcp="ready"]'
 agent-browser webmcp list
-agent-browser webmcp invoke protocol_describe --params '{}'
+agent-browser webmcp invoke help --params '{}'
+agent-browser webmcp invoke help --params '{"name":"go"}'
 ```
 
-Add `--headed` to `open` to watch the game. Use the same profile, origin and WASM
-package when resuming a save. Cookie/localStorage exports are not a replacement
-for this game's IndexedDB journal. Close human menus before issuing game tools.
+Add `--headed` to watch. Keep the same browser profile and origin to retain the
+IndexedDB journal; cookie/localStorage exports do not replace it. Close human
+menus before agent input. These commands describe the current navigation-only
+source contract. If the deployed build does not expose `go`, check its version
+instead of assuming an older tool has the same meaning.
 
-If attaching to an existing Chrome instead, launch it with a dedicated profile,
-`--enable-experimental-web-platform-features` and a loopback remote-debugging port.
-Pass `--cdp PORT` on every agent-browser command. Keep Chrome's sandbox enabled.
+## Create or observe one run
 
-## Create a game and inspect it
-
-For a fully random character with a generated name, invoke `session_create`
-with `--params '{}'`. Supply only the identity fields you want to choose.
-
-The examples below use `jq` and keep request/response files in a new temporary
-directory. Tool arguments are the schema's parameters directly, with no enclosing
-`method` or `params` object.
+The shell examples use `jq`. Arguments are the tool’s parameters directly.
+An empty creation object chooses a random character and generated name; specify
+only the identity fields you want to choose.
 
 ```sh
 PLAY_DIR=$(mktemp -d)
 agent-browser --json webmcp invoke session_create \
-  --params '{"name":"Ada","seed":42,"role":"valkyrie"}' > "$PLAY_DIR/create.json"
+  --params '{"seed":42,"role":"valkyrie"}' > "$PLAY_DIR/create.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/create.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/create.json" > "$PLAY_DIR/frame.json"
-jq '{sessionId, revision, observation, decision}' "$PLAY_DIR/frame.json"
 GAME_ID=$(jq -er '.sessionId' "$PLAY_DIR/frame.json")
 ```
 
-Run creation once. If its reply is lost, inspect the visible adventure or saved
-adventure list before creating another game. `session.create` has no retry ID.
-On success, check the game result as well as the CLI's `success`: errors reported
-by the game appear in `data.output.isError` and the structured response's `error`.
-Stop if a check fails; inspect the error before running the next block.
-
-To use an already open game, read its public DOM identifier instead of creating:
-
-```sh
-GAME_ID=$(agent-browser get attr pixel-nethack data-session-id)
-```
-
-Read the current world for free, including any standing decision:
+Run creation once. If its reply is lost, retrieve the original invocation or
+inspect the owning page before creating again. An already open game exposes its
+public token through `agent-browser get attr pixel-nethack data-session-id`.
+Observe it for free:
 
 ```sh
 agent-browser --json webmcp invoke session_observe \
@@ -80,179 +56,94 @@ jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/observe.js
 jq '.data.output.structuredContent' "$PLAY_DIR/observe.json" > "$PLAY_DIR/frame.json"
 ```
 
-## Take a turn
+Check both the CLI envelope and game result. A timed-out invocation is not a
+frame. Require a session token, observation, outcome, decision and ended status;
+stop on errors. MCP/WebMCP returns full observations and witnessed summaries,
+not deltas the caller must merge.
 
-If `decision` is null and the game is active, search once. Each new input gets a
-unique request ID and the revision from the latest observation. Save the exact
-parameters before invoking the tool:
+## Navigate and answer questions
+
+MCP manages request IDs, revisions and pending question context. You pass the
+short `sessionId` on every call and choose one operation at a time.
 
 ```sh
-REQUEST_ID=$(node -e 'console.log(crypto.randomUUID())')
-REQUEST_FILE="$PLAY_DIR/$REQUEST_ID.json"
-jq --arg rid "$REQUEST_ID" \
-  '{sessionId, expectedRevision:.revision, requestId:$rid}' \
-  "$PLAY_DIR/frame.json" > "$REQUEST_FILE"
+agent-browser webmcp invoke session_actions \
+  --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid,target:{direction:"east"}}')"
 agent-browser --json webmcp invoke game_search \
-  --params "@$REQUEST_FILE" > "$PLAY_DIR/search.json"
+  --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid,turns:1}')" > "$PLAY_DIR/search.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/search.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/search.json" > "$PLAY_DIR/frame.json"
-jq '{revision, outcome, events, decision, observation}' "$PLAY_DIR/frame.json"
 ```
 
-For movement, first inspect `observation.neighborhood` or query a direction:
+Inspect the returned question before another action. To navigate, choose a
+perceived destination and invoke `go` with `{sessionId,to:{x,y},maxActions:8}`.
+The shared navigator plans known routes and stops on decisions or changed
+circumstances. `explore` requests one exploration leg; `descend` follows disclosed
+stairs. Neither is an endless autoplay command.
+
+The 9×9 neighborhood is a destination-selection area. Only the eight adjacent
+squares represent single steps. To deliberately attempt an ordinary step east,
+including its normal bumps or attempts to open a door:
 
 ```sh
-jq '{sessionId, expectedRevision:.revision, target:{direction:"east"}}' \
-  "$PLAY_DIR/frame.json" > "$PLAY_DIR/actions.json"
-agent-browser webmcp invoke session_actions --params "@$PLAY_DIR/actions.json"
+jq '{sessionId,to:{x:(.observation.you.x+1),y:.observation.you.y},force:true}' \
+  "$PLAY_DIR/frame.json" > "$PLAY_DIR/move.json"
+agent-browser --json webmcp invoke go \
+  --params "@$PLAY_DIR/move.json" > "$PLAY_DIR/moved.json"
+jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/moved.json"
+jq '.data.output.structuredContent' "$PLAY_DIR/moved.json" > "$PLAY_DIR/frame.json"
 ```
 
-This query costs no turn. Choose a direction from perceived information; an
-available attempt is not a promise of safety. If you choose to step east:
+Refresh `frame.json` after every operation before using it for another target.
+`force:true` permits only adjacent ordinary movement: it does not bypass rules,
+confirmations or standing decisions, and is not force attack. Use `attack` for a
+deliberate adjacent attack. Eligibility is not a safety guarantee.
+
+Answer a standing question explicitly. For a confirmation you choose to decline:
 
 ```sh
-REQUEST_ID=$(node -e 'console.log(crypto.randomUUID())')
-REQUEST_FILE="$PLAY_DIR/$REQUEST_ID.json"
-jq --arg rid "$REQUEST_ID" \
-  '{sessionId, expectedRevision:.revision, requestId:$rid, direction:"east"}' \
-  "$PLAY_DIR/frame.json" > "$REQUEST_FILE"
-agent-browser --json webmcp invoke game_move \
-  --params "@$REQUEST_FILE" > "$PLAY_DIR/move.json"
-jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/move.json"
-jq '.data.output.structuredContent' "$PLAY_DIR/move.json" > "$PLAY_DIR/frame.json"
+agent-browser webmcp invoke decision_answer \
+  --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid,answer:{kind:"confirmation",confirm:false}}')"
 ```
 
-A move attempts one adjacent step and can bump a creature or door. Read the
-resulting observation before choosing the next input.
+`decision_cancel` takes only `sessionId` and works only for cancellable questions.
+The adapter binds answers to its observed question; do not send a decision ID or
+revision. Item references remain opaque. Choice answers accept returned readable
+names or IDs; an ambiguous name returns candidates. Use `help` with a tool’s
+`name` for its schema. An answer can produce another question.
 
-Other tools include `game_wait`, `game_pickup`,
-`game_apply` and `game_pray`. Use `webmcp list` for exact
-schemas. Pass returned item IDs, not inventory letters or labels. Execute one
-input at a time; turns and revisions are different counters.
+## Recover and return
 
-## Answer decisions and recover replies
+After a lost input reply, **do not invoke the action again**. `retry({sessionId})`
+recovers the adapter’s retained uncertain input or latest receipt, never a whole
+navigation leg. `receipt({sessionId,operationId})` reads a known historical receipt
+without rewinding the world. Observe before choosing another action. If a page
+restart lost the adapter’s uncertain-operation context, do not assume a new
+adapter can reconstruct it. Missing receipts remain uncertainty.
 
-When `decision` is present, answer or cancel it before another game operation.
-For a confirmation that you choose to decline, write a new request file with:
+For slow commands use agent-browser’s `--detach`, retain its invocation ID and
+retrieve it with `webmcp result INVOCATION_ID`. That browser handle differs from
+an adapter `operationId`. Cancelling a browser invocation cannot undo engine
+input. A human changing the run requires observation and reconsideration, not
+an automatic retry of the old plan.
 
-```json
-{
-  "sessionId": "SESSION_ID_FROM_RESPONSE",
-  "requestId": "NEW_UNIQUE_REQUEST_ID",
-  "expectedRevision": 3,
-  "decisionId": "DECISION_ID_FROM_RESPONSE",
-  "answer": { "kind": "confirmation", "confirm": false }
-}
-```
+Bookmark the run’s full URL. Wait for **Saved online** before switching browsers;
+the URL contains the private vault key. See [cloud saves](CLOUD_SAVES.md).
+`session_close({sessionId})` releases the engine while retaining its journal and
+standing decision; it is not in-game quit. Return through the bookmark or
+`session_resume({sessionId})` on the same origin/profile and pinned runtime.
 
-Replace all IDs and the illustrative revision with the latest response values,
-then invoke `decision_answer`. Other answers are typed item, target,
-choice or text values; follow the discovered schema and returned choices.
-`decision_cancel` takes the same guards and `decisionId`, without
-`answer`, and is valid only for a cancellable decision. Inspect the next result:
-an answer can produce another decision.
+An instruction for an agent:
 
-After a timeout or lost reply, keep the **same tool and exact request file** for
-receipt recovery. If the transport failed, reload and resume the same adventure
-first, then retry that request. Do not create a new request ID to repeat an
-uncertain action. A recovered receipt can be historical; use `session.observe`
-after recovery for the current world. Corruption or missing receipts must be
-resolved before new input.
+> Open https://neohack.dev and discover WebMCP. Use the selected adventure or
+> create one run. Keep its short session token, choose from perceived information,
+> answer questions explicitly and stop on uncertainty or game over. Never infer
+> hidden map cells or item identity, or repeat an action after a lost reply.
 
-For slow invocations, agent-browser also supports `--detach`, followed by
-`webmcp result INVOCATION_ID`. That invocation ID is a browser-tool handle, distinct
-from the game's `requestId`. `webmcp cancel` cannot undo submitted engine input.
-
-## Stop and resume
-
-Close the game engine while preserving its journal and any standing decision:
-
-```sh
-agent-browser webmcp invoke session_close \
-  --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid}')"
-agent-browser close
-```
-
-While the run is open, bookmark its full page URL. On the live site, wait for
-**Saved online** before switching browsers. Keep the URL private: it includes
-the key to the saved vault. Opening that bookmark resumes the selected run
-through the C engine. See [cloud saves](CLOUD_SAVES.md) for details.
-
-Keep `GAME_ID` for the next visit. Reopen the same origin/profile/package and use
-`session_resume` with `{"sessionId":"YOUR_SAVED_GAME_ID"}`, or choose
-**Continue previous run** in the UI. Closing is not an in-game quit.
-
-## Connect an MCP agent
-
-To expose agent-browser's browser and WebMCP commands through stdio MCP:
-
-```json
-{
-  "mcpServers": {
-    "agent-browser": {
-      "command": "agent-browser",
-      "args": ["mcp", "--tools", "core,webmcp"]
-    }
-  }
-}
-```
-
-A useful instruction for the agent:
-
-> Open https://neohack.dev and discover its WebMCP tools. Start one new Valkyrie
-> game, or use the adventure I selected. Play one input at a time from returned
-> observations. Keep request IDs and revisions, answer decisions explicitly, and
-> stop on uncertainty or game over. Never infer hidden map cells or item identity.
-
-See the [agent-browser command reference](https://agent-browser.dev/commands) for
-CLI flags, and [WebMCP](WEBMCP.md) for the adapter and storage contract.
-
-## Run a local development copy
-
-For development, [build and start the pixel client](../../../web/neohack.dev/README.md#run-locally)
-and replace `https://neohack.dev` in the commands with `http://127.0.0.1:3333`.
-Local and live sites have separate browser storage and saves.
-
-Read `structuredContent` from tool results. Ordinary observation responses are
-[compact deltas](PROTOCOL.md#mcp-observation-presentation); `session.observe`
-resynchronizes a lost baseline. Full action offers are available via
-`session.actions`. Do not assume omitted fields or map cells disappeared.
-
-## Creation timeout checklist
-
-Creation is not an idempotent input operation. A successful CLI envelope only
-means the browser command was handled: `data.status: "timed_out"` is not a game
-result, and `data.output.isError: true` is not a validated frame. Before using a
-result, require a completed invocation, non-error output, no structured `error`,
-and a materialized snapshot with `sessionId`, numeric `revision`, `observation`, `outcome`,
-`decision` and `ended`. MCP/WebMCP may return a compact delta: resolve its
-baseline first, or use `session.observe` for a standalone full snapshot before
-replanning. Never treat omitted delta fields as missing game facts or feed a
-compact response directly to the full-frame reference consumer. Never extract
-an ID from an error or empty output.
-
-For a slow creation, invoke once with `--detach`, retain the returned invocation
-ID and retrieve it with `webmcp result INVOCATION_ID`. If that result is missing,
-read the owning page's `pixel-nethack[data-session-id]` and observe that session.
-Check the saved-adventure UI on the same origin/profile if the page restarted.
-An empty DOM identifier while startup is in flight proves nothing. Wait for the
-original invocation or stop for investigation; do not submit another creation.
-A rejected or cancelled supervisor command cannot prove that the engine received
-no input. Coordinate one input owner, including keyboard, touch and other agents.
-
-For diagnosis, record the public library version, backend, capability profile,
-client code revision and actual `WasmTransport.buildId` (the complete package
-identity checked at initialization). Keep vault URLs, keys, profile paths and
-journals private. Discovery on an old package may omit capabilities: do not infer
-support or load newer binaries to repair it. Memory storage cannot survive worker
-loss. Durable recovery requires the same origin, explicit IndexedDB name and
-original complete package, with its Web Lock released by the previous owner.
-
-The focused `tests/wasm/lifecycle.test.mjs` scenario creates in a fresh browser
-store, delays or drops the reply after the page owns the frame, observes the
-public ID, and reopens the same package/store. This tests recovery mechanics;
-it does not reproduce every CDP/agent-browser timeout or prove an old package's
-startup performance.
+For CLI setup, see the [agent-browser command reference](https://agent-browser.dev/commands).
+For adapter guarantees, see [WebMCP](WEBMCP.md); for local development, use the
+[web client setup](../../../web/neohack.dev/README.md#run-locally) and replace the
+live origin in these examples. Local and live saves are separate.
 
 ## Manual reference consumer
 

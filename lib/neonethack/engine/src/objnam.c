@@ -138,6 +138,21 @@ strprepend(char *s, const char *pref)
 static char NEARDATA obufs[NUMOBUF][BUFSZ];
 static int obufidx = 0;
 
+#ifdef HEADLESS_GRAPHICS
+/* A free reference query can run while an input callback retains a pointer
+ * into this pool. Preserve both its contents and allocation position. */
+void
+headless_isolated_names(void (*query)(void *), void *context)
+{
+    char saved[NUMOBUF][BUFSZ];
+    int index = obufidx;
+    memcpy(saved, obufs, sizeof saved);
+    query(context);
+    memcpy(obufs, saved, sizeof saved);
+    obufidx = index;
+}
+#endif
+
 staticfn char *
 nextobuf(void)
 {

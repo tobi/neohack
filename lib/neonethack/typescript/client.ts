@@ -1,7 +1,8 @@
 import { LowLevel } from './low.js';
+import { Navigator, type GoOptions } from './navigator.js';
 import { beforeInput, accepted, scheduled } from './lifecycle.js';
-import type { AutomaticPickup, ActionTarget, ActionsResponse, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
-export type { EquipmentSlot, ItemRef, AutomaticPickup, ActionTarget, ActionsResponse, ActionOffer, ActionBasis, CellActions, Neighborhood, InputGate, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
+import type { LoreResponse, NavigationResponse, RouteResponse, AutomaticPickup, ActionTarget, ActionsResponse, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
+export type { LoreResponse, NavigationResponse, RouteResponse, EquipmentSlot, ItemRef, AutomaticPickup, ActionTarget, ActionsResponse, ActionOffer, ActionBasis, CellActions, Neighborhood, InputGate, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
 
 /** A transport owns its runtime, not game semantics. It must not retry input. */
 export interface Transport {
@@ -139,6 +140,36 @@ export class Game {
       return freeze(r);
     });
   }
+  go(options: GoOptions) { return new Navigator(this).go(options); }
+  lookup(name:string):Promise<LoreResponse> {
+    return this.enqueue(async()=>{
+      if(this.retired) throw Error("Session is closed; resume it explicitly.");
+      const r=await this.client.request("session.lookup",{sessionId:this.id,name});
+      if (!("kind" in r) || r.kind!=="lore" || "error" in r) throw new WorldError(r);
+      return freeze(r);
+    });
+  }
+  navigation(options: RevisionOptions = {}): Promise<NavigationResponse> {
+    const expectedRevision = options.expectedRevision ?? this.current.revision;
+    return this.enqueue(async () => {
+      if (this.retired) throw Error("Session is closed; resume it explicitly.");
+      if (this.unresolved) throw new UncertainExecution(this.unresolved);
+      const r = await this.client.request("session.navigation", {sessionId:this.id,expectedRevision});
+      if (!("kind" in r) || r.kind !== "navigation" || "error" in r) throw new WorldError(r);
+      return freeze(r);
+    });
+  }
+  /** Optional perception-only planner. Does not move or accept a new snapshot. */
+  route(to: MethodParams["session.route"]["to"], options: RevisionOptions = {}): Promise<RouteResponse> {
+    const copy = structuredClone(to), expectedRevision = options.expectedRevision ?? this.current.revision;
+    return this.enqueue(async () => {
+      if (this.retired) throw Error("Session is closed; resume it explicitly.");
+      if (this.unresolved) throw new UncertainExecution(this.unresolved);
+      const r = await this.client.request("session.route", { sessionId: this.id, expectedRevision, to: copy });
+      if (!("kind" in r) || r.kind !== "route" || "error" in r) throw new WorldError(r);
+      return freeze(r);
+    });
+  }
   observe(): Promise<Snapshot> {
     return this.enqueue(async () => this.accept(await this.client.request("session.observe", { sessionId: this.id }), false));
   }
@@ -153,7 +184,8 @@ export class Game {
   move(direction: Compass, options: RevisionOptions = {}) { return this.operation("game.move", { direction }, options); }
   wait(options: RevisionOptions = {}) { return this.operation("game.wait", {}, options); }
   climb(direction: "up" | "down", options: RevisionOptions = {}) { return this.operation("game.climb", { direction }, options); }
-  search(options: RevisionOptions = {}) { return this.operation("game.search", {}, options); }
+  search(options: RevisionOptions & {turns?:number} = {}) { const {turns,...guard}=options; return this.operation("game.search", turns===undefined?{}:{turns}, guard); }
+  rest(options: RevisionOptions & {turns?:number} = {}) { const {turns,...guard}=options; return this.operation("game.rest", turns===undefined?{}:{turns}, guard); }
   quit(options: RevisionOptions = {}) { return this.operation("game.quit", {}, options); }
   loot(options: RevisionOptions = {}) { return this.operation("game.loot", {}, options); }
   configurePickup(automaticPickup: AutomaticPickup, options: RevisionOptions = {}) { return this.operation("game.configurePickup", { automaticPickup }, options); }
@@ -197,3 +229,4 @@ export type { BotContext, BotDefinition, BotBuilder, BotHandler, Step } from './
 export type { HeroEvent, HeroEventName, HeroEventDetails, HeroListener, BotResult, StopReason, CellChange, ItemSighting } from './hero-events.js';
 
 export type { ScriptState, ScriptValue, ScriptResult, ScriptHost, ScriptControl, ScriptJournalEntry } from './script.js';
+export { Navigator, type NavigationOptions, type NavigationResult, type GoOptions } from './navigator.js';

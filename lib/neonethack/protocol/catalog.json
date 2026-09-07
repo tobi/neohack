@@ -228,6 +228,26 @@
                   "direction"
                 ],
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 79
+                  },
+                  "y": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 20
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
               }
             ]
           }
@@ -236,6 +256,147 @@
           "sessionId",
           "expectedRevision",
           "target"
+        ],
+        "additionalProperties": false
+      },
+      "readOnly": true,
+      "idempotent": true
+    },
+    {
+      "name": "session.lookup",
+      "description": "Look up a name in the pinned game encyclopedia. Lore is reference text, not observed identity or a safety prediction. Free query; leaves the standing decision unchanged.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "x-maxBytes": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Session ID from create/resume."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "x-maxBytes": 255,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+          }
+        },
+        "required": [
+          "sessionId",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "readOnly": true,
+      "idempotent": true
+    },
+    {
+      "name": "session.navigation",
+      "description": "Read perceived frontiers and known downward stairs under the knownWalking policy. Frontiers are reachable unvisited squares bordering unknown cardinal neighbors; exclude every witnessed standing square, including the initial position. Downstairs may have null distance. Free revision-bound query, no movement or hidden level search.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "x-maxBytes": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Session ID from create/resume."
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "sessionId",
+          "expectedRevision"
+        ],
+        "additionalProperties": false
+      },
+      "readOnly": true,
+      "idempotent": true
+    },
+    {
+      "name": "session.route",
+      "description": "Find a shortest known walking route in the perceived current level. Free revision-bound query; does not move. knownWalking excludes closed doors, occupants, boulders, known hazards and uncertain diagonal squeezes. Null distance means no route known under this policy, not impossible or unsafe. Steps exclude the origin. Recheck after input.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "x-maxBytes": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Session ID from create/resume."
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "to": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 79
+              },
+              "y": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "sessionId",
+          "expectedRevision",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "readOnly": true,
+      "idempotent": true
+    },
+    {
+      "name": "session.receipt",
+      "description": "Read an exact stored operation receipt without executing or retrying input. This is historical, not the current observation. Missing receipts mean uncertainty; observe/resume explicitly before deciding what to do.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "x-maxBytes": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Session ID from create/resume."
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "x-maxBytes": 128,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+          }
+        },
+        "required": [
+          "sessionId",
+          "requestId"
         ],
         "additionalProperties": false
       },
@@ -422,7 +583,7 @@
     },
     {
       "name": "game.search",
-      "description": "Search once from the current square. May spend a turn; reports only discoveries the hero perceives. Does not search repeatedly until success. Answer returned decisions separately.",
+      "description": "Request a bounded native counted search (default one). Stops under the engine occupation/interruption rules; reports actual elapsed turns and witnessed discoveries. Answer returned decisions separately.",
       "schema": {
         "type": "object",
         "properties": {
@@ -447,6 +608,54 @@
             "minimum": 0,
             "maximum": 9007199254740991,
             "description": "Latest observation revision, not game time."
+          },
+          "turns": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "sessionId",
+          "requestId",
+          "expectedRevision"
+        ],
+        "additionalProperties": false
+      },
+      "idempotent": true
+    },
+    {
+      "name": "game.rest",
+      "description": "Request a bounded native counted rest (default one). The engine may refuse or interrupt; never auto-confirms danger or restarts the occupation. Answer returned decisions separately.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "x-maxBytes": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Session ID from create/resume."
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "x-maxBytes": 128,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "description": "Unique operation ID; retry only with the same ID and payload."
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Latest observation revision, not game time."
+          },
+          "turns": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
           }
         },
         "required": [

@@ -2100,7 +2100,11 @@ dosearch(void)
                           "You already found a monster.",
                           &ga.already_found_flag))
         return ECMD_OK;
-    return dosearch0(0) ? ECMD_TIME : ECMD_OK;
+    if (!dosearch0(0)) return ECMD_OK;
+#ifdef HEADLESS_GRAPHICS
+    headless_count_step("search");
+#endif
+    return ECMD_TIME;
 }
 
 void

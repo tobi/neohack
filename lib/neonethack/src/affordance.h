@@ -12,6 +12,9 @@ typedef enum {
 #define NNH_AFFORDANCE_ACTIONS 16
 #define NNH_ITEM_ACTIONS 8
 #define NNH_DOOR_FACT_LIMIT 8192
+#define NNH_MAP_WIDTH 80
+#define NNH_MAP_HEIGHT 21
+#define NNH_MAP_CELLS (NNH_MAP_WIDTH * NNH_MAP_HEIGHT)
 
 typedef struct {
     int terrain, in_bounds, visible; /* visible -1 means unavailable */
@@ -41,6 +44,7 @@ typedef struct {
 typedef struct {
     nnh_known_cell known;
     int x, y, dx, dy, walkable; /* -1 null */
+    int requires_squeeze;
     const char *relation, *intent, *restriction;
     nnh_action_offer actions[NNH_AFFORDANCE_ACTIONS];
     int action_count;
@@ -55,4 +59,8 @@ void nnh_emit_cell_actions(const nnh_cell_actions *, mj_Buf *);
 void nnh_emit_display(const nnh_known_cell *, mj_Buf *);
 const char *nnh_terrain_freshness(int, int);
 void nnh_emit_neighborhood(const nnh_knowledge *, mj_Buf *);
+/* Conservative known-walking policy, not a prediction of safe movement.
+ * Returns steps (origin excluded), or -1 when no route is known. */
+int nnh_known_paths(const nnh_knowledge *, const nnh_known_cell *, int *);
+int nnh_known_route(const nnh_knowledge *, const nnh_known_cell *, int, int *);
 #endif

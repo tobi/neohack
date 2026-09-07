@@ -1,5 +1,10 @@
 # Event-driven hero API
 
+Start with [How an agent plays](AGENT_PLAY.md) for the short interaction guide.
+The shared `game.route({x,y})` query plans known walking paths without moving;
+see [route semantics](PROTOCOL.md#known-walking-routes). Hero remains the event and
+script convenience layer; routes do not automatically run a travel loop.
+
 The workshop runs one initialization callback, then an awaited `turn` listener.
 No manual loop is needed. `defineBot` contextually types both JavaScript and
 TypeScript, including event names and their payloads.
@@ -20,8 +25,8 @@ export default defineBot({
     hero.addEventListener('turn', async () => {
       if (hero.decision) { hero.stop(); return; }
       const enemy = hero.senseClosest(entities.Enemy);
-      if (enemy?.distance === 1) await hero.attack(enemy);
-      else await hero.go(direction.northWest);
+      if (enemy?.distance === 1) await hero.attack({target:enemy});
+      else await hero.game.move(direction.northWest);
     });
   },
 });
@@ -97,17 +102,24 @@ An Entity has `type`, `appearance`, `attitude`, `kind`, `position: [x,y]`,
 A perceived Balrog two west and one north has `type === entities.Balrog` and
 `offset === [-2,-1]`; no hidden statistics are disclosed.
 
-`hero.go(directionOrEntity)` attempts **one** compass step. Going toward an
-entity uses the signs of its offset and performs no pathfinding. Normal bump
-rules apply. `hero.attack(entity)` requires an adjacent, known hostile creature.
-It never force-attacks or confirms warnings. Handles are bound to their Game,
-level and revision, including across queued operations; re-sense after acting.
+`hero.go({to,force?})` plans a bounded navigation leg to coordinates or a fresh
+perceived Entity. `force:true` is restricted to an adjacent square and attempts
+ordinary movement, including normal bumps, opening and possible pushes. It
+bypasses navigator policy only, never engine rules or standing decisions. It does
+not mean force attack. A farther forced destination is rejected with an instruction
+to choose an adjacent square.
+
+`hero.attack({target})` is distinct: a fresh perceived creature reference or an
+adjacent coordinate (including an apparently empty square) becomes the precise
+low-level force-attack operation. Engine confirmations remain explicit. Handles
+are bound to their Game, level and revision; re-sense after acting. Direct compass
+steps remain available through `hero.game.move(direction)`.
 
 `hero.position`, `location`, `map`, `vitals`, `snapshot`, `decision` and `ended`
 expose public observations. `hero.steps` lists adjacent squares with the C
 driver's movement facts, actions and a typed direction. `canDescend()` reads the
 engine's current downward climb offer, or returns undefined if unavailable.
-`wait()`, `search()`, `climb('up'|'down')`, and the complete `hero.game` API remain
+`wait()`, `search({turns})`, `rest({turns})`, `climb('up'|'down')`, and the complete `hero.game` API remain
 available. No path, safety, or success guarantee is implied by an attempt.
 
 ## Hunger and items
@@ -245,3 +257,44 @@ Script notes are labeled with author and turn, and stored separately from engine
 messages, input journals and receipts. Signed-in workshop recordings retain their
 script journal privately alongside the captured source and replay. Anonymous tests
 retain notes only for the current page; neither makes script claims into engine facts.
+
+## Optional navigation
+
+```ts
+import { Navigator } from 'neonethack/high';
+const navigator = new Navigator(game); // explicit opt-in for this Game
+const leg = await navigator.explore({ maxActions: 8 });
+console.log(leg.reason, leg.actionsTaken, leg.snapshot.outcome);
+```
+
+`go({to:{x,y}})` plans and attempts a known route on the current level.
+`explore()` selects the nearest reachable unvisited frontier for one leg. If none
+is reachable, it approaches a remembered closed door not known locked and makes
+one explicit open attempt, then stops. It does not pick locks, kick or repeat
+a resisted opening.
+`descend()` selects the nearest reachable remembered downward stair, travels to
+it and attempts the engine's climb command. `maxActions` defaults to 8 and is
+bounded at 64; it counts submitted move/open/climb attempts, not elapsed game turns.
+Pass an `AbortSignal` to stop between inputs. A pending decision, interruption,
+level change during travel or a newly perceived creature ends the leg. No warning
+is answered, blocked action repeated, or uncertain operation retried.
+
+Route and frontier semantics live in C. This executor only submits the named
+operations with their observed revision and returns the actual final snapshot.
+Known-walking routes exclude closed doors; the exploration leg uses the separate
+C-provided door approach and named opening action. World-only evaluations do not instantiate a
+Navigator or call navigation queries.
+
+### Encyclopedia reference
+
+`await hero.lookup("floating eye")` (also `game.lookup`) reads the pinned game’s
+encyclopedia. The returned `kind: "lore"` and `lines` are reference text, separate
+from perceived entities. No turns are spent and pending decisions stay open.
+
+### Counted occupations
+
+`hero.search({turns:20})` and `hero.rest({turns:20})` request one native counted
+command. Counts default to one and range from 1 to 1000. The engine may refuse
+or interrupt before finishing. Use the returned actual elapsed turns and
+`outcome.status`; no callback automatically resumes the occupation. The same
+methods are available on `game`.

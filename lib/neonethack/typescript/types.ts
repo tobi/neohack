@@ -33,12 +33,15 @@ export interface CellActions {
   objects?: { mark: string; color: number; kind?: "boulder" }[];
   hazards?: ("trap" | "water" | "lava")[];
   walkable: boolean | null;
-  movement: { relation: "here" | "adjacent" | "distant"; intent?: "step" | "attemptOpen" | "attemptObstacle" | "creatureBump" | "allyBump" | "possiblePush" | "unknown"; knownRestriction?: "intactDoorDiagonal" | "lockedDoor" | "knownTerrainObstacle" };
+  movement: { relation: "here" | "adjacent" | "distant"; intent?: "step" | "attemptOpen" | "attemptObstacle" | "creatureBump" | "allyBump" | "possiblePush" | "unknown"; knownRestriction?: "intactDoorDiagonal" | "lockedDoor" | "knownTerrainObstacle"; requiresSqueeze?: boolean };
   actions: ActionOffer[];
 }
 export type Neighborhood =
   | { version: 1; status: "available"; basis: ActionBasis; radius: 4; inputGate: InputGate; cells: CellActions[] }
   | { version: 1; status: "unavailable"; reason: "unknownPosition" | "unsupportedPerception" | "recoveryRequired" };
+export interface LoreResponse { version:1; kind:"lore"; sessionId:string; name:string; found:boolean; lines:string[] }
+export interface NavigationResponse { version:1; kind:"navigation"; sessionId:string; basis:ActionBasis; inputGate:InputGate; policy:"knownWalking"; doors:{x:number;y:number;lock:"locked"|"unlocked"|"unknown";distance:number|null;approach?:{x:number;y:number};direction?:Compass}[]; frontiers:{x:number;y:number;distance:number}[]; waysDown:{x:number;y:number;distance:number|null}[] }
+export interface RouteResponse { version: 1; kind: "route"; sessionId: string; basis: ActionBasis; inputGate: InputGate; policy: "knownWalking"; to: {x: number; y: number}; distance: number | null; steps: {x: number; y: number; direction:Compass}[] }
 export interface ActionsResponse { version: 1; kind: "actions"; sessionId: string; basis: ActionBasis; inputGate: InputGate; cell: CellActions }
 export type { EquipmentSlot } from "./equipment.js";
 import type { EquipmentSlot } from "./equipment.js";
@@ -100,7 +103,7 @@ export type Decision = DecisionBase & (
   | { kind: "item"; options: Omit<ItemRef, "category" | "usage">[]; counted?: boolean; selection: { min: number; max: number } }
   | { kind: "target"; allowedTargets: ("self" | "direction")[]; allowedDirections?: Direction[] }
   | { kind: "confirmation"; context?: { action: string; direction?: Direction; itemId?: string } }
-  | { kind: "choice"; options: { id: number; label: string; transfer?: "take" | "put"; suggested?: boolean }[]; selection?: { min: number; max: number }; containerPhase?: "inspect" | "transfer"; pickupReview?: boolean }
+  | { kind: "choice"; options: { id: number; label: string; name: string; transfer?: "take" | "put"; suggested?: boolean }[]; selection?: { min: number; max: number }; containerPhase?: "inspect" | "transfer"; pickupReview?: boolean }
   | { kind: "position"; cursor: { x: number; y: number }; mode: "browse" | "select" }
   | { kind: "text"; purpose?: "consumedPotionNickname" }
 );
@@ -145,4 +148,4 @@ export interface Description {
   };
   catalog: { version: 1; methods: { name: string; description: string; schema: Record<string, unknown>; readOnly?: boolean; idempotent?: boolean }[] };
 }
-export type Response = Snapshot | Rejection | Description | ActionsResponse;
+export type Response = Snapshot | Rejection | Description | ActionsResponse | RouteResponse | NavigationResponse | LoreResponse;

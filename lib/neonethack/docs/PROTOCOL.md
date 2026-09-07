@@ -3,6 +3,11 @@
 A request names a method. It does not mix an action with a reply to a previous
 choice. All transports invoke the same validating C boundary.
 
+Creation returns an opaque `sessionId`: a 16-character URL-safe token minted
+from 96 random bits independently of the game seed. Pass it back on subsequent
+run operations and resume. It identifies a run; it is not an authentication
+credential. Treat IDs as opaque rather than depending on their length or prefix.
+
 ```json
 {"version":1,"method":"session.create","params":{"name":"Ada","seed":42}}
 {"version":1,"method":"game.move","params":{"sessionId":"g-...","requestId":"step-1","expectedRevision":0,"direction":"south"}}
@@ -104,7 +109,11 @@ These continue the standing map prompt; they are not hero movement operations.
 Detection scrolls remain suspended until an explicit finish, selection or cancellation.
 The decision and cursor survive close/resume with the pinned runtime.
 
-Choice IDs are the returned **integers**, not keyboard letters. Headers are not
+Low-level choice IDs are the returned **integers**, not keyboard letters.
+Each choice also has a readable `name` derived from its displayed label. These
+aliases can collide and are bound to the current question; MCP resolves them
+or returns candidate clarification, while the low protocol still accepts IDs.
+Headers are not
 options. Cancellation is `decision.cancel`, not an empty choice array, arbitrary
 text, or a confirmation default. It cannot undo time already spent. Wrong
 answer shapes and stale IDs do not advance the engine. No client should restart
@@ -294,7 +303,7 @@ resolver. Engine support is separate: every newly emitted full observation carri
 `unknownPosition`, or `recoveryRequired`. Old receipts are returned unchanged and
 may omit it. A resumed game uses its original pinned engine/package.
 
-`session.actions({sessionId, expectedRevision, target})` accepts `"here"` or
+`session.actions({sessionId, expectedRevision, target})` accepts `"here"`, an adjacent `{x,y}` coordinate, or
 `{direction: Compass}`. It returns an `ActionsResponse` (`kind: "actions"`), never
 an observation. It rejects a stale revision before resolving and never resumes an
 unloaded engine. It sends no engine input, consumes no events or random numbers,
@@ -313,7 +322,43 @@ hazards, source-dependent movement restrictions, and permission to issue input.
 Unknown doors, water/lava and unusual forms return null conservatively. Manual
 movement remains available even toward false/null terrain. `movement` describes
 an adjacent attempt (including creature/ally bumps or possible pushes), and known
-intact-door diagonal restrictions. No success, safety or hidden squeeze test runs.
+intact-door diagonal restrictions. `requiresSqueeze:true` identifies a diagonal
+between two perceived rock/tree obstacles, without claiming the hero can or cannot
+fit. No success, safety or hidden squeeze test runs.
+
+### Known walking routes
+
+`session.route({sessionId, expectedRevision, to:{x,y}})` (typed client:
+`game.route({x,y})`) is an optional, free query over the perceived current level.
+It returns `kind:"route"`, revision/level/origin `basis`, `inputGate`, the target,
+`policy:"knownWalking"`, `distance` and ordered `steps` excluding the origin.
+The origin has distance zero. A null distance and empty steps mean no route is
+known under this policy, not that the destination is physically unreachable.
+
+The shared C resolver computes the shortest path in steps, with a stable compass
+tie-break order. The policy excludes unknown terrain, closed doors (even known
+unlocked doors), occupants, boulders, known hazards, intact doorway diagonals,
+uncertain corners and tight squeezes. It allows remembered terrain but does not
+promise it remains unchanged. Unusual locomotion or unreliable direction returns
+`unsupportedMovement`. No path executes movement, opens a door, answers a question,
+resumes an unloaded run or changes a receipt. Inspect the input gate and re-query
+after an action; a route is a plan based on its revision, not a success guarantee.
+
+`session.navigation({sessionId,expectedRevision})` (`game.navigation()`) returns
+`frontiers`, `waysDown` and `doors` under the same policy and revision/level basis.
+Frontiers are reachable unvisited squares next to unknown cardinal neighbors.
+The C driver remembers actual disclosed standing positions by level, including
+the initial square; targeting cursor motion does not count. Pinned replay
+rebuilds this history. Known downward stairs are included even when their distance
+is null. Door entries carry remembered lock knowledge, the nearest reachable
+cardinal `approach`, its walking `distance`, and the named `direction` from that
+approach. Unreachable doors have null distance and no approach/direction. The
+query does not open them. Neither query searches an unseen level or spends
+input/randomness.
+
+The optional high-level [Navigator](HERO.md#optional-navigation) executes bounded
+travel/explore/descend legs. Route steps include C-resolved named directions.
+The higher-level MCP profile remains planned separately.
 
 Door locks come only from player-facing disclosures at the actual engine target.
 They are `unknown`, `locked` or `unlocked`, with independent `unknown`, `witnessed`
@@ -643,3 +688,37 @@ paragraph breaks. Associated `heard` lines have `textWindow: true`; consumers ca
 show the passage once instead of duplicating those lines. Ordinary messages remain
 `heard` events, regardless of their length. Text windows are presentation facts,
 not inferred quest significance. Opening a client reading panel costs no input.
+
+## Encyclopedia lore
+
+`session.lookup({sessionId,name})` returns `{kind:"lore",name,found,lines}`
+with the protocol version and session ID. A live, resumed engine uses its pinned
+encyclopedia and actual typed-name matcher. A missing entry returns `found:false`
+and an empty line list. Matching follows the engine’s rules, including their
+limits; it is not a general search engine.
+
+This reference channel does not identify anything on the map, reveal hidden
+properties, or classify safety. It performs no gameplay input, journal append,
+revision change or RNG draw, and leaves the standing decision unchanged. The
+query uses an out-of-band engine response while input remains suspended. A lost
+or malformed transport reply retires that runtime so a late query response cannot
+be mistaken for the next gameplay response. Resume replays the intact input
+journal and restores its standing decision; a failed free query does not invent
+an uncertain gameplay input. Current runtimes also compare the reply's private
+RNG evidence with the last engine input boundary. A mismatch retires the runtime
+without exposing that evidence through the public result.
+
+## Counted search and rest
+
+`game.search` and `game.rest` accept optional `turns` (integer 1–1000, default 1).
+This is NetHack’s native command count, submitted as one journaled input and
+handled by its timed occupation logic. `game.wait` remains a single waiting
+attempt. Engine safety refusals, discoveries, approaching monsters, hunger and
+other interruption rules remain in effect; no warning is automatically answered.
+
+The count is not a promise about elapsed world time: hero speed or involuntary
+delays can make it differ. `outcome.turnsElapsed` reports actual elapsed time.
+Execution witnesses distinguish completed and interrupted occupations from the
+requested count; a refused search does not emit `searched`. Standing decisions,
+including client-facing item selections, block a new occupation. Exact request
+retries and close/resume retain the original counted command and receipt.

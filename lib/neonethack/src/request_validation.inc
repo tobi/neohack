@@ -139,10 +139,12 @@ request_pickup_settings(mj_val value)
 static const char *
 validate_request(const char *args, const char *tool, const char **why)
 {
+    static const char *const lookup[] = { "tool", "sessionId", "name", NULL };
+    static const char *const route[] = { "tool", "sessionId", "expectedRevision", "to", NULL };
     static const char *const actions[] = { "tool", "sessionId", "expectedRevision", "target", NULL };
     static const char *const common[] = { "tool", "sessionId", "requestId", NULL };
     static const char *const create[] = { "tool", "sessionId", "requestId", "seed", "name", "role", "race", "gender", "align", "automaticPickup", NULL };
-    static const char *const act[] = { "tool", "sessionId", "requestId", "expectedRevision", "action", "direction", "target", "item", "replyTo", "confirm", "choose", "text", "position", "cancel", "automaticPickup", "slot", NULL };
+    static const char *const act[] = { "tool", "sessionId", "requestId", "expectedRevision", "action", "turns", "direction", "target", "item", "replyTo", "confirm", "choose", "text", "position", "cancel", "automaticPickup", "slot", NULL };
     static const char *const answer[] = { "item", "target", "confirm", "choose", "text", "position", "cancel", NULL };
     const char *const *fields;
     mj_val v;
@@ -151,10 +153,10 @@ validate_request(const char *args, const char *tool, const char **why)
     size_t i;
     if (!tool || !*tool) REQUEST_BAD("badTool", "request needs a named tool");
     is_act = !strcmp(tool, "act"); is_create = !strcmp(tool, "new_game");
-    if (!is_act && !is_create && strcmp(tool, "get_state") && strcmp(tool, "resume") && strcmp(tool, "end_session") && strcmp(tool, "actions"))
+    if (!is_act && !is_create && strcmp(tool, "get_state") && strcmp(tool, "resume") && strcmp(tool, "end_session") && strcmp(tool, "actions") && strcmp(tool, "route") && strcmp(tool, "navigation") && strcmp(tool, "receipt") && strcmp(tool, "lookup"))
         REQUEST_BAD("badTool", "unknown tool");
     if (strlen(args) >= 4095) REQUEST_BAD("invalidArgument", "request exceeds the 4094-byte translated request limit");
-    fields = is_act ? act : is_create ? create : !strcmp(tool, "actions") ? actions : common;
+    fields = !strcmp(tool,"lookup") ? lookup : is_act ? act : is_create ? create : !strcmp(tool, "actions") ? actions : (!strcmp(tool, "route") || !strcmp(tool, "navigation")) ? route : common;
     if (!request_fields(args, fields)) REQUEST_BAD("invalidArgument", "unknown, duplicate or escaped field name");
     if (mj_find(args, "automaticPickup", &v) && !request_pickup_settings(v))
         REQUEST_BAD("invalidArgument", "automaticPickup requires enabled, distinct itemTypes, arrows, leaveCorpses and leaveKnownCursed");
@@ -162,6 +164,8 @@ validate_request(const char *args, const char *tool, const char **why)
         REQUEST_BAD("badSessionId", "sessionId must be a nonempty string of at most 64 bytes");
     if (mj_find(args, "requestId", &v) && !request_string(v, 1, 128, NULL))
         REQUEST_BAD("invalidArgument", "requestId must be a nonempty string of at most 128 bytes");
+    if (!strcmp(tool,"lookup") && (!mj_find(args,"name",&v) || !request_string(v,1,255,NULL)))
+        REQUEST_BAD("invalidArgument", "lookup needs a name of 1..255 bytes without control characters");
     if (is_create) {
         static const char *const identity[] = { "name", "role", "race", "gender", "align", NULL };
         for (i = 0; identity[i]; i++)
@@ -171,6 +175,18 @@ validate_request(const char *args, const char *tool, const char **why)
             REQUEST_BAD("badIdentity", "seed must be a safe integer, not null or a coerced string");
         return NULL;
     }
+    if (!strcmp(tool, "actions") && mj_find(args, "target", &v) && *request_ws(v.p) == '{') {
+        mj_val x, y;
+        if (mj_find(v.p, "x", &x)) {
+            static const char *const coords[] = {"x", "y", NULL};
+            if (!request_fields(v.p, coords) || !request_integer(x, 1, MAP_W-1) ||
+                !mj_find(v.p, "y", &y) || !request_integer(y, 0, MAP_H-1) ||
+                !mj_find(args, "sessionId", &v) || !request_string(v, 1, 64, NULL) ||
+                !mj_find(args, "expectedRevision", &v) || !request_integer(v, 0, 9007199254740991LL))
+                REQUEST_BAD("invalidArgument", "actions requires a revision and in-bounds target coordinates");
+            return NULL;
+        }
+    }
     if (!strcmp(tool, "actions")) {
         if (!mj_find(args, "sessionId", &v) || !request_string(v, 1, 64, NULL) ||
             !mj_find(args, "expectedRevision", &v) || !request_integer(v, 0, 9007199254740991LL) ||
@@ -178,6 +194,27 @@ validate_request(const char *args, const char *tool, const char **why)
             REQUEST_BAD("invalidArgument", "actions requires sessionId, expectedRevision and here or a compass target");
         return NULL;
     }
+    if (!strcmp(tool, "navigation")) {
+        if (!mj_find(args, "sessionId", &v) || !request_string(v, 1, 64, NULL) ||
+            !mj_find(args, "expectedRevision", &v) || !request_integer(v, 0, 9007199254740991LL) || mj_find(args, "to", &v))
+            REQUEST_BAD("invalidArgument", "navigation requires sessionId and expectedRevision");
+        return NULL;
+    }
+    if (!strcmp(tool, "route")) {
+        static const char *const coords[] = { "x", "y", NULL };
+        mj_val to;
+        if (!mj_find(args, "sessionId", &v) || !request_string(v, 1, 64, NULL) ||
+            !mj_find(args, "expectedRevision", &v) || !request_integer(v, 0, 9007199254740991LL) ||
+            !mj_find(args, "to", &to) || !request_fields(to.p, coords) ||
+            !mj_find(to.p, "x", &v) || !request_integer(v, 1, MAP_W - 1) ||
+            !mj_find(to.p, "y", &v) || !request_integer(v, 0, MAP_H - 1))
+            REQUEST_BAD("invalidArgument", "route requires sessionId, expectedRevision and in-bounds to coordinates");
+        return NULL;
+    }
+    if (!strcmp(tool, "receipt") &&
+        (!mj_find(args, "sessionId", &v) || !request_string(v, 1, 64, NULL) ||
+         !mj_find(args, "requestId", &v) || !request_string(v, 1, 128, NULL)))
+        REQUEST_BAD("invalidArgument", "receipt requires a session and operation id");
     if (!is_act) return NULL;
     if (mj_find(args, "expectedRevision", &v) && !request_integer(v, 0, 9007199254740991LL))
         REQUEST_BAD("invalidArgument", "expectedRevision must be a nonnegative safe integer");
@@ -220,6 +257,10 @@ validate_request(const char *args, const char *tool, const char **why)
         int n = 5;
         if (!strcmp(action, "move") || !strcmp(action, "attack") || !strcmp(action, "moveWithoutAttack") || !strcmp(action, "climb")) allowed[n++] = "direction";
         if (!strcmp(action, "inspect") || !strcmp(action, "kick") || !strcmp(action, "open") || !strcmp(action, "close") || !strcmp(action, "chat") || !strcmp(action, "fire") || !strcmp(action, "throw") || !strcmp(action, "zap")) allowed[n++] = "target";
+        if (!strcmp(action,"search") || !strcmp(action,"rest")) {
+            allowed[n++] = "turns";
+            if (mj_find(args,"turns",&v) && !request_integer(v,1,1000)) REQUEST_BAD("invalidArgument","turns must be an integer from 1 to 1000");
+        }
         if (action_takes_item(action)) allowed[n++] = "item";
         if (!strcmp(action, "equip") || !strcmp(action, "wield")) allowed[n++] = "slot";
         if (!strcmp(action, "configurePickup")) {

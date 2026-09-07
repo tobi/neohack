@@ -18,6 +18,49 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void
+hl_lore_line(const char *line, void *context)
+{
+    jb_sep((JBuf *) context); jb_str((JBuf *) context, line);
+}
+
+int
+headless_lore_request(const char *line)
+{
+    char *method = j_parse_str(j_find_key(line, "method"), NULL);
+    int is_lore = method && !strcmp(method, "lore");
+    free(method);
+    if (is_lore) {
+        int ok = 0;
+        long long id = j_parse_int(j_find_key(line, "id"), &ok);
+        const char *params = j_find_key(line, "params");
+        char *name = j_parse_str(params ? j_find_key(params, "name") : NULL, NULL);
+        boolean error = FALSE, found;
+        JBuf lines, result;
+        if (!ok || !name || !*name || strlen(name) >= BUFSZ) {
+            rpc_reply_error(id, -32602, "Invalid lore query"); free(name); return 1;
+        }
+        jb_init(&lines); jb_begin_arr(&lines);
+        found = headless_lore_lookup(name, hl_lore_line, &lines, &error);
+        jb_end_arr(&lines);
+        jb_init(&result); jb_begin_obj(&result);
+        jb_key(&result, "kind"); jb_str(&result, "lore");
+        jb_key(&result, "found"); jb_bool(&result, found);
+        { char integrity[512];
+          if (headless_rng_integrity(integrity,sizeof integrity)) {
+              jb_key(&result,"rngIntegrity"); jb_raw(&result,integrity);
+          }
+        }
+        jb_key(&result, "lines"); if (lines.ok) jb_raw(&result, lines.buf);
+        jb_end_obj(&result);
+        if (error || !lines.ok || !result.ok)
+            rpc_reply_error(id, -32603, "Cannot read the pinned encyclopedia");
+        else rpc_reply(id, result.buf);
+        jb_free(&result); jb_free(&lines); free(name);
+    }
+    return is_lore;
+}
+
 #include "pickup-settings.inc"
 #include "knowledge.inc"
 
@@ -712,6 +755,11 @@ headless_final_score(long score)
     if (windowprocs.wp_id != wp_headless) return;
     jb_init(&jb); jb_begin_obj(&jb);
     jb_key(&jb, "score"); jb_int(&jb, score);
+    { char integrity[512];
+      if (headless_rng_integrity(integrity,sizeof integrity)) {
+          jb_key(&jb,"rngIntegrity"); jb_raw(&jb,integrity);
+      }
+    }
     hl_knowledge(&jb);
     jb_end_obj(&jb);
     if (jb.ok) rpc_notify("final_result", jb.buf);
@@ -1509,6 +1557,26 @@ hl_perception(void)
     jb_free(&jb);
 }
 
+/* The count is parsed by NetHack's normal get_count path. Only the count
+ * digits and one command are queued; no follow-up command or answer is added. */
+static char hl_count_keys[16];
+static size_t hl_count_cursor;
+static int hl_count_requested, hl_count_executed;
+static const char *hl_count_action;
+void
+headless_count_step(const char *action)
+{
+    if (hl_count_action && !strcmp(hl_count_action, action)) hl_count_executed++;
+}
+static char *
+hl_count_next(void)
+{
+    char *reply = malloc(32);
+    if (!reply) panic("Cannot supply counted command");
+    snprintf(reply,32,"{\"key\":%d}",(unsigned char)hl_count_keys[hl_count_cursor++]);
+    return reply;
+}
+
 /* Decisions can interrupt a deed after inventory has already changed (for
  * example, one bite before a near-full warning). Publish at each semantic
  * input boundary, not only at the next resting command prompt. */
@@ -1517,10 +1585,25 @@ hl_input(const char *kind, const char *params)
 {
     char *reply;
     const char *settings;
+    if (hl_count_keys[hl_count_cursor]) return hl_count_next();
+    if (hl_count_action && iflags.in_parse && gg.getposx == 0) {
+        if (hl_count_executed) headless_action_result(hl_count_action, hl_count_executed >= hl_count_requested ? "completed" : "interrupted");
+        hl_count_action = NULL; hl_count_requested = hl_count_executed = 0;
+    }
     for (;;) {
         headless_flush();
         hl_perception();
         reply = rpc_input(kind, params);
+        if (reply && iflags.in_parse && gg.getposx == 0 && j_find_key(reply,"count")) {
+            int ok = 0, key = (int) hl_param_int(reply,"key",0);
+            long long count = j_parse_int(j_find_key(reply,"count"),&ok);
+            if (!ok || count < 1 || count > 1000 || (key != 's' && key != '.') || gc.Cmd.num_pad)
+                panic("Invalid counted search/rest command");
+            snprintf(hl_count_keys,sizeof hl_count_keys,"%lld%c",count,key);
+            hl_count_cursor = 0; hl_count_requested = (int)count; hl_count_executed = 0;
+            hl_count_action = key == 's' ? "search" : "rest";
+            free(reply); return hl_count_next();
+        }
         if (!reply || (strcmp(kind, "key") && strcmp(kind, "poskey"))
             || gg.getposx > 0 || !(settings = j_find_key(reply, "automaticPickup")))
             return reply;

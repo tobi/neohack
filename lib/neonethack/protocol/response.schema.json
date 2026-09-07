@@ -4,7 +4,25 @@
   "type": "object",
   "properties": {
     "kind": {
-      "const": "actions"
+      "type": "string",
+      "enum": [
+        "actions",
+        "route",
+        "navigation",
+        "lore"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "found": {
+      "type": "boolean"
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "basis": {
       "type": "object",
@@ -272,6 +290,9 @@
                 "lockedDoor",
                 "knownTerrainObstacle"
               ]
+            },
+            "requiresSqueeze": {
+              "type": "boolean"
             }
           },
           "required": [
@@ -1846,7 +1867,13 @@
                   },
                   "arguments": {
                     "type": "object",
-                    "properties": {},
+                    "properties": {
+                      "turns": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000
+                      }
+                    },
                     "required": [],
                     "additionalProperties": false
                   },
@@ -1914,7 +1941,13 @@
                   },
                   "arguments": {
                     "type": "object",
-                    "properties": {},
+                    "properties": {
+                      "turns": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000
+                      }
+                    },
                     "required": [],
                     "additionalProperties": false
                   },
@@ -5900,6 +5933,189 @@
       ],
       "additionalProperties": false
     },
+    "doors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "integer"
+          },
+          "y": {
+            "type": "integer"
+          },
+          "lock": {
+            "type": "string",
+            "enum": [
+              "locked",
+              "unlocked",
+              "unknown"
+            ]
+          },
+          "distance": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approach": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer"
+              },
+              "y": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "north",
+              "northeast",
+              "east",
+              "southeast",
+              "south",
+              "southwest",
+              "west",
+              "northwest"
+            ]
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "lock",
+          "distance"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "frontiers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "integer"
+          },
+          "y": {
+            "type": "integer"
+          },
+          "distance": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "distance"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "waysDown": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "integer"
+          },
+          "y": {
+            "type": "integer"
+          },
+          "distance": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "distance"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "policy": {
+      "const": "knownWalking"
+    },
+    "to": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    },
+    "distance": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "integer"
+          },
+          "y": {
+            "type": "integer"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "north",
+              "northeast",
+              "east",
+              "southeast",
+              "south",
+              "southwest",
+              "west",
+              "northwest"
+            ]
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "direction"
+        ],
+        "additionalProperties": false
+      }
+    },
     "version": {
       "const": 1
     },
@@ -6490,6 +6706,9 @@
                               "lockedDoor",
                               "knownTerrainObstacle"
                             ]
+                          },
+                          "requiresSqueeze": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -8064,7 +8283,13 @@
                                 },
                                 "arguments": {
                                   "type": "object",
-                                  "properties": {},
+                                  "properties": {
+                                    "turns": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 1000
+                                    }
+                                  },
                                   "required": [],
                                   "additionalProperties": false
                                 },
@@ -8132,7 +8357,13 @@
                                 },
                                 "arguments": {
                                   "type": "object",
-                                  "properties": {},
+                                  "properties": {
+                                    "turns": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 1000
+                                    }
+                                  },
                                   "required": [],
                                   "additionalProperties": false
                                 },
@@ -13150,6 +13381,9 @@
                       "label": {
                         "type": "string"
                       },
+                      "name": {
+                        "type": "string"
+                      },
                       "transfer": {
                         "type": "string",
                         "enum": [
@@ -13163,7 +13397,8 @@
                     },
                     "required": [
                       "id",
-                      "label"
+                      "label",
+                      "name"
                     ]
                   }
                 },
@@ -13829,10 +14064,63 @@
       "required": [
         "kind",
         "sessionId",
+        "name",
+        "found",
+        "lines"
+      ],
+      "properties": {
+        "kind": {
+          "const": "lore"
+        }
+      }
+    },
+    {
+      "required": [
+        "kind",
+        "sessionId",
+        "basis",
+        "inputGate",
+        "policy",
+        "frontiers",
+        "waysDown",
+        "doors"
+      ],
+      "properties": {
+        "kind": {
+          "const": "navigation"
+        }
+      }
+    },
+    {
+      "required": [
+        "kind",
+        "sessionId",
         "basis",
         "inputGate",
         "cell"
-      ]
+      ],
+      "properties": {
+        "kind": {
+          "const": "actions"
+        }
+      }
+    },
+    {
+      "required": [
+        "kind",
+        "sessionId",
+        "basis",
+        "inputGate",
+        "policy",
+        "to",
+        "distance",
+        "steps"
+      ],
+      "properties": {
+        "kind": {
+          "const": "route"
+        }
+      }
     },
     {
       "required": [
