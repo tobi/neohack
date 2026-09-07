@@ -17,7 +17,7 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
         run: |
-          npx --yes vercel@59.10.0 logs --project "$VERCEL_PROJECT_ID" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" --environment production --since 2h --level warning --expand --limit 500 --json > "$RUNNER_TEMP/requests.jsonl"
+          npx --yes vercel@59.10.0 logs --project "$VERCEL_PROJECT_ID" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" --environment production --since 2h --expand --limit 500 --json > "$RUNNER_TEMP/requests.jsonl"
           node <<'JS'
           const fs=require('node:fs');
           let records=0,events=0;
@@ -36,7 +36,7 @@ jobs:
           }
           for(const line of fs.readFileSync(process.env.RUNNER_TEMP+'/requests.jsonl','utf8').split('\n')){
             if(!line.trim())continue;
-            try{const record=JSON.parse(line);records++;inspect(record);}catch{}
+            try{const record=JSON.parse(line);records++;inspect(record);if(records===1)console.log(JSON.stringify({keys:Object.keys(record)}));}catch{}
           }
           console.log(JSON.stringify({records,events}));
           JS
