@@ -112,8 +112,9 @@ not touch private journals or runtime pins:
 node hosting/vercel/scripts/rebuild-ledger.mjs --apply
 ```
 
-Public recordings have a separate browser IndexedDB outbox (500 frames / 32 MiB
-per run). Transient uploads retry the same index/frame, including a lost response.
+During play, public recordings only append to a separate browser IndexedDB outbox (500 frames / 32 MiB
+per run). Uploads start on explicit flush (death screen or share/embed), not on
+each movement. Transient uploads retry the same index/frame, including a lost response.
 An exact duplicate is acknowledged without appending twice; a changed duplicate
 is rejected. Queue exhaustion or access/sequence refusal is visibly reported and
 retains pending frames. Browser data removal can still delete unsynced frames.
@@ -164,9 +165,11 @@ Before deploying:
 - Set PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN and PUBLIC_REPLAY_ORIGIN on the Vercel
   project. The origin must match that store's https://<id>.public.blob.vercel-storage.com URL.
   The existing BLOB_READ_WRITE_TOKEN remains the private store's credential.
-- Set the GitHub repository variable PUBLIC_REPLAY_ORIGIN to that same public
-  origin for staging. Deployment refuses to proceed without it. Tokens never
-  enter browser configuration or staged assets.
+- Deployment reads the public origin from the Vercel production configuration
+  and confirms the dedicated token is configured without decrypting that token.
+  An optional GitHub PUBLIC_REPLAY_ORIGIN variable must agree. Deployment refuses
+  to proceed with missing or mismatched configuration. Tokens never enter browser
+  configuration or staged assets.
 - Publish already-public historical recordings once, with both store tokens and
   the public origin provided securely through the environment:
   node hosting/vercel/scripts/publish-replays.mjs (inventory only), then add

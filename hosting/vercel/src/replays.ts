@@ -21,22 +21,19 @@ export async function replay(request: Request, id: string) {
   const json = (body:unknown,status=200) => Response.json(body,{status,headers:{'cache-control':'no-store','access-control-allow-origin':'*'}});
   const key='replays/'+id+'.json';
   if(request.method==='GET') {
-    const doc=await read(key);
-    if(!doc)return json({error:'No public replay recorded'},404);
     const params=new URL(request.url).searchParams;
     if(params.get('publication')==='1') {
+      const doc=await read(key);
+      if(!doc)return json({error:'No public replay recorded'},404);
       const token=request.headers.get('authorization')?.replace(/^Bearer /,'');
       if(!token||createHash('sha256').update(token).digest('hex')!==doc.owner)return json({error:'Recording owner differs'},403);
       await publishReplay(id);
+      return json({count:doc.frames.length,revision:doc.revision});
     }
-    const offset=Number(params.get('offset')??0);
-    if(!Number.isSafeInteger(offset)||offset<0)return json({error:'Invalid offset'},400);
-    const limit=Number(params.get('limit')??25);
-    if(!Number.isSafeInteger(limit)||limit<1||limit>25)return json({error:'Invalid limit'},400);
-    const refs=doc.frames.slice(offset,offset+limit);
-    const frames=await Promise.all(refs.map((ref:string)=>read(ref)));
-    if(frames.some(f=>!f))return json({error:'Recording incomplete'},409);
-    return json({count:doc.frames.length,revision:doc.revision,frames,next:offset+frames.length<doc.frames.length?offset+frames.length:null,role:doc.role,seed:doc.seed,partial:doc.partial,complete:doc.complete===true&&!doc.partial,buildId:doc.buildId});
+    const origin=process.env.PUBLIC_REPLAY_ORIGIN || (publicReplayConfigured() ? new URL('/replay-files/', request.url).href : '');
+    if(!origin)return json({error:'Public replay delivery is unavailable'},503);
+    const location=new URL('replays/'+id+'/manifest.json', origin.endsWith('/')?origin:origin+'/');
+    return new Response(null,{status:302,headers:{Location:location.href,'cache-control':'no-cache','access-control-allow-origin':'*'}});
   }
   if(request.method!=='PUT')return json({error:'Method not allowed'},405);
   const origin=request.headers.get('origin');

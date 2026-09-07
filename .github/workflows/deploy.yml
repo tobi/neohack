@@ -21,6 +21,13 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: lib/neonethack/package-lock.json
+      - name: Verify public replay production configuration
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          PUBLIC_REPLAY_ORIGIN: ${{ vars.PUBLIC_REPLAY_ORIGIN }}
+        run: node hosting/vercel/scripts/replay-deploy-env.mjs
       - name: Reuse hosted WASM compiler artifacts
         id: wasm-cache
         run: node hosting/vercel/scripts/runtime-package.mjs restore https://neohack.dev/
@@ -52,8 +59,6 @@ jobs:
           bun run --cwd web/neohack.dev build
       - run: bun install --frozen-lockfile --cwd hosting/vercel
       - name: Stage direct public replay delivery
-        env:
-          PUBLIC_REPLAY_ORIGIN: ${{ vars.PUBLIC_REPLAY_ORIGIN }}
         run: |
           test -n "$PUBLIC_REPLAY_ORIGIN" || { echo "Configure PUBLIC_REPLAY_ORIGIN for the dedicated public Blob store before deploying."; exit 1; }
           node hosting/vercel/scripts/stage.mjs

@@ -51,13 +51,12 @@ export class PublicReplayRecorder {
           queue.frames.push(copy);
           queue.bytes += bytes;
         });
-        this.status("Replay pending · recorded here");
+        this.status("Replay local · publishes when this run settles");
       })
       .catch((error) => {
         this.stopped = true;
         this.status(error.message ?? "Recording storage unavailable.");
       });
-    void this.tail.then(() => this.pump());
   }
   private pump(): Promise<void> {
     if (this.flight) return this.flight;
