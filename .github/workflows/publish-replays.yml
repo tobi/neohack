@@ -1,0 +1,37 @@
+name: Publish existing public replay recordings
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Publish already-public recordings to the dedicated public Blob store
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: publish-public-replays
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts --prefix hosting/vercel
+      - name: Inventory or publish existing public recordings
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          APPLY: ${{ inputs.apply }}
+        run: |
+          if [ "$APPLY" = true ]; then
+            node hosting/vercel/scripts/publish-production-replays.mjs --apply
+          else
+            node hosting/vercel/scripts/publish-production-replays.mjs
+          fi

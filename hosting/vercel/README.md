@@ -163,7 +163,7 @@ Before deploying:
 
 - Deployment provisions a dedicated **public** Vercel Blob store for public
   observations when replay configuration is absent. Its project-specific name
-  makes retries reuse the same store. A production-only PUBLIC_REPLAY connection
+  makes retries reuse the same store. A production-only PUBLIC_REPLAY_BLOB connection
   creates PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN; setup adds PUBLIC_REPLAY_ORIGIN.
   Existing complete configuration is reused; conflicting or partially configured
   external stores require operator review. Setup never changes a store's access,
@@ -178,6 +178,9 @@ Before deploying:
   node hosting/vercel/scripts/publish-replays.mjs (inventory only), then add
   --apply to publish. It never reads private account recordings or deletes data.
   Re-running skips published prefixes and repairs interrupted publication.
+  The manual **Publish existing public replay recordings** Actions workflow does
+  this with production credentials held only in the runner process. It defaults
+  to inventory; select `apply` to publish. It never changes the private store.
 
 Recording writes acknowledge only after publication. If publication fails after
 its private recording commit, exact upload retries and authenticated writer
