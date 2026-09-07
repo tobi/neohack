@@ -7,7 +7,7 @@ export interface WebMcpContext {
     name:string; description:string; inputSchema:object;
     annotations:{readOnlyHint:boolean};
     execute(input:Record<string,unknown>,options?:{signal?:AbortSignal}):Promise<unknown>;
-  },options?:{signal:AbortSignal}):void|Promise<void>;
+  },options?:{signal:AbortSignal}):void|(()=>void)|Promise<void|(()=>void)>;
   unregisterTool?(name:string):void;
 }
 export interface WebMcpRegistration {supported:boolean;toolCount:number;dispose():void}
@@ -21,11 +21,11 @@ export async function registerWebMcp(
     (globalThis.navigator as (Navigator & {modelContext?:WebMcpContext})|undefined)?.modelContext,
 ):Promise<WebMcpRegistration> {
   if(!context?.registerTool)return {supported:false,toolCount:0,dispose(){}};
-  const agent=new AgentClient(transport),controller=new AbortController(),registered:string[]=[];
-  const dispose=()=>{controller.abort();for(const name of registered.splice(0))context.unregisterTool?.(name);};
+  const agent=new AgentClient(transport),controller=new AbortController(),registered:string[]=[],cleanups:(()=>void)[]=[];
+  const dispose=()=>{controller.abort();for(const cleanup of cleanups.splice(0))cleanup();for(const name of registered.splice(0))context.unregisterTool?.(name);};
   try {
     for(const tool of tools){
-      await context.registerTool({
+      const cleanup = await context.registerTool({
         name:tool.name,description:tool.description,inputSchema:tool.inputSchema,
         annotations:{readOnlyHint:tool.annotations.readOnlyHint},
         execute:async(input,options)=>{
@@ -37,16 +37,17 @@ export async function registerWebMcp(
           options?.signal?.addEventListener('abort',abort,{once:true});
           try {
             const response=await agent.call(tool.name,input,{signal:callController.signal});
-            return {isError:!!response.error,structuredContent:response,content:[]};
+            return {isError:!!response.error,structuredContent:response,content:[{type:"text",text:JSON.stringify(response)}]};
           } finally {
             controller.signal.removeEventListener('abort',abort);
             options?.signal?.removeEventListener('abort',abort);
           }
         },
       },{signal:controller.signal});
-      registered.push(tool.name);
+      if(typeof cleanup === "function")cleanups.push(cleanup);
+      else registered.push(tool.name);
     }
   }catch(error){dispose();throw error;}
-  return {supported:true,toolCount:registered.length,dispose};
+  return {supported:true,toolCount:tools.length,dispose};
 }
 export {CompactObservationReader} from '../mcp/compact.js';

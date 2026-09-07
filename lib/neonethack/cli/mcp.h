@@ -22,6 +22,7 @@ typedef struct mcp_job {
     struct mcp_job *next;
     mcp_server *server;
     struct evhttp_request *http;
+    int legacy_http;
     char *frame, *semantic, *method;
 } mcp_job;
 struct mcp_server {

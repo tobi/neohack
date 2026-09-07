@@ -85,7 +85,7 @@ async function nativeWebMcp(page, t) {
   return { ...native, call: async (...args) => {
     const result = await native.call(...args);
     if (result.structuredContent) {
-      assert.deepEqual(result.content, []);
+      assert.deepEqual(JSON.parse(result.content[0].text), result.structuredContent);
     }
     return result;
   } };

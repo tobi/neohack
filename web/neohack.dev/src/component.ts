@@ -219,18 +219,20 @@ export class NeohackWorld extends HTMLElement {
   async registerWebMcp(context?: WebMcpContext) {
     const actual = context ?? (document as Document & {modelContext?:WebMcpContext}).modelContext ?? (navigator as Navigator & {modelContext?:WebMcpContext}).modelContext;
     if(!actual) return {supported:false,toolCount:0,dispose(){}};
-    const controller = new AbortController(), names:string[] = [];
-    const dispose=()=>{controller.abort();for(const name of names.splice(0))actual.unregisterTool?.(name);};
+    const controller = new AbortController(), names:string[] = [], cleanups:(()=>void)[] = [];
+    let toolCount=0;
+    const dispose=()=>{controller.abort();for(const cleanup of cleanups.splice(0))cleanup();for(const name of names.splice(0))actual.unregisterTool?.(name);};
     try {
       for(const tool of this.availableTools()) {
-        await actual.registerTool({...tool,execute:async input=>{
+        const cleanup = await actual.registerTool({...tool,execute:async input=>{
           const response=await this.send({version:1,method:toolMethods.get(tool.name)!,params:input} as Request);
           return {content:[{type:'text',text:JSON.stringify(response)}],isError:'error' in response};
         }},{signal:controller.signal});
-        names.push(tool.name);
+        toolCount++;
+        if(typeof cleanup === "function")cleanups.push(cleanup);else names.push(tool.name);
       }
     } catch(error){dispose();throw error;}
-    return {supported:true,toolCount:names.length,dispose};
+    return {supported:true,toolCount,dispose};
   }
   private availableTools() { return this.transport ? tools.filter(t=>this.writable || t.annotations.readOnlyHint) : []; }
   /** JSON-RPC / WebMCP vocabulary, delivered on this element's message event. */

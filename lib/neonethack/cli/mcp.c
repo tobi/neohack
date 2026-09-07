@@ -28,10 +28,22 @@ void mcp_finish(mcp_job *j, char *value, int error, int status)
     mcp_server *s = j->server;
     mj_Buf b; mj_val id = mcp_field(j->frame,"id"); char *reply;
     if (!value) { error = 1; status = 500; value = mcp_failure(-32603,"Transport failed; execution may be uncertain. Retain exact requestId and payload."); }
+    if (j->legacy_http && !error && value) {
+        mj_val structured=mcp_field(value,"structuredContent"), content=mcp_field(value,"content");
+        if (structured.p && content.p) {
+            size_t length; mj_raw(content,&length);
+            char *text=mj_canonical(structured), *replacement=NULL;
+            mj_Buf rendered; mj_init(&rendered); mj_arr(&rendered); mj_obj(&rendered);
+            mj_key(&rendered,"type"); mj_strv(&rendered,"text"); mj_key(&rendered,"text"); mj_strv(&rendered,text);
+            mj_endobj(&rendered); mj_endarr(&rendered); char *array=mcp_take(&rendered);
+            if (array && asprintf(&replacement,"%.*s%s%s",(int)(content.p-value),value,array,content.p+length)>=0) { free(value); value=replacement; }
+            free(array); free(text);
+        }
+    }
     mj_init(&b); mj_obj(&b); mj_key(&b,"jsonrpc"); mj_strv(&b,"2.0");
     if (id.p || !j->http) { mj_key(&b,"id"); mcp_raw(&b,id); }
     mj_key(&b,error ? "error" : "result");
-    if (j->http && !error && value) {
+    if (j->http && !j->legacy_http && !error && value) {
         size_t n = strlen(value);
         char *members = n >= 2 ? strndup(value+1,n-2) : NULL;
         if (!members) b.ok = 0;
@@ -53,7 +65,7 @@ void mcp_finish(mcp_job *j, char *value, int error, int status)
             /* Each request is independent; bounded connection lifetime also
              * makes disconnect/shutdown ownership unambiguous. */
             evhttp_add_header(headers,"Connection","close");
-            if (out && reply) evbuffer_add(out,reply,strlen(reply));
+            if (out && reply && status != 202) evbuffer_add(out,reply,strlen(reply));
             evhttp_send_reply(j->http,reply ? status : 500,NULL,out);
             if (out) evbuffer_free(out);
         } else evhttp_request_free(j->http);
@@ -99,15 +111,20 @@ void mcp_request(mcp_server *s, const char *line, size_t length, struct evhttp_r
         mcp_field(j->frame,"result").p || mcp_field(j->frame,"error").p || (params.p && *params.p != '{')) {
         free(j->frame); j->frame = NULL; mcp_reject(j,400,-32600,"Invalid JSON-RPC request");
     } else if (!id.p) {
-        if (http) mcp_reject(j,400,-32600,"Unsupported notification");
+        if (http) {
+            if (mcp_http_validate(j)) {
+                if (j->legacy_http && !strcmp(method,"notifications/initialized")) mcp_finish(j,strdup("{}"),0,202);
+                else mcp_reject(j,400,-32600,"Unsupported notification");
+            }
+        }
         else { free(j->frame); free(j); --s->pending; mcp_maybe_stop(s); }
     } else if (http && !mcp_http_validate(j)) {
         /* Validation owns the error response and job on failure. */
-    } else if (!strcmp(method,"initialize") && !http) {
+    } else if (!strcmp(method,"initialize") && (!http || j->legacy_http)) {
         char *protocol = mcp_string(mcp_field(params.p,"protocolVersion"));
         if (!protocol || !mcp_field(params.p,"clientInfo").p || !mcp_field(params.p,"capabilities").p) mcp_reject(j,400,-32602,"Missing initialization parameters");
         else {
-            const char *negotiated = !strcmp(protocol,"2024-11-05") || !strcmp(protocol,"2025-03-26") || !strcmp(protocol,"2025-06-18") ? protocol : "2025-11-25";
+            const char *negotiated = (!http && !strcmp(protocol,"2024-11-05")) || !strcmp(protocol,"2025-03-26") || !strcmp(protocol,"2025-06-18") ? protocol : "2025-11-25";
             mj_Buf b; mj_init(&b); mj_obj(&b);
             mj_key(&b,"protocolVersion"); mj_strv(&b,negotiated);
             mj_key(&b,"capabilities"); mj_rawv(&b,"{\"tools\":{}}");

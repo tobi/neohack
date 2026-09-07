@@ -18,7 +18,7 @@ For the playing loop, read [How an agent plays](docs/AGENT_PLAY.md).
 
 WebMCP and stdio MCP return [compact observation deltas](docs/PROTOCOL.md#mcp-observation-presentation).
 The [native C MCP CLI](docs/TYPESCRIPT.md#streamable-http) also supports concurrent
-game processes and `--http PORT` for MCP 2026-07-28 Streamable HTTP, using the same
+game processes and `--http PORT` for MCP 2026-07-28 and 2025 Streamable HTTP, using the same
 tool schemas and independent observation snapshots.
 The native build includes a [C MCP server](docs/QUICKSTART.md#native-stdio-mcp-no-node-runtime),
 `neonethack-mcp ENGINE DATA SESSIONS`, with no JavaScript runtime requirement.

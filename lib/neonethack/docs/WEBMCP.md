@@ -20,11 +20,11 @@ registration.dispose();
 The adapter detects current `document.modelContext` and early
 `navigator.modelContext` implementations. It awaits registration, rolls back on a
 partial failure, and unregisters via the registration AbortSignal (or legacy
-`unregisterTool`). Browsers without the API return `supported: false`; no shim,
+`unregisterTool` or returned cleanup callback). Browsers without the API return `supported: false`; no shim,
 remote MCP service or global JavaScript tool registry is installed.
 
 The adapter preserves `readOnlyHint`. Calls return `structuredContent`,
-`isError`, and an empty `content` array. Results contain a brief witnessed
+`isError`, and the same result serialized in a text `content` block for older clients. Results contain a brief witnessed
 summary and a complete observation; agents do not merge deltas.
 
 Pass the short `sessionId` back on calls. The adapter owns request IDs, its
@@ -112,3 +112,18 @@ verify that disposed callbacks cannot reach the closed engine.
 
 Follow [the agent-browser walkthrough](AGENT_BROWSER.md) to discover tools, create
 a game, take turns, answer decisions and resume browser saves through WebMCP.
+
+### Earlier clients
+
+Native HTTP accepts the 2025-03-26, 2025-06-18 and 2025-11-25 Streamable HTTP
+handshakes alongside 2026-07-28 per-request metadata. Earlier clients send
+`initialize`, then `notifications/initialized`, then the negotiated
+`MCP-Protocol-Version` header. No transport session is assigned; the short game
+session token remains an explicit tool argument. GET streams are not offered.
+Missing version headers use the 2025-03-26 default. Modern requests retain their
+required metadata and routing-header checks. Earlier tool results include text
+as well as structured content. The retired 2024 HTTP+SSE transport is not supported.
+
+WebMCP accepts both document and earlier navigator registration surfaces, including
+synchronous registration, explicit unregister methods and returned cleanup
+callbacks. It never uses `clearContext` to erase other scripts’ tools.

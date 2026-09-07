@@ -71,6 +71,17 @@ int mcp_http_validate(mcp_job *j)
     char *method = mcp_string(mcp_field(j->frame,"method"));
     char *body_version = mcp_string(mcp_field(meta.p,"io.modelcontextprotocol/protocolVersion"));
     mj_val capabilities = mcp_field(meta.p,"io.modelcontextprotocol/clientCapabilities");
+    /* Earlier Streamable HTTP uses initialize, then a version header, without
+     * modern routing metadata. Transport sessions remain optional. */
+    int duplicate_version = !version && evhttp_find_header(evhttp_request_get_input_headers(j->http),"MCP-Protocol-Version");
+    int legacy = !version || !strcmp(version,"2025-03-26") || !strcmp(version,"2025-06-18") || !strcmp(version,"2025-11-25");
+    if (legacy && !duplicate_version) {
+        int mismatch = (body_version && strcmp(body_version,version ? version : "2025-03-26")) ||
+            (method_header && (!method || strcmp(method_header,method)));
+        free(method); free(body_version);
+        if (mismatch) { mcp_reject(j,400,-32020,"Mismatched protocol metadata"); return 0; }
+        j->legacy_http = 1; return 1;
+    }
     int code = 0; const char *message = NULL;
     if (!version || !method_header || !method || strcmp(method_header,method)) {
         code = -32020; message = "Missing or mismatched MCP-Protocol-Version/Mcp-Method headers";
