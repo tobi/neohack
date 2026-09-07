@@ -18,7 +18,7 @@ function fixture({access='public',failOrigin=false}={}) {
    assert.equal(body.access,'public');stores.push({...body,id:'store_Abc123',type:'blob',ownerId:'team',access});return Response.json({store:stores[0]});
   }
   if(path.endsWith('/connections')){
-   if(body){assert.equal(body.envVarPrefix,'PUBLIC_REPLAY');assert.deepEqual(body.envVarEnvironments,['production']);connections.push(body);vars.push({key:'PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN',target:['production']});}
+   if(body){assert.equal(body.envVarPrefix,'PUBLIC_REPLAY_BLOB');assert.deepEqual(body.envVarEnvironments,['production']);connections.push(body);vars.push({key:'PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN',target:['production']});}
    return Response.json({connections});
   }
   throw Error('Unexpected endpoint');

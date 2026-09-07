@@ -26,11 +26,11 @@ export async function setupReplayStore(env, request=fetch) {
   const path=`/v1/storage/stores/${store.id}/connections`;
   const connections=(await api(path)).connections??[];
   const linked=connections.filter(c=>c.projectId===project);
-  if(linked.length && !linked.some(c=>c.envVarPrefix==='PUBLIC_REPLAY'&&c.envVarEnvironments?.includes('production')))
+  if(linked.length && !linked.some(c=>c.envVarPrefix==='PUBLIC_REPLAY_BLOB'&&c.envVarEnvironments?.includes('production')))
     throw Error('Existing replay connection has conflicting configuration');
   if(!linked.length){
     if(hasToken)throw Error('Existing replay credential is not bound to the managed store');
-    await api(path,{projectId:project,envVarPrefix:'PUBLIC_REPLAY',envVarEnvironments:['production']});
+    await api(path,{projectId:project,envVarPrefix:'PUBLIC_REPLAY_BLOB',envVarEnvironments:['production']});
   }
   const after=(await api(envPath)).envs??[];
   if(!after.some(e=>e.key==='PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN'&&(Array.isArray(e.target)?e.target.includes('production'):e.target==='production')))
