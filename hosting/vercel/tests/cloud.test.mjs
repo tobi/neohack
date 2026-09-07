@@ -208,3 +208,19 @@ test('ledger ranks all runs, preserves progress, bounds diagnostics and renders 
   await page.waitForFunction(()=>document.querySelector('#runs').children.length>0);
   await page.screenshot({path:'/tmp/neohack-ledger-mobile.png',fullPage:true});
 });
+
+test('transient cloud failures retry the exact commit in the background without blocking turns',{timeout:60000},async t=>{
+ const {url,browser}=await fixture(t);const page=await browser.newPage();await create(page,url);await synced(page);
+ const bodies=[];let failed=0;
+ await page.route('**/api/vaults/*',async route=>{
+  if(route.request().method()!=='PUT')return route.continue();
+  bodies.push(route.request().postData());if(failed++<2)return route.fulfill({status:503,body:'temporary failure'});return route.continue();
+ });
+ await page.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});
+ const before=await snapshot(page);
+ await page.waitForFunction(()=>document.querySelector('#cloud-status').textContent.includes('retrying'));
+ assert.equal(await page.locator('#error').isVisible(),false,'transient save errors do not become gameplay alerts');
+ await page.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});
+ assert.equal((await snapshot(page)).observation.turn,before.observation.turn+1);
+ await synced(page);assert.ok(bodies.length>=3);assert.equal(bodies[0],bodies[1]);assert.equal(bodies[1],bodies[2]);
+});

@@ -41,7 +41,8 @@ test('real cloud run records public scenes, embeds after death and shares a ledg
   const privateBookmark=page.url();
   const vault=new URLSearchParams(new URL(privateBookmark).hash.slice(1)).get('vault');
   const append=(body,token=vault)=>fetch(endpoint,{method:'PUT',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify(body)});
-  assert.equal((await append({index:0,frame:first.frames[0]})).status,409,'duplicate frame cannot rewrite the recording');
+  assert.equal((await append({index:0,frame:first.frames[0]})).status,200,'an exact retry acknowledges the original frame without rewriting it');
+  assert.equal((await append({index:0,frame:{...first.frames[0],observation:{...first.frames[0].observation,turn:999}}})).status,409,'a changed duplicate cannot replace a recorded frame');
   assert.equal((await append({index:first.count,frame:{...state,sessionId:'another-run'}})).status,400);
   assert.equal((await append({index:first.count,frame:state},crypto.randomUUID())).status,403);
   assert.equal((await fetch(new URL('?offset=-1',endpoint))).status,400);
@@ -50,6 +51,7 @@ test('real cloud run records public scenes, embeds after death and shares a ledg
   const summary=await page.getByLabel('Game menu',{exact:true}).boundingBox();const menu=await page.locator('.hud-menu-body').boundingBox();
   assert.ok(menu.y>=summary.y+summary.height && Math.abs(menu.x+menu.width-summary.x-summary.width)<2);
   await page.locator('#copy-embed').click();
+  await page.waitForFunction(()=>document.querySelector('#copy-embed').textContent==='Embed copied');
   const embed=await page.evaluate(()=>navigator.clipboard.readText());assert.ok(embed.includes('autoplay speed="4" controls'));assert.ok(embed.includes(state.sessionId));assert.ok(!embed.includes('vault'));
   await page.getByRole('button',{name:'Abandon run',exact:true}).click();
   await page.getByRole('button',{name:'Yes, continue',exact:true}).click();

@@ -14,7 +14,8 @@ export function validateRegistry(registry) {
       Object.keys(registry.packages).some(key => !hash(key))) throw Error('Invalid runtime registry');
   for (const [id, manifest] of Object.entries(registry.packages)) {
     if (manifest.version !== 1 || manifest.buildId !== id || sha256(JSON.stringify(manifest.files)) !== id ||
-        JSON.stringify(Object.keys(manifest.files).sort()) !== JSON.stringify([...compiled,...workers].sort()) ||
+        [...compiled,...workers.filter(name=>name!=='replica-uploader.mjs')].some(name=>!(name in manifest.files)) ||
+        Object.keys(manifest.files).some(name=>![...compiled,...workers].includes(name)) ||
         Object.values(manifest.files).some(value=>!hash(value))) throw Error('Invalid runtime manifest');
   }
   return registry;

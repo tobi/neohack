@@ -27,3 +27,14 @@ test('invalid recovery source never writes and concurrent live updates survive r
   assert.deepEqual((await store.read('board/index.json')).value.runs.map(r=>r.id).sort(),['live','old']);
  });
 });
+
+test('historical recovery also fills the partitioned ledger without changing its source',async()=>{
+ const {saveLedgerRun,ledgerStats}=await import('../src/ledger-store.ts');
+ const store=new MemoryStorage();await store.write('board/runs.json',[run('old'),run('shared',1)]);
+ await storageContext.run(store,async()=>{
+  await saveLedgerRun(run('shared',50));const revision=store.revision;
+  const report=await recoverLedger();assert.equal(report.added,1);assert.equal(store.revision,revision);
+  await recoverLedger({apply:true});const stats=await ledgerStats();assert.equal(stats.totals.runs,2);assert.equal(stats.best.find(r=>r.id==='shared').turn,50);
+  assert.equal((await store.read('board/runs.json')).value[1].turn,1);
+ });
+});

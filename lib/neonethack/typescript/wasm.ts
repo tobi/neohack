@@ -13,7 +13,7 @@ export interface WasmOptions {
   timeoutMs?: number;
   onDiagnostic?: (message: string) => void;
   /** Remote replication is asynchronous; local durability remains awaited. */
-  onReplicaStatus?: (status: { state: "queued" | "pending" | "saved" | "error"; message: string }) => void;
+  onReplicaStatus?: (status: { state: "queued" | "pending" | "saved" | "retrying" | "error"; message: string }) => void;
 }
 /** The worker boundary is private. All gameplay uses the same C ABI as native. */
 export class WasmTransport implements Transport {

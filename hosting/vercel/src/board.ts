@@ -1,5 +1,11 @@
-import { read, update } from "./storage.ts";
-import { publicReplayIds } from './replays.ts';
+import {
+  ledgerStats,
+  ledgerErrors,
+  ledgerRun,
+  ledgerRuns,
+  saveLedgerRun,
+  recordLedgerError,
+} from "./ledger-store.ts";
 
 const RUN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const CONTROLS = new Set(["manual", "webmcp", "bot", "script", "playground"]);
@@ -96,62 +102,25 @@ const codes = new Set([
   "client",
   "server",
 ]);
-const empty = () => ({
-  runs: [] as Run[],
-  errors: [] as Array<{
-    day: string;
-    code: string;
-    build: string;
-    count: number;
-    last: number;
-  }>,
-});
 export async function board(request: Request) {
   const url = new URL(request.url),
     path = url.pathname;
   if (request.method === "GET") {
-    const doc =
-      (await read<ReturnType<typeof empty>>("board/index.json")) ?? empty();
-    if (path === "/api/stats") {
-      const recordedIds=await publicReplayIds();
-      const ranked=[...doc.runs].sort((a,b)=>
-        Number(b.endKind==='ascended')-Number(a.endKind==='ascended') ||
-        (b.maxLevel??0)-(a.maxLevel??0) || b.turn-a.turn || a.id.localeCompare(b.id));
-      const withReplay=(run:Run)=>({...run,replayAvailable:recordedIds.has(run.id)});
-      const runs: Run[] = doc.runs,
-        roles: Record<string, number> = {};
-      for (const run of runs) roles[run.role] = (roles[run.role] ?? 0) + 1;
-      const since = new Date(Date.now() - 13 * 86400000)
-        .toISOString()
-        .slice(0, 10);
+    if (path === "/api/stats")
       return json({
         generatedAt: Date.now(),
-        totals: {
-          runs: runs.length,
-          living: runs.filter((r) => !r.ended).length,
-          ascended: runs.filter((r) => r.endKind === "ascended").length,
-          longest: Math.max(0, ...runs.map((r) => r.turn)),
-        },
-        best: ranked.slice(0,100).map(withReplay),
-        recorded: ranked.filter(run=>recordedIds.has(run.id)).slice(0,100).map(withReplay),
-        roles: Object.entries(roles)
-          .map(([role, count]) => ({ role, count }))
-          .sort((a, b) => b.count - a.count),
-        errors: doc.errors
-          .filter((e) => e.day >= since)
-          .sort((a, b) => b.day.localeCompare(a.day) || b.count - a.count)
-          .slice(0, 500),
-        errorSince: since,
+        ...(await ledgerStats()),
+        errors: await ledgerErrors(),
+        errorSince: new Date(Date.now() - 13 * 86400000)
+          .toISOString()
+          .slice(0, 10),
       });
-    }
     if (path.startsWith("/api/runs/")) {
-      const run = doc.runs.find(
-        (r) => r.id === path.slice("/api/runs/".length),
-      );
+      const run = await ledgerRun(path.slice("/api/runs/".length));
       return run ? json(run) : json({ error: "not found" }, 404);
     }
     return json(
-      doc.runs.slice(
+      (await ledgerRuns()).slice(
         0,
         Math.min(
           10000,
@@ -179,41 +148,24 @@ export async function board(request: Request) {
       (body.buildId && !/^[a-f0-9]{64}$/.test(body.buildId))
     )
       return json({ error: "invalid diagnostic" }, 400);
-    return update("board/index.json", empty, (doc) => {
-      const day = new Date(now).toISOString().slice(0, 10),
-        build = body.buildId || "";
-      const entry = doc.errors.find(
-        (e) => e.day === day && e.code === body.code && e.build === build,
-      );
-      if (!entry && doc.errors.filter((e) => e.day === day).length >= 512)
-        return json({ error: "diagnostic capacity reached" }, 429);
-      if (entry) {
-        entry.count = Math.min(entry.count + 1, 1000000);
-        entry.last = now;
-      } else
-        doc.errors.push({ day, code: body.code, build, count: 1, last: now });
-      doc.errors = doc.errors.filter(
-        (e) =>
-          e.day >= new Date(now - 14 * 86400000).toISOString().slice(0, 10),
-      );
-      return new Response(null, { status: 204 });
-    });
+    const accepted = await recordLedgerError(
+      body.code,
+      body.buildId || "",
+      now,
+    );
+    return accepted
+      ? new Response(null, { status: 204 })
+      : json({ error: "diagnostic capacity reached" }, 429);
   }
   if (!Array.isArray(body.runs) || body.runs.length > 50)
     return json({ error: "invalid runs" }, 400);
-  return update("board/index.json", empty, (doc) => {
-    let stored = 0;
-    const runs = new Map(doc.runs.map((r) => [r.id, r]));
-    for (const raw of body.runs) {
-      const run = sanitizeRun(raw, now);
-      if (!run) continue;
-      const old = runs.get(run.id);
-      if (old && (old.turn > run.turn || (old.ended && !run.ended))) continue;
-      run.maxLevel = Math.max(old?.maxLevel ?? 0, run.maxLevel ?? 0);
-      runs.set(run.id, run);
+  let stored = 0;
+  for (const raw of body.runs) {
+    const run = sanitizeRun(raw, now);
+    if (run) {
+      await saveLedgerRun(run);
       stored++;
     }
-    doc.runs = [...runs.values()].sort((a, b) => b.updatedAt - a.updatedAt);
-    return json({ stored });
-  });
+  }
+  return json({ stored });
 }

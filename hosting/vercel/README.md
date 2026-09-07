@@ -92,3 +92,28 @@ node hosting/vercel/scripts/recover-ledger.mjs --apply  # conditional atomic mer
 On 2026-09-06, recovery restored 1,573 missing records (1,665 total at verification).
 Repeated execution reports zero additions. Retain the original ledger as evidence;
 this tool is operational recovery, not a game-save compatibility layer.
+
+### Public ledger storage
+
+New run records live independently at `ledger/runs/<id>.json`. Thirty-two
+partitioned indexes feed bounded top-run/statistics summaries; diagnostic counts
+live in separate daily documents. Statistics read those summaries rather than
+sorting the complete ledger on each request. Updates use conditional writes and
+preserve terminal and highest-progress records. Run records remain authoritative
+if a summary update fails; retrying or rebuilding repairs the projection.
+
+The published `board/index.json` is retained read-only as an additive historical
+source. Initial summary construction batches its records by partition; it does
+not perform thousands of per-run writes during a cold start. Existing records
+are never discarded on deployment. The following rebuild is additive and does
+not touch private journals or runtime pins:
+
+```sh
+node hosting/vercel/scripts/rebuild-ledger.mjs --apply
+```
+
+Public recordings have a separate browser IndexedDB outbox (500 frames / 32 MiB
+per run). Transient uploads retry the same index/frame, including a lost response.
+An exact duplicate is acknowledged without appending twice; a changed duplicate
+is rejected. Queue exhaustion or access/sequence refusal is visibly reported and
+retains pending frames. Browser data removal can still delete unsynced frames.

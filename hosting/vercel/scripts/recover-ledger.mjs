@@ -3,6 +3,7 @@
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { read, update } from '../src/storage.ts';
+import { ledgerRuns,saveLedgerRun } from '../src/ledger-store.ts';
 import { sanitizeRun } from '../src/board.ts';
 
 export async function recoverLedger({apply=false}={}) {
@@ -27,6 +28,12 @@ export async function recoverLedger({apply=false}={}) {
     const missing=recovered.filter(run=>!currentIds.has(run.id));
     const report={apply,sourceHash,sourceRuns:source.length,currentRuns:doc.runs.length,added:missing.length,total:doc.runs.length+missing.length};
     if(missing.length)doc.runs=[...doc.runs,...missing].sort((a,b)=>b.updatedAt-a.updatedAt);
+    return report;
+  }
+  if(await read('ledger/initialized.json')) {
+    const current=await ledgerRuns(), doc={runs:[...current],errors:[]};
+    const report=merge(doc);
+    if(apply){const existing=new Set(current.map(r=>r.id));for(const run of doc.runs)if(!existing.has(run.id))await saveLedgerRun(run);}
     return report;
   }
   if(!apply)return merge((await read('board/index.json'))??{runs:[],errors:[]});

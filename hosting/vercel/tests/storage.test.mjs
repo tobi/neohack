@@ -119,6 +119,7 @@ test("private data stays private and malformed requests never commit", async () 
     );
     const stats = await handler(new Request("https://neohack.dev/api/stats"));
     assert.ok(!(await stats.text()).includes("PRIVATE"));
+    const documentCount=store.docs.size, revision=store.revision;
     const response = await handler(
       new Request(`https://neohack.dev/api/vaults/${crypto.randomUUID()}`, {
         method: "PUT",
@@ -126,7 +127,8 @@ test("private data stays private and malformed requests never commit", async () 
       }),
     );
     assert.equal(response.status, 400);
-    assert.equal(store.docs.size, 1);
+    assert.equal(store.docs.size, documentCount);
+    assert.equal(store.revision,revision,"malformed input writes no documents");
     const rewrite = await handler(
       new Request("https://neohack.dev/api/index?__path=stats"),
     );

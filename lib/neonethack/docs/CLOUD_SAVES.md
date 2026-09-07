@@ -56,7 +56,17 @@ journal before installing it.
 **Saving online…** means local progress is durable but newer changes may not yet
 be available on another device. Closing a runtime explicitly flushes pending
 uploads; abruptly closing a tab can leave unsynced progress in that browser.
-After an upload exhausts its retries, reopen the run to retry its retained data.
+Each request has a ten-second timeout. Network failures, HTTP 408/429 and server
+errors retry in the background with exponential backoff capped at one minute.
+The durable outbox retains the exact commit ID, base and body across retries and
+reloads; newer local work waits behind that acknowledgement. The UI says
+“Saved here · retrying online”, without an error toast for temporary failures.
+Conflicts, refused access and invalid acknowledgement identities stop replication
+and retain local progress for explicit recovery. Close makes a bounded flush
+attempt; abrupt termination can still leave pending local work.
+
+This behavior belongs to the new pinned runtime package. Existing published
+packages retain their exact bytes and are not silently upgraded.
 
 WASM resumption requires the same package identity. Incompatible development
 packages are refused, not silently substituted or migrated.

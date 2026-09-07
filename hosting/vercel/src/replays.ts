@@ -1,3 +1,4 @@
+import {markRecorded} from './ledger-store.ts';
 import { createHash } from 'node:crypto';
 import { read, update, immutable, storage, type Storage } from './storage.ts';
 
@@ -24,7 +25,7 @@ export async function replay(request: Request, id: string) {
     if(!Number.isSafeInteger(offset)||offset<0)return json({error:'Invalid offset'},400);
     const frames=await Promise.all(doc.frames.slice(offset,offset+25).map((ref:string)=>read(ref)));
     if(frames.some(f=>!f))return json({error:'Recording incomplete'},409);
-    return json({count:doc.frames.length,revision:doc.revision,frames,next:offset+frames.length<doc.frames.length?offset+frames.length:null,role:doc.role,seed:doc.seed,partial:doc.partial,buildId:doc.buildId});
+    return json({count:doc.frames.length,revision:doc.revision,frames,next:offset+frames.length<doc.frames.length?offset+frames.length:null,role:doc.role,seed:doc.seed,partial:doc.partial,complete:doc.complete===true&&!doc.partial,buildId:doc.buildId});
   }
   if(request.method!=='PUT')return json({error:'Method not allowed'},405);
   const origin=request.headers.get('origin');
@@ -43,13 +44,15 @@ export async function replay(request: Request, id: string) {
   const observation={...f.observation};delete observation.neighborhood;
   const frame={version:1,sessionId:id,requestId:f.requestId,revision:f.revision,ended:f.ended,observation,outcome:f.outcome,events:f.events,decision:f.decision,end:f.end};
   const owner=createHash('sha256').update(vault).digest('hex');
+  const frameRef='objects/'+createHash('sha256').update(JSON.stringify(frame)).digest('hex')+'.json';
   const result=await update<any,Response>(key,()=>({owner,frames:[],revision:-1,role:run.role,seed:run.seed,buildId:run.buildId,partial:f.observation.turn>1}),async doc=>{
     if(doc.owner!==owner)return json({error:'Recording owner differs'},403);
     if(doc.buildId!==run.buildId)return json({error:'Recording package differs'},409);
+    if(body.index<doc.frames.length && doc.frames[body.index]===frameRef){if(!(await read(frameRef)))return json({error:'Recorded frame missing'},409);return json({count:doc.frames.length});}
     if(body.index!==doc.frames.length || f.revision<=doc.revision)return json({error:'Recording sequence differs'},409);
-    doc.frames.push(await immutable(frame));doc.revision=f.revision;
+    doc.frames.push(await immutable(frame));doc.revision=f.revision;doc.complete=f.ended;
     return json({count:doc.frames.length});
   });
-  if(result.ok && body.index===0)availability.delete(storage());
+  if(result.ok && body.index===0){availability.delete(storage());await markRecorded(id);}
   return result;
 }
