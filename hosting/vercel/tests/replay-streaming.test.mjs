@@ -26,7 +26,7 @@ test('public playback fetches only static files, begins early and preserves immu
  assert.deepEqual(JSON.parse(bytes).frames,frames.slice(0,3));assert.equal(reads.length,0,'static chunks read no private storage');
  const doc=await read('replays/'+id+'.json');await store.write('replays/'+id+'.json',{...doc.value,frames:[...refs,refs[0]]},doc.etag);
  await publish();assert.equal(await(await fetch(chunkURL)).text(),bytes);
- const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());const page=await browser.newPage();
+ const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());const page=await browser.newPage();
  let release;const gate=new Promise(resolve=>release=resolve);t.after(()=>release());
  let chunks=0, apiRequests=0;
  await page.route('**/api/**',route=>{apiRequests++;return route.abort();});
@@ -47,7 +47,7 @@ test('public playback fetches only static files, begins early and preserves immu
 test('partial failures retain playable frames and changing source cancels stale delivery', {timeout:30000},async t=>{
  const{api}=await fixture(t);const game=await api.create({name:'Buffer',role:'valkyrie',seed:7});const first=structuredClone(game.state);await game.wait();const second=structuredClone(game.state);
  const server=createTestHarness();const{url}=await server.listen();t.after(()=>server.close());
- const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());const page=await browser.newPage();
+ const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());const page=await browser.newPage();
  await page.route('**/slow-replay*',async route=>{const next=new URL(route.request().url()).searchParams.has('offset');await route.fulfill({status:next?503:200,contentType:'application/json',body:JSON.stringify(next?{error:'down'}:{frames:[first,second],next:2})});});
  await page.goto(new URL('/component',url).href);await page.waitForFunction(()=>document.querySelector('neohack-world')?.loadReplay);
  await page.evaluate(()=>{const w=document.querySelector('neohack-world');window.ends=0;w.addEventListener('replayend',()=>window.ends++);w.setAttribute('autoplay','');w.setAttribute('src','/slow-replay');});
