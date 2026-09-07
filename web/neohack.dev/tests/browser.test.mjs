@@ -1,4 +1,3 @@
-import { CompactObservationReader } from "../../../lib/neonethack/dist/mcp/compact.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -83,21 +82,18 @@ async function fixture(
 // Chromium 148 exposes its earlier native testing interface instead.
 async function nativeWebMcp(page, t) {
   const native = await rawNativeWebMcp(page, t);
-  const reader = new CompactObservationReader();
   return { ...native, call: async (...args) => {
     const result = await native.call(...args);
     if (result.structuredContent) {
       assert.deepEqual(result.content, []);
-      if (args[0] !== "session.observe") assert.equal(result.structuredContent.observation?.neighborhood, undefined);
-      result.structuredContent = reader.apply(result.structuredContent);
     }
     return result;
   } };
 }
 async function agentSnapshot(page) {
   const state = await snapshot(page);
-  if (state?.observation) delete state.observation.neighborhood;
-  return state;
+  if(!state)return null;
+  const {requestId,...frame}=state;return frame;
 }
 async function rawNativeWebMcp(page, t) {
   const cdp = await page.context().newCDPSession(page);
@@ -1539,14 +1535,16 @@ test("walk-in welcome teaches directions, stops on release and opens creation on
 });
 
 test(
-  "native WebMCP exposes the entire MCP catalog and shares durable engine state with the HUD",
+  "native WebMCP exposes navigation tools and shares durable engine state with the HUD",
   { timeout: 60000 },
   async (t) => {
     const { page, errors } = await fixture(t, { webmcp: true });
     await page.waitForFunction(
       () => document.querySelector("pixel-nethack").dataset.webmcp === "ready",
     );
-    const { tools } = await import("../../../lib/neonethack/dist/mcp/tools.js");
+    const { methods } = await import("../../../lib/neonethack/dist/mcp/agent-data.js");
+    const tools=methods.map(m=>({name:m.name,description:m.description,inputSchema:m.schema}));
+    const snapshotPart=({summary,operationId,historical,navigation,creatures,requestId,...frame})=>frame;
     const native = await nativeWebMcp(page, t);
     const registered = await native.list();
     assert.deepEqual(
@@ -1559,7 +1557,7 @@ test(
       assert.deepEqual(native.inputSchema, tool.inputSchema);
     }
     const call = native.call;
-    assert.equal((await call("protocol.describe")).isError, false);
+    assert.equal((await call("help")).isError, false);
     assert.equal(await agentSnapshot(page), null);
     const created = await call("session.create", {
       name: "Mira",
@@ -1571,7 +1569,7 @@ test(
     });
     assert.equal(created.isError, false);
     let state = created.structuredContent;
-    assert.deepEqual(await agentSnapshot(page), state);
+    assert.deepEqual(await agentSnapshot(page), snapshotPart(state));
     assert.equal(await page.locator("#hero-name").textContent(), "Mira");
     assert.equal(
       await page.locator(".map-viewport").evaluate((el) => el.clientHeight),
@@ -1582,8 +1580,6 @@ test(
     });
     const args = (requestId, extra = {}) => ({
       sessionId: state.sessionId,
-      requestId,
-      expectedRevision: state.revision,
       ...extra,
     });
     const prayerArgs = args("web-pray");
@@ -1594,13 +1590,12 @@ test(
     await page.waitForTimeout(200);
     assert.deepEqual(
       await agentSnapshot(page),
-      state,
+      snapshotPart(state),
       "warnings await an explicit answer",
     );
     const decline = await call(
       "decision.answer",
       args("web-decline", {
-        decisionId: state.decision.id,
         answer: { kind: "confirmation", confirm: false },
       }),
     );
@@ -1610,25 +1605,24 @@ test(
     state = (await call("game.wait", waitArgs)).structuredContent;
     const next = (await call("game.wait", args("web-next"))).structuredContent;
     assert.deepEqual(
-      (await call("game.wait", waitArgs)).structuredContent,
-      state,
+      snapshotPart((await call("receipt",{sessionId:state.sessionId,operationId:state.operationId})).structuredContent),
+      snapshotPart(state),
       "exact receipt retry",
     );
     assert.deepEqual(
       await agentSnapshot(page),
-      next,
+      snapshotPart(next),
       "old receipts never rewind the HUD",
     );
     state = next;
-    const stale = await call("game.wait", {
-      ...args("web-stale"),
-      expectedRevision: 0,
-    });
-    assert.equal(stale.isError, true);
-    assert.equal((await agentSnapshot(page)).revision, state.revision);
+    await page.evaluate(async()=>{const app=document.querySelector('pixel-nethack');await app.run(()=>app.game.wait());});
+    const human=await agentSnapshot(page);
+    const stale=await call('game.wait',{sessionId:state.sessionId});
+    assert.equal(stale.isError,true);
+    assert.equal((await agentSnapshot(page)).revision,human.revision);
+    state=(await call('session.observe',{sessionId:state.sessionId})).structuredContent;
     const actions = await call("session.actions", {
       sessionId: state.sessionId,
-      expectedRevision: state.revision,
       target: "here",
     });
     assert.equal(actions.isError, false);
@@ -1650,15 +1644,15 @@ test(
     await page.locator("#recovery").waitFor({ state: "visible" });
     const wrong = await call("game.wait", args("web-wrong-retry"));
     assert.equal(wrong.isError, true);
-    assert.match(wrong.content[0].text, /uncertain request/);
-    const recovered = await call("game.wait", uncertain);
+    assert.equal(wrong.structuredContent.error.code,"uncertainExecution");
+    const recovered = await call("retry",{sessionId:state.sessionId});
     assert.equal(recovered.isError, false);
     assert.equal(
       recovered.structuredContent.observation.turn,
       state.observation.turn + 1,
     );
     state = recovered.structuredContent;
-    assert.deepEqual(await agentSnapshot(page), state);
+    assert.deepEqual(await agentSnapshot(page), snapshotPart(state));
     await page.locator("#recovery").waitFor({ state: "hidden" });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({
@@ -1686,7 +1680,7 @@ test(
     // Retired callbacks must reject before touching the closed transport even
     // when that browser retains descriptors. Navigation clears the registry.
     let retired;
-    try { retired = await call("protocol.describe"); }
+    try { retired = await call("help"); }
     catch (error) { retired = { removed: /Tool not found/.test(String(error)) }; }
     assert.ok(
       retired.removed ||
@@ -2578,7 +2572,7 @@ test("idle WebMCP discovery and closed adventures release storage for another ta
   await page.waitForFunction(() => document.querySelector("pixel-nethack").dataset.webmcp === "ready");
   const { call } = await nativeWebMcp(page, t);
   const owned = () => page.evaluate(async () => (await navigator.locks.query()).held.some(lock => lock.name === `neonethack:v1:${document.querySelector("pixel-nethack").storeName}`));
-  assert.equal((await call("protocol.describe")).isError, false);
+  assert.equal((await call("help")).isError, false);
   assert.equal(await owned(), false, "discovery must not leave a title worker owning the store");
   // Exercise the C rejection through the client transport directly: the native
   // WebMCP schema validator can reject malformed input before opening storage.
@@ -2590,7 +2584,7 @@ test("idle WebMCP discovery and closed adventures release storage for another ta
   const created = await call("session.create", { name: "Agent", role: "valkyrie", seed: 42 });
   assert.equal(created.isError, false);
   const sid = created.structuredContent.sessionId;
-  const warning = await call("game.pray", { sessionId: sid, expectedRevision: created.structuredContent.revision, requestId: "owner-warning" });
+  const warning = await call("game.pray", { sessionId: sid });
   assert.equal(warning.isError, false);
   assert.equal(warning.structuredContent.decision.kind, "confirmation");
   assert.equal((await call("session.close", { sessionId: sid })).isError, false);
@@ -3454,4 +3448,54 @@ test('compact equipment targets remain visible while the bag scrolls; touch sele
  await page.setViewportSize({width:1280,height:720});
  const panel=await page.locator('.character-panel').boundingBox();assert.ok(panel.height<=720);assert.ok(panel.width<=820);
  await page.screenshot({path:root+'/test-results/equipment-compact-desktop.png'});
+});
+
+for(const touch of [false,true])test(`destination selection previews a free C route and walks through the shared navigator (${touch?'mobile':'desktop'})`,async t=>{
+  const {page,errors}=await fixture(t,{touch});if(touch)await page.setViewportSize({width:390,height:844});await create(page,'valkyrie',1);await ready(page);
+  const selected=await page.evaluate(async()=>{
+    const app=document.querySelector('pixel-nethack'),game=app.game;
+    for(const cell of game.observation.world){
+      const route=await game.route({x:cell.x,y:cell.y});
+      if(route.distance>=2&&route.distance<=4){
+        const before=game.state.revision;
+        const bounds=app.map.canvas.getBoundingClientRect(),shift=app.map.travel(performance.now());
+        return {seen:game.observation.world.filter(c=>c.occupant?.kind==="creature"),to:{x:cell.x,y:cell.y},before,distance:route.distance,x:bounds.left+((cell.x-app.map.origin.x)*16+8+shift.x)*app.map.zoom,y:bounds.top+((cell.y-app.map.origin.y)*16+8+shift.y)*app.map.zoom};
+      }
+    }
+    throw Error('seed must offer a real multi-step walking route');
+  });
+  if(touch)await page.touchscreen.tap(selected.x,selected.y);else await page.mouse.click(selected.x,selected.y);
+  const walk=page.getByRole('button',{name:'Walk here',exact:true});await walk.waitFor();
+  await page.waitForFunction(()=>document.querySelector('pixel-nethack').map.route.length>=2);
+  assert.equal((await snapshot(page)).revision,selected.before,'preview is a free query');
+  await page.screenshot({path:`/tmp/neo33-route-preview-${touch?'mobile':'desktop'}.png`});
+  if(touch)await page.evaluate(()=>{
+    const app=document.querySelector('pixel-nethack'),original=app.game.route.bind(app.game);
+    app.game.route=async(...args)=>{
+      app.game.route=original;
+      const result=await original(...args);
+      await new Promise(resolve=>{app.releaseNavigationQuery=resolve;});return result;
+    };
+  });
+  await walk.click();
+  if(touch){
+    await page.waitForFunction(()=>!!document.querySelector('pixel-nethack').releaseNavigationQuery);
+    await page.getByRole('button',{name:'Stop walking',exact:true}).click();
+    await page.evaluate(()=>document.querySelector('pixel-nethack').releaseNavigationQuery());
+    await ready(page);
+    assert.equal((await snapshot(page)).revision,selected.before,'Stop walking during route query sends no move');
+    assert.match(await page.locator('#navigation-status').textContent(),/aborted/);
+    assert.deepEqual(errors,[]);return;
+  }
+  await ready(page);
+  const after=await snapshot(page);
+  t.diagnostic(JSON.stringify(await page.evaluate(()=>({error:document.querySelector("#error").textContent,notice:document.querySelector("#inspect-text").textContent}))));
+  if(after.observation.you.x!==selected.to.x || after.observation.you.y!==selected.to.y){
+    assert.ok(after.observation.world.some(c=>c.occupant?.kind==='creature'&&!selected.seen.some(p=>p.x===c.x&&p.y===c.y&&p.occupant?.appearance===c.occupant.appearance)),'newly perceived creature stops the leg');
+    assert.match(await page.locator('#inspect-text').textContent(),/Walking stopped: changed/);
+    assert.ok(after.observation.turn<selected.distance+1,'changed scene stops before completing the requested route');
+  }
+  assert.ok(after.observation.turn>1);
+  assert.equal(await page.evaluate(()=>document.querySelector('pixel-nethack').map.route.length),0);
+  assert.deepEqual(errors,[]);
 });

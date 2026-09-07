@@ -1732,3 +1732,19 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
 
 
 .journal-inline { white-space:pre-line; }
+
+#navigation-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .75rem;
+  max-width: 28rem;
+  padding: .5rem .75rem;
+  margin: 0 auto .5rem;
+  background: #202e28;
+  color: #dfe5ca;
+  border: 1px solid #647458;
+  font-size: .875rem;
+}
+#navigation-status[hidden], #navigation-stop[hidden] { display: none; }
+#navigation-stop { white-space: nowrap; min-height: 44px; }

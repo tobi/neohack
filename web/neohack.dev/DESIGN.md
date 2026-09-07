@@ -429,9 +429,10 @@ runtime loader on entry; they must not freeze the courtyard.
 
 Expose every existing MCP tool through native `document.modelContext` WebMCP (or early `navigator.modelContext` builds) when
 available, using the same names, descriptions and JSON schemas as stdio MCP. Share
-tool definitions so future catalog additions cannot drift. All calls retain supplied
-request IDs, expected revisions, targets and decision answers, and run through the
-public persistent WASM transport. Synchronize the visible game after agent actions;
+tool definitions so future catalog additions cannot drift. MCP/WebMCP expose the navigation agent vocabulary; the adapter owns operation
+IDs, observed revisions and response reconstruction. Explicit short run tokens,
+perceived targets and deliberate decision answers pass through the public
+persistent WASM transport. Synchronize the visible game after agent actions;
 serialize access with human input, retain uncertain requests, and retain current-runtime integrity checks. Never auto-answer warnings or repeat uncertain input with a new ID.
 Unsupported browsers keep the human game fully functional; do not claim a JavaScript
 shim is native WebMCP. Document capability detection and test the browser registration
@@ -1245,3 +1246,19 @@ revocable private link. Failed publication retains the private recording and its
 reserved public ID; Update public replay retries without creating another copy.
 Later private recording commits survive public delivery failures and show the
 last published frame count until publication catches up.
+
+### Perception-only destination walking
+
+Selecting a map square opens its perceived description and a free, revision-bound
+C route preview. Sage ground markers show only returned known route steps. Walk
+here requests one bounded leg (at most eight actions) through the same library
+navigator used by agents. Reaching a destination never overrides a standing
+choice, changed creature scene, damage, uncertainty or a level change. Each
+executed step updates the human view and recording. Escape, blur, a hidden page,
+opening a dialog or removing the component aborts subsequent steps. The final
+stop reason remains visible; continuing requires another deliberate selection.
+
+Distant tile descriptions come from the public actions query rather than invented
+local affordances. Adjacent direct movement/interaction buttons remain distinct
+from the walking policy. Arrows, WASD and the direction pad still issue direct
+single-step movement. Inspecting and previewing consume no game turn or randomness.

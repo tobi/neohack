@@ -4,6 +4,8 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Select a map square to preview a known route and walk one bounded leg. Stop walking or Escape cancels further steps; new circumstances and choices pause the journey.
+
 - Account owners can make a recorded run public and share its replay while keeping saves, script source and notes private.
 
 - Replays begin after their first frames arrive, buffer in the background and use CDN-cacheable public chunks.

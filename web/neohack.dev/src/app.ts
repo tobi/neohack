@@ -104,6 +104,9 @@ class PixelNethack extends HTMLElement {
   private webMcp: WebMcpRegistration | null = null;
   private game: Game | null = null;
   private busy = false;
+  private inspectionVersion=0;
+  private navigationNotice="";
+  private navigationAbort: AbortController | null = null;
   private cloudStatusGeneration = 0;
   private cloudEnabled = false;
   private cloudMetadataTimer: ReturnType<typeof setTimeout> | undefined;
@@ -131,6 +134,7 @@ class PixelNethack extends HTMLElement {
   private introAuto: ReturnType<typeof setInterval> | undefined;
   private portalEntering = false;
   private stopMovement = () => {
+    this.navigationAbort?.abort();
     this.movement.stop();
     this.introMovement.stop();
     clearInterval(this.introAuto);
@@ -341,7 +345,7 @@ class PixelNethack extends HTMLElement {
                 `<button data-move="${d}" data-game aria-label="Move ${d}">${g}</button>`,
             )
             .join("")}</div></div>
-          <div class="action-dock"><div class="action-grid"><button data-action="search" data-game>Search<kbd>f</kbd></button><button data-action="pickup" data-game>Pick up<kbd>g</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="pray" data-game>Pray</button><button id="more-actions" data-game>More actions</button></div>
+          <div class="action-dock"><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>f</kbd></button><button data-action="pickup" data-game>Pick up<kbd>g</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="pray" data-game>Pray</button><button id="more-actions" data-game>More actions</button></div>
           <nav class="side-nav" aria-label="Adventure views"><button data-view="inventory">Backpack <span id="inventory-count"></span><kbd>i</kbd></button><button data-view="surroundings">Surroundings</button><button data-view="journal">Journal</button></nav></div>
         </section>
         <aside class="ground-loot" id="ground-loot" aria-label="On the ground" hidden><h2>On the ground</h2><p>At your feet · choose what to take</p><div id="ground-items"></div></aside>
@@ -745,6 +749,7 @@ class PixelNethack extends HTMLElement {
     }
   }
   disconnectedCallback() {
+    this.navigationAbort?.abort();
     this.publicRecorder?.close();
     this.publicSession="";
     this.hudLayout?.disconnect();
@@ -796,6 +801,7 @@ class PixelNethack extends HTMLElement {
     return b;
   }
   private bind() {
+    this.$("#navigation-stop").onclick=()=>this.navigationAbort?.abort();
     this.$("#close-panel").onclick = () => {
       this.closePanel();
       this.$("#dungeon").focus();
@@ -1029,6 +1035,7 @@ class PixelNethack extends HTMLElement {
     this.closeTile();
     const game = this.game;
     const before = this.uncertain() ? null : game?.state;
+    this.navigationNotice="";
     let completed = false;
     this.busy = true;
     if (this.metadataHealthy) this.show("#error", false);
@@ -1149,6 +1156,9 @@ class PixelNethack extends HTMLElement {
 
   }
   private controls() {
+    this.show("#navigation-status",!!this.navigationAbort || !!this.navigationNotice);
+    this.text("#navigation-status-text",this.navigationNotice || "Walking…");
+    this.show("#navigation-stop",!!this.navigationAbort);
     this.$("#pickup-settings").hidden = !this.game;
     (this.$("#text-map-button") as HTMLButtonElement).disabled = !this.game;
     this.querySelectorAll<HTMLButtonElement>("[data-intro]").forEach(
@@ -1285,7 +1295,7 @@ class PixelNethack extends HTMLElement {
             ? `No progress${state.outcome.reason ? ` · ${state.outcome.reason}` : ""}. You can choose a different action.`
             : state.decision
               ? "A choice is waiting. The dungeon will wait for your answer."
-              : "Explore at your own pace. Click a tile to inspect what you know.",
+              : this.navigationNotice || "Explore at your own pace. Click a tile to inspect or plan a walk.",
       );
       const lines = Array.from({ length: 21 }, () =>
         Array<string>(80).fill(" "),
@@ -1583,20 +1593,28 @@ class PixelNethack extends HTMLElement {
     }
   }
   private closeTile() {
+    this.inspectionVersion++;
+    this.map.route=[];
+    this.map.draw();
     if (!this.tilePanel) return;
     const focused = this.tilePanel.contains(document.activeElement);
     this.tilePanel.remove();
     this.tilePanel = null;
     if (focused) (this.querySelector("#dungeon") as HTMLElement)?.focus();
   }
-  private inspectTile(x: number, y: number, obstruction = false) {
+  private async inspectTile(x: number, y: number, obstruction = false) {
     this.closeTile();
     this.movement.stop();
     const game = this.game,
       n = game?.observation.neighborhood;
     if (!game || this.busy || n?.status !== "available") return;
-    const cell = n.cells.find((c) => c.x === x && c.y === y);
-    if (!cell) return;
+    const inspection=this.inspectionVersion, capturedRevision=game.state.revision;
+    let cell = n.cells.find((c) => c.x === x && c.y === y);
+    if(!cell && x>=1 && x<=79 && y>=0 && y<=20){
+      try { cell=(await game.actions({x,y},{expectedRevision:capturedRevision})).cell; }
+      catch(error){if(this.inspectionVersion===inspection)this.text("#inspect-text",String(error));return;}
+    }
+    if (!cell || this.inspectionVersion!==inspection || this.game!==game || this.busy || game.state.revision!==capturedRevision) return;
     this.map.clearMessages();
     const revision = n.basis.revision;
     const panel = document.createElement("section");
@@ -1644,7 +1662,7 @@ class PixelNethack extends HTMLElement {
         : cell.terrain?.freshness === "remembered"
           ? "Remembered · out of sight"
           : cell.movement.relation === "distant"
-            ? "Too far to interact from here"
+            ? "Select a known walking route, or inspect nearby actions."
             : "Attempts can fail or need a choice.";
     const labels: Record<string, string> = {
       move: "Move",
@@ -1691,6 +1709,44 @@ class PixelNethack extends HTMLElement {
       if (offer.key === "kick")
         button.title = "May injure you, make noise or damage property";
       panel.querySelector(".tile-buttons")!.append(button);
+    }
+    if (!obstruction && cell.inBounds && cell.movement.relation !== "here" && !game.decision) {
+      const walk=this.button("Checking route…",()=>{},"primary");
+      walk.disabled=true;
+      const routeText=document.createElement("p");routeText.className="subtle";
+      routeText.setAttribute("role","status");
+      panel.querySelector(".tile-buttons")!.prepend(walk);
+      panel.append(routeText);
+      void game.route({x,y},{expectedRevision:revision}).then(route=>{
+        if(this.tilePanel!==panel || this.game!==game || game.state.revision!==revision)return;
+        walk.textContent="Walk here";
+        if(route.distance!==null && !occupant)panel.querySelector("p")!.hidden=true;
+        walk.disabled=route.distance===null || !this.playable();
+        routeText.textContent=route.distance===null?"No known walking route. Adjacent attempts remain available.":
+          route.distance+" known steps · avoids known hazards. Pauses on changes or choices.";
+        this.map.route=route.steps;this.map.draw();
+        walk.onclick=()=>{
+          if(!this.playable() || this.game!==game || game.state.revision!==revision)return;
+          this.stopMovement();
+          const controller=new AbortController();this.navigationAbort=controller;
+          void this.run(async()=>{
+            try {
+              this.map.route=route.steps;
+              const result=await game.go({to:{x,y},maxActions:8,signal:controller.signal,onStep:frame=>{
+                this.recordReplays();this.render();
+                const at=route.steps.findIndex(p=>p.x===frame.observation.you?.x&&p.y===frame.observation.you?.y);
+                this.map.route=at<0?[]:route.steps.slice(at+1);this.map.draw();
+              }});
+              this.navigationNotice=result.reason==="arrived"?"You reached the selected square.":"Walking stopped: "+result.reason+".";
+            } finally {
+              if(this.navigationAbort===controller)this.navigationAbort=null;
+              this.map.route=[];this.map.draw();
+            }
+          });
+        };
+      }).catch(error=>{
+        if(this.tilePanel===panel){walk.textContent="Route unavailable";routeText.textContent=String(error);}
+      });
     }
     const back = this.button("×", () => this.closeTile(), "tile-dismiss");
     back.setAttribute("aria-label", "Close tile actions");
@@ -2372,6 +2428,7 @@ class PixelNethack extends HTMLElement {
     body.querySelector<HTMLElement>("button,input")?.focus();
   }
   private key(e: KeyboardEvent) {
+    if(this.navigationAbort && e.key==="Escape") { e.preventDefault();this.navigationAbort.abort();return; }
     const target = this.querySelector<HTMLElement>("#direction-target");
     if (target && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (e.defaultPrevented || this.querySelector("dialog[open], .rightbar:not([hidden])") ||

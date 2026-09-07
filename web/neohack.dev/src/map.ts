@@ -181,6 +181,7 @@ export function actionMessages(snapshot: Snapshot): string[] {
 }
 
 export class DungeonMap {
+  route: {x:number;y:number}[] = [];
   context: { x: number; y: number } | null = null;
   positionCursor: { x: number; y: number } | null = null;
   private intro = {
@@ -959,6 +960,10 @@ export class DungeonMap {
     // A nearer boulder covers a figure behind it; underfoot objects stay below it.
     foreground.sort((a, b) => a.y - b.y || a.x - b.x);
     for (const layer of foreground) layer.draw();
+    for (const point of this.route) {
+      const x=(point.x-this.origin.x)*16, y=(point.y-this.origin.y)*16;
+      rect(c,"#b8c995",x+7,y+7,3,3);
+    }
     const cursor = this.positionCursor ?? this.context;
     if (cursor) {
       const x = (cursor.x - this.origin.x) * 16,
