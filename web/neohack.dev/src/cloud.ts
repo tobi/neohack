@@ -84,12 +84,19 @@ try {
 }
 }
 
-type Pending = {saves:CloudAdventure[]; since:number; timer?:ReturnType<typeof setTimeout>; attempts:number; saved?:()=>void};
+type Pending = {saves:CloudAdventure[]; since:number; timer?:ReturnType<typeof setTimeout>; attempts:number; flight?:boolean; saved?:()=>void};
 const pending = new Map<string,Pending>();
-function schedule(vault:string,delay:number) {const p=pending.get(vault)!;clearTimeout(p.timer);p.timer=setTimeout(()=>{
-  const copy=p.saves;
-  void publishCloud(copy,vault).then(()=>{if(p.saves===copy){pending.delete(vault);p.saved?.();}else {p.since=Date.now();schedule(vault,5000);}},()=>{p.attempts++;schedule(vault,Math.min(60000,1000*2**Math.min(p.attempts,6)));});
-},delay);}
+function schedule(vault:string,delay:number) {
+  const p=pending.get(vault)!;clearTimeout(p.timer);if(p.flight)return;
+  p.timer=setTimeout(()=>{
+    p.flight=true;const copy=p.saves;
+    void publishCloud(copy,vault).then(()=>{
+      p.flight=false;p.attempts=0;
+      if(p.saves===copy){pending.delete(vault);p.saved?.();}
+      else {p.since=Date.now();schedule(vault,5000);}
+    },()=>{p.flight=false;p.attempts++;schedule(vault,Math.min(60000,1000*2**Math.min(p.attempts,6)));});
+  },delay);
+}
 export function queueCloud(saves:CloudAdventure[],vault=playerId(),saved?:()=>void) {
   const p=pending.get(vault)??{saves:[],since:Date.now(),attempts:0};p.saves=structuredClone(saves);pending.set(vault,p);if(saved){p.saved=saved;schedule(vault,0);return;}
   if(!p.attempts)schedule(vault,Math.max(0,Math.min(5000,p.since+30000-Date.now())));

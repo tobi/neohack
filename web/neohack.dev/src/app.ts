@@ -690,7 +690,7 @@ class PixelNethack extends HTMLElement {
         }
         const generation = ++this.cloudStatusGeneration;
         if (state === "saved") {
-          if(branch){for(const save of this.saves)if(sessions?.includes(save.id))save.branch=branch;localStorage.setItem(this.indexKey,JSON.stringify(this.saves));}
+          if(branch){for(const save of this.saves)if(save.id===this.game?.id && sessions?.includes(save.id))save.branch=branch;localStorage.setItem(this.indexKey,JSON.stringify(this.saves));}
           this.text("#cloud-status","Saved here · online save pending");
           queueCloud(this.saves, this.vault,()=>{if(this.isConnected && generation===this.cloudStatusGeneration)this.text("#cloud-status","Saved online");});
           return;

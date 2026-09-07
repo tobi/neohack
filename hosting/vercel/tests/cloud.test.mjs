@@ -363,7 +363,8 @@ test('two browsers can upload different runs in one vault without pausing sync',
  assert.ok(head.files.some(([p])=>p.includes('/'+a.sessionId+'/')));const secondCopy=await second.evaluate(()=>document.querySelector('pixel-nethack').saves[0].branch);assert.notEqual(copy,secondCopy);
  const other=await(await fetch(endpoint+'?manifest=1&branch='+secondCopy)).json();assert.ok(other.files.some(([p])=>p.includes('/'+b.sessionId+'/')));
  const third=await browser.newPage();await third.goto(bookmark);await third.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId||document.querySelector('#error').textContent);assert.equal(await third.locator('#error').textContent(),'');
- assert.equal((await snapshot(third)).observation.turn,(await snapshot(first)).observation.turn);
+ assert.equal((await snapshot(third)).observation.turn,(await snapshot(first)).observation.turn);await synced(third);
+ const directory=await(await fetch(endpoint+'/adventures')).json();assert.equal(directory.find(s=>s.id===b.sessionId).branch,secondCopy,'backing up one run never redirects another run to an older copied history');
 });
 
  test('local-only recovery can enable online backups without resetting the run',{timeout:60000},async t=>{
