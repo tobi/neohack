@@ -1,0 +1,34 @@
+name: Inspect Vercel request failures
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Summarize production HTTP failures
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        run: |
+          npx --yes vercel@59.10.0 logs --project "$VERCEL_PROJECT_ID" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" --environment production --since 2h --status-code 4xx --limit 500 --json > "$RUNNER_TEMP/requests.jsonl"
+          node <<'JS'
+          const fs=require('node:fs');
+          const counts={};
+          for(const line of fs.readFileSync(process.env.RUNNER_TEMP+'/requests.jsonl','utf8').split('\n')){
+            if(!line.trim())continue;
+            let r;try{r=JSON.parse(line)}catch{continue}
+            const status=r.statusCode??r.status??r.responseStatusCode;
+            const raw=r.requestPath??r.path??r.request?.path??'';
+            const path=String(raw).replace(/\/api\/vaults\/[^/?]+/g,'/api/vaults/:vault').replace(/\/api\/runs\/[^/?]+/g,'/api/runs/:run').split('?')[0];
+            const safe=path.startsWith('/api/vaults/')?path:path==='/api/vaults/:vault'?path:'other';
+            const key=JSON.stringify({status,route:safe});counts[key]=(counts[key]??0)+1;
+          }
+          console.log(JSON.stringify({event:'production_http_failures',counts}));
+          JS
