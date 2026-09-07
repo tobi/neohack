@@ -10,7 +10,7 @@ export function requestedRun() {
 }
 export function showRunUrl(id: string, vault = playerId()) {
   const url = new URL(location.href);
-  url.hash = new URLSearchParams({ run: id, vault, ...(new URLSearchParams(url.hash.slice(1)).get("local") === "1" ? {local:"1"} : {}) }).toString();
+  url.hash = new URLSearchParams({ run: id, vault }).toString();
   history.replaceState(null, "", url);
 }
 export function clearRunUrl() {

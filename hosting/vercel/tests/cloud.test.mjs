@@ -367,9 +367,15 @@ test('two browsers can upload different runs in one vault without pausing sync',
  const directory=await(await fetch(endpoint+'/adventures')).json();assert.equal(directory.find(s=>s.id===b.sessionId).branch,secondCopy,'backing up one run never redirects another run to an older copied history');
 });
 
- test('local-only recovery can enable online backups without resetting the run',{timeout:60000},async t=>{
+test('old local-recovery bookmarks automatically sync after an outage without a toggle',{timeout:60000},async t=>{
  const {url,browser}=await fixture(t),page=await browser.newPage();await create(page,url);await synced(page);const before=await snapshot(page);
- const local=new URL(page.url()),hash=new URLSearchParams(local.hash.slice(1));hash.set('local','1');local.hash=hash.toString();await page.goto(local.href);await page.reload();await page.waitForFunction(()=>document.querySelector('#cloud-status').textContent.includes('cloud sync off'));
- await page.evaluate(()=>document.querySelector('#enable-cloud-backup').click());await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId);await synced(page);
- assert.equal((await snapshot(page)).sessionId,before.sessionId);assert.equal((await snapshot(page)).observation.turn,before.observation.turn);assert.ok(!page.url().includes('local=1'));
+ await page.route('**/api/vaults/*',r=>r.request().method()==='PUT'?r.fulfill({status:503,body:'temporary outage'}):r.continue());
+ const local=new URL(page.url()),hash=new URLSearchParams(local.hash.slice(1));hash.set('local','1');local.hash=hash.toString();await page.goto(local.href);await page.reload();
+ await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId);assert.equal((await snapshot(page)).sessionId,before.sessionId);
+ await page.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});
+ await page.waitForFunction(()=>document.querySelector('#cloud-status').textContent.includes('retrying'));
+ assert.equal(await page.locator('#error').textContent(),'');assert.equal(await page.locator('#enable-cloud-backup').count(),0);
+ await page.unroute('**/api/vaults/*');await page.evaluate(()=>window.dispatchEvent(new Event('online')));await synced(page);
+ assert.equal((await snapshot(page)).observation.turn,before.observation.turn+1);assert.ok(!page.url().includes('local=1'));
+ const ledger=await(await fetch(url+'/api/runs/'+before.sessionId)).json();assert.equal(ledger.turn,before.observation.turn+1);
 });

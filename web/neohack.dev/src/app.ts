@@ -323,7 +323,7 @@ class PixelNethack extends HTMLElement {
           <details class="hud-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
             <button id="adventures-button">Your adventures</button><button id="pickup-settings" data-game>Automatic pickup</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button>
             <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
-            <button id="copy-embed">Copy run embed</button><p id="public-recording" role="status">Public replays record observed scenes from this visit.</p><button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><button id="enable-cloud-backup" hidden>Enable online backup</button><p id="webmcp-status"></p><p id="account-recording" role="status"></p><a class="menu-github" href="/component" target="_blank" rel="noopener">Embed the world ↗</a><a class="menu-github" href="/bots" target="_blank" rel="noopener">Ascender workshop ↗</a><a class="menu-github" href="/login" target="_blank" rel="noopener">Your account & replays ↗</a>
+            <button id="copy-embed">Copy run embed</button><p id="public-recording" role="status">Public replays record observed scenes from this visit.</p><button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p><p id="account-recording" role="status"></p><a class="menu-github" href="/component" target="_blank" rel="noopener">Embed the world ↗</a><a class="menu-github" href="/bots" target="_blank" rel="noopener">Ascender workshop ↗</a><a class="menu-github" href="/login" target="_blank" rel="noopener">Your account & replays ↗</a>
           </div></details>
         </div>
         <div class="notices"><div class="notice error" id="error" role="alert" hidden></div>
@@ -651,13 +651,11 @@ class PixelNethack extends HTMLElement {
     this.storeName = `${STORE}-${this.vault}`;
     this.indexKey = `${this.storeName}:adventures`;
     rememberPlayer(this.vault);
-    const localOnly = !!requestedRun()?.local;
-    this.$("#enable-cloud-backup").hidden=!localOnly;
-    this.$("#enable-cloud-backup").onclick=()=>{const url=new URL(location.href),values=new URLSearchParams(url.hash.slice(1));values.delete("local");url.hash=values.toString();location.replace(url.href);location.reload();};
+    const preferLocal = !!requestedRun()?.local;
     let buildId: string | undefined, remoteBranch: string | undefined;
     if (sessionId) {
       let saved = this.saves.find(save => save.id === sessionId);
-      if (!localOnly) {
+      if (!preferLocal) {
         const remote = await restoreAdventures(this.vault);
         if (remote) { remoteBranch=remote.find(save=>save.id===sessionId)?.branch;if(!saved){this.saves = remote; saved = this.saves.find(save=>save.id===sessionId);} }
       }
@@ -670,17 +668,17 @@ class PixelNethack extends HTMLElement {
     await this.warm(selected.buildId);
     this.assertConnected();
     ++this.cloudStatusGeneration;
-    this.cloudEnabled = !localOnly;
-    this.text("#cloud-status", localOnly ? "Local copy · cloud sync off" : this.cloudEnabled ? "Connecting online save…" : "Online saves unavailable · saving in this browser");
+    this.cloudEnabled = true;
+    this.text("#cloud-status", "Saved here · syncing in the background");
     const sourceBranch=remoteBranch ?? this.saves.find(save=>save.id===sessionId)?.branch ?? this.saves.find(save=>save.branch)?.branch;
     const sourceUrl=new URL(journalUrl(this.vault));if(sourceBranch)sourceUrl.searchParams.set('branch',sourceBranch);
-    const replica = this.cloudEnabled ? sourceUrl.href : undefined;
+    const replica = sourceUrl.href;
     if (requestedRun() && !replica && !this.saves.some(save => save.id === requestedRun()!.id)) throw Error("The cloud save could not be reached. Retry this bookmark when connected; no new game was started.");
     const transportPackage = buildId ? await runtimePackage(undefined, this.preloadAbort.signal) : selected;
     const wasm = await this.runtime.wasm.createWasm({
       runtimeUrl: new URL(selected.base, location.href).href,
       storage: replica
-        ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica, replicaBranches: true }
+        ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica, replicaBranches: true, replicaRestore: !preferLocal }
         : { kind: "indexeddb", name: this.storeName },
       workerUrl: new URL(`${transportPackage.base}core-worker.mjs`, location.href),
       onReplicaStatus: async ({ state, message, branch, sessions }) => {
@@ -1936,7 +1934,7 @@ class PixelNethack extends HTMLElement {
   }
   private entryRecovery(id?:string) {
     if(!id || requestedRun()?.local)return;
-    this.openMenu('<h2 id="menu-title">Return to your local adventure</h2><p>Online recovery could not open this run. Try the copy stored in this browser, with cloud sync switched off. Its original engine and save checks still apply.</p><p>Your cloud copy and pending upload will be kept.</p><div id="entry-recovery"></div>');
+    this.openMenu('<h2 id="menu-title">Return to your local adventure</h2><p>Online recovery could not open this run. Try the copy stored in this browser, with automatic background backup. Its original engine and save checks still apply.</p><p>Your cloud copy and pending upload will be kept.</p><div id="entry-recovery"></div>');
     this.$("#entry-recovery").append(this.button("Open local copy",()=>this.openLocalCopy(id),"primary"));
   }
   private resume(save: Adventure) {

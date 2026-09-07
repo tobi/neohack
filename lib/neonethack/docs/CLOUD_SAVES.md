@@ -31,6 +31,10 @@ uncertain, and replay must not treat it as a new action.
 
 ## Local durability and background replication
 
+Every active website run attempts background backup automatically. A local
+recovery bookmark may skip remote restoration, but never disables uploading.
+Offline play resumes syncing when the connection returns, without a toggle.
+
 C pre-input `fsync` boundaries still wait for strict IndexedDB transactions.
 Remote latency is outside that boundary. After a completed protocol request, a
 five-second inactivity debounce batches the latest committed journal data for upload,

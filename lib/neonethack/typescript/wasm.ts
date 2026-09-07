@@ -4,7 +4,7 @@ import { worker, type WorkerPort } from "../wasm/worker-port.mjs";
 
 export type WasmStorage =
   | { kind: "memory" }
-  | { kind: "indexeddb"; name: string; replicaUrl?: string; replicaBranches?: boolean };
+  | { kind: "indexeddb"; name: string; replicaUrl?: string; replicaBranches?: boolean; replicaRestore?: boolean };
 export interface WasmOptions {
   /** Exact pinned compiler/data package; network-worker updates do not change this identity. */
   runtimeUrl?: string;

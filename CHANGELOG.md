@@ -1,5 +1,7 @@
 # Changelog
 
+- Every active local run backs up automatically, including old local-recovery bookmarks. No enable-sync button or permanent local-only mode.
+
 - Online saves recover into independent browser backup streams, preserving old copies. Continuous play syncs within 30 seconds; long adventure histories and temporary ledger failures no longer block new run publication.
 
 Player-facing updates to [neohack.dev](https://neohack.dev).

@@ -1276,11 +1276,11 @@ Opening a run on another device does not stop the original device’s sync. Old
 shared-head conflicts recover into a separate stream while preserving both the
 original cloud head and uncertain upload. The directory selects acknowledged
 progress; gameplay and ledger publication do not wait for each other.
-Other failed resumes offer Open local copy. This explicit mode keeps the bookmark
-marked local, skips cloud reads and writes, and resumes the existing IndexedDB
-copy with its original engine. Cloud data and pending uploads remain untouched.
-The game menu offers Enable online backup to leave explicit local-only mode
-without deleting or resetting the run.
+Other failed resumes offer Open local copy. Recovery skips remote restoration
+and resumes the existing IndexedDB copy with its original engine, while always
+backing up automatically in the background. Old `local=1` bookmarks are a
+restore preference, never a sync opt-out; the flag is removed after entry.
+There is no enable-sync switch. Temporary disconnection requires no user action.
 It does not bypass damaged journals, missing runtime pins or another tab’s lock.
 Every create/resume failure reports a bounded category and entry mode to private
 Vercel logs; repeated attempts are not suppressed. Raw messages and save links
