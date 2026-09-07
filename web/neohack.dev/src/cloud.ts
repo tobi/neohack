@@ -72,11 +72,15 @@ export async function cloudReady() {
 }
 
 export async function restoreAdventures(vault = playerId()) {
-  const response = await fetch(`/api/vaults/${vault}/adventures`);
+try {
+  const response = await fetch(`/api/vaults/${vault}/adventures`, {signal:AbortSignal.timeout(3000)});
   if (!response.ok) return null;
   const data: unknown = await response.json();
-  if (!Array.isArray(data)) return null;
-  return data as CloudAdventure[];
+  return Array.isArray(data) ? data as CloudAdventure[] : null;
+} catch {
+  // Remote discovery is optional; never block a new or locally saved game.
+  return null;
+}
 }
 
 let publication: Promise<void> = Promise.resolve();

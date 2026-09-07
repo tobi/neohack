@@ -226,3 +226,16 @@ test('transient cloud failures retry the exact commit in the background without 
  assert.equal((await snapshot(page)).observation.turn,before.observation.turn+1);
  await synced(page);assert.ok(bodies.length>=3);assert.equal(bodies[0],bodies[1]);assert.equal(bodies[1],bodies[2]);
 });
+
+test('UI starts and resumes a local game when both cloud journal and discovery fail',{timeout:60000},async t=>{
+  const {url,browser}=await fixture(t),page=await browser.newPage();
+  await page.route('**/api/vaults/**',route=>route.fulfill({status:200,contentType:'text/plain',body:'Unavailable'}));
+  await create(page,url);
+  const started=await snapshot(page);assert.ok(started.sessionId);
+  assert.equal(await page.locator('#error').textContent(),'');
+  await page.reload();
+  await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId);
+  assert.equal((await snapshot(page)).sessionId,started.sessionId);
+  assert.deepEqual((await snapshot(page)).observation,started.observation);
+  assert.equal(await page.locator('#error').textContent(),'');
+});
