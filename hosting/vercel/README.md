@@ -196,3 +196,14 @@ publishes static files, and adds the run to the ledger. Private source and scrip
 notes are not exported. Future frame uploads preserve the selection; publication
 failures do not invalidate a successful private recording commit. The account
 page displays publishedCount and allows an explicit retry.
+
+Significant, verified improvements should be committed and deployed, followed by
+production smoke checks, as requested by the project owner. Keep unfinished
+changes outside the release candidate.
+
+Large cloud commits upload as content-addressed parts of at most 256 KiB, then
+submit a small final manifest. The server reconstructs and verifies the exact
+commit before advancing its revision. Local pending data remains until an exact
+acknowledgement; a lost response retries without duplicating input. Downloads
+fetch a manifest and bounded blocks at a fixed revision. A concurrent update
+rejects the read rather than mixing revisions.

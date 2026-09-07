@@ -153,3 +153,11 @@ test the actual example, pending-consent reload, owner loss without close,
 exclusive ownership, old-receipt retrieval, package-pin mismatch and torn input
 preservation. All game traffic remains inside the workers; HTTP only loads
 static resources. This is not an exhaustive browser or power-loss audit.
+
+### Network worker updates and engine pins
+
+`workerUrl` selects the current JavaScript worker transport. `runtimeUrl` can
+separately select the recorded content-addressed C driver, engine and data package.
+The worker reports that pinned package's build identity, and loads its exact
+compiler outputs. The web client uses this separation when resuming published
+runs so network fixes reach existing saves without upgrading their engine.

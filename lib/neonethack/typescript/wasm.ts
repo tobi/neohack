@@ -6,6 +6,8 @@ export type WasmStorage =
   | { kind: "memory" }
   | { kind: "indexeddb"; name: string; replicaUrl?: string };
 export interface WasmOptions {
+  /** Exact pinned compiler/data package; network-worker updates do not change this identity. */
+  runtimeUrl?: string;
   /** Defaults to volatile memory. IndexedDB also requires browser Web Locks. */
   storage?: WasmStorage;
   /** Relocate the entire dist/wasm directory together, not individual binaries. */
@@ -41,7 +43,7 @@ export class WasmTransport implements Transport {
   static async create(options: WasmOptions = {}): Promise<WasmTransport> {
     const transport = new WasmTransport(options);
     try {
-      const initialized = await transport.exchange("init", { options: { storage: options.storage } });
+      const initialized = await transport.exchange("init", { options: { storage: options.storage, runtimeUrl: options.runtimeUrl } });
       transport.identity = initialized.buildId;
       return transport;
     } catch (error) {

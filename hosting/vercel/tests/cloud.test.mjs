@@ -239,3 +239,57 @@ test('UI starts and resumes a local game when both cloud journal and discovery f
   assert.deepEqual((await snapshot(page)).observation,started.observation);
   assert.equal(await page.locator('#error').textContent(),'');
 });
+
+test('large exact cloud commits upload below the request limit and recover a lost final receipt',{timeout:60000},async t=>{
+  const {url}=await fixture(t);
+  const {ReplicaUploader}=await import('../../../lib/neonethack/wasm/replica-uploader.mjs');
+  const {randomBytes,createHash}=await import('node:crypto');const {gzipSync}=await import('node:zlib');
+  const blocks=Array.from({length:72},()=>{const raw=randomBytes(48*1024);return [createHash('sha256').update(raw).digest('hex'),{version:1,size:raw.length,codec:'gzip',data:gzipSync(raw).toString('base64')}];});
+  const files=[['/neonethack/large/input.log.jsonl',{blocks:blocks.map(([id])=>id),size:72*48*1024}]];
+  let outbox=null,cursor=null,lost=false;const sizes=[],finalBodies=[];
+  const endpoint=`${url}/api/vaults/${crypto.randomUUID()}`;
+  const store={snapshot:async()=>({version:1,files,blocks}),replicaOutbox:async(...args)=>args.length?(outbox=args[0]):outbox,replicaCursor:async rev=>cursor=rev};
+  const uploader=new ReplicaUploader({store,url:endpoint,idle:60000,backoff:60000,fetch:async(u,options)=>{
+    sizes.push(Buffer.byteLength(options.body));assert.ok(sizes.at(-1)<1024*1024);
+    if(options.method==='PUT')finalBodies.push(options.body);
+    const response=await fetch(u,options);
+    if(options.method==='PUT'&&!lost){assert.equal(response.status,200);lost=true;throw Error('Lost final receipt');}
+    return response;
+  }});t.after(()=>uploader.close());
+  uploader.pending=true;await uploader.upload(true);clearTimeout(uploader.timer);
+  assert.ok(outbox);assert.equal(cursor,null);const exact=JSON.stringify(outbox);assert.ok(Buffer.byteLength(exact)>4*1024*1024);
+  await uploader.upload(true);clearTimeout(uploader.timer);
+  assert.equal(finalBodies.length,2);assert.equal(finalBodies[0],finalBodies[1]);
+  assert.equal(cursor,JSON.parse(exact).commit);assert.equal(outbox,null);
+  const {fetchCloudReplica}=await import("../../../lib/neonethack/wasm/cloud-replica.mjs");
+  const stored=await fetchCloudReplica(endpoint);assert.deepEqual(stored.files,files);
+  assert.deepEqual(Object.fromEntries(stored.blocks),Object.fromEntries(blocks));
+});
+
+test('cloud rejection stays in save status and never opens the gameplay error overlay',{timeout:30000},async t=>{
+  const {url,browser}=await fixture(t),page=await browser.newPage();
+  await page.route('**/api/vaults/*',route=>route.request().method()==='PUT'&&!route.request().url().endsWith('/adventures')?route.fulfill({status:403,body:'Refused'}):route.continue());
+  await create(page,url);
+  await page.waitForFunction(()=>document.querySelector('#cloud-status').title.includes('HTTP 403'));
+  assert.equal(await page.locator('#error').textContent(),'');
+  assert.ok((await snapshot(page)).sessionId);
+});
+
+test('updated network worker resumes an older package without changing its engine pin',{timeout:30000},async t=>{
+  const {url,browser}=await fixture(t),page=await browser.newPage();await page.goto(url);
+  const result=await page.evaluate(async()=>{
+    const {createWasm}=await import('/runtime/typescript/wasm.js');
+    const current=await (await fetch('/runtime/wasm/current.json')).json();
+    const registry=await (await fetch('/runtime/wasm/registry.json')).json();
+    const head=registry.packages[current.buildId];
+    const old=Object.entries(registry.packages).find(([id,m])=>id!==current.buildId&&m.files['neonethack-core.wasm']===head.files['neonethack-core.wasm']);
+    if(!old)throw Error('Staged production fixture must include a previous host package');
+    const base=id=>new URL('/runtime/wasm/'+id+'/',location.href).href;
+    const storage={kind:'indexeddb',name:'pinned-network-update'};
+    let api=await createWasm({storage,workerUrl:new URL('core-worker.mjs',base(old[0]))});let id,observation;
+    try{const game=await api.create({name:'Pinned',seed:42,role:'wizard'});id=game.id;observation=structuredClone(game.observation);}finally{await api.close();}
+    api=await createWasm({storage,workerUrl:new URL('core-worker.mjs',base(current.buildId)),runtimeUrl:base(old[0])});
+    try{const game=await api.resume(id);return {pin:api.transport.buildId,expected:old[0],observation,resumed:game.observation};}finally{await api.close();}
+  });
+  assert.equal(result.pin,result.expected);assert.deepEqual(result.resumed,result.observation);
+});

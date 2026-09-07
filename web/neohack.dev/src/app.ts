@@ -668,11 +668,13 @@ class PixelNethack extends HTMLElement {
     this.text("#cloud-status", this.cloudEnabled ? "Connecting online save…" : "Online saves unavailable · saving in this browser");
     const replica = this.cloudEnabled ? journalUrl(this.vault) : undefined;
     if (requestedRun() && !replica && !this.saves.some(save => save.id === requestedRun()!.id)) throw Error("The cloud save could not be reached. Retry this bookmark when connected; no new game was started.");
+    const transportPackage = buildId ? await runtimePackage(undefined, this.preloadAbort.signal) : selected;
     const wasm = await this.runtime.wasm.createWasm({
+      runtimeUrl: new URL(selected.base, location.href).href,
       storage: replica
         ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica }
         : { kind: "indexeddb", name: this.storeName },
-      workerUrl: new URL(`${selected.base}core-worker.mjs`, location.href),
+      workerUrl: new URL(`${transportPackage.base}core-worker.mjs`, location.href),
       onReplicaStatus: async ({ state, message }) => {
         if (!this.isConnected) return;
         const generation = ++this.cloudStatusGeneration;
@@ -682,7 +684,7 @@ class PixelNethack extends HTMLElement {
         }
         if (generation !== this.cloudStatusGeneration) return;
         this.text("#cloud-status", state === "saved" ? "Saved online" : state === "pending" ? "Saving online…" : state === "queued" ? "Saved here" : state === "retrying" ? "Saved here · retrying online" : "Saved here · cloud sync paused");
-        if (state === "error") this.error(Error(message));
+        this.$("#cloud-status").title = state === "error" ? message : "";
       },
     });
     // Opening may finish after this element has been removed. Never adopt that
