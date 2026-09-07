@@ -1,6 +1,7 @@
 // Read only the public origin value; never decrypt or export Blob credentials.
 import {appendFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
+import {setupReplayStore} from './setup-replay-store.mjs';
 export async function replayDeployOrigin(env, request=fetch){
   const {VERCEL_TOKEN:token,VERCEL_PROJECT_ID:project,VERCEL_ORG_ID:team}=env;
   if(!token||!project||!team)throw Error('Vercel deployment credentials are missing');
@@ -22,6 +23,7 @@ export async function replayDeployOrigin(env, request=fetch){
   return origin;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+  await setupReplayStore(process.env);
   const origin=await replayDeployOrigin(process.env);
   if(!process.env.GITHUB_ENV)throw Error('Run this deployment preflight in GitHub Actions');
   await appendFile(process.env.GITHUB_ENV,`PUBLIC_REPLAY_ORIGIN=${origin}\n`);

@@ -161,10 +161,13 @@ remain in the separate private store and retain authenticated access.
 
 Before deploying:
 
-- Create a dedicated **public** Vercel Blob store for public observations only.
-- Set PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN and PUBLIC_REPLAY_ORIGIN on the Vercel
-  project. The origin must match that store's https://<id>.public.blob.vercel-storage.com URL.
-  The existing BLOB_READ_WRITE_TOKEN remains the private store's credential.
+- Deployment provisions a dedicated **public** Vercel Blob store for public
+  observations when replay configuration is absent. Its project-specific name
+  makes retries reuse the same store. A production-only PUBLIC_REPLAY connection
+  creates PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN; setup adds PUBLIC_REPLAY_ORIGIN.
+  Existing complete configuration is reused; conflicting or partially configured
+  external stores require operator review. Setup never changes a store's access,
+  replaces credentials, or touches the private BLOB_READ_WRITE_TOKEN.
 - Deployment reads the public origin from the Vercel production configuration
   and confirms the dedicated token is configured without decrypting that token.
   An optional GitHub PUBLIC_REPLAY_ORIGIN variable must agree. Deployment refuses
