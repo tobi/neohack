@@ -27,7 +27,8 @@ rather than adding migrations or compatibility loaders. This does **not** permit
 weakening current-format integrity, journals, reservations, receipts or pending
 decisions. A missing response is uncertainty, not permission to repeat input.
 
-Protocol changes start in `lib/neonethack/protocol/catalog.ts`. Regenerate with
+Protocol operations start in `lib/neonethack/protocol/catalog.ts`; response
+shapes start in `lib/neonethack/protocol/response.ts`. Regenerate with
 Node, review the generated C/TypeScript/schema diff, and check for drift. Private
 C symbols use the `nnh_private_*` link namespace even in static libraries; only
 `include/neonethack.h` defines the installed C API.
@@ -46,6 +47,7 @@ npm run --prefix lib/neonethack test:install
 make -C lib/neonethack wasm
 npm run --prefix lib/neonethack test:wasm
 npm run --prefix lib/neonethack test:browser
+npm run --prefix lib/neonethack check:tools
 ```
 
 Use sandbox-capable Chromium (`CHROMIUM` selects the executable). Never disable
@@ -57,6 +59,15 @@ For pixel-client changes, also run:
 bun install --frozen-lockfile --cwd web/neohack.dev
 bun run --cwd web/neohack.dev test
 ```
+
+Read the web client's AGENTS.md and DESIGN.md before UX edits. Human, accessible
+and agent views must describe compatible perceived facts; eligibility is not
+safety, and free observation must not consume input or randomness.
+
+For hosting or cloud changes, build the library and web client first, then run
+`npm test --prefix hosting/vercel`. For shared workshop examples, also run
+`npm test --prefix examples/workshop`. Keep source docs, examples and current
+behavior aligned; record limitations rather than treating a plan as implemented.
 
 For distribution changes, run the complete
 [checked preview and archive-consumer audit](lib/neonethack/docs/DISTRIBUTION.md).
@@ -71,4 +82,5 @@ generated build/test output or local checkpoints as source.
 
 CI uses read-only permissions and commit-pinned actions. Review upstream changes
 before updating their hashes; keep dependency lockfiles in sync. The workflow builds
-and audits preview archives; publishing is a separate step.
+and audits preview archives; preview publication remains separate. The Vercel deployment workflow also deploys
+main to neohack.dev; a push to main can therefore publish website changes.

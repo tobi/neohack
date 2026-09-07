@@ -23,8 +23,9 @@ await nethack.close();
 ```
 
 No keys, inventory letters, modal terminal prompts or hidden-state queries.
-Named operations have individual schemas. Every accepted operation returns the
-full perceived world; genuine decisions remain the caller's responsibility.
+Named operations have individual schemas. Library gameplay calls return full perceived snapshots; MCP/WebMCP turns use
+compact observation updates, with full observations available on request. Genuine
+decisions remain the caller's responsibility.
 
 Try the [live game](https://neohack.dev), [play with an agent](lib/neonethack/docs/AGENT_BROWSER.md),
 or build your own interface, learning environment, or model evaluation on the same
@@ -52,9 +53,19 @@ prerequisites, CMake/Ninja recipes and the public APIs.
 - `examples/wasm/` — small browser client (`index.html`, `neonethack.ts`).
 - `examples/c/` — client of the installed public C header and library.
 - [`web/neohack.dev/`](web/neohack.dev/README.md) — an approachable pixel-art
-  browser client, served by Bun and powered by the public WASM API. Its
+  browser client, deployed on Vercel with a static-only local Bun server and
+  powered by the public WASM API. Its
   [visual design](web/neohack.dev/DESIGN.md) covers raised walls, seeded variety,
   accessible controls and the boundary between decoration and game knowledge.
+
+- `examples/workshop/` — runs the same JavaScript example projects used by `/bots`
+  against the native engine in Node.
+- `hosting/vercel/` — static delivery, private journals/accounts, public ledger
+  and observation recordings; no server-side gameplay simulation.
+
+Use `neonethack/low` for the complete named protocol API and `neonethack/high`
+for the Hero/script API. The Node default `Nethack` constructor supplies native
+engine defaults. See [API surfaces](lib/neonethack/docs/TYPESCRIPT.md).
 
 ## Play with an agent
 

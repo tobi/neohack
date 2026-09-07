@@ -17,7 +17,7 @@ of its semantics in each client:
 | `lib/neonethack/engine/` | Pinned NetHack source, game rules and headless integration. Supplies what the hero actually perceives and the engine's genuine input decisions. |
 | `lib/neonethack/src/` | Shared C semantic driver, public dispatch, perception, action/decision handling, sessions, journals, receipts and replay integrity. `explorer.*` and private headers are internal. |
 | `lib/neonethack/protocol/`, `include/neonethack.h`, `docs/PROTOCOL.md` | Public contract. `protocol/catalog.ts` generates method schemas, C dispatch metadata, TypeScript requests and MCP definitions; `protocol/response.ts` defines response schemas. Regenerate with Node and check drift. |
-| `lib/neonethack/cli/` | Native process entry points: public NDJSON requests/responses and stdio MCP. These expose the semantic contract, not the engine's private input protocol. |
+| `lib/neonethack/cli/` | Native process entry points: public NDJSON requests/responses, stdio MCP and native Streamable HTTP MCP. These expose the semantic contract, not the engine's private input protocol. |
 | `lib/neonethack/typescript/` | Typed library clients and native/browser transports. Client conveniences preserve protocol meaning, costs, decisions and uncertainty. |
 | `lib/neonethack/wasm/` | The same C driver and engine in browser workers, with explicit storage ownership and durability guarantees. Worker plumbing does not own game rules. |
 | `lib/neonethack/mcp/`, `typescript/webmcp.ts` | MCP and browser WebMCP adapters. Named tools expose the same operations and perceived results. Compact presentations must preserve their meaning. |
@@ -31,6 +31,25 @@ The C library, typed library, NDJSON, MCP and WebMCP are surfaces of this contra
 not different games. WebMCP in the pixel client shares the active game with the
 human-facing HUD. Do not restore the retired Bun gameplay server, old UI, generic
 public `act` tool, raw-key escape hatch or JS semantic adapter.
+
+## Documentation authority
+
+Keep current guidance consistent across these documents:
+
+- This file defines architecture and integrity boundaries; CONTRIBUTING.md gives
+  contributor checks. README files provide entry points, not alternate contracts.
+- The protocol catalog, response schemas and public C header define the API.
+  PROTOCOL.md explains that contract; COMMAND_COVERAGE.md records demonstrated
+  coverage and limits. A design goal is not evidence of an implemented operation.
+- web/neohack.dev/AGENTS.md and DESIGN.md define the current UX and approved art.
+  When behavior changes, replace superseded guidance instead of appending a
+  contradictory rule. Label future proposals and historical measurements.
+- hosting/vercel/README.md owns deployment and production-storage operations;
+  CLOUD_SAVES.md and WASM.md explain persistence and exact runtime pins. Disposable
+  development fixtures never authorize wiping published runs or the ledger.
+- Tool surfaces share the catalog. Run check:tools rather than maintaining
+  independent tool counts or lists in adapter guides. The low API is the complete
+  protocol client; high adds Hero/script conveniences without widening knowledge.
 
 ## Perceptual parity and UX
 

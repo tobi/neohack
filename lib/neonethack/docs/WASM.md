@@ -103,7 +103,7 @@ export/import tooling is not yet part of the public v1 API.
 
 Set `replicaUrl` on an IndexedDB storage configuration to use an opaque journal
 endpoint implementing the [cloud commit protocol](CLOUD_SAVES.md). Uploads are
-background work; local pre-input transactions remain awaited. Use
+background work; local pre-input transactions remain awaited.
 `onReplicaStatus` reports `queued` during the five-second inactivity debounce,
 `pending` during upload, `saved` after acknowledgement, and `error` on failure.
 Repeated identical statuses are suppressed. Explicit close flushes immediately.
@@ -115,9 +115,12 @@ The WASM runtime pins a content-derived **package identity**, including core,
 engine, data and worker code. Binary/data resources are checked against the
 manifest before use. A stored game from another build is refused without
 rewriting its input journal or pin. It is never silently replayed on upgraded
-code. Backwards compatibility is not supported during development. Replace old
-packages and start fresh adventures after incompatible changes. The pixel client
-serves only the current package; it does not archive or load older runtimes.
+code. Incompatible development fixtures are disposable; test with fresh stores.
+The live web client selects content-addressed published packages by the recorded
+build ID. Only new games use the current-package pointer. Vercel staging retains
+verified published packages so a website deployment does not invalidate a run.
+This is exact-package resumption, not migration or binary compatibility. See
+[hosting operations](../../../hosting/vercel/README.md).
 
 Native and WASM use different target architectures; **identical maps across
 native and WASM builds are not promised**. Matching build, data and inputs are

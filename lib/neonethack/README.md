@@ -102,15 +102,18 @@ Builds do not replace per-session executable/data pins or reinstall over a
 nonempty damaged playground. Generated protocol sources are committed, so native
 builds do not require JavaScript.
 
-## Three surfaces, one contract
+## Public surfaces, one contract
 
 - **C:** [`include/neonethack.h`](include/neonethack.h). Opaque context/result
   ownership, typed operations and length-delimited JSON dispatch. Process plumbing
   and engine headers are private.
-- **TypeScript:** [`typescript/client.ts`](typescript/client.ts), with a separate
-  Node transport. The browser-facing client has no Node or Bun imports.
-- **MCP:** one tool per method, strict input/output schemas, tool annotations,
-  structured results and descriptions of costs, choices and retry behavior.
+- **JavaScript/TypeScript:** `neonethack/low` is the complete protocol client;
+  `neonethack/high` adds Hero and script conveniences. The Node default export
+  `Nethack` supplies native engine paths; browser transports are explicit.
+  Browser-facing modules have no Node or Bun imports.
+- **MCP/WebMCP:** one generated tool per method through native C stdio/HTTP
+  or the browser adapter, preserving schemas, receipts and standing decisions.
+  MCP observation deltas are presentation only; session.observe returns a full frame.
 
 - **WASM:** [`typescript/wasm.ts`](typescript/wasm.ts) runs the same C core with
   isolated engine workers. Choose volatile memory or explicitly locked,

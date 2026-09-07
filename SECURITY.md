@@ -1,6 +1,6 @@
 # Security
 
-neonethack is an unpublished alpha, not a security-audited service. There is no
+neonethack is an alpha with a live website, not a security-audited service. There is no
 stable supported release line or promised response time yet.
 
 ## Reporting a vulnerability

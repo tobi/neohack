@@ -32,7 +32,7 @@ cannot undo an engine action: the transport still settles the original receipt.
 
 ## Pixel client
 
-The fullscreen client registers all 27 current tools after establishing its
+The fullscreen client registers the complete generated catalog after establishing its
 persistent WASM transport. Open the game menu to see WebMCP availability. Agent
 calls and human input share a reservation: concurrent calls receive a busy error
 before submission. Close a human menu before agent input. Returned standing
@@ -60,6 +60,12 @@ remain unchanged. Session creation itself has no request ID; if its reply is los
 inspect the visible game/adventure list before creating another life.
 
 ## Verification
+
+Run `npm run --prefix lib/neonethack check:tools` from the repository root to
+compare the exact vocabulary across native stdio/HTTP MCP, WebMCP, JavaScript
+low/high.low and the webscript loader. Host policy can restrict execution without
+changing discovery; the workshop owns creation and restricts access to its run.
+
 
 Library tests check full catalog parity, unchanged arguments, read-only annotations,
 pre-submission cancellation, failed registration cleanup and unavailable browsers.

@@ -1,6 +1,6 @@
 # First five minutes
 
-This is an unpublished alpha, not an approved registry release. Use a source
+This is a source-build alpha; the npm package is not a published registry release. Use a source
 checkout/archive or a matching local preview; do not assume `npm install
 neonethack` retrieves this code. Linux is the tested native platform.
 
@@ -43,6 +43,12 @@ This creates a **new temporary directory**, not an existing player store. Retain
 its printed path/ID to resume with the same runtime. Inspect `outcome`, `events`
 and the full `observation`; a warning/choice is not an instruction to repeat the
 initiating action. Answer or cancel the returned decision explicitly.
+
+For the default native layout, use `import Nethack from 'neonethack'` and
+`new Nethack()` as shown in the [repository introduction](../../../README.md).
+The explicit `createNative` example above deliberately selects a fresh temporary
+store and build paths. `neonethack/high` is the Hero/script API for an explicit
+transport; `neonethack/low` exposes exact named protocol calls.
 
 ## Browser: no gameplay server
 

@@ -2,23 +2,22 @@
 
 ## TypeScript
 
-`neonethack` exports the runtime-independent `Neonethack`, `Game` and transport
-interface. `neonethack/native` adds a Node child-process transport. Import world
-model types from `neonethack/types`. No browser-facing module imports Bun, Node,
-MCP or a UI framework.
+In Node, the default `Nethack` export from `neonethack` supplies native engine
+and data defaults; construct it with `new Nethack()`. Named `Neonethack` and
+`Game` exports are runtime-independent clients for an explicit transport.
+`neonethack/low` exposes the complete named protocol API; `neonethack/high`
+adds the Hero, event and script interfaces, retaining the low API through `low`.
+`neonethack/native` provides explicit native transport configuration; WASM
+uses `neonethack/wasm`. Import model types from `neonethack/types`.
+Browser-facing modules do not import Node or Bun. See [Hero](HERO.md) for the
+higher-level interface and the runnable [quickstart](QUICKSTART.md).
 
 ```ts
 const game = await nethack.create({ name: 'Ada', seed: 42 });
 const food = await game.eat();
 if (food.decision?.kind === 'item') {
-  const chosen = food.decision.options[0]; // replace with caller's choice
-  if (chosen) {
-    const next = await game.answer(food.decision.id, {
-      kind: 'item', item: { id: chosen.id },
-    });
-    // A warning is another choice, never implicit consent.
-    console.log(next.decision);
-  }
+  // This example deliberately declines. A real caller chooses an opaque option ID.
+  await game.cancel(food.decision.id);
 }
 ```
 
