@@ -165,7 +165,7 @@ export class Game {
   eat(item?: Item, options: RevisionOptions = {}) { return this.operation("game.eat", item === undefined ? {} : { item }, options); }
   drink(item?: Item, options: RevisionOptions = {}) { return this.operation("game.drink", item === undefined ? {} : { item }, options); }
   wield(item?: Item, options: RevisionOptions = {}) { return this.operation("game.wield", item === undefined ? {} : { item }, options); }
-  equip(item?: Item, options: RevisionOptions = {}) { return this.operation("game.equip", item === undefined ? {} : { item }, options); }
+  equip(item?: Item, options: RevisionOptions & { slot?: import("./equipment.js").EquipmentSlot } = {}) { return this.operation("game.equip", { ...(item === undefined ? {} : { item }), ...(options.slot ? {slot: options.slot} : {}) }, options); }
   remove(item?: Item, options: RevisionOptions = {}) { return this.operation("game.remove", item === undefined ? {} : { item }, options); }
   read(item?: Item, options: RevisionOptions = {}) { return this.operation("game.read", item === undefined ? {} : { item }, options); }
   apply(item?: Item, options: RevisionOptions = {}) { return this.operation("game.apply", item === undefined ? {} : { item }, options); }

@@ -3626,6 +3626,29 @@
                             "additionalProperties": false
                           }
                         ]
+                      },
+                      "slot": {
+                        "type": "string",
+                        "enum": [
+                          "bodyArmor",
+                          "cloak",
+                          "helmet",
+                          "shield",
+                          "gloves",
+                          "boots",
+                          "shirt",
+                          "amulet",
+                          "leftRing",
+                          "rightRing",
+                          "eyewear",
+                          "weapon",
+                          "offhand",
+                          "alternateWeapon",
+                          "quiver",
+                          "skin",
+                          "ball",
+                          "chain"
+                        ]
                       }
                     },
                     "required": [],
@@ -3726,6 +3749,29 @@
                             ],
                             "additionalProperties": false
                           }
+                        ]
+                      },
+                      "slot": {
+                        "type": "string",
+                        "enum": [
+                          "bodyArmor",
+                          "cloak",
+                          "helmet",
+                          "shield",
+                          "gloves",
+                          "boots",
+                          "shirt",
+                          "amulet",
+                          "leftRing",
+                          "rightRing",
+                          "eyewear",
+                          "weapon",
+                          "offhand",
+                          "alternateWeapon",
+                          "quiver",
+                          "skin",
+                          "ball",
+                          "chain"
                         ]
                       }
                     },
@@ -3947,6 +3993,29 @@
                             "additionalProperties": false
                           }
                         ]
+                      },
+                      "slot": {
+                        "type": "string",
+                        "enum": [
+                          "bodyArmor",
+                          "cloak",
+                          "helmet",
+                          "shield",
+                          "gloves",
+                          "boots",
+                          "shirt",
+                          "amulet",
+                          "leftRing",
+                          "rightRing",
+                          "eyewear",
+                          "weapon",
+                          "offhand",
+                          "alternateWeapon",
+                          "quiver",
+                          "skin",
+                          "ball",
+                          "chain"
+                        ]
                       }
                     },
                     "required": [],
@@ -4047,6 +4116,29 @@
                             ],
                             "additionalProperties": false
                           }
+                        ]
+                      },
+                      "slot": {
+                        "type": "string",
+                        "enum": [
+                          "bodyArmor",
+                          "cloak",
+                          "helmet",
+                          "shield",
+                          "gloves",
+                          "boots",
+                          "shirt",
+                          "amulet",
+                          "leftRing",
+                          "rightRing",
+                          "eyewear",
+                          "weapon",
+                          "offhand",
+                          "alternateWeapon",
+                          "quiver",
+                          "skin",
+                          "ball",
+                          "chain"
                         ]
                       }
                     },
@@ -9752,6 +9844,29 @@
                                           "additionalProperties": false
                                         }
                                       ]
+                                    },
+                                    "slot": {
+                                      "type": "string",
+                                      "enum": [
+                                        "bodyArmor",
+                                        "cloak",
+                                        "helmet",
+                                        "shield",
+                                        "gloves",
+                                        "boots",
+                                        "shirt",
+                                        "amulet",
+                                        "leftRing",
+                                        "rightRing",
+                                        "eyewear",
+                                        "weapon",
+                                        "offhand",
+                                        "alternateWeapon",
+                                        "quiver",
+                                        "skin",
+                                        "ball",
+                                        "chain"
+                                      ]
                                     }
                                   },
                                   "required": [],
@@ -9852,6 +9967,29 @@
                                           ],
                                           "additionalProperties": false
                                         }
+                                      ]
+                                    },
+                                    "slot": {
+                                      "type": "string",
+                                      "enum": [
+                                        "bodyArmor",
+                                        "cloak",
+                                        "helmet",
+                                        "shield",
+                                        "gloves",
+                                        "boots",
+                                        "shirt",
+                                        "amulet",
+                                        "leftRing",
+                                        "rightRing",
+                                        "eyewear",
+                                        "weapon",
+                                        "offhand",
+                                        "alternateWeapon",
+                                        "quiver",
+                                        "skin",
+                                        "ball",
+                                        "chain"
                                       ]
                                     }
                                   },
@@ -10073,6 +10211,29 @@
                                           "additionalProperties": false
                                         }
                                       ]
+                                    },
+                                    "slot": {
+                                      "type": "string",
+                                      "enum": [
+                                        "bodyArmor",
+                                        "cloak",
+                                        "helmet",
+                                        "shield",
+                                        "gloves",
+                                        "boots",
+                                        "shirt",
+                                        "amulet",
+                                        "leftRing",
+                                        "rightRing",
+                                        "eyewear",
+                                        "weapon",
+                                        "offhand",
+                                        "alternateWeapon",
+                                        "quiver",
+                                        "skin",
+                                        "ball",
+                                        "chain"
+                                      ]
                                     }
                                   },
                                   "required": [],
@@ -10173,6 +10334,29 @@
                                           ],
                                           "additionalProperties": false
                                         }
+                                      ]
+                                    },
+                                    "slot": {
+                                      "type": "string",
+                                      "enum": [
+                                        "bodyArmor",
+                                        "cloak",
+                                        "helmet",
+                                        "shield",
+                                        "gloves",
+                                        "boots",
+                                        "shirt",
+                                        "amulet",
+                                        "leftRing",
+                                        "rightRing",
+                                        "eyewear",
+                                        "weapon",
+                                        "offhand",
+                                        "alternateWeapon",
+                                        "quiver",
+                                        "skin",
+                                        "ball",
+                                        "chain"
                                       ]
                                     }
                                   },
@@ -12161,6 +12345,49 @@
                 },
                 "required": []
               },
+              "equipmentTargets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "slot": {
+                      "type": "string",
+                      "enum": [
+                        "bodyArmor",
+                        "cloak",
+                        "helmet",
+                        "shield",
+                        "gloves",
+                        "boots",
+                        "shirt",
+                        "amulet",
+                        "leftRing",
+                        "rightRing",
+                        "eyewear",
+                        "weapon",
+                        "offhand",
+                        "alternateWeapon",
+                        "quiver",
+                        "skin",
+                        "ball",
+                        "chain"
+                      ]
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "equip",
+                        "wield",
+                        "quiver"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "slot",
+                    "action"
+                  ]
+                }
+              },
               "equipmentSlots": {
                 "type": "array",
                 "items": {
@@ -12299,6 +12526,49 @@
                       }
                     },
                     "required": []
+                  },
+                  "equipmentTargets": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "slot": {
+                          "type": "string",
+                          "enum": [
+                            "bodyArmor",
+                            "cloak",
+                            "helmet",
+                            "shield",
+                            "gloves",
+                            "boots",
+                            "shirt",
+                            "amulet",
+                            "leftRing",
+                            "rightRing",
+                            "eyewear",
+                            "weapon",
+                            "offhand",
+                            "alternateWeapon",
+                            "quiver",
+                            "skin",
+                            "ball",
+                            "chain"
+                          ]
+                        },
+                        "action": {
+                          "type": "string",
+                          "enum": [
+                            "equip",
+                            "wield",
+                            "quiver"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "slot",
+                        "action"
+                      ]
+                    }
                   },
                   "equipmentSlots": {
                     "type": "array",
@@ -12633,6 +12903,49 @@
                           }
                         },
                         "required": []
+                      },
+                      "equipmentTargets": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "slot": {
+                              "type": "string",
+                              "enum": [
+                                "bodyArmor",
+                                "cloak",
+                                "helmet",
+                                "shield",
+                                "gloves",
+                                "boots",
+                                "shirt",
+                                "amulet",
+                                "leftRing",
+                                "rightRing",
+                                "eyewear",
+                                "weapon",
+                                "offhand",
+                                "alternateWeapon",
+                                "quiver",
+                                "skin",
+                                "ball",
+                                "chain"
+                              ]
+                            },
+                            "action": {
+                              "type": "string",
+                              "enum": [
+                                "equip",
+                                "wield",
+                                "quiver"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "slot",
+                            "action"
+                          ]
+                        }
                       },
                       "equipmentSlots": {
                         "type": "array",
@@ -13201,6 +13514,24 @@
             "properties": {
               "type": {
                 "const": "heard"
+              },
+              "text": {
+                "type": "string"
+              },
+              "textWindow": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "text"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "passage"
               },
               "text": {
                 "type": "string"

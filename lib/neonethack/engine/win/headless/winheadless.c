@@ -40,9 +40,12 @@ struct hl_win {
     int type;
     struct hl_menu_item *items;
     int nitems, capitems;
+    char *passage;
+    int passage_window;
 };
 
 static struct hl_win hl_wins[HL_MAXWIN];
+void headless_passage_window(winid window) { if (window > 0 && window < HL_MAXWIN) hl_wins[window].passage_window = 1; }
 static winid hl_map_win = WIN_ERR;
 
 /* new_game handshake state */
@@ -749,6 +752,7 @@ headless_create_nhwindow(int type)
             JBuf jb;
             hl_wins[i].used = 1;
             hl_wins[i].type = type;
+            hl_wins[i].passage_window = type == NHW_TEXT;
             if (type == NHW_MAP)
                 hl_map_win = i;
             jb_init(&jb);
@@ -771,6 +775,7 @@ static void
 headless_clear_nhwindow(winid window)
 {
     JBuf jb;
+    if (window > 0 && window < HL_MAXWIN) { free(hl_wins[window].passage); hl_wins[window].passage = NULL; }
     if (window == hl_map_win) {
         hl_clear_map();
         hl_snapshot_sent = 0;
@@ -790,6 +795,11 @@ static void
 headless_display_nhwindow(winid window, boolean blocking)
 {
     JBuf jb;
+    if (window > 0 && window < HL_MAXWIN && hl_wins[window].passage_window && hl_wins[window].passage) {
+        jb_init(&jb); jb_begin_obj(&jb);
+        jb_key(&jb, "text"); jb_str(&jb, hl_wins[window].passage);
+        jb_end_obj(&jb); if (jb.ok) rpc_notify("passage", jb.buf); jb_free(&jb);
+    }
     if (window == hl_map_win)
         headless_flush();
     jb_init(&jb);
@@ -821,6 +831,7 @@ headless_destroy_nhwindow(winid window)
         for (i = 0; i < hl_wins[window].nitems; i++)
             free(hl_wins[window].items[i].text);
         free(hl_wins[window].items);
+        free(hl_wins[window].passage);
         memset(&hl_wins[window], 0, sizeof hl_wins[window]);
         if (window == hl_map_win)
             hl_map_win = WIN_ERR;
@@ -860,10 +871,17 @@ headless_putstr(winid window, int attr, const char *str)
     const char *channel = (window == WIN_MESSAGE) ? "message" : "text";
     if (!str)
         str = "";
+    if (window > 0 && window < HL_MAXWIN && hl_wins[window].passage_window) {
+        size_t old = hl_wins[window].passage ? strlen(hl_wins[window].passage) : 0;
+        char *next = realloc(hl_wins[window].passage, old + strlen(str) + 2);
+        if (!next) panic("Cannot retain text window");
+        strcpy(next + old, str); strcat(next, "\n"); hl_wins[window].passage = next;
+    }
     if (window == WIN_MESSAGE)
         hl_log_msg(str);
     jb_init(&jb);
     jb_begin_obj(&jb);
+    jb_key(&jb, "textWindow"); jb_bool(&jb, window > 0 && window < HL_MAXWIN && hl_wins[window].passage_window);
     jb_key(&jb, "channel");
     jb_str(&jb, channel);
     jb_key(&jb, "window");
@@ -1387,6 +1405,25 @@ hl_perceived_object(JBuf *jb, struct obj *o, boolean carried)
         if (o == uquiver) { jb_sep(jb); jb_str(jb, "quivered"); }
         if (o->owornmask & (W_BALL | W_CHAIN)) { jb_sep(jb); jb_str(jb, "attached"); }
         jb_end_arr(jb);
+        /* Only perceived physical shape, never magic, curses or suitability.
+         * These are destinations for attempts, not predictions of success. */
+        if (!Hallucination && o->dknown) {
+            jb_key(jb, "wearableSlots"); jb_begin_arr(jb);
+#define HL_SLOT(test, name) if (test) { jb_sep(jb); jb_str(jb, name); }
+            HL_SLOT(o->oclass == ARMOR_CLASS && is_suit(o), "bodyArmor")
+            HL_SLOT(o->oclass == ARMOR_CLASS && is_cloak(o), "cloak")
+            HL_SLOT(o->oclass == ARMOR_CLASS && is_helmet(o), "helmet")
+            HL_SLOT(o->oclass == ARMOR_CLASS && is_shield(o), "shield")
+            HL_SLOT(o->oclass == ARMOR_CLASS && is_gloves(o), "gloves")
+            HL_SLOT(o->oclass == ARMOR_CLASS && is_boots(o), "boots")
+            HL_SLOT(o->oclass == ARMOR_CLASS && is_shirt(o), "shirt")
+            HL_SLOT(o->oclass == AMULET_CLASS, "amulet")
+            HL_SLOT(o->oclass == RING_CLASS || o->otyp == MEAT_RING, "leftRing")
+            HL_SLOT(o->oclass == RING_CLASS || o->otyp == MEAT_RING, "rightRing")
+            HL_SLOT(o->otyp == BLINDFOLD || o->otyp == TOWEL || o->otyp == LENSES, "eyewear")
+#undef HL_SLOT
+            jb_end_arr(jb);
+        }
         /* Actual placement, not eligible destinations or inferred item type.
          * Artifact property masks are deliberately excluded. */
         jb_key(jb, "equipmentSlots"); jb_begin_arr(jb);
@@ -1541,6 +1578,8 @@ headless_doprev_message(void)
     return 0;
 }
 
+static const char *hl_choice_context;
+void headless_choice_context(const char *context) { hl_choice_context = context; }
 static const struct obj *hl_floor_prompt_item;
 void headless_floor_item(const struct obj *o) { hl_floor_prompt_item = o; }
 
@@ -1560,7 +1599,7 @@ headless_yn_function(const char *query, const char *resp, char def)
     jb_int(&jb, def);
     jb_key(&jb, "objectId"); jb_int(&jb, hl_floor_prompt_item ? hl_floor_prompt_item->o_id : 0);
     jb_key(&jb, "context");
-    jb_str(&jb, hl_floor_prompt_item ? "floorItem" : program_state.input_state == getdirInp && !resp
+    jb_str(&jb, hl_choice_context ? hl_choice_context : hl_floor_prompt_item ? "floorItem" : program_state.input_state == getdirInp && !resp
                   ? "direction" : "confirmationOrChoice");
     jb_end_obj(&jb);
     r = hl_input("yn", hl_frag(&jb));

@@ -62,14 +62,14 @@ const descriptions: Record<string, string> = {
   eat: "Eat a perceived eligible item carried or underfoot. Eligibility is not safety. Preserve choking and other warnings; an interrupted meal is not automatically restarted.",
   drink: "Drink a perceived carried potion, or omit item on a perceived fountain or sink to request the engine’s drinking confirmation. Unidentified properties remain unknown; do not interpret eligibility as safety.",
   wield: "Wield the selected perceived carried item. Does not choose a weapon strategically.",
-  equip: "Wear selected armor, a ring, an amulet or a recognized wearable accessory. Genuine slot choices remain decisions; no silent replacement or removal of other equipment.",
+  equip: "Wear selected armor, a ring, an amulet or a recognized wearable accessory. Optional slot expresses an explicit perceived destination (including ring side); omitted slot choices remain decisions; no silent replacement or removal of other equipment.",
   remove: "Remove selected worn equipment. Physical accessibility constrains candidates; hidden curses are not revealed by filtering.",
   read: "Read the selected perceived object. Study may take multiple turns or be interrupted; a new attempt needs a new operation.",
   apply: "Apply a perceived carried object. Tool-specific targets or options are subsequent typed decisions, not initial guessed arguments.",
   drop: "Drop a selected carried item or stack using the engine's normal single-selection behavior. Use {id, quantity} to select an explicit partial stack.",
   zap: "Zap a selected perceived wand. Target may be self or a compass/vertical direction; here is not a target. Unknown powers and charges remain unknown.",
 };
-for (const [action, description] of Object.entries(descriptions)) game(action, description + " Omit item to choose; use {id} or an unambiguous perceived name.", { item, ...(["zap", "throw"].includes(action) ? { target } : {}) });
+for (const [action, description] of Object.entries(descriptions)) game(action, description + " Omit item to choose; use {id} or an unambiguous perceived name.", { item, ...(["equip", "wield"].includes(action) ? {slot: enumeration("bodyArmor", "cloak", "helmet", "shield", "gloves", "boots", "shirt", "amulet", "leftRing", "rightRing", "eyewear", "weapon", "offhand", "alternateWeapon", "quiver", "skin", "ball", "chain")} : {}), ...(["zap", "throw"].includes(action) ? { target } : {}) });
 for (const action of ["cast", "enhance", "swap", "twoWeapon", "pay", "engrave"]) game(action, {
   cast: "Begin casting a learned spell. Select the spell explicitly in the engine menu, then answer its real target or other decisions. Casting can fail or backfire.",
   enhance: "Inspect and explicitly advance a practiced skill through the engine skill menu. Available advances are earned by ordinary engine rules.",

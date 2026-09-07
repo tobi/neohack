@@ -2270,7 +2270,13 @@ accessory_or_armor_on(struct obj *obj)
                     Sprintf(qbuf, "Which %s%s, Right or Left?",
                             humanoid(gy.youmonst.data) ? "ring-" : "",
                             body_part(FINGER));
+#ifdef HEADLESS_GRAPHICS
+                    headless_choice_context("ringHand");
+#endif
                     answer = yn_function(qbuf, rightleftchars, '\0', TRUE);
+#ifdef HEADLESS_GRAPHICS
+                    headless_choice_context((const char *) 0);
+#endif
                     switch (answer) {
                     case '\0':
                     case '\033':

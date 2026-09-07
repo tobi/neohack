@@ -18,8 +18,8 @@ export interface MethodParams {
   "game.pickup": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string; quantity?: number } };
   "game.eat": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string; quantity?: number } };
   "game.drink": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string; quantity?: number } };
-  "game.wield": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string; quantity?: number } };
-  "game.equip": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string; quantity?: number } };
+  "game.wield": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string; quantity?: number }; slot?: "bodyArmor" | "cloak" | "helmet" | "shield" | "gloves" | "boots" | "shirt" | "amulet" | "leftRing" | "rightRing" | "eyewear" | "weapon" | "offhand" | "alternateWeapon" | "quiver" | "skin" | "ball" | "chain" };
+  "game.equip": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string; quantity?: number }; slot?: "bodyArmor" | "cloak" | "helmet" | "shield" | "gloves" | "boots" | "shirt" | "amulet" | "leftRing" | "rightRing" | "eyewear" | "weapon" | "offhand" | "alternateWeapon" | "quiver" | "skin" | "ball" | "chain" };
   "game.remove": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string; quantity?: number } };
   "game.read": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string; quantity?: number } };
   "game.apply": { sessionId: string; requestId: string; expectedRevision: number; item?: string | { id: string; quantity?: number } };

@@ -1081,6 +1081,29 @@
                 "additionalProperties": false
               }
             ]
+          },
+          "slot": {
+            "type": "string",
+            "enum": [
+              "bodyArmor",
+              "cloak",
+              "helmet",
+              "shield",
+              "gloves",
+              "boots",
+              "shirt",
+              "amulet",
+              "leftRing",
+              "rightRing",
+              "eyewear",
+              "weapon",
+              "offhand",
+              "alternateWeapon",
+              "quiver",
+              "skin",
+              "ball",
+              "chain"
+            ]
           }
         },
         "required": [
@@ -1094,7 +1117,7 @@
     },
     {
       "name": "game.equip",
-      "description": "Wear selected armor, a ring, an amulet or a recognized wearable accessory. Genuine slot choices remain decisions; no silent replacement or removal of other equipment. Omit item to choose; use {id} or an unambiguous perceived name. Answer returned decisions separately.",
+      "description": "Wear selected armor, a ring, an amulet or a recognized wearable accessory. Optional slot expresses an explicit perceived destination (including ring side); omitted slot choices remain decisions; no silent replacement or removal of other equipment. Omit item to choose; use {id} or an unambiguous perceived name. Answer returned decisions separately.",
       "schema": {
         "type": "object",
         "properties": {
@@ -1150,6 +1173,29 @@
                 ],
                 "additionalProperties": false
               }
+            ]
+          },
+          "slot": {
+            "type": "string",
+            "enum": [
+              "bodyArmor",
+              "cloak",
+              "helmet",
+              "shield",
+              "gloves",
+              "boots",
+              "shirt",
+              "amulet",
+              "leftRing",
+              "rightRing",
+              "eyewear",
+              "weapon",
+              "offhand",
+              "alternateWeapon",
+              "quiver",
+              "skin",
+              "ball",
+              "chain"
             ]
           }
         },

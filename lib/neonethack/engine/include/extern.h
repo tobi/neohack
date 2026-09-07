@@ -1033,6 +1033,8 @@ extern void headless_final_score(long);
 extern void headless_menu_object(winid, const struct obj *);
 extern void headless_floor_item(const struct obj *);
 extern void headless_text_context(const char *);
+extern void headless_choice_context(const char *);
+extern void headless_passage_window(winid);
 extern struct obj *headless_getobj_prompt(const char *, boolean, boolean, long *);
 extern void headless_container_menu(winid, const char *);
 extern void headless_container_item(winid, const struct obj *, const char *);

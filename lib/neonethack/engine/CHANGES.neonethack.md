@@ -6,6 +6,15 @@ Original copyright, no-warranty and `dat/license` notices remain intact.
 These notes identify changes; they do not grant a new license for independently
 owned project code. The repository's publication/license review remains open.
 
+## 2026-09-07 — equipment intent and displayed passages
+
+- Headless perception supplies physical wearable destinations without revealing
+  magical identity or curse status. do_wear marks the real ring-hand choice so
+  an explicitly requested hand can be bound without parsing the prompt.
+- Text windows retain their lines and emit a displayed passage. questpgr marks
+  its menu-style narrative windows explicitly; no story classification by text.
+  Existing messages, engine warnings, timing and game rules remain in effect.
+
 ## 2026-09-06 — standalone native packaging
 
 - `src/mail.c`: handle a missing OS account entry when discovering a local

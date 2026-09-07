@@ -53,6 +53,8 @@ export interface ItemRef {
   /** Observed occupied slots; [] means unassigned, absence means unknown.
    * Freshness is observation.perception.equipment. These are not eligible destinations. */
   equipmentSlots?: EquipmentSlot[];
+  /** Perceived destinations for attempts, never a safety or success prediction. */
+  equipmentTargets?: {slot: EquipmentSlot; action: "equip" | "wield" | "quiver"}[];
   usage?: ("worn" | "wielded" | "offhand" | "alternate" | "quivered" | "attached")[];
 }
 export interface Cell {
@@ -115,7 +117,8 @@ export type WorldEvent =
   | { type: "doorWitness"; levelId: string; x: number; y: number; fact: "locked" | "unlocked" | "opened" | "closed" | "resisted" | "notClosed"; turn: number }
   | { type: "saw"; x: number; y: number; kind: string; mark: string; color: number }
   | { type: "felt"; sense: string; value: string }
-  | { type: "heard"; text: string }
+  | { type: "heard"; text: string; textWindow?: boolean }
+  | { type: "passage"; text: string }
   | { type: "shown"; about: string; items: string[] }
   | { type: "actionResult"; action: string; status: string; turn: number }
   | { type: "lifeSaved"; cause: string; turn: number; health: number }

@@ -189,6 +189,7 @@ typedef struct {
     char category[24];      /* perceived object class, not name heuristics */
     unsigned usage;
     int usage_known;
+    unsigned wearable_slots;
     unsigned equipment_slots;
     int equipment_slots_known;
     int accessory;
@@ -1201,12 +1202,13 @@ push_felt(game_t *g, const char *sense, const char *value)
 }
 
 static void
-push_heard(game_t *g, const char *text)
+push_heard(game_t *g, const char *text, int text_window)
 {
     mj_Buf b;
     mj_init(&b);
     mj_obj(&b);
     mj_key(&b, "type"); mj_strv(&b, "heard");
+    if (text_window) { mj_key(&b, "textWindow"); mj_boolv(&b, 1); }
     mj_key(&b, "text"); mj_strv(&b, text);
     mj_endobj(&b);
     if (b.ok)
@@ -1455,6 +1457,15 @@ ingest_belongings(game_t *g, const char *params)
                     if (mj_find(obj, "accessory", &v)) mj_bool(v, &item->accessory);
                     if (mj_find(obj, "armorAccessible", &v))
                         item->armor_access_known = mj_bool(v, &item->armor_accessible);
+                    if (mj_find(obj, "wearableSlots", &v) && *v.p == '[') {
+                        mj_arr_it slots = { 0 }; mj_val slot; slots.first = 1;
+                        while (mj_arr_next(v.p, &slots, &slot)) {
+                            char *word = mj_str(slot); size_t k;
+                            for (k = 0; EQUIPMENT_SLOT_NAMES[k]; k++)
+                                if (word && !strcmp(word, EQUIPMENT_SLOT_NAMES[k])) item->wearable_slots |= 1U << k;
+                            free(word);
+                        }
+                    }
                     if (mj_find(obj, "equipmentSlots", &v) && *v.p == '[') {
                         mj_arr_it slots = { 0 }; mj_val slot; slots.first = 1;
                         item->equipment_slots_known = 1;
@@ -1657,6 +1668,14 @@ ingest(game_t *g, const char *line)
             if (f != 26)
                 push_felt(g, VITAL_NAMES[f], value);
         }
+    } else if (!strcmp(method, "passage")) {
+        mj_val value; char *text;
+        if (mj_find(params, "text", &value) && (text = mj_str(value))) {
+            mj_Buf b; mj_init(&b); mj_obj(&b);
+            mj_key(&b, "type"); mj_strv(&b, "passage");
+            mj_key(&b, "text"); mj_strv(&b, text); mj_endobj(&b);
+            if (b.ok) push_event(g, b.buf); mj_free(&b); free(text);
+        }
     } else if (!strcmp(method, "message")) {
         mj_val tv;
         char *text;
@@ -1668,7 +1687,9 @@ ingest(game_t *g, const char *line)
             } else {
                 g->msg_start = (g->msg_start + 1) % NMSG;
             }
-            push_heard(g, text);
+            { mj_val flag; int text_window = 0;
+              if (mj_find(params, "textWindow", &flag)) mj_bool(flag, &text_window);
+              push_heard(g, text, text_window); }
             /* Narration is not authoritative evidence of a terminal state. */
         }
     } else if (!strcmp(method, "item_looted") || !strcmp(method, "container_opened")) {
@@ -1923,7 +1944,7 @@ ingest(game_t *g, const char *line)
                 } else {
                     g->msg_start = (g->msg_start + 1) % NMSG;
                 }
-                push_heard(g, msg);
+                push_heard(g, msg, 0);
             }
         }
         free(reason);
@@ -2973,6 +2994,11 @@ emit_world(game_t *g, mj_Buf *b)
 }
 
 static int eligible_carried(game_t *, const char *, const inv_item_t *);
+static int equipment_slot_occupied(game_t *g, size_t slot) {
+    size_t i;
+    for (i = 0; i < g->ninv; i++) if (g->inv[i].equipment_slots & (1U << slot)) return 1;
+    return 0;
+}
 static int eligible_item(const char *, const char *, const char *);
 
 static void
@@ -2996,6 +3022,18 @@ emit_inventory(game_t *g, mj_Buf *b)
             mj_key(b, "actions"); mj_arr(b);
             for (a = 0; a < sizeof actions / sizeof actions[0]; a++)
                 if (eligible_carried(g, actions[a], &g->inv[i])) mj_strv(b, actions[a]);
+            mj_endarr(b);
+        }
+        if (g->perception_fresh) {
+            size_t k;
+            mj_key(b, "equipmentTargets"); mj_arr(b);
+            for (k = 0; EQUIPMENT_SLOT_NAMES[k]; k++) {
+                const char *action = k == 11 ? "wield" : k == 14 ? "quiver" : "equip";
+                if ((k == 11 || k == 14 || (g->inv[i].wearable_slots & (1U << k))) && eligible_carried(g, action, &g->inv[i]) && !((k == 8 || k == 9) && equipment_slot_occupied(g, k))) {
+                    mj_obj(b); mj_key(b, "slot"); mj_strv(b, EQUIPMENT_SLOT_NAMES[k]);
+                    mj_key(b, "action"); mj_strv(b, action); mj_endobj(b);
+                }
+            }
             mj_endarr(b);
         }
         if (g->inv[i].usage_known) {
@@ -5114,6 +5152,17 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
         if (!strcmp(g->pending.kind, "yn")) {
             int bare = !g->pending.choices || !g->pending.choices[0];
             char line[256];
+            if (!strcmp(g->pending.context, "ringHand") && !strcmp(action, "equip")) {
+                mj_val value; char *slot = NULL;
+                if (mj_find(g->operation.args_json, "slot", &value)) slot = mj_str(value);
+                if (slot && (!strcmp(slot, "leftRing") || !strcmp(slot, "rightRing"))) {
+                    snprintf(line, sizeof line, "{\"jsonrpc\":\"2.0\",\"id\":%lld,\"result\":{\"answer\":\"%c\"}}", g->pending.id, !strcmp(slot, "leftRing") ? 'l' : 'r');
+                    free(slot);
+                    if (send_engine(g, line) < 0) return envelope_error(g, req_id, action, "engineError", "write failed");
+                    pending_clear(g); bump_once(g, bumped); continue;
+                }
+                free(slot);
+            }
             if (!strcmp(g->pending.context, "floorItem") &&
                 (g->operation.item_letter || g->operation.floor_object_id > 0)) {
                 /* This prompt selects a bound floor object; separate danger
@@ -6063,6 +6112,23 @@ run_scripted(nhx_t *x, game_t *g, const char *action, const char *args,
     mj_val v;
     const char *ecode = NULL, *emsg = NULL;
     op_start(g, action);
+    if (mj_find(args, "slot", &v)) {
+        char *slot = mj_str(v); size_t k, i; int rc;
+        for (k = 0; EQUIPMENT_SLOT_NAMES[k]; k++) if (slot && !strcmp(slot, EQUIPMENT_SLOT_NAMES[k])) break;
+        free(slot);
+        if (!EQUIPMENT_SLOT_NAMES[k] || !mj_find(args, "item", &v))
+            return envelope_error(g, req_id, action, "invalidEquipmentSlot", "an explicit item and perceived equipment destination are required");
+        rc = resolve_item_arg(x, g, action, args, &ecode, &emsg);
+        if (rc != 0) return envelope_error(g, req_id, action, "invalidEquipmentSlot", "destination requires one current unambiguous item");
+        for (i = 0; i < g->ninv; i++) if (g->inv[i].object_id == g->operation.item_object_id) break;
+        if (i == g->ninv || !g->perception_fresh ||
+            (!strcmp(action, "wield") ? k != 11 : !(g->inv[i].wearable_slots & (1U << k))))
+            return envelope_error(g, req_id, action, "invalidEquipmentSlot", "that perceived item does not have this equipment destination");
+        /* Ring code chooses the free hand itself when the other is occupied.
+         * Reject that redirection before input; never replace the other ring. */
+        if ((k == 8 || k == 9) && equipment_slot_occupied(g, k))
+                return envelope_error(g, req_id, action, "equipmentSlotOccupied", "the requested ring hand is occupied; remove its item explicitly first");
+    }
     if (strlen(args) + 1 < sizeof g->operation.args_json)
         snprintf(g->operation.args_json, sizeof g->operation.args_json,
                  "%s", args);

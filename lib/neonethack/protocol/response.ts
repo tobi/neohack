@@ -14,6 +14,7 @@ const item = object({ id: string, label: string, location: enumeration("inventor
 const lootItem = object({id: string, label: string, quantity: integer});
 const knownProperties = object({appearance: string, identity: string, beatitude: enumeration("blessed", "uncursed", "cursed"), charges: integer, recharges: integer, enchantment: integer, erosionProof: boolean}, []);
 item.properties.known = knownProperties;
+item.properties.equipmentTargets = array(object({slot: enumeration(...equipmentSlots), action: enumeration("equip", "wield", "quiver")}));
 item.properties.equipmentSlots = { ...array(enumeration(...equipmentSlots)), uniqueItems: true };
 const knowledge = object({
  observedTurn: integer,
@@ -98,7 +99,7 @@ export const responseSchema: Schema = {
       event("containerOpened", {container: lootItem, contents: array(lootItem), turn: integer}),
       event("doorWitness", { levelId: string, x: integer, y: integer, fact: enumeration("locked", "unlocked", "opened", "closed", "resisted", "notClosed"), turn: integer }),
       event("saw", { x: integer, y: integer, kind: string, mark: string, color: integer }),
-      event("felt", { sense: string, value: string }), event("heard", { text: string }),
+      event("felt", { sense: string, value: string }), event("heard", { text: string, textWindow: boolean }, ["textWindow"]), event("passage", { text: string }),
       event("shown", { about: string, items: array(string) }),
       event("actionResult", { action: string, status: enumeration("completed", "interrupted"), turn: integer }),
       event("lifeSaved", { cause: string, turn: integer, health: integer }),

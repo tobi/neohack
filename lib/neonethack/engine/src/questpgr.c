@@ -441,6 +441,9 @@ deliver_by_window(const char *msg, int how)
     char in_line[BUFSZ], out_line[BUFSZ];
     const char *msgp = msg, *msgend = eos((char *) msg);
     winid datawin = create_nhwindow(how);
+#ifdef HEADLESS_GRAPHICS
+    headless_passage_window(datawin);
+#endif
 
     while (msgp < msgend) {
         /* copynchars() will stop at newline if it finds one */

@@ -142,7 +142,7 @@ validate_request(const char *args, const char *tool, const char **why)
     static const char *const actions[] = { "tool", "sessionId", "expectedRevision", "target", NULL };
     static const char *const common[] = { "tool", "sessionId", "requestId", NULL };
     static const char *const create[] = { "tool", "sessionId", "requestId", "seed", "name", "role", "race", "gender", "align", "automaticPickup", NULL };
-    static const char *const act[] = { "tool", "sessionId", "requestId", "expectedRevision", "action", "direction", "target", "item", "replyTo", "confirm", "choose", "text", "position", "cancel", "automaticPickup", NULL };
+    static const char *const act[] = { "tool", "sessionId", "requestId", "expectedRevision", "action", "direction", "target", "item", "replyTo", "confirm", "choose", "text", "position", "cancel", "automaticPickup", "slot", NULL };
     static const char *const answer[] = { "item", "target", "confirm", "choose", "text", "position", "cancel", NULL };
     const char *const *fields;
     mj_val v;
@@ -192,6 +192,7 @@ validate_request(const char *args, const char *tool, const char **why)
         size_t count = 0;
         int boolean;
         if (mj_find(args, "direction", &v)) REQUEST_BAD("invalidAnswer", "direction answers belong in target");
+        if (mj_find(args, "slot", &v)) REQUEST_BAD("invalidAnswer", "slot is an initiating equipment intent");
         if (mj_find(args, "automaticPickup", &v)) REQUEST_BAD("invalidAnswer", "settings cannot answer a standing decision");
         for (i = 0; answer[i]; i++) if (mj_find(args, answer[i], &v)) count++;
         if (count != 1) REQUEST_BAD("invalidAnswer", "supply exactly one answer field");
@@ -220,6 +221,7 @@ validate_request(const char *args, const char *tool, const char **why)
         if (!strcmp(action, "move") || !strcmp(action, "attack") || !strcmp(action, "moveWithoutAttack") || !strcmp(action, "climb")) allowed[n++] = "direction";
         if (!strcmp(action, "inspect") || !strcmp(action, "kick") || !strcmp(action, "open") || !strcmp(action, "close") || !strcmp(action, "chat") || !strcmp(action, "fire") || !strcmp(action, "throw") || !strcmp(action, "zap")) allowed[n++] = "target";
         if (action_takes_item(action)) allowed[n++] = "item";
+        if (!strcmp(action, "equip") || !strcmp(action, "wield")) allowed[n++] = "slot";
         if (!strcmp(action, "configurePickup")) {
             allowed[n++] = "automaticPickup";
             if (!mj_find(args, "automaticPickup", &v)) REQUEST_BAD("invalidArgument", "automaticPickup settings are required");

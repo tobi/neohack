@@ -127,6 +127,8 @@ nnh_status nnh_game_offer(nnh_context *, const char *, const nnh_guard *, const 
 nnh_status nnh_game_throw(nnh_context *, const char *, const nnh_guard *, const nnh_item *, const nnh_target *, nnh_result **);
 nnh_status nnh_game_drink(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
 nnh_status nnh_game_wield(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
+/* Explicit perceived destination; does not replace occupied gear or answer warnings. */
+nnh_status nnh_game_equip_at(nnh_context *, const char *, const nnh_guard *, const nnh_item *, const char *slot, nnh_result **);
 nnh_status nnh_game_equip(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
 nnh_status nnh_game_remove(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);
 nnh_status nnh_game_read(nnh_context *, const char *, const nnh_guard *, const nnh_item *, nnh_result **);

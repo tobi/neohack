@@ -256,6 +256,8 @@ DIRECTION(attack) DIRECTION_AS(move_without_attack, moveWithoutAttack) DIRECTION
 TARGET(fire) TARGET(chat) TARGET(kick) TARGET(open) TARGET(close)
 #define ITEM(name) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, const nnh_item *i, nnh_result **out) { mj_Buf b; start(&b, "game." #name, sid, g); if (i) { mj_key(&b, "item"); put_item(&b, i); } return finish(x, &b, out); }
 ITEM(dip) ITEM(rub) ITEM(invoke) ITEM(quiver) ITEM(offer) ITEM(pickup) ITEM(eat) ITEM(drink) ITEM(wield) ITEM(equip) ITEM(remove) ITEM(read) ITEM(apply) ITEM(drop)
+nnh_status nnh_game_equip_at(nnh_context *x, const char *sid, const nnh_guard *g, const nnh_item *i, const char *slot, nnh_result **out)
+{ mj_Buf b; start(&b, "game.equip", sid, g); if (i) { mj_key(&b, "item"); put_item(&b, i); } mj_key(&b, "slot"); if (slot) mj_strv(&b, slot); else mj_nullv(&b); return finish(x, &b, out); }
 nnh_status nnh_game_zap(nnh_context *x, const char *sid, const nnh_guard *g, const nnh_item *i, const nnh_target *t, nnh_result **out)
 {
     mj_Buf b; start(&b, "game.zap", sid, g);

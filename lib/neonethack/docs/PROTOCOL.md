@@ -622,3 +622,24 @@ and driver lookup table are generated from the response contract; native JSON,
 WASM, MCP and WebMCP preserve the same inventory fields. Free observation does
 not change assignments or spend a turn. Equipment actions retain their existing
 explicit decisions, revision checks and opaque item references.
+
+### Perceived equipment destinations and passages
+
+Current carried items may expose `equipmentTargets: [{slot, action}]`. These are
+physical destinations for named attempts, derived in the engine from perceived
+shape and current use. They do not disclose hidden curses, magical identity or
+predict that wearing will succeed. An occupied ring hand is not offered as a
+destination; removal remains a separate explicit action.
+
+`game.equip` accepts optional `slot` with an explicit item. A mismatched destination
+is rejected before input. A selected ring hand supplies that particular hand
+choice; omitted hand choices, warnings and subsequent unrelated decisions remain
+explicit. No equipment is automatically removed. TypeScript:
+`await game.equip({id: item.id}, {slot: 'leftRing'})`. The C convenience is
+`nnh_game_equip_at`; ordinary `nnh_game_equip` remains the slot-unspecified form.
+
+`passage` events carry the exact text of a displayed engine text window, including
+paragraph breaks. Associated `heard` lines have `textWindow: true`; consumers can
+show the passage once instead of duplicating those lines. Ordinary messages remain
+`heard` events, regardless of their length. Text windows are presentation facts,
+not inferred quest significance. Opening a client reading panel costs no input.
