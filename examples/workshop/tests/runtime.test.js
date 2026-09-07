@@ -87,7 +87,7 @@ test(
     const result = await runProject(
       script(`
     const step = hero.steps.find(step => step.movement.intent === "step");
-    await hero.go(step.direction);
+    await hero.game.move(step.direction);
     await game.observe();
     await game.observe();
     hero.stop();

@@ -68,8 +68,10 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
 - Per-model-turn input/output/cache token counts are appended to
   `state/logs/token-usage.jsonl`; `state/last-run.json` contains cumulative
   output-token and cache-miss totals.
-- Observation snapshots and deltas are merged into `state/last-obs.json`, so
-  the advisor retains its world cache while the model receives compact deltas.
+- MCP returns complete observations. The harness saves them to `state/last-obs.json`;
+  it does not reconstruct deltas or add request/revision fields. The small advisor
+  uses `explore`/`descend` and engine action offers, with no independent pathfinder
+  or corpse-safety table. Pending questions remain deliberate model choices.
 - Stuck detection tracks revealed cells, depth, position history and turns—not
   merely whether turns advance. Three zero-turn actions, short position cycles,
   or 25 turns without discovery when no downstairs is known end the run for
@@ -81,3 +83,14 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
   `state/system-prompt.md` and `state/advisor.mjs` after every session. Point
   `NEONETHACK_BOT_STATE` at another directory to run a separate evolving
   instance (or to keep the evolving mind out of the repository).
+
+## Evaluation limits
+
+This adaptive model/retrospective loop is not a fixed benchmark. Changing prompts,
+advisors or model settings between runs changes the player. Report actual engine
+terminal facts separately from harness stops; neither a stall nor narrated death
+text proves the hero died. There is no demonstrated ascension result here.
+
+Validate the bundled advisor against the generated MCP schemas with
+`node --test examples/cli-mcp-bot/tests/advisor.test.mjs` from the repository root
+after building the library.

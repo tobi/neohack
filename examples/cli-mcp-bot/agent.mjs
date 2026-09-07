@@ -117,7 +117,6 @@ let deathSeen = false;
 let stalledOps = 0;   // consecutive interactions without game-turn advancement
 let lastTurnSeen = null;
 let toollessSteps = 0; // consecutive model steps without any tool call
-let observationCache = loadJson(OBS_F, null)?.observation ?? null;
 let explorationProgress = loadJson(PROGRESS_F, null);
 
 function assessExplorationProgress(observation, tool, decision) {
@@ -125,7 +124,7 @@ function assessExplorationProgress(observation, tool, decision) {
   const depth = String(observation?.vitals?.depth ?? '').trim();
   const pos = observation?.you;
   const world = Array.isArray(observation?.world) ? observation.world : [];
-  if (!Number.isFinite(turn) || !depth || !pos || !['game_move', 'game_moveWithoutAttack', 'game_search'].includes(tool)) return null;
+  if (!Number.isFinite(turn) || !depth || !pos || !['go', 'explore', 'descend', 'game_search'].includes(tool)) return null;
 
   const known = world.reduce((n, cell) => n + (cell.terrain?.type && cell.terrain.type !== 'dark' ? 1 : 0), 0);
   const hasDownstairs = world.some(cell => cell.terrain?.type === 'stairsDown');
@@ -159,24 +158,6 @@ function assessExplorationProgress(observation, tool, decision) {
   saveJson(PROGRESS_F, { ...explorationProgress, stagnantTurns, known, hasDownstairs, uniquePositions });
   if (!stuck) return null;
   return `${cycleStuck ? `position cycle (${uniquePositions} unique positions in ${recent.length} moves)` : `${stagnantTurns} turns without revealing a cell`} on depth ${depth}; known=${known}, downstairs=${hasDownstairs}`;
-}
-
-function mergeObservation(previous, incoming) {
-  const update = incoming?.update;
-  if (!previous || !update || update.kind === 'snapshot') return incoming;
-  if (update.kind !== 'delta' || previous.update?.id !== update.base) return null;
-
-  const merged = { ...previous, ...incoming };
-  for (const field of update.remove ?? []) delete merged[field];
-
-  if (Array.isArray(previous.world) || Array.isArray(incoming.world)) {
-    const cells = new Map();
-    for (const cell of previous.world ?? []) cells.set(`${cell.x},${cell.y}`, cell);
-    for (const removed of update.worldRemoved ?? []) cells.delete(`${removed.x},${removed.y}`);
-    for (const cell of incoming.world ?? []) cells.set(`${cell.x},${cell.y}`, cell);
-    merged.world = [...cells.values()];
-  }
-  return merged;
 }
 
 // ---- MCP HTTP 2026-07-28 -------------------------------------------------
@@ -214,21 +195,7 @@ const mcpClient = await createMCPClient({
 });
 
 async function callBridge(tool, params) {
-  let effectiveParams = params ?? {};
-  // The wrapper owns operation identity. Letting the model invent request IDs
-  // caused collisions and wasted full model turns; revision is protocol state,
-  // not a strategic choice.
-  if (/^(game_|decision_)/.test(tool) && lastSessionId && latestRevision !== null) {
-    state.reqSeq = (state.reqSeq ?? 0) + 1;
-    effectiveParams = {
-      ...effectiveParams,
-      sessionId: lastSessionId,
-      requestId: `bot-${process.pid}-${state.reqSeq}`,
-      expectedRevision: latestRevision,
-    };
-    saveJson(STATE_F, state);
-  }
-  const r = await mcpClient.callTool({ name: tool, arguments: effectiveParams });
+  const r = await mcpClient.callTool({ name: tool, arguments: params ?? {} });
   const structuredContent = r?.structuredContent ?? null;
   if (!r?.isError && structuredContent?.revision !== undefined) latestRevision = structuredContent.revision;
   const contentText = r?.content?.map(c => c.text ?? '').join('') ?? '';
@@ -290,7 +257,7 @@ for (const t of mcpTools) {
         }
         // Capture only a successful, structurally valid session id.
         const candidateSid = structuredContent?.sessionId;
-        const sid = /^g-[A-Za-z0-9]+-[A-Za-z0-9]+-\d+-[A-Za-z0-9]+$/.test(candidateSid ?? '') ? candidateSid : undefined;
+        const sid = /^[A-Za-z0-9_-]{16}$/.test(candidateSid ?? '') ? candidateSid : undefined;
         if (sid && sid !== lastSessionId) {
           lastSessionId = sid;
           state.gameId = sid;
@@ -303,14 +270,8 @@ for (const t of mcpTools) {
           const j = JSON.parse(text);
           const sc = j?.data?.output?.structuredContent ?? j;
           if (sc?.observation) {
-            const merged = mergeObservation(observationCache, sc.observation);
-            const effectiveObservation = merged ?? sc.observation;
-            if (merged) {
-              observationCache = merged;
-            } else {
-              log(`observation cache miss: delta base=${sc.observation.update?.base} local=${observationCache?.update?.id}; advisor using current delta only`);
-            }
-            saveJson(OBS_F, { sessionId: sc.sessionId ?? lastSessionId, revision: sc.revision, decision: sc.decision ?? null, observation: effectiveObservation });
+            const effectiveObservation = sc.observation;
+            saveJson(OBS_F, { sessionId: sc.sessionId ?? lastSessionId, revision: sc.revision, ended: sc.ended, decision: sc.decision ?? null, observation: effectiveObservation });
 
             const stuck = assessExplorationProgress(effectiveObservation, t.name, sc.decision);
             if (stuck) {
@@ -323,24 +284,17 @@ for (const t of mcpTools) {
             try {
               const advisorSrc = existsSync(ADVISOR_F) ? ADVISOR_F : BUNDLED_ADVISOR;
               const out = execFileSync('node', [advisorSrc, OBS_F], { timeout: 5000, encoding: 'utf8' });
-              advisorNote = `\n\nADVISOR (heuristic decision tree — strong prior from past deaths; you may override): ${out.trim().slice(0, 500)}`;
+              advisorNote = `\n\nADVISOR (optional player policy; not a safety guarantee): ${out.trim().slice(0, 500)}`;
               const aj = JSON.parse(out);
               log(`advisor: p${aj.priority} ${aj.tool} — ${String(aj.reason).slice(0, 90)}`);
             } catch (e) {
               log(`advisor failed: ${String(e.message ?? e).slice(0, 120)}`);
             }
           }
-          // shrink the text the model sees: drop the bulky remembered-map array
-          // (the advisor does pathfinding on the full map in state/last-obs.json)
-          const sc2 = j?.data?.output?.structuredContent ?? j;
-          if (sc2?.observation?.world && Array.isArray(sc2.observation.world)) {
-            const n = sc2.observation.world.length;
-            sc2.observation.world = { stripped: `${n} remembered cells — full map handled by ADVISOR; unknown cells listed in neighborhood` };
-          }
-          text = JSON.stringify(sc2 ?? j);
+          text = JSON.stringify(sc);
         } catch {}
-        if (/killed by|You die|died of|game.?over|ascended/i.test(text)) {
-          const cause = text.match(/(killed by[^"\\]{0,80}|died of[^"\\]{0,80}|ascended[^"\\]{0,40})/i)?.[1] ?? 'unknown';
+        if (structuredContent?.ended) {
+          const cause = structuredContent.end?.cause ?? structuredContent.end?.kind ?? 'ended';
           saveJson(DEATH_F, { cause, turn: turn ?? null, depth: depth ?? null, at: new Date().toISOString() });
           log(`op#${opCount} ${t.name} turn=${turn ?? '?'} <<DEATH>> ${cause}`);
           deathSeen = true;
@@ -379,12 +333,12 @@ let doctrine = '';
 try { doctrine = readFileSync(DOCTRINE_F, 'utf8'); } catch { doctrine = readFileSync(BUNDLED_DOCTRINE, 'utf8'); }
 const sessionInstruction = lastSessionId
   ? `SESSION: resumed session "${lastSessionId}". Begin with session_observe {"sessionId":"${lastSessionId}"}.`
-  : 'SESSION: start a NEW adventure. Your first action must be session_create {"name":"Ada","role":"valkyrie"}.';
+  : 'SESSION: start a NEW adventure. Your first action must be session_create {"role":"valkyrie"}.';
 const system = `${doctrine}\n\n${sessionInstruction}`;
 
 const initialPrompt = lastSessionId
   ? `Continue the resumed adventure (sessionId ${lastSessionId}). Observe, then play turn after turn. Descend as deep as you can.`
-  : 'Start a fresh adventure: session_create {"name":"Ada","role":"valkyrie"}, then play. Descend as deep as you can.';
+  : 'Start a fresh adventure: session_create {"role":"valkyrie"}, then play. Descend as deep as you can.';
 
 // Persistent conversation is resumed only with -c. A default invocation starts
 // both a new game and a fresh model conversation.
@@ -475,7 +429,7 @@ try {
       log(`<<SKILL-DEATH>> ${toollessSteps} model steps without a tool call`);
       deathSeen = true;
     }
-    messages.push({ role: 'user', content: deathSeen ? 'A death occurred — if the adventure is over, start a NEW game (session_create {"name":"Ada","role":"valkyrie"}) and keep playing.' : 'Continue.' });
+    messages.push({ role: 'user', content: deathSeen ? 'A death occurred — if the adventure is over, start a NEW game (session_create {"role":"valkyrie"}) and keep playing.' : 'Continue.' });
     if (messages.length > 60) {
       messages = [messages[0], ...messages.slice(-58)];
     }

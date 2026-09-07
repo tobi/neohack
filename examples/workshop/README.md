@@ -23,17 +23,11 @@ Each run starts a fresh human Valkyrie with a fixed seed (42 by default). The br
 | `steady-fighter` | Descend and fight single adjacent enemies while healthy; retreat when hurt or surrounded. |
 | `first-steps` | Search once and stop: a small introduction to events. |
 
-The main scripts are short. `explore.js` holds map routing, limited searches and unsuccessful-step handling; `care.js` holds ration selection and decision handling. These are editable **example policies**, not automatic behavior in the SDK. Opening a door can succeed without moving the hero. A failed edge is remembered so the explorer can try another route. Boulders are left for a strategy that knows how to push them.
+The main scripts are short. `explore.js` selects destinations from the shared C navigator and keeps each destination between turns. It does not implement terrain collision tables or pathfinding. Retreat, one-shot adjacent probes, limited searches and ration selection remain editable **example policies**. They use perceived information and explicit engine attempts; they are not safety guarantees. Boulders are left for another strategy.
 
-Examples can stop when cornered or when they need another strategy; the fighter can die. They do not solve NetHack. In fresh native human-Valkyrie runs with a 500-call cap:
+Examples stop when cornered, when navigation cannot handle the current movement, or when they need another strategy; the fighter can die. They do not solve NetHack. The native regression uses seed 7 and a 2,000-request budget, including free route queries, to verify door opening and distinct exploration policies. For fixed, fingerprinted evaluation use [the benchmark](../benchmark/README.md).
 
-| Script | Seed 1 | Seed 7 | Seed 42 |
-| --- | --- | --- | --- |
-| Curious imp | 43 moves, depth 1, stopped | 90 moves, depth 3, stopped | 75 moves, depth 2, stopped |
-| Cartographer | 43 moves, depth 1, stopped | 222 moves, depth 1, stopped | 41 moves, depth 1, stopped |
-| Steady fighter | 401 moves, depth 7, died | 148 moves, depth 5, stopped | 196 moves, depth 3, died |
-
-These are measured examples, not performance guarantees. `--json` reports actual engine turns, move receipts, unique visited/known squares, the deepest disclosed level, final outcome/decision/end, and the last 100 script logs. `--calls` counts every forwarded script API request, including free queries; it does not mean engine turns. Session creation is owned by the host and is not included in this count.
+`--json` reports actual engine turns, move receipts, unique visited/known squares, the deepest disclosed level, final outcome/decision/end, and the last 100 script logs. `--calls` counts every forwarded script API request, including free queries; it does not mean engine turns. Session creation is owned by the host and is not included in this count.
 
 ## Test your own project
 

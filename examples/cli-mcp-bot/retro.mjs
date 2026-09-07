@@ -73,7 +73,7 @@ Current system prompt (doctrine shown to the playing LLM):
 ${systemPrompt}
 ---
 
-Current advisor heuristic (decision tree, JS): ${advisorSrc.length} chars. Key branches: starvation->pray/eat safe corpses; 2+ adjacent foes or long fight -> disengage; hp thresholds for attack/flee (0.8/0.75 at depth>=5, 0.35/0.35 shallow); loot pickup; regen-wait only when hood empty; descend at hp>=60%; frontier explore; hunt; search/relocate when sealed; idle last. CLI contract: argv[1]=observation.json, stdout=JSON {priority, tool, args, reason, context}.
+Current advisor policy (JS): ${advisorSrc.length} chars. It uses shared navigation and engine action offers, leaves standing decisions explicit, and has no independent pathfinder or food-safety tables. Preserve these boundaries. This is adaptive experimentation, not a fixed benchmark. CLI contract: argv[1]=observation.json, stdout=JSON {priority, tool, args, reason}.
 
 Session evidence:
 ${JSON.stringify(stats, null, 1).slice(0, 6000)}

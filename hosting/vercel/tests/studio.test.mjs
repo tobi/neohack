@@ -140,7 +140,7 @@ test('hero API has real TypeScript completions, documentation, diagnostics and m
  await page.waitForSelector('.cm-lintRange-error');
  const language=await page.evaluate(async()=>{
    const worker=new Worker('/build/bot-language.js',{type:'module'});
-   const files={'main.js':"import { defineBot, Hero } from 'neonethack';\nimport { heading } from './strategy';\nexport default defineBot({name:\"Test bot\",initialize({hero}) { hero.addEventListener('turn', async()=>{await hero.go(heading);hero.stop();}); }});",'strategy.js':"import { direction } from 'neonethack'; export const heading = direction.northWest;"};
+   const files={'main.js':"import { defineBot, Hero } from 'neonethack';\nimport { heading } from './strategy';\nexport default defineBot({name:\"Test bot\",initialize({hero}) { hero.addEventListener('turn', async()=>{await hero.game.move(heading);hero.stop();}); }});",'strategy.js':"import { direction } from 'neonethack'; export const heading = direction.northWest;"};
    const ask=(kind,position,name)=>new Promise(resolve=>{worker.onmessage=e=>resolve(e.data);worker.postMessage({id:1,kind,files,file:'main.js',position,name});});
    const clean=await ask('diagnostics');const original=files['main.js'];files['main.js']="import {defineBot} from 'neonethack'; defineBot({initialize(){}});";const unnamed=await ask('diagnostics');files['main.js']=original;files['strategy.js']='export const heading = 123;';const bad=await ask('diagnostics');
    files['main.js']="import { Hero, defineBot } from 'neonethack'; defineBot({name:\"Test bot\",initialize({hero}) { hero.";
@@ -151,12 +151,12 @@ test('hero API has real TypeScript completions, documentation, diagnostics and m
    const badState=await ask('diagnostics');
    worker.terminate();return {clean,bad,detail,unnamed,stateTypes,badState};
  });
- assert.deepEqual(language.stateTypes.result,[]);assert.ok(language.badState.result.some(d=>d.message.includes('123')));assert.deepEqual(language.clean.result,[]);assert.ok(language.unnamed.result.some(d=>d.message.includes("name")));assert.ok(language.bad.result.some(d=>d.message.includes('123')));assert.match(language.detail.result.docs,/ONE step/);
+ assert.deepEqual(language.stateTypes.result,[]);assert.ok(language.badState.result.some(d=>d.message.includes('123')));assert.deepEqual(language.clean.result,[]);assert.ok(language.unnamed.result.some(d=>d.message.includes("name")));assert.ok(language.bad.result.some(d=>d.message.includes('123')));assert.match(language.detail.result.docs,/Navigate to a perceived destination/);
  await page.locator('#filename').fill('strategy.js');await page.locator('#add-file').click();
  await page.locator('#tabs').getByRole('tab',{name:'strategy.js'}).click();
  await replace("import { direction } from 'neonethack'; export const heading = direction.north;");
  await page.locator('#tabs').getByRole('tab',{name:'main.js'}).click();
- await replace(prefix+"import { heading } from './strategy';\nexport default defineBot({name:\"Test bot\",initialize({hero, log}){ hero.addEventListener('turn', async()=>{log('hungry',hero.isHungry()); log('enemies',hero.sense(entities.Enemy).length); await hero.go(heading); log('hero turn',hero.snapshot.observation.turn);hero.stop();}); }});");
+ await replace(prefix+"import { heading } from './strategy';\nexport default defineBot({name:\"Test bot\",initialize({hero, log}){ hero.addEventListener('turn', async()=>{log('hungry',hero.isHungry()); log('enemies',hero.sense(entities.Enemy).length); await hero.game.move(heading); log('hero turn',hero.snapshot.observation.turn);hero.stop();}); }});");
  await page.locator('#role').selectOption('valkyrie');await page.locator('#seed-mode').selectOption('fixed');await page.locator('#seed').fill('42');await page.locator('#test').click();
  await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:90000});
  assert.equal(await page.locator('#status[role=status]').textContent(),'Script finished.');

@@ -30,7 +30,7 @@ bot.on("turn", async (context) => {
       await explorer.retreat(context, enemies);
     } else {
       attacks++;
-      await hero.attack(nearby[0]);
+      await hero.attack({target:nearby[0]});
     }
     return;
   }

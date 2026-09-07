@@ -1,0 +1,20 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import {standings} from './leaderboard.mjs';
+const run=profile=>execFileSync(process.execPath,[new URL('./run.mjs',import.meta.url).pathname,profile],{encoding:'utf8',timeout:30000}).trim().split('\n').map(JSON.parse);
+test('leaderboard validates actual fixed-seed runs and separates incomparable profiles',()=>{
+  const navigator=run('navigator'),world=run('world-only');
+  const result=standings([{name:'navigator',records:navigator},{name:'world',records:world}]);
+  assert.equal(result.cohorts.length,2);
+  assert.ok(result.cohorts.every(c=>c.entries[0].runs===3&&c.entries[0].tokens===null));
+  assert.throws(()=>standings([{name:'missing',records:navigator.slice(1)}]),/exactly seeds/);
+  const duplicate=structuredClone(navigator);duplicate[1].seed=duplicate[0].seed;
+  assert.throws(()=>standings([{name:'duplicate',records:duplicate}]),/invalid/);
+  const mixed=structuredClone(navigator);mixed[1].buildId+='different';
+  assert.throws(()=>standings([{name:'mixed',records:mixed}]),/mixed runtime/);
+  const model=structuredClone(navigator);model[0].tokens=0;
+  assert.throws(()=>standings([{name:'unsupported-model',records:model}]),/invalid/);
+  const leaked=structuredClone(world);leaked[0].lowCalls['session.route']=1;
+  assert.throws(()=>standings([{name:'leaked',records:leaked}]),/world-only/);
+});

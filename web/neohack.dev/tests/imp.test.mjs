@@ -12,9 +12,11 @@ test(
     const dir = await mkdtemp(join(tmpdir(), "imp-test-"));
     t.after(() => rm(dir, { recursive: true, force: true }));
     const trace = join(dir, "trace.jsonl");
+    // Shared navigation adds free planning queries; budget counts those too.
+    // Seed 7 exercises a witnessed door opening with this navigation policy.
     const result = await runProject("curious-imp", {
-      seed: 1,
-      calls: 500,
+      seed: 7,
+      calls: 2000,
       trace,
     });
     assert.equal(result.reason, "stopped", result.error);
@@ -25,14 +27,14 @@ test(
       .split("\n")
       .map(JSON.parse);
     const door = frames.findIndex((frame) =>
-      frame.response?.outcome.effects.includes("openedDoor"),
+      frame.response?.outcome?.effects.includes("openedDoor"),
     );
     assert.ok(door > 0, "this real dungeon must exercise opening a door");
     assert.equal(frames[door].response.outcome.positionChanged, false);
     assert.ok(
       frames
         .slice(door + 1)
-        .some((frame) => frame.response.outcome.positionChanged),
+        .some((frame) => frame.response?.outcome?.positionChanged),
       "opening a door must not end the script",
     );
     assert.match(result.logs.at(-1), /retreat/);
@@ -50,9 +52,9 @@ test(
   "the exploration examples execute unchanged JavaScript and have distinct policies",
   { timeout: 90000 },
   async (t) => {
-    const imp = await runProject("curious-imp", { seed: 7, calls: 500 });
-    const mapper = await runProject("cartographer", { seed: 7, calls: 500 });
-    const fighter = await runProject("steady-fighter", { seed: 7, calls: 500 });
+    const imp = await runProject("curious-imp", { seed: 7, calls: 2000 });
+    const mapper = await runProject("cartographer", { seed: 7, calls: 2000 });
+    const fighter = await runProject("steady-fighter", { seed: 7, calls: 2000 });
     for (const result of [imp, mapper, fighter]) {
       assert.equal(result.reason, "stopped", result.error);
       assert.ok(result.moves > 40);
