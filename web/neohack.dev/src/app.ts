@@ -680,6 +680,9 @@ class PixelNethack extends HTMLElement {
       workerUrl: new URL(`${transportPackage.base}core-worker.mjs`, location.href),
       onReplicaStatus: async ({ state, message }) => {
         if (!this.isConnected) return;
+        if (state === "error" && message.includes("conflicts with remote progress")) {
+          this.cloudEnabled = false; reportError(Error(message),this.runtimeBuildId);
+        }
         const generation = ++this.cloudStatusGeneration;
         if (state === "saved") {
           try { await publishCloud(this.saves, this.vault); }

@@ -303,7 +303,7 @@ test('updated network worker resumes an older package without changing its engin
   assert.equal(result.pin,result.expected);assert.deepEqual(result.resumed,result.observation);
 });
 
-test('conflicting cloud upload offers local resume and logs each failed entry',{timeout:60000},async t=>{
+test('conflicting cloud upload permits local resume and new games without overwriting the cloud',{timeout:60000},async t=>{
  const {url,browser}=await fixture(t),page=await browser.newPage();const reports=[];
  page.on('request',r=>{if(r.url().endsWith('/api/errors'))reports.push(JSON.parse(r.postData()));});
  await create(page,url);await synced(page);
@@ -311,19 +311,23 @@ test('conflicting cloud upload offers local resume and logs each failed entry',{
  await page.route('**/api/vaults/*',route=>route.request().method()==='PUT'?route.fulfill({status:503,body:'temporary outage'}):route.continue());
  await page.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});
  await page.waitForFunction(()=>document.querySelector('#cloud-status').textContent.includes('retrying'));
+ const pending=()=>page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('/neonethack/'+document.querySelector('pixel-nethack').storeName);r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,q=db.transaction('replica').objectStore('replica').get('outbox');q.onsuccess=()=>{resolve(q.result);db.close();};q.onerror=()=>{reject(q.error);db.close();};};}));
+ const retained=await pending();assert.ok(retained);
  const local=await snapshot(page),head=await (await fetch(endpoint)).json();
  const remote={version:1,base:head.revision,commit:crypto.randomUUID(),files:head.files,blocks:[]};
  assert.equal((await fetch(endpoint,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(remote)})).status,200);
- for(let i=0;i<2;i++){
-  await page.reload();await page.getByRole('button',{name:'Open local copy',exact:true}).waitFor();
- }
- assert.equal(reports.filter(r=>r.entry?.kind==='resume'&&!r.entry.local).length,2);
- const recovery=page.getByRole('button',{name:'Open local copy',exact:true});await recovery.click();
+ await page.reload();
  await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId);
  assert.equal((await snapshot(page)).sessionId,local.sessionId);assert.deepEqual((await snapshot(page)).observation,local.observation);
- assert.match(await page.locator('#cloud-status').textContent(),/Local copy/);
+ assert.match(await page.locator('#cloud-status').textContent(),/cloud sync paused/);
+ assert.equal(reports.filter(r=>r.entry).length,0,'cloud conflicts no longer cause failed entry');
  await page.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});
  assert.equal((await snapshot(page)).observation.turn,local.observation.turn+1);
  assert.equal((await (await fetch(endpoint)).json()).revision,remote.commit,'local recovery never overwrites the other cloud head');
  assert.equal(await page.locator('#error').textContent(),'');
+ await page.goto(url);await create(page,url);
+ assert.notEqual((await snapshot(page)).sessionId,local.sessionId,'same conflicted browser store can create a new run');
+ assert.deepEqual(await pending(),retained,'conflicted upload stays intact for later recovery');
+ assert.equal(await page.locator('#error').textContent(),'');
+ assert.equal((await (await fetch(endpoint)).json()).revision,remote.commit);
 });

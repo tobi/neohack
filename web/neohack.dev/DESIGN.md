@@ -1271,7 +1271,9 @@ Decision dialogs keep their title and cancellation controls visible; the shell n
 
 ### Failed-entry recovery
 
-A failed resume offers Open local copy. This explicit mode keeps the bookmark
+A cloud conflict automatically pauses cloud sync while allowing local creation
+and resume. It does not overwrite either copy or discard the queued upload.
+Other failed resumes offer Open local copy. This explicit mode keeps the bookmark
 marked local, skips cloud reads and writes, and resumes the existing IndexedDB
 copy with its original engine. Cloud data and pending uploads remain untouched.
 It does not bypass damaged journals, missing runtime pins or another tab’s lock.

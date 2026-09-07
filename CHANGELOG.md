@@ -4,6 +4,8 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- A conflicting online save no longer blocks starting or resuming local games. Cloud sync pauses while both copies are retained.
+
 - Failed resumes offer Open local copy, keeping cloud sync off so conflicting online progress cannot prevent local recovery.
 
 - Destination walking follows known routes across the level instead of stopping after eight actions. Real decisions and changed circumstances still pause movement.

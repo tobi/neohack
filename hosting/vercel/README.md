@@ -214,3 +214,8 @@ runtime hash. Each failed attempt is reported, rather than deduplicated per page
 The endpoint does not depend on Blob availability; client delivery remains best
 effort when the network itself is unavailable. Filter these events in Vercel
 Observability; they never appear on the public ledger.
+
+A conflicting remote head pauses replication at startup; it does not reject local
+creation or resume. The local outbox and remote head remain unchanged. The client
+records a `cloud_conflict` diagnostic for this nonfatal state; it only records
+`game_entry_failed` when entry actually fails.
