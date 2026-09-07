@@ -1,3 +1,4 @@
+import {publicReplayContext} from '../src/public-replay-store.ts';
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { resolve, extname } from "node:path";
@@ -23,11 +24,16 @@ export class MemoryStorage {
     return [...this.docs.keys()].filter((p) => p.startsWith(prefix));
   }
 }
+const publicStores=new WeakMap();
+export function publicStoreFor(store){let publicStore=publicStores.get(store);if(!publicStore){publicStore=new MemoryStorage();publicStores.set(store,publicStore);}return publicStore;}
 export function createTestHarness({ store = new MemoryStorage() } = {}) {
+  const publicStore=publicStoreFor(store);
   const root = resolve(import.meta.dirname, "../public");
   const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url, `http://${req.headers.host}`);
+      if(url.pathname==='/replay-config.json'){res.writeHead(200,{'content-type':'application/json','access-control-allow-origin':'*'});res.end(JSON.stringify({base:url.origin+'/replay-files/'}));return;}
+      if(url.pathname.startsWith('/replay-files/')){const doc=await publicStore.read(url.pathname.slice('/replay-files/'.length));res.writeHead(doc?200:404,{'content-type':'application/json','access-control-allow-origin':'*'});res.end(JSON.stringify(doc?.value??{error:'not found'}));return;}
       if (url.pathname.startsWith("/api/")) {
         const chunks = [];
         for await (const chunk of req) chunks.push(chunk);
@@ -39,7 +45,7 @@ export function createTestHarness({ store = new MemoryStorage() } = {}) {
             : { body: Buffer.concat(chunks) }),
         });
         const response = await storageContext.run(store, () =>
-          handler(request),
+          publicReplayContext.run(publicStore,()=>handler(request)),
         );
         res.writeHead(response.status, Object.fromEntries(response.headers));
         res.end(Buffer.from(await response.arrayBuffer()));

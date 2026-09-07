@@ -48,7 +48,15 @@ test('component is read-only, bot imports execute real engine, private recording
  await page.screenshot({path:'/tmp/neohack-bots.png',fullPage:true});
  const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));assert.equal(runs.length,1);assert.ok(runs[0].count>=2);
  await page.goto(url+'/login');await page.getByRole('button',{name:/Replay \d+ frames/}).click();await page.waitForFunction(()=>!document.querySelector('#playback').hidden,{},{timeout:10000}).catch(async e=>{throw Error(await page.locator('#status[role=status]').textContent(),{cause:e});});
+ await page.waitForFunction(count=>Number(document.querySelector('#scrub').max)===count-1,runs[0].count);
  const first=await page.evaluate(()=>document.querySelector('#replay').snapshot);await page.locator('#scrub').fill(String(runs[0].count-1));const last=await page.evaluate(()=>document.querySelector('#replay').snapshot);assert.ok(last.revision>first.revision);
+ await page.getByRole('button',{name:'Make public',exact:true}).click();
+ await page.getByRole('link',{name:'Open public replay',exact:true}).waitFor();
+ const publicLink=await page.getByRole('link',{name:'Open public replay',exact:true}).getAttribute('href');
+ const visitor=await page.context().browser().newPage();await visitor.goto(new URL(publicLink,url).href);
+ await visitor.waitForFunction(()=>document.querySelector('neohack-world')?.snapshot);
+ assert.equal((await visitor.request.get(url+'/api/account/runs/'+runs[0].id+'/source')).status(),401);
+ await visitor.close();
  await page.screenshot({path:'/tmp/neohack-login.png',fullPage:true});
  const actualErrors=errors.filter(e=>!e.includes('401')&&!e.includes('400')&&!e.includes('409'));assert.deepEqual(actualErrors,[]);
 });

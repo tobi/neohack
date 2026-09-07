@@ -16,6 +16,7 @@ export class NeohackWorld extends HTMLElement {
   private loading?: AbortController;
   private sourceMessage?: string;
   private sourcePending = false;
+  private sourceTotal?: number;
   private audio?: DungeonSound;
   private map?: DungeonMap;
   private frame: Snapshot | null = null;
@@ -72,53 +73,84 @@ export class NeohackWorld extends HTMLElement {
     if(!this.root.querySelector('.playback')) return;
     (this.root.querySelector('.playback') as HTMLElement).hidden=!this.flag('controls');
     const play=this.root.querySelector('#play') as HTMLButtonElement;
-    play.textContent=this.timer ? 'Pause' : 'Play'; play.setAttribute('aria-label',this.timer ? 'Pause replay' : 'Play replay');play.disabled=this.frames.length<2;
+    play.textContent=this.timer ? 'Pause' : 'Play'; play.setAttribute('aria-label',this.timer ? 'Pause replay' : 'Play replay');play.disabled=this.frames.length<2 && !(this.sourcePending && this.frames.length);
     const seek=this.root.querySelector('#seek') as HTMLInputElement;
     seek.max=String(Math.max(0,this.frames.length-1));seek.value=String(this.index);seek.disabled=!this.frames.length;
-    this.root.querySelector("#progress")!.textContent=this.frames.length ? (this.index+1)+" / "+this.frames.length : this.sourcePending ? "Loading…" : this.sourceMessage ? "Unavailable" : "No frames";
+    this.root.querySelector("#progress")!.textContent=this.frames.length ? (this.index+1)+" / "+(this.sourceTotal ?? this.frames.length)+(this.sourcePending ? " · "+this.frames.length+" buffered" : "") : this.sourcePending ? "Loading…" : this.sourceMessage ? "Unavailable" : "No frames";
     const speed=this.root.querySelector('#speed') as HTMLSelectElement;
     if(!Array.from(speed.options).some(o=>Number(o.value)===this.speed)) speed.add(new Option(this.speed+"×",String(this.speed)));
     speed.value=String(this.speed);
     const sound=this.root.querySelector('#sound')!;sound.textContent=this.audio?.enabled ? 'Sound: on' : 'Sound: off';sound.setAttribute('aria-pressed',String(!!this.audio?.enabled));
   }
   private async loadSource() {
-    this.loading?.abort();const controller=this.loading=new AbortController();
-    const source=this.getAttribute('src');
+    this.loadReplay([]);
+    const controller=this.loading=new AbortController(), source=this.getAttribute('src');
     this.sourcePending=!!source;this.sourceMessage=source?'Loading replay…':undefined;
-    this.loadReplay([]);if(!source)return;
+    this.paint();this.updateControls();if(!source)return;
     try {
       const url=new URL(source,document.baseURI);
       if(!['http:','https:'].includes(url.protocol) || url.username || url.password)throw Error('Expected an HTTP replay URL');
-      // A ledger link contains only its public run id, never a save capability.
       if(url.pathname==='/dashboard') {
         const id=url.searchParams.get('run');if(!id || !/^[\w-]{1,64}$/.test(id))throw Error('Ledger URL needs a run id');
-        url.pathname='/api/runs/'+id+'/replay';url.search='';url.hash='';
+        const configResponse=await fetch(new URL('/replay-config.json',url),{signal:controller.signal,credentials:'omit'});
+        if(!configResponse.ok)throw Error('Public replay delivery is unavailable');
+        const config=await configResponse.json();
+        if(typeof config.base!=='string'||!config.base)throw Error('Public replay delivery is not configured');
+        const base=new URL(config.base,url);
+        if(!['http:','https:'].includes(base.protocol)||base.username||base.password)throw Error('Invalid replay origin');
+        url.href=new URL('replays/'+id+'/manifest.json',base.href.endsWith('/')?base.href:base.href+'/').href;
       }
-      const frames:Snapshot[]=[];let offset:number|null=0;
-      do {
-        if(offset)url.searchParams.set('offset',String(offset));
-        const response=await fetch(url,{signal:controller.signal,credentials:'omit'});
-        if(!response.ok) throw Error(response.status===404 ? 'Replay unavailable: no public frames were recorded for this run.' : 'Replay could not load.');
-        const page=await response.json();
-        if(controller.signal.aborted)return;
-        const batch=Array.isArray(page)?page:page.frames;
-        if(!Array.isArray(batch) || frames.length+batch.length>100000)throw Error('Invalid replay frames');
-        frames.push(...batch);
-        this.sourceMessage=`Loading replay… ${frames.length} frames received`;this.status.textContent=this.sourceMessage;
-        const next=Array.isArray(page)?null:page.next ?? null;
-        if(next!==null && (!Number.isSafeInteger(next)||next<=offset!||!batch.length))throw Error('Invalid replay pagination');
-        offset=next;
-        if(page.role)this.setAttribute('role',String(page.role));
-        if(page.seed!==undefined)this.setAttribute('seed',String(page.seed));
-      } while(offset!==null);
+      if(url.pathname.startsWith('/api/account/'))url.searchParams.set('limit','3');
+      const get=async(target:URL)=>{
+        const privateSource=target.origin===location.origin && target.pathname.startsWith('/api/account/');
+        const response=await fetch(target,{signal:controller.signal,credentials:privateSource?'same-origin':'omit'});
+        if(!response.ok)throw Error(response.status===404?'Replay unavailable: no public frames were recorded for this run.':'Replay could not load.');
+        return response.json();
+      };
+      let page=await get(url), offset=0;
       if(controller.signal.aborted)return;
-      this.sourcePending=false;this.sourceMessage=undefined;
-      this.loadReplay(frames);
-      if(!frames.length){this.sourceMessage='Replay unavailable: no frames recorded.';this.paint();this.updateControls();}
-      this.dispatchEvent(new CustomEvent('replayload',{detail:{length:frames.length}}));
+      if(page.role)this.setAttribute('role',String(page.role));
+      if(page.seed!==undefined)this.setAttribute('seed',String(page.seed));
+      const append=(batch:Snapshot[])=>{
+        if(!Array.isArray(batch)||this.frames.length+batch.length>100000||batch.some(f=>!f||typeof f!=='object'||!isSnapshot(f)||!Array.isArray(f.observation.world)||f.observation.world.length>10000))throw Error('Invalid replay frames');
+        const first=this.frames.length===0;
+        this.frames.push(...batch);this.sourceMessage=undefined;
+        if(first && batch.length)this.snapshot=batch[0]!;
+        this.updateControls();
+        if(first && batch.length && this.isConnected && this.flag('autoplay'))this.play();
+        this.dispatchEvent(new CustomEvent('replayprogress',{detail:{length:this.frames.length,total:this.sourceTotal}}));
+      };
+      if(Array.isArray(page.chunks)) {
+        if(page.version!==1||!Number.isSafeInteger(page.count)||page.count<0||page.count>100000||page.chunks.length>100000)throw Error('Invalid replay manifest');
+        this.sourceTotal=page.count;
+        for(const path of page.chunks) {
+          if(controller.signal.aborted)return;
+          if(typeof path!=='string')throw Error('Invalid replay chunk');
+          const chunk=new URL(path,url);
+          if(chunk.origin!==url.origin||!chunk.pathname.startsWith(new URL('./chunks/',url).pathname)||chunk.username||chunk.password||!/^\/[\w/.-]+\.json$/.test(chunk.pathname))throw Error('Invalid replay chunk URL');
+          const result=await get(chunk);if(controller.signal.aborted)return;
+          append(result.frames);
+        }
+        if(this.frames.length!==this.sourceTotal)throw Error('Replay length differs');
+      } else {
+        while(true) {
+          if(controller.signal.aborted)return;
+          const batch=Array.isArray(page)?page:page.frames;
+          const next=Array.isArray(page)?null:page.next??null;
+          if(next!==null && (!Number.isSafeInteger(next)||next!==offset+batch?.length||next<=offset))throw Error('Invalid replay pagination');
+          append(batch);if(next===null)break;
+          offset=next;url.searchParams.set('offset',String(offset));url.searchParams.set('limit','25');
+          page=await get(url);
+        }
+      }
+      if(controller.signal.aborted)return;
+      this.sourcePending=false;
+      if(!this.frames.length)this.sourceMessage='Replay unavailable: no frames recorded.';
+      this.paint();this.updateControls();
+      this.dispatchEvent(new CustomEvent('replayload',{detail:{length:this.frames.length}}));
     } catch(error) {
       if(controller.signal.aborted)return;
-      this.sourcePending=false;this.sourceMessage=error instanceof Error?error.message:String(error);
+      this.sourcePending=false;this.sourceMessage=(this.frames.length?'Replay interrupted. Buffered frames remain available. ':'')+(error instanceof Error?error.message:String(error));
       this.paint();this.updateControls();
       this.dispatchEvent(new CustomEvent('error',{detail:this.status.textContent}));
     }
@@ -139,7 +171,7 @@ export class NeohackWorld extends HTMLElement {
   }
   loadReplay(frames: Snapshot[]) {
     if(!Array.isArray(frames) || frames.length > 100000 || frames.some(f=>!f || typeof f!=='object' || !isSnapshot(f) || !Array.isArray(f.observation.world) || f.observation.world.length>10000)) throw Error('Invalid replay');
-    if(!this.sourcePending)this.sourceMessage=undefined;
+    this.loading?.abort();this.sourcePending=false;this.sourceTotal=undefined;this.sourceMessage=undefined;
     this.pause(); this.frames = structuredClone(frames); this.index = 0;
     this.snapshot = this.frames[0] ?? null;
     this.updateControls();
@@ -156,12 +188,13 @@ export class NeohackWorld extends HTMLElement {
   play(interval = 250 / this.speed) {
     if(!Number.isFinite(interval) || interval < 50 || interval > 10000) throw Error('Interval must be 50–10000 ms');
     this.pause();
-    if(this.frames.length<2)return;
-    if(this.index===this.frames.length-1)this.seek(0);
+    if(this.frames.length<2 && !(this.sourcePending && this.frames.length))return;
+    if(this.index===this.frames.length-1 && !this.sourcePending && !this.sourceMessage)this.seek(0);
     this.timer = setInterval(() => {
       if(this.index + 1 >= this.frames.length) {
-        if(this.flag('loop'))this.seek(0);
-        else {this.pause();this.dispatchEvent(new Event('replayend'));}
+        if(this.sourcePending)return; // Buffer at the frontier; never loop or end a partial download.
+        if(this.flag('loop') && !this.sourceMessage)this.seek(0);
+        else {this.pause();if(!this.sourceMessage)this.dispatchEvent(new Event('replayend'));}
       } else {
         const before=this.frame!;this.seek(this.index+1);
         this.audio?.observe(before,this.frame!,this.frame!.observation.heard);

@@ -1,3 +1,5 @@
+import {publishReplay} from './publish-replay.ts';
+import {publicReplayConfigured} from './public-replay-store.ts';
 import {markRecorded} from './ledger-store.ts';
 import { createHash } from 'node:crypto';
 import { read, update, immutable, storage, type Storage } from './storage.ts';
@@ -21,9 +23,18 @@ export async function replay(request: Request, id: string) {
   if(request.method==='GET') {
     const doc=await read(key);
     if(!doc)return json({error:'No public replay recorded'},404);
-    const offset=Number(new URL(request.url).searchParams.get('offset')??0);
+    const params=new URL(request.url).searchParams;
+    if(params.get('publication')==='1') {
+      const token=request.headers.get('authorization')?.replace(/^Bearer /,'');
+      if(!token||createHash('sha256').update(token).digest('hex')!==doc.owner)return json({error:'Recording owner differs'},403);
+      await publishReplay(id);
+    }
+    const offset=Number(params.get('offset')??0);
     if(!Number.isSafeInteger(offset)||offset<0)return json({error:'Invalid offset'},400);
-    const frames=await Promise.all(doc.frames.slice(offset,offset+25).map((ref:string)=>read(ref)));
+    const limit=Number(params.get('limit')??25);
+    if(!Number.isSafeInteger(limit)||limit<1||limit>25)return json({error:'Invalid limit'},400);
+    const refs=doc.frames.slice(offset,offset+limit);
+    const frames=await Promise.all(refs.map((ref:string)=>read(ref)));
     if(frames.some(f=>!f))return json({error:'Recording incomplete'},409);
     return json({count:doc.frames.length,revision:doc.revision,frames,next:offset+frames.length<doc.frames.length?offset+frames.length:null,role:doc.role,seed:doc.seed,partial:doc.partial,complete:doc.complete===true&&!doc.partial,buildId:doc.buildId});
   }
@@ -36,6 +47,7 @@ export async function replay(request: Request, id: string) {
   const run=adventures?.values?.find((r:any)=>r.id===id);
   if(!run)return json({error:'Run does not belong to this vault'},403);
   if(typeof run.buildId!=='string' || !/^[a-f0-9]{64}$/.test(run.buildId))return json({error:'Run package is not recorded'},400);
+  if(!publicReplayConfigured())return json({error:'Public replay publication unavailable'},503);
   const raw=await request.text();if(raw.length>1000000)return json({error:'Frame too large'},413);
   let body:any;try{body=JSON.parse(raw);}catch{return json({error:'Invalid JSON'},400);}
   const f=body?.frame;
@@ -53,6 +65,7 @@ export async function replay(request: Request, id: string) {
     doc.frames.push(await immutable(frame));doc.revision=f.revision;doc.complete=f.ended;
     return json({count:doc.frames.length});
   });
+  if(result.ok)await publishReplay(id);
   if(result.ok && body.index===0){availability.delete(storage());await markRecorded(id);}
   return result;
 }

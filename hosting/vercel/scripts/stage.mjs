@@ -10,6 +10,9 @@ const dist = resolve(root, "lib/neonethack/dist");
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 await cp(pixel, out, { recursive: true });
+const replayOrigin=process.env.PUBLIC_REPLAY_ORIGIN || '';
+if(replayOrigin && !/^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\/?$/.test(replayOrigin))throw Error('PUBLIC_REPLAY_ORIGIN must be a public Blob store origin');
+await writeFile(resolve(out,'replay-config.json'),JSON.stringify({base:replayOrigin}));
 await mkdir(resolve(out, "runtime"), { recursive: true });
 for (const part of ["typescript", "mcp", "protocol"]) {
   await cp(resolve(dist, part), resolve(out, "runtime", part), { recursive: true });

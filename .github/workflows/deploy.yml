@@ -51,7 +51,12 @@ jobs:
           bun install --frozen-lockfile --cwd web/neohack.dev
           bun run --cwd web/neohack.dev build
       - run: bun install --frozen-lockfile --cwd hosting/vercel
-      - run: node hosting/vercel/scripts/stage.mjs
+      - name: Stage direct public replay delivery
+        env:
+          PUBLIC_REPLAY_ORIGIN: ${{ vars.PUBLIC_REPLAY_ORIGIN }}
+        run: |
+          test -n "$PUBLIC_REPLAY_ORIGIN" || { echo "Configure PUBLIC_REPLAY_ORIGIN for the dedicated public Blob store before deploying."; exit 1; }
+          node hosting/vercel/scripts/stage.mjs
       - run: node hosting/vercel/scripts/verify-stage.mjs
       - name: Deploy Vercel
         working-directory: hosting/vercel

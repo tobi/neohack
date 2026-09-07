@@ -69,7 +69,8 @@ export class PublicReplayRecorder {
         if (!queue.frames.length) return;
         await this.prepare();
         if (queue.index === null) {
-          const response = await fetch("/api/runs/" + this.id + "/replay", {
+          const response = await fetch("/api/runs/" + this.id + "/replay?publication=1", {
+            headers: {authorization:"Bearer "+this.vault},
             signal: AbortSignal.timeout(10000),
           });
           let count = 0,

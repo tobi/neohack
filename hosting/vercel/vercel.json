@@ -44,7 +44,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://va.vercel-scripts.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; worker-src 'self'; connect-src 'self' https://vitals.vercel-insights.com https://va.vercel-scripts.com https://blob.vercel-storage.com; object-src 'none'; base-uri 'none'; frame-ancestors 'self'"
+          "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://va.vercel-scripts.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; worker-src 'self'; connect-src 'self' https://*.public.blob.vercel-storage.com https://vitals.vercel-insights.com https://va.vercel-scripts.com https://blob.vercel-storage.com; object-src 'none'; base-uri 'none'; frame-ancestors 'self'"
         }
       ]
     },
@@ -90,6 +90,19 @@
         {
           "key": "Access-Control-Allow-Origin",
           "value": "*"
+        }
+      ]
+    },
+    {
+      "source": "/replay-config.json",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
         }
       ]
     }

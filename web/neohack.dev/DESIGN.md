@@ -680,7 +680,8 @@ run summaries by ascension, peak observed experience level, then turns; dungeon
 location is descriptive, not a cross-branch depth score. Clearly label browser
 reports and missing older data. Error telemetry sends only a bounded category and
 engine package, asynchronously and once per category/package/page visit. Never
-send bookmarks, vault IDs, raw messages, stacks or journals to the public ledger.
+send bookmarks, vault IDs, raw messages, stacks or journals in diagnostic reports.
+Reports go to structured Vercel logs; the public ledger API excludes diagnostics.
 
 ### Approachable action choices
 
@@ -1187,8 +1188,8 @@ top 100. Private account recordings are never exposed by this filter.
 
 Ledger rows are compact: name/class, progress, outcome and an explicit Show replay
 button in its own column. Missing recordings use a quiet dash with an accessible
-label. An amber Errors encountered summary links to aggregate report details;
-these reports must not be presented as errors attributable to individual runs.
+label. The public dashboard contains adventures and replays only. Operational
+diagnostics belong in Vercel Runtime Logs and Observability, not on this page.
 
 The workshop chooser uses a bounded editorial layout: a serif invitation beside
 a small selectable code preview, example cards, then private saved scripts.
@@ -1214,3 +1215,33 @@ opaque item ID and captured revision. Tap Choose equipment slot, then a target,
 provides the same explicit operation for touch/keyboard users. Item labels open
 details. No automatic removal, replacement or warning confirmation. Text-map
 access belongs only to Surroundings.
+
+### Progressive replay delivery
+
+Public replay loading reads a small manifest and immutable content-addressed
+chunks directly from a dedicated public Blob store/CDN. The upload path publishes
+these static files before acknowledging the recording. Playback never requests
+a dynamic function, including on cold loads. The first chunk contains up to three observations;
+subsequent chunks contain up to 25. Playback begins immediately, while later
+chunks download. The seek range covers buffered frames, grows without resetting
+position, and respects Pause. At the buffered edge playback waits; it only loops
+or emits replayend after a successful complete download. Failures retain the
+loaded prefix with an explicit interrupted message. Replacing or removing the
+viewer cancels its requests. replayprogress reports buffered length (and total
+when available); replayload still means the entire recording arrived.
+
+Private account recordings use authenticated same-origin pagination and the same
+progressive viewer. Their responses are never publicly cached. No replay path
+loads an engine or executes game actions.
+
+### Owner-selected public account runs
+
+Account recordings start private. Make public explicitly publishes observed frames
+and a public run summary under a separate public replay ID. The account page
+explains that future recorded frames also publish and gives an Open public replay
+link after success. Source artifacts, script notes, saves and account identity stay
+private. Published files can be retained by viewers; this is publication, not a
+revocable private link. Failed publication retains the private recording and its
+reserved public ID; Update public replay retries without creating another copy.
+Later private recording commits survive public delivery failures and show the
+last published frame count until publication catches up.

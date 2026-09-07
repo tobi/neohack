@@ -52,8 +52,8 @@ source and script notes are immutable objects referenced by small manifests.
 Passkey registration uniqueness and credential counters share one atomic auth
 document. Expired ceremonies and sessions are rejected and pruned on writes.
 Projects and recordings are separate owner-scoped documents. Public run summaries
-exclude vault keys, account IDs, private notes and source. Diagnostics retain only
-bounded categories, build hashes and counts, never raw errors or bookmarks.
+exclude vault keys, account IDs, private notes and source. Diagnostic application logs contain only bounded categories, build hashes,
+route templates, response status and duration, never raw errors or bookmarks.
 
 The private Blob implementation is tested through the same storage interface as
 an isolated CAS fixture; tests run the actual API and staged browser client,
@@ -96,7 +96,7 @@ this tool is operational recovery, not a game-save compatibility layer.
 ### Public ledger storage
 
 New run records live independently at `ledger/runs/<id>.json`. Thirty-two
-partitioned indexes feed bounded top-run/statistics summaries; diagnostic counts
+partitioned indexes feed bounded top-run/statistics summaries; historical diagnostic counts
 live in separate daily documents. Statistics read those summaries rather than
 sorting the complete ledger on each request. Updates use conditional writes and
 preserve terminal and highest-progress records. Run records remain authoritative
@@ -117,3 +117,73 @@ per run). Transient uploads retry the same index/frame, including a lost respons
 An exact duplicate is acknowledged without appending twice; a changed duplicate
 is rejected. Queue exhaustion or access/sequence refusal is visibly reported and
 retains pending frames. Browser data removal can still delete unsynced frames.
+
+### Vercel logs and observability
+
+Operational diagnostics are private to the Vercel project. `/dashboard` and
+`/api/stats` expose adventures, not error feeds. No new diagnostic aggregates are
+written to Blob; existing historical documents are preserved without being read
+by the dashboard.
+
+In the Vercel project, open **Logs**, select the production environment, and
+filter for `request_failed` (error level) or `client_diagnostic` (warning level).
+Application logs are single JSON records. Failed API responses include a route
+**template**, method, status, duration and a bounded failure category; Vercel adds
+invocation/deployment correlation. Routes never include vault or run identifiers
+in application log fields. Request bodies, headers, raw exceptions and user
+content are not logged by this application. Vercel's own request metadata is
+managed separately by the platform.
+
+Browser reports are untrusted category/package reports, deduplicated per page
+visit. They reach the function's logs even when Blob is unavailable, but offline
+reports can be lost. A report is not an affected-player count or a server 5xx.
+Use **Observability** for function invocation/error rates and latency, then Logs
+for the corresponding failures. Log retention, alerts and drains depend on the
+project's plan/configuration; this code does not enable paid features or change
+account settings.
+
+See [Runtime Logs](https://vercel.com/docs/logs/runtime),
+[structured logging](https://vercel.com/kb/guide/add-structured-application-logs-to-vercel-functions)
+and [Observability](https://vercel.com/docs/observability).
+
+### Direct public replay delivery
+
+Public replay playback makes **no dynamic function requests**. The static
+/replay-config.json gives the public Blob origin. The viewer reads
+replays/<id>/manifest.json and its relative chunks/<hash>.json files directly
+from that origin, including on a cold load. Upload functions publish those files
+at recording time. Chunks are create-only and content-addressed; the latest
+manifest advances with ETag compare-and-swap after every referenced chunk exists.
+A losing older publisher cannot roll it back. Manifest caching lasts 60 seconds;
+immutable chunks cache for one year. Private recordings and resumable journals
+remain in the separate private store and retain authenticated access.
+
+Before deploying:
+
+- Create a dedicated **public** Vercel Blob store for public observations only.
+- Set PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN and PUBLIC_REPLAY_ORIGIN on the Vercel
+  project. The origin must match that store's https://<id>.public.blob.vercel-storage.com URL.
+  The existing BLOB_READ_WRITE_TOKEN remains the private store's credential.
+- Set the GitHub repository variable PUBLIC_REPLAY_ORIGIN to that same public
+  origin for staging. Deployment refuses to proceed without it. Tokens never
+  enter browser configuration or staged assets.
+- Publish already-public historical recordings once, with both store tokens and
+  the public origin provided securely through the environment:
+  node hosting/vercel/scripts/publish-replays.mjs (inventory only), then add
+  --apply to publish. It never reads private account recordings or deletes data.
+  Re-running skips published prefixes and repairs interrupted publication.
+
+Recording writes acknowledge only after publication. If publication fails after
+its private recording commit, exact upload retries and authenticated writer
+reconciliation retry publication. Browser playback does not provide a fallback
+through the API. Verify in the browser Network panel that replay requests go
+straight to the public Blob origin; the regression test blocks every /api/
+request while playback still starts and advances.
+
+Account owners can POST {"public":true} to /api/account/runs/:id/publish through
+the account UI. Session ownership and same-origin checks precede publication.
+The server reserves a separate public ID, projects only observed replay fields,
+publishes static files, and adds the run to the ledger. Private source and script
+notes are not exported. Future frame uploads preserve the selection; publication
+failures do not invalidate a successful private recording commit. The account
+page displays publishedCount and allows an explicit retry.

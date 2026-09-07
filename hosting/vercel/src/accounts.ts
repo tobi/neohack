@@ -1,3 +1,5 @@
+import {publishAccountRun} from './publish-account-run.ts';
+import {publicReplayConfigured} from './public-replay-store.ts';
 import { AuthStore, read, update, storage, immutable } from "./storage.ts";
 import {
   generateRegistrationOptions,
@@ -263,11 +265,21 @@ export class Accounts {
           .sort((a, b) => b.updated - a.updated),
       );
     const match = path.match(
-      /^\/runs\/([\w-]{1,100})(?:\/(?:frames|source|journal))?$/,
+      /^\/runs\/([\w-]{1,100})(?:\/(?:frames|source|journal|publish))?$/,
     );
     if (match) {
       const key = `accounts/${uid}/runs/${match[1]}.json`;
       const frames = path.endsWith("/frames");
+      if(request.method==='POST' && path.endsWith('/publish')) {
+        if(body.public!==true)return json({error:'Explicit public selection required'},400);
+        if(!(await read(key))?.run)return json({error:'Run not found'},404);
+        if(!publicReplayConfigured())return json({error:'Public replay publication unavailable'},503);
+        await update<any,void>(key,()=>{throw Error('Run not found');},doc=>{
+          doc.publicId??='p-'+crypto.randomUUID();doc.run.publicId=doc.publicId;
+        });
+        await publishAccountRun(key);
+        return json((await read(key)).run);
+      }
       if (request.method === "GET") {
         const doc = await read(key);
         const run = doc?.run;
@@ -294,12 +306,10 @@ export class Accounts {
         const offset = Number(url.searchParams.get("offset") ?? 0);
         if (!Number.isInteger(offset) || offset < 0)
           return json({ error: "Invalid offset" }, 400);
-        const values = [];
-        for (let i = offset; i < Math.min(run.count, offset + 25); i++) {
-          const frame = doc.frames[i] ? await read(doc.frames[i]) : null;
-          if (!frame) return json({ error: "Recording incomplete" }, 409);
-          values.push(frame);
-        }
+        const limit=Number(url.searchParams.get('limit')??25);
+        if(!Number.isSafeInteger(limit)||limit<1||limit>25)return json({error:'Invalid limit'},400);
+        const values=await Promise.all(Array.from({length:Math.min(limit,Math.max(0,run.count-offset))},(_,n)=>doc.frames[offset+n]?read(doc.frames[offset+n]):null));
+        if(values.some(frame=>!frame))return json({error:'Recording incomplete'},409);
         return json({
           frames: values,
           next:
@@ -428,7 +438,7 @@ export class Accounts {
             },
             409,
           );
-        return update<any, Response>(
+        const result=await update<any, Response>(
           key,
           () => ({ run: null, frames: [], notes: [] }),
           async (doc) => {
@@ -456,6 +466,8 @@ export class Accounts {
             if (sourceRecord) doc.source = await immutable(sourceRecord);
             doc.frames.push(await immutable(f));
             doc.run = {
+              publicId:doc.publicId,
+              publishedCount:run?.publishedCount,
               id: match[1],
               sessionId: f.sessionId,
               name: body.name,
@@ -482,6 +494,10 @@ export class Accounts {
             return json({ count: body.index + 1 });
           },
         );
+        if(result.ok && (await read(key))?.publicId) {
+          try {await publishAccountRun(key);}catch {console.error(JSON.stringify({event:'account_replay_publication_pending',code:'storage'}));}
+        }
+        return result;
       }
     }
     return json({ error: "Not found" }, 404);

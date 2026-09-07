@@ -1,0 +1,66 @@
+import {publicReplayContext} from '../src/public-replay-store.ts';
+import {publishReplay} from '../src/publish-replay.ts';
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {fixture} from '../../../lib/neonethack/tests/native-fixture.mjs';
+import {createTestHarness,MemoryStorage,publicStoreFor} from './server.mjs';
+import {storageContext,immutable} from '../src/storage.ts';
+import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
+
+test('public playback fetches only static files, begins early and preserves immutable chunks', {timeout:30000},async t=>{
+ const {api}=await fixture(t);const game=await api.create({name:'Streaming',role:'valkyrie',seed:7});const frames=[structuredClone(game.state)];
+ for(let i=0;i<6;i++){await game.wait();frames.push(structuredClone(game.state));}
+ const store=new MemoryStorage();const id=game.id??game.state.sessionId;
+ const refs=await storageContext.run(store,()=>Promise.all(frames.map(f=>immutable(f))));
+ await store.write('replays/'+id+'.json',{frames:refs,revision:frames.at(-1).revision,role:'valkyrie',seed:7});
+ const reads=[];const read=store.read.bind(store);store.read=async path=>{reads.push(path);return read(path);};
+ const server=createTestHarness({store});const{url}=await server.listen();t.after(()=>server.close());
+ const endpoint=new URL('/api/runs/'+id+'/replay',url);
+ const publicStore=publicStoreFor(store);
+ const publish=()=>storageContext.run(store,()=>publicReplayContext.run(publicStore,()=>publishReplay(id)));
+ await publish();reads.length=0;
+ const endpointStatic=new URL('/replay-files/replays/'+id+'/manifest.json',url);
+ const response=await fetch(endpointStatic);const manifest=await response.json();
+ assert.equal(manifest.count,7);assert.equal(manifest.chunks.length,5);
+ assert.equal(reads.length,0,'static manifest reads no private storage');
+ const chunkURL=new URL(manifest.chunks[0],endpointStatic), bytes=await(await fetch(chunkURL)).text();
+ assert.deepEqual(JSON.parse(bytes).frames,frames.slice(0,3));assert.equal(reads.length,0,'static chunks read no private storage');
+ const doc=await read('replays/'+id+'.json');await store.write('replays/'+id+'.json',{...doc.value,frames:[...refs,refs[0]]},doc.etag);
+ await publish();assert.equal(await(await fetch(chunkURL)).text(),bytes);
+ const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());const page=await browser.newPage();
+ let release;const gate=new Promise(resolve=>release=resolve);t.after(()=>release());
+ let chunks=0, apiRequests=0;
+ await page.route('**/api/**',route=>{apiRequests++;return route.abort();});
+ await page.route('**/replay-files/replays/*/chunks/*.json',async route=>{if(++chunks===2)await gate;await route.continue();});
+ await page.route('**/playback-only',route=>route.fulfill({contentType:'text/html',body:'<script type="module" src="/component/neohack.js"></script><neohack-world controls style="height:400px"></neohack-world>'}));
+ await page.goto(new URL('/playback-only',url).href);await page.waitForFunction(()=>document.querySelector('neohack-world')?.loadReplay);
+ await page.evaluate(src=>{const w=document.querySelector('neohack-world');window.ends=0;w.addEventListener('replayend',()=>window.ends++);w.setAttribute('autoplay','');w.setAttribute('loop','');w.setAttribute('src',src);},new URL('/dashboard?run='+id,url).href);
+ await page.waitForFunction(()=>document.querySelector('neohack-world').index===2);
+ assert.equal(await page.evaluate(()=>document.querySelector('neohack-world').sourcePending),true);
+ await page.waitForTimeout(200);assert.equal(await page.evaluate(()=>document.querySelector('neohack-world').index),2,'buffers instead of looping');assert.equal(await page.evaluate(()=>window.ends),0);
+ await page.evaluate(()=>document.querySelector('neohack-world').pause());release();
+ await page.waitForFunction(()=>!document.querySelector('neohack-world').sourcePending);
+ assert.equal(await page.evaluate(()=>document.querySelector('neohack-world').index),2,'new chunks do not reset position or override pause');
+ assert.equal(await page.evaluate(()=>document.querySelector('neohack-world').frames.length),8);
+ assert.equal(apiRequests,0,'all playback succeeds with every dynamic API request blocked');
+});
+
+test('partial failures retain playable frames and changing source cancels stale delivery', {timeout:30000},async t=>{
+ const{api}=await fixture(t);const game=await api.create({name:'Buffer',role:'valkyrie',seed:7});const first=structuredClone(game.state);await game.wait();const second=structuredClone(game.state);
+ const server=createTestHarness();const{url}=await server.listen();t.after(()=>server.close());
+ const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());const page=await browser.newPage();
+ await page.route('**/slow-replay*',async route=>{const next=new URL(route.request().url()).searchParams.has('offset');await route.fulfill({status:next?503:200,contentType:'application/json',body:JSON.stringify(next?{error:'down'}:{frames:[first,second],next:2})});});
+ await page.goto(new URL('/component',url).href);await page.waitForFunction(()=>document.querySelector('neohack-world')?.loadReplay);
+ await page.evaluate(()=>{const w=document.querySelector('neohack-world');window.ends=0;w.addEventListener('replayend',()=>window.ends++);w.setAttribute('autoplay','');w.setAttribute('src','/slow-replay');});
+ await page.waitForFunction(()=>document.querySelector('neohack-world').sourceMessage?.includes('Replay interrupted'));
+ assert.equal(await page.evaluate(()=>document.querySelector('neohack-world').frames.length),2);
+ await page.waitForTimeout(150);assert.equal(await page.evaluate(()=>window.ends),0);
+ let release;const gate=new Promise(resolve=>release=resolve);t.after(()=>release());
+ await page.route('**/held-replay*',async route=>{await gate;try{await route.fulfill({contentType:'application/json',body:JSON.stringify([second])});}catch{}});
+ await page.route('**/replacement*',route=>route.fulfill({contentType:'application/json',body:JSON.stringify([first])}));
+ await page.evaluate(()=>document.querySelector('neohack-world').setAttribute('src','/held-replay'));
+ await page.waitForFunction(()=>document.querySelector('neohack-world').sourcePending);
+ await page.evaluate(()=>document.querySelector('neohack-world').setAttribute('src','/replacement'));
+ await page.waitForFunction(()=>document.querySelector('neohack-world').snapshot && !document.querySelector('neohack-world').sourcePending);
+ release();await page.waitForTimeout(150);
+ assert.deepEqual(await page.evaluate(()=>document.querySelector('neohack-world').snapshot),first);
+});

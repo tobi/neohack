@@ -4,14 +4,19 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Account owners can make a recorded run public and share its replay while keeping saves, script source and notes private.
+
+- Replays begin after their first frames arrive, buffer in the background and use CDN-cacheable public chunks.
+
+- The adventure ledger focuses on runs and replays; operational error reports now go to private Vercel logs.
+
 - Equipment stays visible beside a scrolling bag, with highlighted destinations,
   exact ring-hand selection and a tap-to-equip alternative to dragging.
 - Temporary online-save and public-replay failures retry in the background; pending
   uploads stay in this browser through reloads.
 - The HUD and sheet share status labels, and journal scrolls follow actual engine
   passages instead of grouping ordinary messages into apparent stories.
-- Ledger updates and error reporting use separate storage; public statistics can
-  be rebuilt without deleting run history.
+- Public ledger statistics can be rebuilt without deleting run history.
 
 - A redesigned character sheet puts stats beside the portrait, equipment in a
   paper-doll layout, and item icons/actions in a compact scrolling bag. Drag equipment
