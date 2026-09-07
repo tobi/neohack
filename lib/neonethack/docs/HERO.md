@@ -273,8 +273,7 @@ is reachable, it approaches a remembered closed door not known locked and makes
 one explicit open attempt, then stops. It does not pick locks, kick or repeat
 a resisted opening.
 `descend()` selects the nearest reachable remembered downward stair, travels to
-it and attempts the engine's climb command. `maxActions` defaults to 8 and is
-bounded at 64; it counts submitted move/open/climb attempts, not elapsed game turns.
+it and attempts the engine's climb command. `maxActions` defaults to the full level bound of 1,659 and can be reduced; it counts submitted move/open/climb attempts, not elapsed game turns.
 Pass an `AbortSignal` to stop between inputs. A pending decision, interruption,
 level change during travel or a newly perceived creature ends the leg. No warning
 is answered, blocked action repeated, or uncertain operation retried.
@@ -298,3 +297,8 @@ command. Counts default to one and range from 1 to 1000. The engine may refuse
 or interrupt before finishing. Use the returned actual elapsed turns and
 `outcome.status`; no callback automatically resumes the occupation. The same
 methods are available on `game`.
+
+`hero.go({to})` accepts any square on the current level. It follows known routes
+until arrival, a real decision, changed circumstances or no known route; it does
+not guess unexplored terrain. `hero.explore()` and `hero.descend()` expose the same
+helpers as MCP/WebMCP, and accept `maxActions`, `signal` and `onStep`.

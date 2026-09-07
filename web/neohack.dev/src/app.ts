@@ -1734,7 +1734,7 @@ class PixelNethack extends HTMLElement {
           void this.run(async()=>{
             try {
               this.map.route=route.steps;
-              const result=await game.go({to:{x,y},maxActions:8,signal:controller.signal,onStep:frame=>{
+              const result=await game.go({to:{x,y},signal:controller.signal,onStep:frame=>{
                 this.recordReplays();this.render();
                 const at=route.steps.findIndex(p=>p.x===frame.observation.you?.x&&p.y===frame.observation.you?.y);
                 this.map.route=at<0?[]:route.steps.slice(at+1);this.map.draw();

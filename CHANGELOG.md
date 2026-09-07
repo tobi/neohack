@@ -4,6 +4,8 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Destination walking follows known routes across the level instead of stopping after eight actions. Real decisions and changed circumstances still pause movement.
+
 - Container dialogs keep transfer actions visible while compact item lists scroll independently.
 - Double-click a map square to walk there; successful arrival stays quiet.
 - Large cloud saves upload in bounded chunks, and sync failures stay in the save status instead of covering the game.

@@ -18,7 +18,7 @@ export class Navigator {
     return options.force ? this.direct({...options.to},options) : this.run({...options.to},false,options);
   }
   private async direct(to:Point, options:NavigationOptions):Promise<NavigationResult> {
-    if(options.maxActions!==undefined && (!Number.isInteger(options.maxActions) || options.maxActions<1 || options.maxActions>64)) throw Error('maxActions must be an integer from 1 to 64');
+    if(options.maxActions!==undefined && (!Number.isInteger(options.maxActions) || options.maxActions<1 || options.maxActions>1659)) throw Error('maxActions must be an integer from 1 to 1659');
     if(this.running) throw Error('A navigation leg is already running');
     this.running=true;
     let actionsTaken=0, turnsElapsed=0;
@@ -46,8 +46,8 @@ export class Navigator {
     return this.run('down', true, options);
   }
   private async run(destination:Point|'frontier'|'down', climb:boolean, options:NavigationOptions):Promise<NavigationResult> {
-    const limit = options.maxActions ?? 8;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 64) throw Error('maxActions must be an integer from 1 to 64');
+    const limit = options.maxActions ?? 1659;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1659) throw Error('maxActions must be an integer from 1 to 1659');
     if (this.running) throw Error('A navigation leg is already running');
     this.running = true;
     let actionsTaken = 0, turnsElapsed = 0;

@@ -187,12 +187,12 @@ static char *navigate(nnh_context *ctx, mcp_agent_state *s, const char *method, 
 {
     char *sid = mcp_string(mcp_field(args.p,"sessionId")), *to = NULL, *door = NULL, *initial_level = level(s), *response = NULL;
     const char *reason = gate(s); int actions = 0, force = 0;
-    long long turns = 0, limit = number(args.p,"maxActions",8);
+    long long turns = 0, limit = number(args.p,"maxActions",1659);
     int descend = !strcmp(method,"agent.descend"), explore = !strcmp(method,"agent.explore");
     mj_val force_value = mcp_field(args.p,"force");
     if (force_value.p) mj_bool(force_value,&force);
     if (reason) goto finish;
-    if (limit < 1 || limit > 64 || !operation) { response = mcp_agent_error("invalidParams","A bounded leg requires maxActions from 1 to 64 and an adapter operation ID."); goto done; }
+    if (limit < 1 || limit > 1659 || !operation) { response = mcp_agent_error("invalidParams","A bounded leg requires maxActions from 1 to 1659 and an adapter operation ID."); goto done; }
     if (!descend && !explore) to = mj_canonical(mcp_field(args.p,"to"));
     else {
         char *p = params(sid,NULL,(mj_val){NULL});

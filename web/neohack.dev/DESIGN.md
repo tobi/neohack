@@ -1251,7 +1251,7 @@ last published frame count until publication catches up.
 
 Selecting a map square opens its perceived description and a free, revision-bound
 C route preview. Sage ground markers show only returned known route steps. Walk
-here, or double-clicking a map square, requests one bounded leg (at most eight actions) through the same library
+here, or double-clicking a map square, requests destination walking across the current level (at most 1,659 actions) through the same library
 navigator used by agents. Reaching a destination never overrides a standing
 choice, changed creature scene, damage, uncertainty or a level change. Each
 executed step updates the human view and recording. Escape, blur, a hidden page,

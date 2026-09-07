@@ -2,7 +2,7 @@ import { ScriptControls, ScriptJournal, copyState, returnedState, type ScriptSta
 import { attachController } from './lifecycle.js';
 import { HeroEventListeners, type HeroEventDetails, type HeroEventName, type HeroListener, type BotResult, type StopReason, type CellChange } from './hero-events.js';
 import type { Game } from './client.js';
-import type { GoOptions, NavigationResult, Point } from './navigator.js';
+import type { GoOptions, NavigationOptions, NavigationResult, Point } from './navigator.js';
 import type { AutomaticPickup, CellActions, Cell, Item, ItemRef, Snapshot } from './types.js';
 import { direction, entities } from './vocabulary.js';
 export { direction, entities } from './vocabulary.js';
@@ -417,6 +417,14 @@ export class Hero {
     const target=options.to;
     if(target instanceof Entity) current(target,this.game);
     return this.game.go({...options,to:target instanceof Entity ? {x:target.position[0],y:target.position[1]} : {...target}});
+  }
+  /** Approach a known frontier or attempt a closed door; stop for real decisions. */
+  explore(options:NavigationOptions = {}): Promise<NavigationResult> {
+    this.assertActive(); return this.game.explore(options);
+  }
+  /** Approach known downward stairs and attempt descent. */
+  descend(options:NavigationOptions = {}): Promise<NavigationResult> {
+    this.assertActive(); return this.game.descend(options);
   }
   /** Force one engine attack at an adjacent square or a fresh perceived creature.
    * Does not infer hostility or answer any engine confirmation. */

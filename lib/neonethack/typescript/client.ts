@@ -1,5 +1,5 @@
 import { LowLevel } from './low.js';
-import { Navigator, type GoOptions } from './navigator.js';
+import { Navigator, type GoOptions, type NavigationOptions } from './navigator.js';
 import { beforeInput, accepted, scheduled } from './lifecycle.js';
 import type { LoreResponse, NavigationResponse, RouteResponse, AutomaticPickup, ActionTarget, ActionsResponse, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
 export type { LoreResponse, NavigationResponse, RouteResponse, EquipmentSlot, ItemRef, AutomaticPickup, ActionTarget, ActionsResponse, ActionOffer, ActionBasis, CellActions, Neighborhood, InputGate, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
@@ -141,6 +141,8 @@ export class Game {
     });
   }
   go(options: GoOptions) { return new Navigator(this).go(options); }
+  explore(options: NavigationOptions = {}) { return new Navigator(this).explore(options); }
+  descend(options: NavigationOptions = {}) { return new Navigator(this).descend(options); }
   lookup(name:string):Promise<LoreResponse> {
     return this.enqueue(async()=>{
       if(this.retired) throw Error("Session is closed; resume it explicitly.");
