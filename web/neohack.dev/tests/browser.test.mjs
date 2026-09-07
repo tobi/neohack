@@ -3253,7 +3253,7 @@ test("opening story is a complete, free, reopenable journal scroll", async t => 
   assert.ok(heard.some(line => line.includes("Amulet")), "real engine opening story");
   assert.equal(await page.locator("#journal-scroll").isVisible(), true);
   const text = await page.locator("#scroll-text").textContent();
-  assert.equal(text, heard.join("\n"), "complete receipt including paragraph breaks");
+  assert.equal(text, before.events.find(e=>e.type==="passage" && e.text.includes("Amulet")).text, "complete engine text window including paragraph breaks");
   assert.ok(text.includes("from birth"));
   const footer = await page.locator("#finish-scroll").boundingBox();
   assert.ok(footer.y + footer.height <= 844, "reading controls stay visible on mobile");
@@ -3375,7 +3375,7 @@ test('journal scrolls require four non-empty source lines, not trailing blanks o
   ];
   await page.evaluate(entries=>{
     const app=document.querySelector('pixel-nethack');
-    app.journal=entries.map((text,i)=>({text,turn:i+1,lastTurn:i+1,count:1}));
+    app.journal=entries.map((text,i)=>({text,turn:i+1,lastTurn:i+1,count:1,passage:i===4}));
     app.panel='journal';app.renderPanel();app.showPanel();
   },entries);
   const rows=page.locator('.journal-entry');
@@ -3428,11 +3428,30 @@ test('equipment drag uses a real candidate and leaves rejected items untouched',
  const food=before.observation.inventory.find(i=>i.category==='food');
  await page.locator('[data-item-id="'+food.id+'"] .item-row').dragTo(page.locator('[data-slot=helmet]'));
  assert.equal((await snapshot(page)).revision,before.revision);
- assert.match(await page.locator('.sheet-equip-feedback').textContent(),/cannot use/);
+ assert.equal(await page.locator('[data-slot=helmet]').getAttribute('class'),'equipment-slot');
  await page.locator('[data-item-id="'+shield.id+'"] .item-row').dragTo(page.locator('[data-slot=shield]'));await ready(page);
  const equipped=await snapshot(page);assert.ok(equipped.observation.inventory.find(i=>i.id===shield.id).equipmentSlots.includes('shield'));
  assert.ok(equipped.observation.turn>before.observation.turn);
  await page.setViewportSize({width:390,height:844});
  assert.equal(await page.locator('#sheet-equipment').isVisible(),true);assert.equal(await page.locator('#sheet-bag').isVisible(),true);
  await page.screenshot({path:root+'/test-results/equipment-drag-mobile.png'});
+});
+
+test('compact equipment targets remain visible while the bag scrolls; touch selection is free',async t=>{
+ const {page}=await fixture(t,{touch:true});await page.setViewportSize({width:390,height:667});await create(page);await page.getByRole('button',{name:/Backpack/}).click();
+ let frame=await snapshot(page),shield=frame.observation.inventory.find(i=>i.equipmentSlots?.includes('shield'));
+ await page.getByRole('button',{name:'Remove '+shield.label,exact:true}).click();await ready(page);frame=await snapshot(page);shield=frame.observation.inventory.find(i=>i.id===shield.id);
+ const before=await page.locator('.equipment-board').boundingBox();
+ await page.locator('#sheet-bag').evaluate(el=>{el.scrollTop=el.scrollHeight;});
+ const after=await page.locator('.equipment-board').boundingBox();assert.deepEqual(after,before,'scrolling the bag never moves equipment');
+ for(const tile of await page.locator('.equipment-slot').all()){const b=await tile.boundingBox();assert.ok(b.y>=0&&b.y+b.height<=667,'all equipment targets fit the short phone viewport');}
+ const selection=page.getByRole('button',{name:'Choose equipment slot for '+shield.label,exact:true});await selection.click();
+ assert.equal((await snapshot(page)).revision,frame.revision,'selecting equipment has no engine input');
+ assert.equal(await page.locator('[data-slot=helmet]').getAttribute('class'),'equipment-slot');
+ await page.getByRole('button',{name:'Equip selected item · Shield',exact:true}).click();await ready(page);
+ assert.deepEqual((await snapshot(page)).observation.inventory.find(i=>i.id===shield.id).equipmentSlots,['shield']);
+ await page.screenshot({path:root+'/test-results/equipment-compact-phone.png'});
+ await page.setViewportSize({width:1280,height:720});
+ const panel=await page.locator('.character-panel').boundingBox();assert.ok(panel.height<=720);assert.ok(panel.width<=820);
+ await page.screenshot({path:root+'/test-results/equipment-compact-desktop.png'});
 });

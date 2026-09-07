@@ -1,0 +1,421 @@
+/* Character sheet owns a bounded viewport; only the bag scrolls during equipment selection. */
+.rightbar.character-panel {
+  z-index: 11;
+  top: 12px;
+  bottom: 12px;
+  width: min(820px, calc(100% - 24px));
+  max-height: 640px;
+  padding: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.rightbar.character-panel[hidden] {
+  display: none;
+}
+.character-panel > .section-title {
+  margin: 0 44px 8px 0;
+  padding: 0;
+  flex-shrink: 0;
+}
+.character-panel .section-title h2 {
+  font-size: 22px;
+  margin: 0;
+}
+.character-panel #close-panel {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 44px;
+  min-height: 44px;
+}
+.character-panel #panel-count {
+  display: none;
+}
+.character-panel #panel-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.character-panel .pickup-shortcut {
+  flex-shrink: 0;
+  margin: 4px 0 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  min-height: 44px;
+}
+.character-sheet {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sheet-hero {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 0 0 8px;
+  flex-shrink: 0;
+}
+.sheet-portrait {
+  width: 32px;
+  height: 64px;
+  flex: 0 0 32px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.sheet-identity {
+  flex: 1;
+  min-width: 0;
+}
+.sheet-identity h3 {
+  font:
+    23px Georgia,
+    serif;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.sheet-eyebrow,
+.sheet-depth {
+  display: inline;
+  font:
+    11px ui-monospace,
+    monospace;
+  color: #b7c59d;
+  margin-right: 12px;
+}
+.sheet-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin: 6px 0;
+}
+.sheet-stats dt {
+  font-size: 11px;
+  color: #aebc9f;
+}
+.sheet-stats dd {
+  margin: 3px 0 0;
+  font:
+    13px ui-monospace,
+    monospace;
+}
+.sheet-condition {
+  font-size: 12px;
+  color: #dbbd85;
+  margin: 4px 0;
+}
+.sheet-attributes {
+  font-size: 12px;
+}
+.sheet-attributes summary {
+  cursor: pointer;
+}
+.sheet-attributes[open] {
+  position: absolute;
+  z-index: 5;
+  inset: 52px 12px auto;
+  padding: 16px;
+  background: #202d29;
+  border: 1px solid #87966d;
+}
+.sheet-columns {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 244px minmax(0, 1fr);
+  gap: 16px;
+}
+.sheet-equipment {
+  min-height: 0;
+}
+.sheet-section-heading {
+  font:
+    11px ui-monospace,
+    monospace;
+  text-transform: uppercase;
+  color: #baca9e;
+  margin: 4px 0 8px;
+}
+.sheet-bag {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-left: 12px;
+  border-left: 1px solid #49563f;
+}
+.sheet-bag .sheet-section-heading {
+  position: sticky;
+  top: 0;
+  padding: 6px 0;
+  margin: 0;
+  background: #202d29;
+  z-index: 1;
+}
+.equipment-board {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(6, 48px);
+  gap: 4px;
+}
+.equipment-slot {
+  position: relative;
+  min-width: 0;
+  border: 1px solid #506046;
+  background: #172420;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.slot-label {
+  position: absolute;
+  top: 3px;
+  left: 1px;
+  right: 1px;
+  text-align: center;
+  font:
+    9px ui-monospace,
+    monospace;
+  color: #b7c59d;
+  pointer-events: none;
+  z-index: 1;
+}
+.slot-item {
+  position: absolute;
+  inset: 0;
+  padding: 14px 4px 0;
+  border: 0;
+  background: transparent;
+  min-height: 44px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.slot-item img {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
+}
+.slot-item-name {
+  display: none;
+}
+.slot-empty {
+  color: #7e8d71;
+  padding-top: 12px;
+}
+.slot-destination {
+  display: none;
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  z-index: 2;
+  min-height: 44px;
+}
+.available-target {
+  border-color: #c6d69f;
+  background: #354831;
+}
+.available-target .slot-destination:not(:disabled) {
+  display: block;
+}
+.drop-target {
+  outline: 2px solid #e5c982;
+}
+.sheet-equip-feedback {
+  font-size: 12px;
+  color: #b6c39f;
+  margin: 8px 0;
+}
+.equipment-figure {
+  position: absolute;
+  pointer-events: none;
+  width: 48px;
+  height: 96px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  left: calc(50% - 24px);
+  top: 92px;
+}
+.equipment-slot[data-slot="eyewear"] {
+  grid-area: 1/1;
+}
+.equipment-slot[data-slot="helmet"] {
+  grid-area: 1/2;
+}
+.equipment-slot[data-slot="amulet"] {
+  grid-area: 1/3;
+}
+.equipment-slot[data-slot="bodyArmor"] {
+  grid-area: 2/1;
+}
+.equipment-slot[data-slot="cloak"] {
+  grid-area: 2/3;
+}
+.equipment-slot[data-slot="gloves"] {
+  grid-area: 3/1;
+}
+.equipment-slot[data-slot="shield"] {
+  grid-area: 3/3;
+}
+.equipment-slot[data-slot="weapon"] {
+  grid-area: 4/1;
+}
+.equipment-slot[data-slot="offhand"] {
+  grid-area: 4/3;
+}
+.equipment-slot[data-slot="leftRing"] {
+  grid-area: 5/1;
+}
+.equipment-slot[data-slot="boots"] {
+  grid-area: 5/2;
+}
+.equipment-slot[data-slot="rightRing"] {
+  grid-area: 5/3;
+}
+.equipment-slot[data-slot="alternateWeapon"] {
+  grid-area: 6/1;
+}
+.equipment-slot[data-slot="shirt"] {
+  grid-area: 6/2;
+}
+.equipment-slot[data-slot="quiver"] {
+  grid-area: 6/3;
+}
+.sheet-bag .inventory-entry {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+.sheet-bag .item-row {
+  flex: 1;
+  min-width: 0;
+  padding: 4px;
+  text-align: left;
+}
+.sheet-bag .item-copy {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.sheet-bag .equipment-assignment,
+.known-curse {
+  font-size: 10px;
+  color: #b9c7a0;
+}
+.sheet-bag .inventory-actions {
+  flex-shrink: 0;
+  padding: 0;
+  gap: 0;
+}
+.selected-item {
+  background: #34462f;
+  outline: 1px solid #b7ca98;
+}
+.sheet-notice,
+.sheet-empty {
+  font-size: 12px;
+  color: #dec69d;
+  padding: 4px;
+  margin: 0;
+}
+@media (max-width: 620px) {
+  .rightbar.character-panel {
+    right: 6px;
+    width: calc(100% - 12px);
+    padding: 10px;
+  }
+  .sheet-identity h3 {
+    font-size: 19px;
+  }
+  .sheet-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px 8px;
+  }
+  .sheet-columns {
+    grid-template-columns: 154px minmax(0, 1fr);
+    gap: 6px;
+  }
+  .sheet-bag {
+    padding-left: 6px;
+  }
+  .sheet-bag .inventory-entry {
+    flex-wrap: wrap;
+  }
+  .sheet-bag .inventory-actions {
+    margin-left: auto;
+  }
+  .sheet-bag .item-row {
+    flex-basis: 100%;
+  }
+  .sheet-bag .item-copy {
+    font-size: 12px;
+  }
+  .slot-label {
+    font-size: 8px;
+  }
+  .sheet-equip-feedback {
+    font-size: 11px;
+  }
+}
+
+@media (max-height: 740px) {
+  .sheet-eyebrow {
+    display: none;
+  }
+  .sheet-hero {
+    padding-bottom: 4px;
+  }
+  .sheet-identity h3 {
+    font-size: 18px;
+  }
+  .equipment-board {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(5, 44px);
+  }
+  .equipment-board .equipment-slot {
+    grid-area: auto;
+  }
+  .equipment-figure {
+    display: none;
+  }
+  .sheet-equip-feedback {
+    margin: 4px 0;
+  }
+}
+.sheet-bag .inventory-actions {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+@media (max-width: 360px) {
+  .sheet-columns {
+    grid-template-columns: 148px minmax(0, 1fr);
+  }
+}
+@media (max-height: 620px) {
+  .character-panel > .section-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .sheet-identity h3 {
+    padding-right: 34px;
+  }
+  .sheet-attributes {
+    display: none;
+  }
+}
+@media (max-height: 500px) and (min-width: 600px) {
+  .equipment-board {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-rows: repeat(3, 44px);
+  }
+}

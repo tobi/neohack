@@ -1,5 +1,6 @@
 /** Small control icons; their buttons retain complete accessible action names. */
 const paths: Record<string, string> = {
+  selectEquipment: 'M3 3h6v6H3Zm12 0h6v6h-6ZM3 15h6v6H3Zm10 3h8m-3-3 3 3-3 3',
   wield: 'M5 19 19 5V2h-3L5 13m-2-2 10 10M3 21l4-4',
   drop: 'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5',
   pickup: 'M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5',

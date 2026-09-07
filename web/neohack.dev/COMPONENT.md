@@ -62,10 +62,21 @@ Bridge validation failures return a JSON-RPC error and never retry a request.
 retain its returned registration and call `dispose()` before replacing a connection
 or removing its host. It reports unsupported browsers without installing a shim.
 
+## Public ledger playback
+
+Set `src="https://neohack.dev/dashboard?run=PUBLIC_RUN_ID"` on
+`neohack-world` to fetch an existing public scene recording. `controls`,
+`autoplay`, `speed` and `loop` configure playback. These frames are
+browser-reported perceptions, not authoritative scores or resumable journals.
+Historical ledger summaries without frames cannot be reconstructed into replays.
+Never use a private run bookmark containing a vault key as a public embed URL.
+
 ## Accounts and recordings
 
 The full account API runs in the Vercel API.
-The local Bun server serves static files only; use Wrangler for account testing.
+The local Bun server serves static files only. Build the library and web client,
+then run `npm test --prefix hosting/vercel` for the actual Vercel handlers and
+staged browser client against isolated conditional-write storage fixtures.
 Passkeys need HTTPS in production or a `localhost` hostname for local development.
 WebAuthn verification uses SimpleWebAuthn (MIT), with discoverable credentials,
 required user verification, one-use five-minute challenges, credential counters,

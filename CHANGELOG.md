@@ -4,11 +4,20 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Equipment stays visible beside a scrolling bag, with highlighted destinations,
+  exact ring-hand selection and a tap-to-equip alternative to dragging.
+- Temporary online-save and public-replay failures retry in the background; pending
+  uploads stay in this browser through reloads.
+- The HUD and sheet share status labels, and journal scrolls follow actual engine
+  passages instead of grouping ordinary messages into apparent stories.
+- Ledger updates and error reporting use separate storage; public statistics can
+  be rebuilt without deleting run history.
+
 - A redesigned character sheet puts stats beside the portrait, equipment in a
-  paper-doll layout, and item icons/actions in a compact list below. Drag equipment
+  paper-doll layout, and item icons/actions in a compact scrolling bag. Drag equipment
   to request Wear or Wield; normal engine decisions still apply.
 
-- Clearer phone HUD and journal spacing, a full-height character sheet, readable
+- Clearer phone HUD and journal spacing, a bounded character sheet, readable
   status labels, and steadier workshop navigation and replay loading feedback.
 
 - A redesigned workshop chooser pairs a short code preview with clear starter

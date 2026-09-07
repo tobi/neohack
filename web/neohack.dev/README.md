@@ -74,7 +74,12 @@ Release cancels future repeats. Walls, nearby perceived creatures, damage,
 decisions, uncertainty, menus and focus loss stop walking. Other actions remain
 one-shot: holding search, wait or an occupation does not repeat it.
 The Field guide lists shortcuts, diagonals, free inspection and map panning.
-Use the backpack or action buttons; each selected item is sent by its public ID.
+The character sheet keeps stats beside the portrait and displays actual equipment
+slots around the character. Its complete item list has icons and inline actions;
+dragging requests Wear, Wield or Quiver through the public API. The engine chooses
+the actual assignment and retains destination choices, removals and warnings.
+The text map belongs to Surroundings; automatic pickup remains in the sheet.
+Each selected item is sent by its public ID.
 Standing on a recognizable chest, box or bag offers **Open container**. NetHack's
 container dialog offers explicit inspection of unknown contents, then two lists:
 contents to take and backpack stacks to put in. **Take everything** stages the
@@ -124,8 +129,10 @@ it resolves. A failed transport must be reloaded and the same world resumed firs
 Creation/resume are never automatically retried.
 
 Closing a world or reloading preserves the game and its standing decision.
-Clearing browser site data deletes it. Different origins/ports have separate saves.
-Old worlds are not supported across incompatible rebuilds.
+Clearing browser site data deletes local copies and any progress not uploaded.
+An acknowledged cloud copy can be restored using its complete private bookmark
+and exact runtime package. Different origins/ports have separate local saves.
+Published runs retain their pinned package across website deployments.
 No service worker upgrades or automatic game-version replacements are installed.
 The visible journal contains observations received since opening the adventure;
 the underlying game journal remains owned by the library.
@@ -148,14 +155,17 @@ live in ignored `test-results/`. No saved user games are test fixtures.
 See [art attribution](art/ATTRIBUTION.md) for sprite sources and terms, and
 [NetHack and dependency notices](../../lib/neonethack/NOTICE.md).
 
-## Development saves
+## Development builds and published runs
 
-Only the current package under `/runtime/wasm/` is supported. Builds replace it;
-there are no package archives, legacy loaders or save migrations. Old development
-saves are disposable. Start a new adventure after an incompatible rebuild and
-clear browser site data if the old save index is no longer useful. Storage schema
-upgrades replace the old database contents outright. Current-format reloads still
-preserve exact receipts and standing decisions.
+Local disposable test stores are not compatibility fixtures. Start a fresh temporary
+store after an incompatible development build; do not use player data for this.
+The low-level IndexedDB implementation replaces obsolete development schemas;
+that is not permission to upgrade a published run's store or delete its data.
+
+The web loader selects `/runtime/wasm/current.json` for new runs and
+`/runtime/wasm/<buildId>/` for a recorded run. Vercel staging preserves verified
+published packages. A missing pin is an error, never an automatic upgrade.
+Deployments must also preserve the production Blob store and ledger.
 
 ## Bookmark and resume
 
@@ -197,5 +207,5 @@ the right. Pickup uses explicit item IDs and the displayed revision.
 
 The build also produces `/component` and its single-file `/component/neohack.js`
 viewer, `/login` for passkey accounts and private replays, and `/bots` for local
-JS/TS ascender experiments. See [the integration guide](COMPONENT.md). Account
+JavaScript ascender experiments with TypeScript-powered editor assistance. See [the integration guide](COMPONENT.md). Account
 features require the Vercel API; Bun's static server cannot authenticate.

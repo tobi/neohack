@@ -1,5 +1,32 @@
 # Pixel NetHack: a place worth descending into
 
+## Current UX and implementation boundaries
+
+This file records current design decisions. Sections explicitly called targets,
+proposals or studies are not claims of shipped behavior. Replace superseded
+instructions when a decision changes; do not leave competing rules below.
+
+- Human, accessible and agent views share the C protocol's perceived facts.
+  Illustrations never identify hidden items, predict safety or weaken the game.
+- The game is browser WASM; Vercel handles accounts, private cloud journals,
+  the public ledger and observation recordings. Published runtime pins and
+  production data survive deployments; disposable development fixtures do not
+  justify deleting a player's progress.
+- The HUD is compact: level at top right, health values together, equipped item
+  icon on one line, and no normal hunger/burden text. The character sheet puts
+  stats beside the portrait, gear around a paper doll beside an independently scrolling bag.
+  Dragging selects an engine-provided equipment destination; actual outcomes and warnings
+  belong to the engine. Text-map access belongs in Surroundings.
+- Journal scrolls require an engine-marked passage with four non-empty source lines. Short notices stay inline.
+- Workshop projects are JavaScript with TypeScript editor assistance; the same
+  example sources run in the browser sandbox and the trusted local Node runner.
+- Ground is drawn first; walls and doors share per-pixel structure depth. Actors
+  and known raised objects share foreground foot ordering. Do not restore an
+  unconditional doors-on-top pass.
+
+For API guarantees use [PROTOCOL.md](../../lib/neonethack/docs/PROTOCOL.md);
+for hosting use [the Vercel guide](../../hosting/vercel/README.md).
+
 ## Selected art library — Modern Interiors by LimeZu
 
 **Modern Interiors — LimeZu is the selected asset pack for this client.**
@@ -197,7 +224,8 @@ unseen destination. Door frame axes come from the shared library's public terrai
 orientation (horizontal/vertical), including remembered doors. They describe the
 frame, not the leaf or travel direction; neighboring cells do not choose the axis.
 
-Draw ground, then wall sprites, then door fixtures, then actors. Known raised
+Draw ground, then a shared wall-and-door structure depth layer, then actors and
+raised objects in foot order. Known raised
 silhouettes can overlap the dark backdrop; unknown ground stays unpainted. Fog,
 viewport culling and feedback placement account for the full sprite bounds.
 Workshop and live rendering share the same meshes. `masonry-3d-2` retains the
@@ -311,14 +339,15 @@ playability. The workshop and real browser tests are complementary evidence.
 
 ## Interaction feedback and layer order
 
-The world uses six explicit passes, from back to front:
+The world follows these layer responsibilities; shared structure depth, rather
+than an independent door pass, resolves overlapping masonry:
 
 1. Background: a restrained charcoal mineral texture, with no hints of unexplored
    rooms, routes or objects.
-2. Walls and floors: connected raised stonework and walkable surface art.
-3. Decals: surface wear and cosmetic ornament, reserved for later elaboration.
-4. Sprites: doors, creatures, player and foreground objects, sorted by foot position
-   above the dungeon surfaces. A creature never becomes a floor tile.
+2. Ground and surface decoration: walkable surface art and seeded wear.
+3. Structures: connected walls and doors composited by shared per-pixel depth.
+4. Foreground: creatures, player and raised objects, sorted by foot position
+   above the structures. A creature never becomes a floor tile.
 5. Modifiers: small comic question marks on category illustrations where the public
    API does not supply an exact identity; lock badges only on disclosed locks.
    Badges communicate knowledge, never hidden species or private door state.
@@ -336,7 +365,8 @@ Feedback should be brief, local and expressive:
   actions, rather than repeated action bubbles. Populate it automatically from
   current public underfoot perception, which costs no input or turn; never send an
   inspection command merely to populate it. If perception is unavailable, say so.
-  Use opaque item IDs and the displayed revision for pickup. Never auto-loot.
+  Use opaque item IDs and the displayed revision for manual pickup. Automatic
+  pickup is configured in the engine; the UI never emits follow-up pickup commands.
 - Combat deserves a brief impact effect and possibly a very small screen shake,
   driven by confirmed public outcomes rather than invented hit/damage claims.
   Keep input responsive and the grid stable; disable shake and flashes for reduced
@@ -386,9 +416,10 @@ while the player explores the title courtyard. Intro art and movement must not w
 for engine downloads. Warmup downloads files only: no engine, save-store lock or
 session until starting/resuming an adventure or explicitly invoking a WebMCP tool.
 Entering early waits for preparation with input reserved once, never queues duplicate
-starts. Warmup and workers use the current package under `/runtime/wasm/` with cache
-revalidation. Replace old builds and discard incompatible development saves;
-there are no package archives or migration paths. Idle title tabs do not compete
+starts. New games select `/runtime/wasm/current.json`; resume selects the recorded
+`/runtime/wasm/<buildId>/` package. Hosted verified packages are retained across
+deployments. Incompatible local development fixtures are disposable, but no
+published run is silently upgraded or migrated. Idle title tabs do not compete
 for save ownership. Active engines still require the exclusive store lock, and a tab
 refreshes adventure metadata after acquiring it so waiting title tabs cannot overwrite
 another tab's saved progress. Failed speculative downloads are retried by the verified
@@ -568,7 +599,7 @@ phones, retain the stacked welcome content and a single page scroll.
 
 The title is also the library’s frontpage. Keep the playable courtyard and its
 walk-in entrance. Beside it on desktop, show three cards: Play the classic,
-Play with WebMCP (link the agent-browser walkthrough), and build with the library.
+Have your Agent play (link WebMCP and the agent-browser walkthrough), and build with the library.
 Explain the separation of NetHack’s brain from its UX through the JSON protocol;
 mention new interfaces, reinforcement learning environments and model evaluations.
 Include a prominent GitHub link, NetHack history and sprite attribution. Show the
@@ -658,8 +689,8 @@ current item ID and revision. Eligibility does not promise safety. The everyday
 dock offers Search, Pick up, Eat and Pray; doors, stairs and drinking from a fountain
 or sink appear in context. Ascending from the top dungeon floor reads “Leave” and
 still goes through the engine's confirmation. Other actions remain in More actions.
-The character sheet shows current wielded/offhand equipment and a larger experience
-level. Low health or severe hunger outlines the sheet orange-red, then red at
+The HUD shows current wielded/offhand equipment and experience level at top right.
+Low health or severe hunger outlines the HUD orange-red, then red at
 critical severity; condition text and the health meter retain the same information.
 Hungry adventurers get a restrained Eat glow; critical trouble also highlights
 Pray, whose first use explains possible help, punishment and unknown safety before
@@ -906,7 +937,7 @@ original environment extension does not authorize another vendor pack.
 Recipe and scope: [cave tileset](art/layout-types/cave/README.md). The organic
 cavern fixture is explicitly authored offline; it does not alter the engine map.
 Live selection remains dungeon until a public layout classification is available
-or the client explicitly selects a style. Current renderer: terrain-3d-9.
+or the client explicitly selects a style. Current renderer: terrain-3d-10.
 
 ### Live environment selection
 
@@ -941,8 +972,8 @@ Bot execution belongs in a worker inside an opaque sandbox with network blocked.
 Use the public Game API, sequential calls, a fixed 1,000-call/five-minute limit and Stop.
 Temporary test engines never acquire an existing save. A worker-hosted TypeScript
 language service supplies cross-file completion, hover documentation and advisory
-type diagnostics from the built library declarations. No npm package support is claimed. Signed-in tests save replay
-observations; offline or failed uploads must visibly stop recording.
+type diagnostics from the built library declarations. No npm package support is claimed. Signed-in tests save private replay
+observations. Public human-run recordings use a separate bounded durable upload queue.
 
 The workshop is a compact IDE surface: a project/run toolbar, file explorer, editor
 tabs, resizable editor/world split, output panel and cursor/status rail. Keep the
@@ -1025,8 +1056,8 @@ Automatic pickup accepts editable Loot patterns and Ignore patterns, one literal
 ## Journal scrolls
 
 Keep complete heard-event batches from public receipts, including blank lines;
-the rolling observation preview can omit the beginning of a passage. Multiline
-batches appear as clearly labeled, clickable scrolls in recent notes and the full
+the rolling observation preview can omit the beginning of a passage. Engine-marked text-window passages with at least four non-empty source lines
+appear as clearly labeled, clickable scrolls in recent notes and the full
 journal. A modal reading surface preserves the exact text and paragraph breaks
 above the game, with keyboard dismissal and an explicit return button. Opening
 and closing it are free presentation actions, and held movement stops. Show the
@@ -1071,7 +1102,8 @@ found no named shield/chest assets; no vendor pack or runtime PNG was added.
 Unsupported weapon/armor/tool appearances use their neutral class glyph rather
 than an unrelated sword, shirt or pick. Missing appearance and hallucination
 cannot select specific shapes. Known identity does not override the appearance.
-The text remains authoritative; icons are decorative and never operation targets.
+The text remains authoritative. Item icons decorate labeled controls; equipment
+drop targets use engine-provided opaque references and destination offers.
 
 ## Error pages
 
@@ -1095,7 +1127,8 @@ Its Copy run embed action supplies a public source without the private vault URL
 
 New cloud-backed game visits publish a separate, browser-reported scene recording
 using the vault capability for writes only. Public reads preserve canonical observations, decisions, events and outcomes; no private saves, journals, bot
-source or storage descriptors. Upload failures stop recording visibly. Existing
+source or storage descriptors. Public recording uploads retry transient failures from a durable IndexedDB queue;
+sequence/access refusals stop recording visibly. Existing
 private account recordings stay private. Public ledger entries open an accessible
 replay lightbox; links with a run id open it directly. Missing historical frames
 are stated explicitly, never reconstructed from summaries or engine hidden state.
@@ -1117,8 +1150,8 @@ its palette/shading with observed graves; no new runtime PNG or vendor asset.
 
 The Backpack entry opens a wider character sheet: the existing hero portrait,
 name and class, canonical health/energy/armor/level/strength/gold, then actual
-worn equipment in a paper-doll board above a complete carried-item list. Both
-sections remain in the same scrolling panel on narrow screens.
+worn equipment in a compact paper-doll board beside a complete carried-item list. The board remains
+visible while the bag scrolls independently, including on phones.
 Keep the close button visible while scrolling; use the available screen height.
 
 Assignments come exclusively from `equipmentSlots`, with explicit left/right
@@ -1133,11 +1166,11 @@ Item rows use shared perceived-appearance silhouettes and keep their full engine
 labels. Quick actions prioritize the ordinary category action (or removal for
 worn equipment) plus Drop, intersected with the engine's candidates. Selecting an
 item opens all named candidate actions. All actions retain opaque IDs, revision
-checks and real standing decisions. Dragging requests the public equipment action;
+checks and real standing decisions. Dragging sends the public equipment action and selected slot;
 there is no automatic replacement or confirmation.
 No new art pack, PNGs or generated character sprites were introduced.
 
-Journal scroll links require at least four non-empty source lines. Short combat
+Journal scroll links require an engine-marked passage with at least four non-empty source lines. Short combat
 notices, pet swaps and other one-to-three-line entries remain inline, regardless
 of trailing blank lines or viewport wrapping. Opening-story auto-display uses the
 same threshold; a full scroll preserves its original text and paragraph breaks.
@@ -1164,7 +1197,7 @@ height. Keep its heading inside the viewport, with muted account context, full
 touch targets and explicit empty saved-script guidance. No new art is required.
 
 Agent-browser walkthrough corrections: mobile HUD uses canonical status labels,
-keeps routine equipment in the character sheet, and places compact journal notes
+keeps equipment on a single icon-and-name line, and places compact journal notes
 below the measured HUD height. Sheets start directly below the site rail and
 hide the underlying HUD. Workshop navigation resets page scrolling and stacks
 mobile run buttons. Replay loading/error messages survive artwork and role redraws;
@@ -1172,4 +1205,12 @@ loading is never presented as an empty recording.
 
 Hero HUD: level sits at the top right of the identity row; health numbers sit beside Health. Suppress normal hunger/burden labels. Keep the equipped weapon on one line with its existing perceived-appearance icon, ellipsis and full-label tooltip.
 
-Character sheet redesign: portrait and canonical stats share the header; dungeon depth reads `lvl: N`. A paper-doll equipment board shows actual typed assignments; the complete item list and inline action icons follow below on desktop and phone. Dragging a current item requests the named Equip/Wield/Quiver operation using its opaque ID and captured revision. Engine-owned destination choices and warnings remain explicit; no automatic removal or replacement. Touch and keyboard users retain item action buttons. The perceived text map belongs only to Surroundings.
+Character sheet: portrait and canonical stats share the header with the HUD's
+status formatter. Dungeon depth reads `lvl: N`; experience reads Hero level.
+Equipment stays visible beside an independently scrolling bag. On shorter
+viewports the board becomes a compact three-column slot grid. Only current
+engine-provided equipmentTargets highlight; dropping sends the selected slot,
+opaque item ID and captured revision. Tap Choose equipment slot, then a target,
+provides the same explicit operation for touch/keyboard users. Item labels open
+details. No automatic removal, replacement or warning confirmation. Text-map
+access belongs only to Surroundings.

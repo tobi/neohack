@@ -1,3 +1,5 @@
+import { appendReceipt, journalScroll, renderJournalEntry, type JournalEntry } from './journal';
+import { renderHeroHud } from './hero-hud';
 import './component';
 import { PublicReplayRecorder, embedCode, replayLink } from './public-replay';
 import { adventurerName } from './adventurer-names';
@@ -114,7 +116,7 @@ class PixelNethack extends HTMLElement {
   private prayerExplained = (() => {
     try { return localStorage.getItem("neonethack-prayer-explained") === "yes"; } catch { return false; }
   })();
-  private journal: { turn: number; lastTurn: number; text: string; count: number }[] = [];
+  private journal: JournalEntry[] = [];
   private lastFrame = "";
   private decisionIdentity = "";
   private menuReturn: HTMLElement | null = null;
@@ -239,6 +241,7 @@ class PixelNethack extends HTMLElement {
     if(this.cloudEnabled) {
       if(this.publicSession!==frame.sessionId){
         this.publicSession=frame.sessionId;this.text('#copy-embed','Copy run embed');
+        this.publicRecorder?.close();
         this.publicRecorder=new PublicReplayRecorder(frame.sessionId,this.vault,()=>publishCloud(this.saves,this.vault),message=>{if(this.publicSession!==frame.sessionId)return;const node=this.querySelector('#public-recording');if(node)node.textContent=message;});
       }
       this.publicRecorder?.record(frame);
@@ -674,7 +677,7 @@ class PixelNethack extends HTMLElement {
           catch { this.text("#cloud-status", "Saved here · online save pending"); return; }
         }
         if (generation !== this.cloudStatusGeneration) return;
-        this.text("#cloud-status", state === "saved" ? "Saved online" : state === "pending" ? "Saving online…" : state === "queued" ? "Saved here" : "Saved here · cloud sync paused");
+        this.text("#cloud-status", state === "saved" ? "Saved online" : state === "pending" ? "Saving online…" : state === "queued" ? "Saved here" : state === "retrying" ? "Saved here · retrying online" : "Saved here · cloud sync paused");
         if (state === "error") this.error(Error(message));
       },
     });
@@ -742,6 +745,8 @@ class PixelNethack extends HTMLElement {
     }
   }
   disconnectedCallback() {
+    this.publicRecorder?.close();
+    this.publicSession="";
     this.hudLayout?.disconnect();
     this.preloadAbort.abort();
     this.webMcp?.dispose();
@@ -1072,8 +1077,9 @@ class PixelNethack extends HTMLElement {
       this.busy = false;
       if (!this.game?.decision) this.map.context = null;
       this.render();
-      if (completed && entry && !entry.resume && this.game && !this.game.decision && this.journal.length && this.isJournalScroll(this.journal[0]!.text))
-        this.openJournalScroll(this.journal[0]!);
+      const openingPassage=this.journal.find(journalScroll);
+      if (completed && entry && !entry.resume && this.game && !this.game.decision && openingPassage)
+        this.openJournalScroll(openingPassage);
       if (completed && before && game === this.game && !this.uncertain())
         this.map.showMessages(before, this.game!.state);
       if (completed && before && game === this.game && this.playable()) {
@@ -1232,25 +1238,7 @@ class PixelNethack extends HTMLElement {
         "aria-label",
         `Perceived dungeon, ${o.location.depthLabel}. Arrow keys move one step. Shift and arrow keys pan the view.`,
       );
-      const fraction = Number(v.health) / Number(v.maxHealth);
-      const hunger = String(v.hunger ?? "");
-      const hungry = ["hungry", "weak", "fainting", "fainted", "starved"].includes(hunger);
-      const severeHunger = hungry && hunger !== "hungry";
-      const danger = fraction <= .2 || ["fainting", "fainted", "starved"].includes(hunger);
-      const warning = fraction <= .4 || severeHunger;
-      this.$(".hero-hud").dataset.urgency = danger ? "danger" : warning ? "warning" : "normal";
-      for (const button of this.querySelectorAll<HTMLElement>('[data-action="eat"], [data-action="pray"]')) {
-        const active = button.dataset.action === "eat" ? hungry : danger;
-        button.classList.toggle("action-cue", active);
-        button.setAttribute("aria-label", button.dataset.action === "eat" ? (hungry ? "Eat · you are hungry" : "Eat") : (danger ? "Pray · ask for help; safety unknown" : "Pray"));
-      }
-      const weapons = o.inventory.filter(item => item.equipmentSlots?.includes("weapon") || item.equipmentSlots?.includes("offhand"));
-      const weapon = o.perception.equipment === "current" && o.perception.inventory === "current" && o.inventoryKnown && o.inventory.every(item=>item.equipmentSlots!==undefined) ? weapons.map(item => item.label).join(" · ") || "Empty hands" : "Equipment unknown";
-      this.$("#hero-level").innerHTML = `<small>LEVEL</small><strong>${escape(v.level ?? "?")}</strong>`;
-      const weaponIcons = weapon !== "Equipment unknown" ? weapons.map(item => `<img src="${inventoryArt(item)}" alt="">`).join("") : "";
-      const conditions = [v.hunger !== "not_hungry" ? v.hungerLabel : "", v.burden !== "unencumbered" ? v.burdenLabel : "", ...(Array.isArray(v.condition) ? v.condition : [v.condition])].filter(value => value && value !== "not_hungry" && value !== "unencumbered").join(" · ");
-      this.$("#character-stats").innerHTML =
-        `<div class="health-label"><span>Health</span><strong>${escape(v.health ?? "?")} <span>/ ${escape(v.maxHealth ?? "?")}</span></strong></div><progress aria-label="Health" max="100" value="${Number.isFinite(fraction) ? Math.max(0, Math.min(100, fraction * 100)) : 0}"></progress><div class="stats-row"><div><small>ARMOR</small><strong>${escape(v.armor ?? "?")}</strong></div><div><small>GOLD</small><strong>${escape(v.gold ?? "?")}</strong></div></div><p class="weapon-line" title="${escape(weapon)}">${weaponIcons}<span>${escape(weapon)}</span></p><p class="condition" ${conditions ? "" : "hidden"}>${escape(conditions)}</p>`;
+      renderHeroHud(this,o);
       this.text(
         "#inventory-count",
         o.inventoryKnown ? o.inventory.length : "?",
@@ -1272,16 +1260,7 @@ class PixelNethack extends HTMLElement {
       if (frameKey !== this.lastFrame) {
         // Use the complete receipt, including blank text-window lines. The
         // observation's heard list is only a rolling ten-line preview.
-        const heard = state.events.flatMap(event => event.type === "heard" ? [event.text] : []);
-        const messages = heard.length ? heard : this.lastFrame ? actionMessages(state) : o.heard;
-        const text = messages.join("\n");
-        if (text.trim()) {
-          const previous = this.journal.at(-1);
-          if (previous?.text === text) {
-            previous.count++;
-            previous.lastTurn = o.turn;
-          } else this.journal.push({ turn: o.turn, lastTurn: o.turn, text, count: 1 });
-        }
+        appendReceipt(this.journal, state, this.lastFrame ? actionMessages(state) : o.heard);
         this.lastFrame = frameKey;
       }
       this.text(
@@ -1457,7 +1436,7 @@ class PixelNethack extends HTMLElement {
         name: this.current?.name ?? 'Adventurer',
         role: roles.find(r=>r.id===this.current?.role)?.title.replace('The ','') ?? 'Adventurer',
         portrait: '/art/'+heroArt(this.current?.role)+'.png',
-        equip: (item,action)=>{if(this.game===sheetGame && sheetGame.state.revision===sheetRevision && this.playable())this.action(action,item);},
+        equip: (item,action,slot)=>{if(this.game===sheetGame && sheetGame.state.revision===sheetRevision && this.playable())this.action(action,item,slot);},
         inspect: item=>this.itemDetails(item),
         actions: (host,item)=>this.appendItemActions(host,item,true),
       }));
@@ -1519,19 +1498,8 @@ class PixelNethack extends HTMLElement {
       body.append(note);
     }
   }
-  private isJournalScroll(text: string) {
-    return text.split("\n").filter(line => line.trim().length > 0).length >= 4;
-  }
-  private appendJournalContent(host: HTMLElement, entry: {turn: number; text: string; count: number}) {
-    if (!this.isJournalScroll(entry.text)) {
-      host.insertAdjacentHTML("beforeend", this.journalText(entry));
-      return;
-    }
-    const button = this.button("", () => this.openJournalScroll(entry), "journal-scroll-link");
-    button.innerHTML = '<span aria-hidden="true" class="scroll-mark">▤</span><span><strong>Read journal scroll</strong><span class="scroll-excerpt"></span></span>';
-    button.querySelector(".scroll-excerpt")!.textContent = entry.text.trim().split("\n")[0]!;
-    button.setAttribute("aria-label", "Read journal scroll · turn " + entry.turn);
-    host.append(button);
+  private appendJournalContent(host: HTMLElement, entry: JournalEntry) {
+    renderJournalEntry(host, entry, entry=>this.openJournalScroll(entry));
   }
   private openJournalScroll(entry: {turn: number; text: string}) {
     this.stopMovement();
@@ -1540,10 +1508,6 @@ class PixelNethack extends HTMLElement {
     const dialog = this.querySelector<HTMLDialogElement>("#journal-scroll")!;
     if (!dialog.open) dialog.showModal();
     this.controls();
-  }
-  private journalText(entry: { text: string; count: number }) {
-    return escape(entry.text.trim()).replaceAll("\n", "<br>") + (entry.count > 1
-      ? ` <span class="journal-repeat" aria-label="Repeated ${entry.count} times">×${entry.count}</span>` : "");
   }
   private climbLabel(direction: "up" | "down") {
     return direction === "down" ? "Go downstairs" : this.game?.observation.location.depthLabel.trim() === "Dlvl:1" ? "Leave" : "Go upstairs";
@@ -2008,7 +1972,7 @@ class PixelNethack extends HTMLElement {
       this.action("pray");
     }), this.button("Not now", () => this.closeMenu()));
   }
-  private action(name: string, item?: ItemRef) {
+  private action(name: string, item?: ItemRef, slot?: import("neonethack/types").EquipmentSlot) {
     this.movement.stop();
     if (!this.playable() || this.actionUnavailable(name)) return;
     if (name === "pray" && !this.prayerExplained) { this.explainPrayer(); return; }
@@ -2031,7 +1995,7 @@ class PixelNethack extends HTMLElement {
       read: () => g.read(ref, options),
       apply: () => g.apply(ref, options),
       wield: () => g.wield(ref, options),
-      equip: () => g.equip(ref, options),
+      equip: () => g.equip(ref, { ...options, slot }),
       remove: () => g.remove(ref, options),
       drop: () => g.drop(ref, options),
       zap: () => g.zap(ref, undefined, options),
