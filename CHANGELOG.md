@@ -8,6 +8,8 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Agent observation queries keep your backpack, selected equipment and keyboard
+  focus in place. Agent actions still clear outdated equipment selections.
 - Restoring an online backup uses its latest valid level checkpoint before
   replaying the remaining actions. The full action history stays intact.
 - Agent-assisted adventures retain their WebMCP attribution when another tab
