@@ -8,6 +8,8 @@ export function routeName(request: Request) {
   if (/^\/api\/vaults\/[^/]+\/adventures$/.test(path)) return '/api/vaults/:vault/adventures';
   if (/^\/api\/vaults\/[^/]+$/.test(path)) return '/api/vaults/:vault';
   if (/^\/api\/runs\/[^/]+\/replay$/.test(path)) return '/api/runs/:run/replay';
+  if (/^\/api\/runs\/[^/]+\/inputs$/.test(path)) return '/api/runs/:run/inputs';
+  if (/^\/api\/runs\/[^/]+\/checkpoint$/.test(path)) return '/api/runs/:run/checkpoint';
   if (/^\/api\/runs\/[^/]+$/.test(path)) return '/api/runs/:run';
   if (path.startsWith('/api/account/')) return '/api/account/*';
   return ['/api/account', '/api/health', '/api/stats', '/api/runs', '/api/errors'].includes(path) ? path : 'unmatched';
@@ -18,6 +20,7 @@ export function failureKind(error: unknown) {
   return ['AbortError', 'TimeoutError', 'TypeError', 'SyntaxError', 'BlobAccessError', 'BlobStoreSuspendedError', 'BlobServiceNotAvailable', 'BlobUnknownError'].includes(name) ? name : 'Error';
 }
 export function logFailure(request: Request, status: number, started: number, failure: Failure) {
+  if(status>=400&&status<500&&['/api/runs/:run/inputs','/api/runs/:run/checkpoint'].includes(routeName(request)))console.warn(JSON.stringify({event:'recording_upload_refused',route:routeName(request),method:request.method,status}));
   if (status < 500) return;
   console.error(JSON.stringify({
     event: 'request_failed', route: routeName(request),

@@ -8,7 +8,7 @@ instructions when a decision changes; do not leave competing rules below.
 
 - Human, accessible and agent views share the C protocol's perceived facts.
   Illustrations never identify hidden items, predict safety or weaken the game.
-- The game is browser WASM; Vercel handles accounts, private cloud journals,
+- The game is browser WASM; Vercel handles accounts, compressed input archives,
   the public ledger and observation recordings. Published runtime pins and
   production data survive deployments; disposable development fixtures do not
   justify deleting a player's progress.
@@ -660,11 +660,12 @@ a sage waistcoat, warm face and broad bare feet. Keep the same native-pixel scal
 as other small humanoids; use it only for the engine-supplied "hobbit" appearance,
 never infer species from the h glyph. The unknown humanoid fallback stays generic.
 
-Cloud journal and adventure metadata uploads wait for five seconds of inactivity.
-New actions reset the timer. Queued changes show a stable "Saved here" status;
+Input archive and adventure metadata uploads wait for five seconds of inactivity,
+with a thirty-second maximum during ongoing play. New actions reset the idle timer. Queued changes show a stable "Saved here" status;
 "Saving online…" appears only during an actual upload, with duplicate status
 notifications suppressed. Local durable input transactions stay immediate, and
-explicit runtime close flushes pending cloud work without waiting for the debounce.
+an explicit share or finish requests a flush. A network failure retains pending
+inputs locally; it never delays the next game action.
 
 Engine map-browsing prompts use a nonmodal position panel with eight cursor
 directions, Help (?), Done/Select and Cancel. WASD/arrows move the cursor; Enter
@@ -960,13 +961,14 @@ and LimeZu art through a self-contained shadow-DOM `<neohack-world>` viewer;
 never create a game on the showcase. Charcoal, sage and warm cream carry into
 editorial pages with large serif headlines, selectable code and responsive columns.
 The component defaults to no engine connection. An explicitly supplied transport
-controls discovery and execution; replay playback displays public frames only.
+controls discovery and execution. New replay playback reconstructs observations
+in isolated pinned WASM from static input archives.
 
 `/login` uses discoverable, user-verified passkeys and unique case-insensitive
 handles. Explain the browser's phone/QR option for cross-device use. Private run
-history records observed branch locations, experience level and recorded frames;
-label browser-reported data and partial recordings honestly. Frame recordings are
-separate from the authoritative engine journals and never resume games.
+history associates input archives, observed locations and experience level.
+Label browser-reported data honestly. Replay links are unlisted and readable by
+anyone who has them; account access is for discovery, source and script notes.
 
 `/bots` is the Ascender workshop: CodeMirror, multiple JavaScript files, random class
 and random seed by default, named private projects, a read-only world and bounded output.
@@ -974,8 +976,10 @@ Bot execution belongs in a worker inside an opaque sandbox with network blocked.
 Use the public Game API, sequential calls, a fixed 1,000-call/five-minute limit and Stop.
 Temporary test engines never acquire an existing save. A worker-hosted TypeScript
 language service supplies cross-file completion, hover documentation and advisory
-type diagnostics from the built library declarations. No npm package support is claimed. Signed-in tests save private replay
-observations. Public human-run recordings use a separate bounded durable upload queue.
+type diagnostics from the built library declarations. No npm package support is claimed.
+Workshop and human runs use the same append-only input archives and background
+upload schedule. Exact script source and notes are saved locally first and backed
+up privately for signed-in authors; the input replay remains an unlisted link.
 
 The workshop is a compact IDE surface: a project/run toolbar, file explorer, editor
 tabs, resizable editor/world split, output panel and cursor/status rail. Keep the
@@ -1127,15 +1131,14 @@ frame seeking, speed and gesture-enabled optional sound. HTML controls retain
 The game hamburger remains anchored beneath its 44px button with a bounded menu.
 Its Copy run embed action supplies a public source without the private vault URL.
 
-New cloud-backed game visits publish a separate, browser-reported scene recording
-using the vault capability for writes only. Public reads preserve canonical observations, decisions, events and outcomes; no private saves, journals, bot
-source or storage descriptors. Public recording uploads retry transient failures from a durable IndexedDB queue;
-sequence/access refusals stop recording visibly. Existing
-private account recordings stay private. Public ledger entries open an accessible
-replay lightbox; links with a run id open it directly. Missing historical frames
-are stated explicitly, never reconstructed from summaries or engine hidden state.
-Death notices embed the same viewer beneath the witnessed cause, with Copy embed,
-Copy replay link and Open replay. The final frame upload settles before loading.
+New runs append client-to-engine requests locally. No observation copy is written
+on each turn. Strict local reservations and completion evidence protect recovery;
+compressed uploads happen asynchronously every five seconds idle / thirty seconds
+active. Level changes can add real engine checkpoints with a scene preview.
+Sharing uses the direct static manifest URL, with no upload capability. Anyone
+with the link can watch; script source, notes and account identity stay separate.
+The death screen can request a flush, but offline failure retains the local log.
+Existing published frame archives remain readable and are labelled when partial.
 
 ## Hero tombstone
 
@@ -1219,33 +1222,24 @@ access belongs only to Surroundings.
 
 ### Progressive replay delivery
 
-Public replay loading reads a small manifest and immutable content-addressed
-chunks directly from a dedicated public Blob store/CDN. The upload path publishes
-these static files before acknowledging the recording. Playback never requests
-a dynamic function, including on cold loads. The first chunk contains up to three observations;
-subsequent chunks contain up to 25. Playback begins immediately, while later
-chunks download. The seek range covers buffered frames, grows without resetting
-position, and respects Pause. At the buffered edge playback waits; it only loops
-or emits replayend after a successful complete download. Failures retain the
-loaded prefix with an explicit interrupted message. Replacing or removing the
-viewer cancels its requests. replayprogress reports buffered length (and total
-when available); replayload still means the entire recording arrived.
+The viewer reads a small static manifest and immutable compressed input chunks
+from Blob/CDN. It runs the exact pinned WASM package locally and shows the first
+scene before later chunks arrive. Seeking can use a preceding real checkpoint;
+corrupt optional checkpoints fall back to the verified input log. Broken log
+ranges stop playback with a clear error, preserving the last valid scene.
 
-Private account recordings use authenticated same-origin pagination and the same
-progressive viewer. Their responses are never publicly cached. No replay path
-loads an engine or executes game actions.
+The range covers recorded input positions. Rejected attempts preserve the current
+scene. Play, Pause and seek serialize reconstruction; replacing or removing a
+viewer cancels its requests and workers. No account, ledger, upload or dynamic
+replay request is needed to watch. The public component/runtime routes permit
+ordinary cross-origin embeds. Embedding hosts must permit the module, static CDN
+fetches, WASM and module-worker bootstrap under their own CSP.
 
-### Owner-selected public account runs
-
-Account recordings start private. Make public explicitly publishes observed frames
-and a public run summary under a separate public replay ID. The account page
-explains that future recorded frames also publish and gives an Open public replay
-link after success. Source artifacts, script notes, saves and account identity stay
-private. Published files can be retained by viewers; this is publication, not a
-revocable private link. Failed publication retains the private recording and its
-reserved public ID; Update public replay retries without creating another copy.
-Later private recording commits survive public delivery failures and show the
-last published frame count until publication catches up.
+For input archives, replayprogress reports indexed input count and replayload
+means the first scene is ready, not that every chunk has downloaded. Historical
+frame archives retain their buffered-frame event meaning. New account runs have
+no Make public step; their unlisted replay link already grants read access.
+Source projects and script notes remain private to their owner.
 
 ### Perception-only destination walking
 
@@ -1286,4 +1280,4 @@ Every create/resume failure reports a bounded category and entry mode to private
 Vercel logs; repeated attempts are not suppressed. Raw messages and save links
 are never transmitted.
 
-Local entry opens the existing device journal without downloading a cloud copy. New games never restore a vault. A fresh browser with no local run restores the acknowledged cloud branch. Different device branches are not silently substituted during local entry. Startup displays its current stage and reports bounded slow/complete/failure timings to private operational logs. Public replay recording appends individual IndexedDB rows; walking never reads or rewrites its historical frame queue.
+Local entry opens the existing device journal without downloading a cloud copy. New games never restore a vault. A fresh browser with no local run restores the acknowledged cloud branch. Different device branches are not silently substituted during local entry. Startup displays its current stage and reports bounded slow/complete/failure timings to private operational logs. New run recording appends individual protocol inputs and completion rows; walking never reads or rewrites historical recording rows.

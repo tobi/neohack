@@ -15,6 +15,11 @@ async function fixture(t,{insecure=false}={}){
  const errors=[];page.on('response',async r=>{if(r.status()>=500)console.error('HTTP FAILURE',r.url(),await r.text().catch(String));});page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
  return {page,context,browser,url:url.href.replace('127.0.0.1','localhost').replace(/\/$/,''),errors};
 }
+async function waitForRuns(page,predicate){
+ const deadline=Date.now()+20000;
+ while(Date.now()<deadline){const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));if(predicate(runs))return runs;await new Promise(r=>setTimeout(r,50));}
+ throw Error('Run backup did not finish: '+await page.locator('#recording').textContent());
+}
 async function passkey(page){const cdp=await page.context().newCDPSession(page);await cdp.send('WebAuthn.enable');await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});return cdp;}
 async function register(page,url,name='AdaTest'){
  await page.goto(url+'/login');await passkey(page);await page.locator('#open-login').click();await page.locator('#name').fill(name);await page.locator('#register').click();
@@ -46,14 +51,13 @@ test('component is read-only, bot imports execute real engine, private recording
  assert.match(await page.locator('#status[role=status]').textContent(),/Script finished|Test budget reached/);
  assert.ok(await page.evaluate(()=>document.querySelector('neohack-world').snapshot.observation.turn>1));
  await page.screenshot({path:'/tmp/neohack-bots.png',fullPage:true});
+ await waitForRuns(page,r=>r.some(v=>v.count>1&&v.sourceHash));
  const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));assert.equal(runs.length,1);assert.ok(runs[0].count>=2);
- await page.goto(url+'/login');await page.getByRole('button',{name:/Replay \d+ frames/}).click();await page.waitForFunction(()=>!document.querySelector('#playback').hidden,{},{timeout:10000}).catch(async e=>{throw Error(await page.locator('#status[role=status]').textContent(),{cause:e});});
+ await page.goto(url+'/login');await page.getByRole('button',{name:/Replay \d+ actions/}).click();await page.waitForFunction(()=>!document.querySelector('#playback').hidden,{},{timeout:10000}).catch(async e=>{throw Error(await page.locator('#status[role=status]').textContent(),{cause:e});});
  await page.waitForFunction(count=>Number(document.querySelector('#scrub').max)===count-1,runs[0].count);
- const first=await page.evaluate(()=>document.querySelector('#replay').snapshot);await page.locator('#scrub').fill(String(runs[0].count-1));const last=await page.evaluate(()=>document.querySelector('#replay').snapshot);assert.ok(last.revision>first.revision);
- await page.getByRole('button',{name:'Make public',exact:true}).click();
- await page.getByRole('link',{name:'Open public replay',exact:true}).waitFor();
- const publicLink=await page.getByRole('link',{name:'Open public replay',exact:true}).getAttribute('href');
- const visitor=await page.context().browser().newPage();await visitor.goto(new URL(publicLink,url).href);
+ const first=await page.evaluate(()=>document.querySelector('#replay').snapshot);await page.locator('#scrub').fill(String(runs[0].count-1));await page.waitForFunction(first=>document.querySelector('#replay').snapshot.revision>first,first.revision);const last=await page.evaluate(()=>document.querySelector('#replay').snapshot);assert.ok(last.revision>first.revision);
+ const publicLink=runs[0].replayUrl;
+ const visitor=await page.context().browser().newPage();await visitor.goto(url+'/dashboard?run='+runs[0].id);
  await visitor.waitForFunction(()=>document.querySelector('neohack-world')?.snapshot);
  assert.equal((await visitor.request.get(url+'/api/account/runs/'+runs[0].id+'/source')).status(),401);
  await visitor.close();
@@ -79,13 +83,13 @@ test('a foreign origin embeds the single module without runtime or artwork reque
  assert.equal((await page.evaluate(()=>document.querySelector('neohack-world').postMessage({jsonrpc:'2.0',id:'embed',method:'world.snapshot'}))).result,null);
 });
 
-test('signed-in human play records real frames and other accounts cannot read them', {timeout:60000},async t=>{
+test('signed-in human play associates static inputs without sharing account data', {timeout:60000},async t=>{
  const {page,url,browser}=await fixture(t);await register(page,url,'HumanAuthor');await page.goto(url);
  await page.waitForFunction(()=>!document.querySelector('#new-adventure').disabled);
  await page.getByRole('button',{name:'Begin your adventure',exact:true}).click();await page.getByLabel('YOUR NAME',{exact:true}).fill('Human run');await page.locator('input[name=role][value=valkyrie]').check();await page.getByRole('button',{name:'Enter the dungeon →',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation&&document.querySelector('pixel-nethack').getAttribute('aria-busy')==='false');
  await page.evaluate(async()=>{const app=document.querySelector('pixel-nethack');await app.run(()=>app.game.search());});
- await page.waitForFunction(()=>document.querySelector('#account-recording').textContent==='Replay saved');
+ await page.evaluate(async()=>document.querySelector('pixel-nethack').publicRecorder.flush());
  const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));assert.equal(runs.length,1);assert.ok(runs[0].count>=2);assert.equal(runs[0].name,'Human run');assert.equal(runs[0].control,'interactive');assert.equal(runs[0].automated,false);
  const other=await browser.newPage();await register(other,url,'OtherAuthor');
  assert.equal(await other.evaluate(async id=>(await fetch('/api/account/runs/'+id+'/frames')).status,runs[0].id),404);
@@ -183,6 +187,7 @@ export default defineBot({name:'Archive imp',autoloot:{enabled:true,itemTypes:['
  await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:60000});
  assert.equal(await page.locator('#status[role=status]').textContent(),'Script finished.');
  assert.match(await page.locator('#output').textContent(),/original helper/);
+ await waitForRuns(page,r=>r.some(v=>v.sourceHash));
  const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));
  assert.equal(runs.length,1);const run=runs[0];assert.equal(run.name,'Archive imp');assert.equal(run.automated,true);assert.equal(run.control,'bot');
  const saved=await page.evaluate(id=>fetch(`/api/account/runs/${id}/source`).then(r=>r.json()),run.id);
@@ -192,11 +197,10 @@ export default defineBot({name:'Archive imp',autoloot:{enabled:true,itemTypes:['
  const {createHash}=await import('node:crypto');assert.equal(saved.sha256,createHash('sha256').update(saved.artifact).digest('hex'));
  await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('#status').textContent==='Bot saved.');
  const rejected=await page.evaluate(async ({run,source})=>{
-   const frames=await fetch(`/api/account/runs/${run.id}/frames`).then(r=>r.json());
-   const frame=structuredClone(frames.frames.at(-1));frame.revision=run.revision+1;
-   const append=extra=>fetch(`/api/account/runs/${run.id}/frames`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({...run,index:run.count,frame,...extra})}).then(r=>r.status);
-   return [await append({source}),await append({name:'Renamed imp'}),await append({control:'interactive'})];
- },{run,source});assert.deepEqual(rejected,[409,409,409]);
+   const user=await fetch('/api/account').then(r=>r.json());
+   const append=extra=>fetch(`/api/account/runs/${run.id}/artifacts`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({owner:user.id,name:run.name,from:0,entries:[],...extra})}).then(r=>r.status);
+   return [await append({source:{...source,files:{...source.files,'main.js':'changed'}}}),await append({name:'Renamed imp'}),await append({owner:'different-account'})];
+ },{run,source});assert.deepEqual(rejected,[409,409,403]);
  await page.goto(url+'/login');await page.getByRole('button',{name:'View bot source'}).click();
  await page.getByText(main,{exact:true}).waitFor();assert.match(await page.locator('#runs').textContent(),/Automated bot/);
  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
@@ -212,7 +216,7 @@ test('invalid bot names and failed source persistence never initialize the bot',
  await page.locator('#test').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:60000});
  assert.match(await page.locator('#status[role=status]').textContent(),/needs a name/);
  assert.doesNotMatch(await page.locator('#output').textContent(),/MUST NOT RUN/);
- await page.route('**/api/account/runs/*/frames',route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":"test storage failure"}'}));
+ await page.evaluate(()=>{const original=IDBObjectStore.prototype.add;IDBObjectStore.prototype.add=function(value,...args){if(this.transaction.db.name==='neohack-script-artifacts-v1')throw new DOMException('Fixture quota exhaustion','QuotaExceededError');return original.call(this,value,...args);};});
  await replace(`export default {name:'Failure imp',initialize({log}){log('MUST NOT RUN')}}`);
  await page.locator('#test').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:60000});
  assert.match(await page.locator('#status[role=status]').textContent(),/Could not save bot source/);
@@ -248,6 +252,7 @@ export default defineBot({name:'Stateful imp',initialize({hero,log}) {
   assert.doesNotMatch(await page.locator('#output').textContent(),/FORBIDDEN STOP/);
   assert.equal(await page.locator('#script-state').inputValue(),'null');
   assert.equal(await page.getByRole('button',{name:'Hand back control'}).isDisabled(),true);
+  await page.waitForFunction(()=>document.querySelector('#recording').textContent.startsWith('Run backed up'));
   const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));assert.equal(runs.length,1);
   const path=url+`/api/account/runs/${runs[0].id}/journal`;
   const journal=await (await context.request.get(path)).json();assert.ok(journal.entries.length>=3);
@@ -337,4 +342,32 @@ test('workshop chooser keeps its heading in view, scrolls on mobile and opens th
  assert.equal(await page.locator('#project-picker').isVisible(),false);
  await page.locator('#choose-project').click();await page.locator('#project-picker').waitFor();
  assert.equal(await page.locator('#picker-saved').isDisabled(),true);
+});
+
+test('workshop inputs and private source survive a page close during a backup outage',{timeout:120000},async t=>{
+ const {page,context,url}=await fixture(t);await register(page,url,'OfflineAuthor');
+ const failed=[];page.on('requestfailed',r=>failed.push(new URL(r.url()).pathname));
+ await page.goto(url+'/');
+ await page.evaluate(async()=>{await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(r=>navigator.serviceWorker.addEventListener('controllerchange',r,{once:true}));});
+ await page.goto(url+'/bots?example=curious-imp');await page.waitForSelector('.cm-content');
+ const main=`import {defineBot} from 'neonethack'; export default defineBot({name:'Offline imp',initialize({hero,log}){log('Retain this private offline note');hero.addEventListener('turn',async()=>{await hero.wait();hero.stop();});}});`;
+ await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(main);
+ await page.locator('#role').selectOption('valkyrie');await page.locator('#seed-mode').selectOption('fixed');await page.locator('#seed').fill('9');
+ await context.route('**/api/**',route=>route.abort('internetdisconnected'));
+ await page.locator('#test').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled).catch(async e=>{throw Error(await page.locator('#status[role=status]').textContent()+'; '+await page.locator('#output').textContent()+'; '+failed.join(','),{cause:e});});
+ assert.equal(await page.locator('#status[role=status]').textContent(),'Script finished.');
+ assert.match(await page.locator('#output').textContent(),/Retain this private offline note/);
+ // Terminate all page callbacks before any upload succeeds, keeping only IDB.
+ await page.close();const reopened=await context.newPage();
+ await reopened.goto(url+'/bots');await reopened.waitForSelector('#project-picker');
+ await context.unroute('**/api/**');await reopened.evaluate(()=>window.dispatchEvent(new Event('online')));
+ // The online event must recover the owner-bound source even though account
+ // discovery failed while this new page was offline.
+ const runs=await waitForRuns(reopened,r=>r.some(v=>v.sourceHash&&v.count>=2));
+ assert.equal(runs.length,1);
+ const source=await reopened.evaluate(id=>fetch('/api/account/runs/'+id+'/source').then(r=>r.json()),runs[0].id);
+ assert.equal(JSON.parse(source.artifact).files['main.js'],main);
+ const notes=await reopened.evaluate(id=>fetch('/api/account/runs/'+id+'/journal').then(r=>r.json()),runs[0].id);
+ assert.ok(notes.entries.some(e=>e.text==='Retain this private offline note'));
+ const manifest=await reopened.evaluate(async link=>(await fetch(link)).json(),runs[0].replayUrl);assert.equal(manifest.format,'neonethack.inputs');assert.ok(manifest.count>=2);
 });

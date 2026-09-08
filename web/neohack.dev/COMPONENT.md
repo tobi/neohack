@@ -20,7 +20,7 @@ await customElements.whenDefined('neohack-world');
 world.snapshot = game.state; // a public library Snapshot
 world.addEventListener('frame', event => console.log(event.detail));
 world.loadReplay(recordedFrames);
-world.seek(0);
+await world.seek(0);
 world.play(250); // milliseconds per recorded frame, minimum 50
 world.pause();
 ```
@@ -30,6 +30,16 @@ surface treatment, and `static` hides the text-observation disclosure. Set attri
 before supplying a frame. The component has no keyboard or pointer game controls.
 Its container determines its size (minimum height 320px). Removing it pauses playback
 and disposes renderer listeners; reattaching it renders its retained frame.
+
+For new replay archives, set `src` to the direct Blob manifest URL from Copy run
+embed. The component loads the pinned runtime and reconstructs scenes locally
+without an account or dynamic replay request. `seek()` is asynchronous and can
+use level checkpoints. Listen for `replayload` when the first scene is ready;
+`replayprogress` includes `format: 'neonethack.inputs'` and the indexed input
+count. Later chunks are fetched on demand. An embedding site's CSP must permit
+its selected module/CDN origins, WASM and the Blob module-worker bootstrap.
+`loadReplay(recordedFrames)` remains for supplied snapshots and published older
+archives; merely mounting a viewer without a replay still starts no engine.
 
 To connect a runtime you own, call `world.connect(transport, { writable: true })`.
 This returns the public `Neonethack` client with unchanged `create`, `resume` and

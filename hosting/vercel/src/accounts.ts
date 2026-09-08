@@ -1,4 +1,5 @@
 import {publishAccountRun} from './publish-account-run.ts';
+import {scriptArtifacts} from './script-artifacts.ts';
 import {publicReplayConfigured} from './public-replay-store.ts';
 import { AuthStore, read, update, storage, immutable } from "./storage.ts";
 import {
@@ -256,7 +257,11 @@ export class Accounts {
         (
           await Promise.all(
             (await storage().list(`accounts/${uid}/runs/`)).map((path) =>
-              read(path),
+              read(path).then(async doc=>{
+                if(!doc?.inputRun)return doc;
+                const archive=await read('input-runs/'+doc.inputRun+'.json');
+                return archive?{...doc,run:{...doc.run,...archive.summary,count:archive.count,ended:archive.complete,updated:archive.updated,locations:[archive.summary?.depth??'Unknown'],partial:false}}:doc;
+              }),
             ),
           )
         )
@@ -265,11 +270,12 @@ export class Accounts {
           .sort((a, b) => b.updated - a.updated),
       );
     const match = path.match(
-      /^\/runs\/([\w-]{1,100})(?:\/(?:frames|source|journal|publish))?$/,
+      /^\/runs\/([\w-]{1,100})(?:\/(?:frames|source|journal|publish|artifacts))?$/,
     );
     if (match) {
       const key = `accounts/${uid}/runs/${match[1]}.json`;
       const frames = path.endsWith("/frames");
+      if(request.method==='PUT'&&path.endsWith('/artifacts'))return scriptArtifacts(uid,match[1]!,body);
       if(request.method==='POST' && path.endsWith('/publish')) {
         if(body.public!==true)return json({error:'Explicit public selection required'},400);
         if(!(await read(key))?.run)return json({error:'Run not found'},404);
@@ -294,7 +300,7 @@ export class Accounts {
           const offset = Number(url.searchParams.get("offset") ?? 0);
           if (!Number.isSafeInteger(offset) || offset < 0)
             return json({ error: "Invalid offset" }, 400);
-          const rows: string[] = doc.notes.slice(offset, offset + 101);
+          const rows: string[] = (doc.notes??[]).slice(offset, offset + 101);
           return json({
             entries: await Promise.all(
               rows.slice(0, 100).map((path) => read(path)),
@@ -303,6 +309,7 @@ export class Accounts {
           });
         }
         if (!frames) return json(run);
+        if(doc.inputRun)return json({error:'Use the static input replay URL',url:run.replayUrl},409);
         const offset = Number(url.searchParams.get("offset") ?? 0);
         if (!Number.isInteger(offset) || offset < 0)
           return json({ error: "Invalid offset" }, 400);
@@ -339,11 +346,13 @@ export class Accounts {
             if (!run) return json({ error: "Run not found" }, 404);
             if (run.control !== "bot")
               return json({ error: "Run is not an automated script" }, 409);
-            if (entry.revision > run.revision || entry.turn > run.turn)
+            const boundary=doc.inputRun?(await read('input-runs/'+doc.inputRun+'.json'))?.summary:run;
+            if (!boundary || entry.revision > boundary.revision || entry.turn > boundary.turn)
               return json(
                 { error: "Save the observed frame before its note" },
                 409,
               );
+            doc.notes??=[];
             const count = doc.notes.length;
             if (body.index !== count)
               return json({ error: "Journal sequence differs" }, 409);
@@ -360,6 +369,7 @@ export class Accounts {
         );
       }
       if (request.method === "PUT" && frames) {
+        if((await read(key))?.inputRun)return json({error:'Input archives do not accept observation frames'},409);
         const f = body.frame;
         if (
           !Number.isInteger(body.index) ||

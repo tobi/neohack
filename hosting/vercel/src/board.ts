@@ -147,7 +147,7 @@ export async function board(request: Request) {
     if (body.entry !== undefined && (!body.entry || !["create","resume","boot"].includes(body.entry.kind) || typeof body.entry.local !== "boolean")) return json({error:"invalid entry diagnostic"},400);
     if(body.code==='runtime_timing'){
       const v=body.timing;
-      if(!v||!['preparation','ownership','assets','compile','local','cloud','engine','ready','action','durability'].includes(v.stage)||!['slow','complete','failed'].includes(v.outcome)||!Number.isSafeInteger(v.duration)||v.duration<0||v.duration>600000)return json({error:'invalid timing'},400);
+      if(!v||!['preparation','ownership','assets','compile','local','cloud','engine','ready','action','durability','checkpoint'].includes(v.stage)||!['slow','complete','failed'].includes(v.outcome)||!Number.isSafeInteger(v.duration)||v.duration<0||v.duration>600000)return json({error:'invalid timing'},400);
       console.info(JSON.stringify({event:'runtime_timing',stage:v.stage,duration:v.duration,outcome:v.outcome,buildId:body.buildId||undefined}));
       return new Response(null,{status:204});
     }

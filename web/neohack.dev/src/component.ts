@@ -1,6 +1,8 @@
 import { DungeonMap, loadArt } from './map';
 import { DungeonSound } from './sound';
 import { heroArt } from './characters';
+import {InputPlayback} from './input-playback';
+import {replayDocument} from '../../../lib/neonethack/wasm/protocol-reader.mjs';
 import { Neonethack, isSnapshot, type Transport } from '../../../lib/neonethack/typescript/client';
 import { tools, toolMethods } from '../../../lib/neonethack/mcp/tools';
 import { registerWebMcp, type WebMcpContext } from '../../../lib/neonethack/typescript/webmcp';
@@ -21,6 +23,8 @@ export class NeohackWorld extends HTMLElement {
   private map?: DungeonMap;
   private frame: Snapshot | null = null;
   private frames: Snapshot[] = [];
+  private inputPlayback?:InputPlayback;
+  private inputStepping=false;
   private timer?: ReturnType<typeof setInterval>;
   private transport?: Pick<Transport, 'send'>;
   private writable = false;
@@ -37,7 +41,7 @@ export class NeohackWorld extends HTMLElement {
     this.status = this.root.querySelector('#status')!;
     this.text = this.root.querySelector('pre')!;
     this.root.querySelector('#play')!.addEventListener('click',()=>{void this.enableSound();this.timer ? this.pause() : this.play();});
-    this.root.querySelector('#seek')!.addEventListener('input',event=>{this.pause();this.seek(Number((event.target as HTMLInputElement).value));});
+    this.root.querySelector('#seek')!.addEventListener('input',event=>{this.pause();void Promise.resolve(this.seek(Number((event.target as HTMLInputElement).value))).catch(()=>{});});
     this.root.querySelector('#speed')!.addEventListener('change',event=>this.setAttribute('speed',(event.target as HTMLSelectElement).value));
     this.root.querySelector('#sound')!.addEventListener('click',()=>{
       if(this.audio?.enabled) this.removeAttribute('sound');
@@ -51,7 +55,7 @@ export class NeohackWorld extends HTMLElement {
     if(this.hasAttribute('src')) void this.loadSource();
     this.dispatchEvent(new CustomEvent('ready'));
   }
-  disconnectedCallback() { this.loading?.abort(); this.audio?.dispose(); this.audio = undefined; this.pause(); this.map?.destroy(); this.map = undefined; }
+  disconnectedCallback() { this.loading?.abort();void this.inputPlayback?.close(); this.audio?.dispose(); this.audio = undefined; this.pause(); this.map?.destroy(); this.map = undefined; }
   attributeChangedCallback(name:string, old:string|null, value:string|null) {
     if(old === value) return;
     if(name === 'src' && this.isConnected) void this.loadSource();
@@ -81,6 +85,11 @@ export class NeohackWorld extends HTMLElement {
     if(!Array.from(speed.options).some(o=>Number(o.value)===this.speed)) speed.add(new Option(this.speed+"×",String(this.speed)));
     speed.value=String(this.speed);
     const sound=this.root.querySelector('#sound')!;sound.textContent=this.audio?.enabled ? 'Sound: on' : 'Sound: off';sound.setAttribute('aria-pressed',String(!!this.audio?.enabled));
+    if(this.inputPlayback){
+      play.disabled=this.inputStepping||!this.sourceTotal;
+      seek.max=String(Math.max(0,(this.sourceTotal??1)-1));seek.value=String(this.index);seek.disabled=this.inputStepping;
+      this.root.querySelector('#progress')!.textContent=this.sourcePending?'Loading…':`${this.index+1} / ${this.sourceTotal} actions`;
+    }
   }
   private async loadSource() {
     this.loadReplay([]);
@@ -105,12 +114,24 @@ export class NeohackWorld extends HTMLElement {
         const privateSource=target.origin===location.origin && target.pathname.startsWith('/api/account/');
         const response=await fetch(target,{signal:controller.signal,credentials:privateSource?'same-origin':'omit'});
         if(!response.ok)throw Error(response.status===404?'Replay unavailable: no public frames were recorded for this run.':'Replay could not load.');
-        return response.json();
+        return replayDocument(response);
       };
       let page=await get(url), offset=0;
       if(controller.signal.aborted)return;
       if(page.role)this.setAttribute('role',String(page.role));
       if(page.seed!==undefined)this.setAttribute('seed',String(page.seed));
+      if(page.format==='neonethack.inputs'){
+        const player=this.inputPlayback=new InputPlayback(page,url,controller.signal);
+        this.sourceTotal=page.count;this.updateControls();
+        const frame=await player.seek(0);
+        if(controller.signal.aborted)return;
+        this.index=0;this.snapshot=frame;this.sourceMessage=undefined;this.sourcePending=false;
+        this.paint();this.updateControls();
+        this.dispatchEvent(new CustomEvent('replayprogress',{detail:{length:page.count,total:page.count,format:page.format}}));
+        this.dispatchEvent(new CustomEvent('replayload',{detail:{length:page.count,format:page.format}}));
+        if(this.flag('autoplay'))this.play();
+        return;
+      }
       const append=(batch:Snapshot[])=>{
         if(!Array.isArray(batch)||this.frames.length+batch.length>100000||batch.some(f=>!f||typeof f!=='object'||!isSnapshot(f)||!Array.isArray(f.observation.world)||f.observation.world.length>10000))throw Error('Invalid replay frames');
         const first=this.frames.length===0;
@@ -170,6 +191,7 @@ export class NeohackWorld extends HTMLElement {
     this.text.textContent = o ? `${o.heard.join('\n')}\n${JSON.stringify(o, null, 2)}` : 'No observation supplied.';
   }
   loadReplay(frames: Snapshot[]) {
+    void this.inputPlayback?.close();this.inputPlayback=undefined;
     if(!Array.isArray(frames) || frames.length > 100000 || frames.some(f=>!f || typeof f!=='object' || !isSnapshot(f) || !Array.isArray(f.observation.world) || f.observation.world.length>10000)) throw Error('Invalid replay');
     this.loading?.abort();this.sourcePending=false;this.sourceTotal=undefined;this.sourceMessage=undefined;
     this.pause(); this.frames = structuredClone(frames); this.index = 0;
@@ -178,6 +200,7 @@ export class NeohackWorld extends HTMLElement {
     if(this.isConnected && this.flag('autoplay'))this.play();
   }
   seek(index: number) {
+    if(this.inputPlayback)return this.seekInput(index);
     if(!Number.isInteger(index) || index < 0 || index >= this.frames.length) throw Error('Frame outside replay');
     if(index<this.index)this.audio?.reset();
     this.index = index; this.snapshot = this.frames[index]!;
@@ -185,9 +208,32 @@ export class NeohackWorld extends HTMLElement {
     this.dispatchEvent(new CustomEvent('replayframe',{detail:{index,length:this.frames.length}}));
     return {index, length:this.frames.length};
   }
+  private async seekInput(index:number){
+    const player=this.inputPlayback!;this.inputStepping=true;this.updateControls();
+    try {
+      const frame=await player.seek(index);
+      if(this.inputPlayback!==player)return {index,length:player.manifest.count};
+      const before=this.frame;this.index=index;this.snapshot=frame;
+      if(before)this.audio?.observe(before,frame,frame.observation.heard);
+      this.dispatchEvent(new CustomEvent('replayframe',{detail:{index,length:player.manifest.count}}));
+      return {index,length:player.manifest.count};
+    }catch(error){
+      this.pause();this.sourceMessage=error instanceof Error?error.message:String(error);this.paint();throw error;
+    }finally{this.inputStepping=false;this.updateControls();}
+  }
   play(interval = 250 / this.speed) {
     if(!Number.isFinite(interval) || interval < 50 || interval > 10000) throw Error('Interval must be 50–10000 ms');
     this.pause();
+    if(this.inputPlayback){
+      this.timer=setInterval(()=>{
+        if(this.inputStepping)return;
+        if(this.index+1>=(this.sourceTotal??0)){
+          if(this.flag('loop'))void this.seekInput(0).catch(()=>{});
+          else{this.pause();this.dispatchEvent(new Event('replayend'));}
+        }else void this.seekInput(this.index+1).catch(()=>{});
+      },interval);
+      this.updateControls();return;
+    }
     if(this.frames.length<2 && !(this.sourcePending && this.frames.length))return;
     if(this.index===this.frames.length-1 && !this.sourcePending && !this.sourceMessage)this.seek(0);
     this.timer = setInterval(() => {
@@ -253,7 +299,7 @@ export class NeohackWorld extends HTMLElement {
         case 'world.snapshot': result = this.snapshot; break;
         case 'world.render': this.snapshot = m.params.snapshot; result = {}; break;
         case 'replay.load': this.loadReplay(m.params.frames); result = {length:this.frames.length}; break;
-        case 'replay.seek': result = this.seek(m.params.index); break;
+        case 'replay.seek': result = await this.seek(m.params.index); break;
         case 'replay.play': this.play(m.params?.interval); result = {}; break;
         case 'replay.pause': this.pause(); result = {}; break;
         default: throw Error('Unknown method');

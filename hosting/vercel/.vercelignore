@@ -5,3 +5,4 @@ tests/
 .env*
 *.log
 README.md
+!.generated/

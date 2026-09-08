@@ -25,7 +25,7 @@ $('#copy-replay').onclick=async()=>{
 };
 function renderRuns() {
   const filter=$("#status").value;
-  $('#leaders-description').textContent=filter==='recorded' ? 'Top 100 adventures with public replay frames, ranked by level and turns.' : 'Top 100 across all recorded runs: ascensions first, then highest experience level, then turns survived.';
+  $('#leaders-description').textContent=filter==='recorded' ? 'Top 100 adventures with replays, ranked by level and turns.' : 'Top 100 across all recorded runs: ascensions first, then highest experience level, then turns survived.';
   const candidates=filter==='recorded' ? data.recorded??[] : data.best;
   const runs=candidates.filter(run=>filter==="all" || filter==="recorded" || filter==="living" && !run.ended || filter==="ended" && run.ended || filter==="ascended" && run.endKind==="ascended");
   $("#runs").replaceChildren(...runs.map(run=>{
@@ -67,5 +67,11 @@ async function refresh() {
 }
 $("#refresh").addEventListener("click",refresh);
 $("#status").addEventListener("change",()=>data && renderRuns());
-setInterval(()=>{if(!document.hidden) void refresh();},60000);
-void refresh();
+const initialRun=new URL(location.href).searchParams.get('run');
+if(initialRun){
+  openedInitial=true;openReplay({id:initialRun,name:'Adventure replay'});
+  $('#freshness').textContent='Replay loads directly from the CDN. Refresh to open the ledger.';
+}else{
+  setInterval(()=>{if(!document.hidden) void refresh();},60000);
+  void refresh();
+}

@@ -1,0 +1,12 @@
+{
+  "id": "/",
+  "name": "neonethack",
+  "short_name": "neohack",
+  "description": "A little courage. A deep dungeon. Play offline and keep your adventure.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#171d21",
+  "theme_color": "#171d21",
+  "icons": [{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
+}

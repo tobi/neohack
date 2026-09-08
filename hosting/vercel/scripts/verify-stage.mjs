@@ -13,10 +13,17 @@ for (const file of [
   "bots/index.html",
   "bots/sandbox.html",
   "build/app.js",
+  "service-worker.js",
+  "offline.js",
+  "manifest.webmanifest",
 ]) {
   if (!(await stat(resolve(root, file))).size)
     throw Error(`Missing staged asset: ${file}`);
 }
+const offline = await readFile(resolve(root, "service-worker.js"), "utf8");
+if (offline.includes("const CONFIG = null")) throw Error("Offline inventory was not staged");
+if (!(await stat(resolve(root, "../.generated/protocol-recording.mjs"))).size)
+  throw Error("Missing function-local input format validator");
 const current = JSON.parse(
   await readFile(resolve(root, "runtime/wasm/current.json"), "utf8"),
 );

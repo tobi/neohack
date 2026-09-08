@@ -135,7 +135,9 @@ async function initialize() {
 }
 export async function saveLedgerRun(run: Run) {
   await initialize();
-  return writeRun(run);
+  // Input publication may beat its independently retried metadata/index write.
+  // The per-run head establishes availability without a global Blob listing.
+  return writeRun(run,((await read('input-runs/'+run.id+'.json'))?.count??0)>0);
 }
 export async function markRecorded(id: string) {
   await initialize();

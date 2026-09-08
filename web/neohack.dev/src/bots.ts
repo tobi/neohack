@@ -10,7 +10,9 @@ import { javascript } from '@codemirror/lang-javascript';
 import ts from 'typescript';
 import { roles } from './characters';
 import { loadRuntime, runtimePackage } from './runtime-loader';
-import { accountApi, RunRecorder } from './account-client';
+import { accountApi } from './account-client';
+import { ScriptRecorder } from './script-recording';
+import {playerId,rememberPlayer,queueCloud,publishCloud,type CloudAdventure} from './cloud';
 import { NeohackWorld } from './component';
 import { isSnapshot } from '../../../lib/neonethack/typescript/client';
 import { toolMethods } from '../../../lib/neonethack/mcp/tools';
@@ -34,7 +36,7 @@ let files:Record<string,string>={'main.js':blankScript};
 let projectVersion = 0;
 let dirty = false;
 let routePending = true;
-let selected='main.js', botId:string|undefined, signedIn=false;
+let selected='main.js', botId:string|undefined, signedIn=false, accountId:string|undefined;
 const editor:EditorView=new EditorView({doc:files[selected],extensions:[botLanguage(()=>({files:{...files,[selected]:editor.state.doc.toString()},file:selected})),EditorView.updateListener.of(update=>{if(update.docChanged) dirty=true;const head=update.state.selection.main.head,line=update.state.doc.lineAt(head);$('cursor-position').textContent=`Ln ${line.number}, Col ${head-line.from+1}`;}),basicSetup,javascript(),syntaxHighlighting(HighlightStyle.define([{tag:tags.keyword,color:'#d8b0de'},{tag:tags.string,color:'#a9c98a'},{tag:tags.comment,color:'#94a197'},{tag:tags.variableName,color:'#e1dcbf'},{tag:tags.number,color:'#d5b788'},{tag:tags.function(tags.variableName),color:'#9dccca'},{tag:tags.operator,color:'#d1b584'},{tag:tags.typeName,color:'#c6c394'}])),EditorView.theme({'&':{color:'#d6dec5'},'.cm-content':{padding:'16px 0'}}),EditorView.contentAttributes.of({'aria-label':'Bot source code'})],parent:$('editor')});
 $('format-code').onclick = () => void (async () => {
   const file = selected;
@@ -138,13 +140,22 @@ $('choose-project').onclick = () => { $('project-picker').hidden = false; $('pro
 for(const id of ['bot-name','role','seed-mode','seed']) $(id).addEventListener('change',()=>{dirty=true;});
 async function refreshBots(){
   try {
-    const user=await accountApi(); signedIn=true;
+    const user=await accountApi(); signedIn=true;accountId=user.id;
     $('author').textContent=`Private workspace · ${user.name}`;
     saved=await accountApi('/bots');
   } catch {
-    signedIn=false; saved=[];
+    signedIn=false; accountId=undefined; saved=[];
     $('author').textContent='Local project · not saved';
   }
+  void ScriptRecorder.recover(accountId,async metadata=>{
+    const {wasm}=await loadRuntime();
+    const transport=await wasm.WasmTransport.create({storage:{kind:'journal',name:metadata.storeName,uploadUrl:new URL('/api/runs/',location.href).href,uploadToken:metadata.vault},workerUrl:new URL('/runtime/wasm/'+metadata.buildId+'/core-worker.mjs',location.href)});
+    try{
+      const info=await transport.recordingInfo(metadata.id);if(!info)throw Error('Local script inputs are missing');
+      await publishCloud([{id:metadata.id,name:metadata.name,role:metadata.role,seed:metadata.seed,buildId:metadata.buildId,control:'bot',automated:true,recording:'inputs',turn:info.summary?.turn??1,ended:info.complete}],metadata.vault);
+      const ack=await transport.flushRecording(metadata.id);if(ack.count<info.count)throw Error('Script backup pending');
+    }finally{await transport.close();}
+  }).catch(()=>{});
   for(const id of ['saved-bots','picker-saved']) {
     const select=$<HTMLSelectElement>(id);
     select.replaceChildren(new Option(signedIn ? 'Open a saved script…' : 'Sign in to open your saved scripts',''));
@@ -191,7 +202,7 @@ $('save').onclick=()=>void (async()=>{
   } catch(error){status.textContent=signedIn?String(error):'Sign in from the top rail to save your private copy.';}
   finally { saving = false; }
 })();
-type ActiveRun = {cancelled:boolean;yielded?:boolean;iframe?:HTMLIFrameElement;port?:MessagePort;timer?:ReturnType<typeof setTimeout>;api?:any;recorder?:RunRecorder;inflight?:Promise<void>};
+type ActiveRun = {cancelled:boolean;yielded?:boolean;iframe?:HTMLIFrameElement;port?:MessagePort;timer?:ReturnType<typeof setTimeout>;api?:any;recorder?:ScriptRecorder;inflight?:Promise<void>;retired?:Promise<void>};
 let active: ActiveRun | null = null;
 async function stop(reason='Stopped by you.'){
   const run=active;if(!run || run.cancelled)return;run.cancelled=true;
@@ -200,8 +211,11 @@ async function stop(reason='Stopped by you.'){
   for(const el of document.querySelectorAll<HTMLInputElement|HTMLButtonElement>('.script-panel input,.script-panel button'))el.disabled=true;
   await run.inflight;
   status.textContent=reason;
-  await run.api?.close().catch((e:unknown)=>log(String(e)));
-  await run.recorder?.flush();
+  await run.recorder?.settled();
+  // Stopping the script releases the controls immediately. Upload remains an
+  // optional background operation; each workshop run has its own store lease.
+  run.retired=run.api?.close().catch((e:unknown)=>log(String(e)));
+  void run.recorder?.flush();
   if(active===run){active=null;freezeProject(false);}
 }
 $('stop').onclick=()=>void stop();
@@ -251,12 +265,16 @@ $('test').onclick=()=>void (async()=>{
     status.textContent='Loading the game package…';
     const [{wasm},pkg]=await Promise.all([loadRuntime(),runtimePackage()]);
     if(run.cancelled)return;
-    // Test sessions are intentionally volatile. Runtime package identity is retained in the recording.
-    const api=await wasm.createWasm({storage:{kind:'memory'},workerUrl:new URL(pkg.base+'core-worker.mjs',location.href)});
+    const vault=playerId();rememberPlayer(vault);
+    const storeName='neohack-workshop-'+crypto.randomUUID();
+    const recordingOptions={storage:{kind:'journal' as const,name:storeName,uploadUrl:new URL('/api/runs/',location.href).href,uploadToken:vault},workerUrl:new URL(pkg.base+'core-worker.mjs',location.href)};
+    const api=await wasm.createWasm(recordingOptions);
     run.api=api;if(run.cancelled){await api.close();return;}
     const game=await api.create({...chosen.identity,seed});
     if(run.cancelled){await api.close();return;}
     const world=$('bot-world') as NeohackWorld;world.setAttribute('role',chosen.id);world.setAttribute('seed',String(seed));world.snapshot=game.state;
+    const metadata:CloudAdventure={id:game.id,name:'Workshop',role:chosen.id,seed,buildId:pkg.buildId,control:'bot',automated:true,recording:'inputs',turn:game.observation.turn,ended:false};
+    const remember=(frame:import('neonethack/types').Snapshot)=>{metadata.turn=frame.observation.turn;metadata.ended=frame.ended;metadata.heroLevel=Number(frame.observation.vitals.level)||1;metadata.depthLabel=frame.observation.location.depthLabel;queueCloud([metadata],vault);};
     let ready=false, started=false;
     let calls=0, busy=false, logs=0, halted=false;
     const allowed=new Set(toolMethods.values());
@@ -277,11 +295,18 @@ $('test').onclick=()=>void (async()=>{
       if(data.ready) {
         if(ready || typeof data.ready.name !== 'string' || !data.ready.name.trim() || data.ready.name.length>60 || /[\u0000-\u001f\u007f]/.test(data.ready.name)) { void stop('Invalid bot definition.'); return; }
         ready=true;
-        if(signedIn) {
-          run.recorder=new RunRecorder({name:data.ready.name,role:chosen.id,seed,buildId:pkg.buildId,control:'bot',source:{version:1,entrypoint:'main.js',files:sourceFiles,compiledFiles:compiled,compiler:{name:'typescript',version:ts.version},...(data.ready.autoloot === undefined ? {} : {autoloot:data.ready.autoloot})}},message=>{$('recording').textContent=message;});
-          run.recorder.record(game.state);
-          if(!await run.recorder.flush()) { void stop('Could not save bot source. Test stopped before initialization.'); return; }
-        } else $('recording').textContent='Sign in to retain bot source and replay. This test is temporary.';
+        metadata.name=data.ready.name;
+        const source={version:1 as const,entrypoint:'main.js' as const,files:sourceFiles,compiledFiles:compiled,compiler:{name:'typescript' as const,version:ts.version},...(data.ready.autoloot===undefined?{}:{autoloot:data.ready.autoloot})};
+        try{
+          run.recorder=await ScriptRecorder.create({id:game.id,owner:accountId,name:data.ready.name,role:chosen.id,seed,buildId:pkg.buildId,source,storeName,vault},async()=>{
+            await publishCloud([metadata],vault);
+            await run.retired;
+            const sync=run.cancelled?await wasm.WasmTransport.create(recordingOptions):api.transport as import('neonethack/wasm').WasmTransport;
+            try{const ack=await sync.flushRecording(game.id);if(!ack.count)throw Error('Run backup pending');}
+            finally{if(sync!==api.transport)await sync.close();}
+          },message=>{$('recording').textContent=message;});
+        }catch{void stop('Could not save bot source locally. Test stopped before initialization.');return;}
+        remember(game.state);$('recording').textContent='Saved here';
         if(run.cancelled)return;
         started=true; channel.port1.postMessage({start:true}); return;
       }
@@ -298,7 +323,7 @@ $('test').onclick=()=>void (async()=>{
       run.inflight=(async()=>{
         try{
           const result=await api.transport.send(request);
-          if(isSnapshot(result)){world.snapshot=result;run.recorder?.record(result);status.textContent=`${calls}/${budget} calls · Turn ${result.observation.turn} · ${result.observation.location.depthLabel} · Level ${result.observation.vitals.level ?? '?'}`;}
+          if(isSnapshot(result)){world.snapshot=result;remember(result);run.recorder?.record(result);status.textContent=`${calls}/${budget} calls · Turn ${result.observation.turn} · ${result.observation.location.depthLabel} · Level ${result.observation.vitals.level ?? '?'}`;}
           channel.port1.postMessage({id:data.id,result});
           if(('error' in result && result.error?.code === 'incompleteRequest') || (isSnapshot(result)&&(result.outcome.status==='unknown'||[result.storage,result.recording].some(d=>d&&d.status!=='ok')))) { halted=true;setTimeout(()=>void stop('Execution uncertain or storage failed. No new input was sent.'),0); }
         }catch(error){halted=true;channel.port1.postMessage({id:data.id,error:String(error)});setTimeout(()=>void stop('Transport failed; execution is uncertain. Test stopped.'),0);}
@@ -319,6 +344,7 @@ function seedMode(){ $('fixed-seed').hidden=$<HTMLSelectElement>('seed-mode').va
 $('seed-mode').onchange=seedMode;
 $('clear-output').onclick=()=>{output.textContent='';};
 window.addEventListener('accountchange',event=>{signedIn=!!(event as CustomEvent).detail;void refreshBots();});
+window.addEventListener('online',()=>void refreshBots());
 document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey) && (event.key==='s'||event.key==='Enter')){event.preventDefault();$<HTMLButtonElement>(event.key==='s'?'save':'test').click();}});
 const divider=$('pane-divider'),panes=document.querySelector<HTMLElement>('.ide-panes')!;
 function resize(value:number){value=Math.max(30,Math.min(75,value));panes.style.setProperty('--editor-width',value+'%');divider.setAttribute('aria-valuenow',String(Math.round(value)));}

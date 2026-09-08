@@ -2,7 +2,7 @@
 
 The web UI lives in [`web/neohack.dev`](../../web/neohack.dev). Vercel serves the
 website and its same-origin API. Gameplay runs in browser WASM; the server stores
-journals and public observations without implementing game rules.
+compressed protocol input archives without implementing game rules.
 
 ## Deployment
 
@@ -46,12 +46,13 @@ deployment, so an empty deployment or wrong domain assignment fails the job.
 Private Blob documents use ETags for conditional updates and create-only initial
 writes. Contending writers re-read before retrying a pure storage update. Journal
 commits compare the base revision and exact request digest; uncertainty never
-executes another game action. Content-addressed blocks, replay frames, captured
-source and script notes are immutable objects referenced by small manifests.
+executes another game action. Compressed input chunks and checkpoints are public,
+unlisted immutable objects. Captured script source and notes stay private. The
+retained block and frame formats support previously published runs.
 
 Passkey registration uniqueness and credential counters share one atomic auth
 document. Expired ceremonies and sessions are rejected and pruned on writes.
-Projects and recordings are separate owner-scoped documents. Public run summaries
+Projects and account-to-run associations are separate owner-scoped documents. Public run summaries
 exclude vault keys, account IDs, private notes and source. Diagnostic application logs contain only bounded categories, build hashes,
 route templates, response status and duration, never raw errors or bookmarks.
 
@@ -112,12 +113,11 @@ not touch private journals or runtime pins:
 node hosting/vercel/scripts/rebuild-ledger.mjs --apply
 ```
 
-During play, public recordings only append to a separate browser IndexedDB outbox (500 frames / 32 MiB
-per run). Uploads start on explicit flush (death screen or share/embed), not on
-each movement. Transient uploads retry the same index/frame, including a lost response.
-An exact duplicate is acknowledged without appending twice; a changed duplicate
-is rejected. Queue exhaustion or access/sequence refusal is visibly reported and
-retains pending frames. Browser data removal can still delete unsynced frames.
+New runs append protocol requests locally and upload compressed immutable batches
+at five seconds idle / thirty seconds active. No per-turn observation archive is
+written. [CLOUD_SAVES.md](../../lib/neonethack/docs/CLOUD_SAVES.md) owns the input
+format, checkpoints, recovery and static playback contract. Earlier published
+frame recordings remain readable; their endpoints are retained for those saves.
 
 ### Vercel logs and observability
 
@@ -151,13 +151,20 @@ and [Observability](https://vercel.com/docs/observability).
 
 Public replay playback makes **no dynamic function requests**. The static
 /replay-config.json gives the public Blob origin. The viewer reads
-replays/<id>/manifest.json and its relative chunks/<hash>.json files directly
+replays/<id>/manifest.json and its relative chunks/<hash>.gz input files directly
 from that origin, including on a cold load. Upload functions publish those files
 at recording time. Chunks are create-only and content-addressed; the latest
 manifest advances with ETag compare-and-swap after every referenced chunk exists.
 A losing older publisher cannot roll it back. Manifest caching lasts 60 seconds;
-immutable chunks cache for one year. Private recordings and resumable journals
-remain in the separate private store and retain authenticated access.
+immutable chunks cache for one year. Replay links are unlisted and readable by
+anyone who has the link. Upload authority, account associations, script source and
+notes stay in the separate private store. Checkpoints use immutable hash-named
+objects with the same static delivery; they are derived caches, not log authority.
+
+Staging also generates the offline service worker's exact asset list and copies
+the shared archive validator into `.generated/`, inside Vercel's upload root.
+Deploy the staged folder; do not omit its generated function dependency. API and
+authenticated responses never enter service-worker caches.
 
 Before deploying:
 
@@ -189,7 +196,7 @@ through the API. Verify in the browser Network panel that replay requests go
 straight to the public Blob origin; the regression test blocks every /api/
 request while playback still starts and advances.
 
-Account owners can POST {"public":true} to /api/account/runs/:id/publish through
+For older published frame recordings, account owners can POST {"public":true} to /api/account/runs/:id/publish through
 the account UI. Session ownership and same-origin checks precede publication.
 The server reserves a separate public ID, projects only observed replay fields,
 publishes static files, and adds the run to the ledger. Private source and script
@@ -201,7 +208,7 @@ Significant, verified improvements should be committed and deployed, followed by
 production smoke checks, as requested by the project owner. Keep unfinished
 changes outside the release candidate.
 
-Large cloud commits upload as content-addressed parts of at most 256 KiB, then
+The retained block-store format uploads large commits as content-addressed parts of at most 256 KiB, then
 submit a small final manifest. The server reconstructs and verifies the exact
 commit before advancing its revision. Local pending data remains until an exact
 acknowledgement; a lost response retries without duplicating input. Downloads
@@ -215,7 +222,7 @@ The endpoint does not depend on Blob availability; client delivery remains best
 effort when the network itself is unavailable. Filter these events in Vercel
 Observability; they never appear on the public ledger.
 
-The website uses one persistent backup-stream UUID per local browser store.
+Older block-store runs use one persistent backup-stream UUID per local browser store.
 `/api/vaults/:vault?branch=:stream` stores its conditional manifest at
 `vaults/:vault/copies/:stream.json`; existing shared `journal.json` remains intact.
 Opening a cloud copy in a fresh browser restores its exact files and pin, then

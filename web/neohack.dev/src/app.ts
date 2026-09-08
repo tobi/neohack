@@ -1,7 +1,7 @@
 import { appendReceipt, journalScroll, renderJournalEntry, type JournalEntry } from './journal';
 import { renderHeroHud } from './hero-hud';
 import './component';
-import { PublicReplayRecorder, embedCode, replayLink } from './public-replay';
+import { PublicReplayRecorder,InputReplayRecorder, embedCode, replayLink } from './public-replay';
 import { adventurerName } from './adventurer-names';
 import { renderCharacterSheet, equipmentDescription } from './character-sheet';
 import { actionIcon } from "./action-icons";
@@ -57,6 +57,7 @@ const directions: [Compass, string][] = [
   ["southeast", "↘"],
 ];
 type Adventure = {
+  recording?:'inputs';
   branch?: string;
   id: string;
   buildId?: string;
@@ -237,12 +238,22 @@ class PixelNethack extends HTMLElement {
   private accountChanged = (event: Event) => { this.accountUser = Promise.resolve((event as CustomEvent).detail); this.accountSession = ''; this.accountRecorder = null; };
   private accountRecorder: RunRecorder | null = null;
   private accountSession = '';
-  private publicRecorder?: PublicReplayRecorder;
+  private publicRecorder?: PublicReplayRecorder|InputReplayRecorder;
+  private inputTransport?:import('neonethack/wasm').WasmTransport;
+  private inputRecording=false;
+  private onlineRecording=()=>{if(this.game&&this.inputTransport)void this.inputTransport.flushRecording(this.game.id);};
   private publicSession='';
   private inputSource: PlayControl = "manual";
   private recordReplays() {
     const frame = this.game?.state, current = this.current;
     if(!frame || !current?.buildId) return;
+    if(current.recording==='inputs'){
+      if(this.publicSession!==frame.sessionId){
+        this.publicSession=frame.sessionId;this.publicRecorder?.close();
+        this.publicRecorder=new InputReplayRecorder(()=>this.inputTransport!.flushRecording(frame.sessionId),()=>publishCloud(this.saves,this.vault));
+      }
+      return;
+    }
     if(this.cloudEnabled) {
       if(this.publicSession!==frame.sessionId){
         this.publicSession=frame.sessionId;this.text('#copy-embed','Copy run embed');
@@ -379,6 +390,7 @@ class PixelNethack extends HTMLElement {
     window.addEventListener("account-dialog-open", this.stopMovement);
     window.addEventListener("accountchange", this.accountChanged);
     document.addEventListener("visibilitychange", this.visibilityChanged);
+    window.addEventListener('online',this.onlineRecording);
     document.addEventListener("focusin", this.focusChanged);
     try {
       this.vault = window.isSecureContext ? playerId() : "unavailable";
@@ -557,6 +569,7 @@ class PixelNethack extends HTMLElement {
             save = {
               id: response.sessionId,
               buildId: this.runtimeBuildId,
+              ...(this.inputRecording?{recording:'inputs' as const}:{}),
               name:
                 typeof params.name === "string" ? params.name : "Adventurer",
               role: typeof params.role === "string" ? params.role : "valkyrie",
@@ -663,7 +676,8 @@ class PixelNethack extends HTMLElement {
       buildId = saved.buildId;
     }
     const selected = await runtimePackage(buildId, this.preloadAbort.signal);
-    if (this.api && this.runtimeBuildId === selected.buildId) return;
+    const inputRecording=!sessionId||this.saves.find(save=>save.id===sessionId)?.recording==='inputs';
+    if (this.api && this.runtimeBuildId === selected.buildId && this.inputRecording===inputRecording) return;
     if (this.api) { const previous = this.api; this.api = null; await previous.close(); }
     // Speculative downloads must never gate opening the actual runtime.
     void this.warm(selected.buildId);
@@ -675,10 +689,11 @@ class PixelNethack extends HTMLElement {
     const sourceUrl=new URL(journalUrl(this.vault));if(sourceBranch)sourceUrl.searchParams.set('branch',sourceBranch);
     const replica = sourceUrl.href;
     if (requestedRun() && !replica && !this.saves.some(save => save.id === requestedRun()!.id)) throw Error("The cloud save could not be reached. Retry this bookmark when connected; no new game was started.");
-    const transportPackage = buildId ? await runtimePackage(undefined, this.preloadAbort.signal) : selected;
+    this.inputRecording=inputRecording;
+    const transportPackage = buildId&&!this.inputRecording ? await runtimePackage(undefined, this.preloadAbort.signal) : selected;
     const wasm = await this.runtime.wasm.createWasm({
       runtimeUrl: new URL(selected.base, location.href).href,
-      storage: replica
+      storage: this.inputRecording?{kind:'journal',name:this.storeName,uploadUrl:new URL('/api/runs/',location.href).href,uploadToken:this.vault,archiveConfigUrl:new URL('/replay-config.json',location.href).href}:replica
         ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica, replicaBranches: true, replicaRestore: !!sessionId && !preferLocal, replicaSession: sessionId }
         : { kind: "indexeddb", name: this.storeName },
       workerUrl: new URL(`${transportPackage.base}core-worker.mjs`, location.href),
@@ -701,6 +716,7 @@ class PixelNethack extends HTMLElement {
         this.$("#cloud-status").title = state === "error" ? message : "";
       },
     });
+    this.inputTransport=this.inputRecording?wasm.transport as import('neonethack/wasm').WasmTransport:undefined;
     // Opening may finish after this element has been removed. Never adopt that
     // late worker/store owner, even if the same element was reattached meanwhile.
     try { this.assertConnected(); }
@@ -778,6 +794,7 @@ class PixelNethack extends HTMLElement {
     window.removeEventListener("account-dialog-open", this.stopMovement);
     window.removeEventListener("accountchange", this.accountChanged);
     document.removeEventListener("visibilitychange", this.visibilityChanged);
+    window.removeEventListener('online',this.onlineRecording);
     document.removeEventListener("focusin", this.focusChanged);
     this.stopMovement();
     this.map.destroy();
@@ -827,9 +844,9 @@ class PixelNethack extends HTMLElement {
       const id=this.game?.state.sessionId;
       if(!id){this.openMenu('<h2>Start a run first</h2><p>An embed needs a recorded adventure.</p>');return;}
       const saved=await this.publicRecorder?.flush();
-      const code=embedCode(id);
+      const code=embedCode(id,this.publicRecorder instanceof InputReplayRecorder?this.publicRecorder.manifest:undefined);
       try {if(!saved)throw Error();await navigator.clipboard.writeText(code);this.$('#copy-embed').textContent='Embed copied';}
-      catch {this.openMenu('<h2>Run embed</h2><p>'+ (saved?'Copy this code into your page.':'No public frames saved yet. This embed will show replay unavailable until recording succeeds.') +'</p><textarea id="embed-code" readonly aria-label="Embed code" style="width:100%;min-height:140px"></textarea>');const field=this.querySelector<HTMLTextAreaElement>('#embed-code')!;field.value=code;field.select();}
+      catch {this.openMenu('<h2>Run embed</h2><p>'+ (saved?'Copy this code into your page.':'This replay is still saved locally. Its embed becomes available after online backup finishes.') +'</p><textarea id="embed-code" readonly aria-label="Embed code" style="width:100%;min-height:140px"></textarea>');const field=this.querySelector<HTMLTextAreaElement>('#embed-code')!;field.value=code;field.select();}
     })());
     this.$(".hud-menu").addEventListener("toggle", () => {
       if (this.querySelector(".hud-menu[open]")) this.stopMovement();
@@ -1915,6 +1932,7 @@ class PixelNethack extends HTMLElement {
         this.current = {
           id: this.game.id,
           buildId: this.runtimeBuildId,
+          ...(this.inputRecording?{recording:'inputs' as const}:{}),
           vaultId: this.vault,
           name,
           role: role.id,

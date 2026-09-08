@@ -21,6 +21,7 @@
 /hosting/vercel/node_modules/
 /hosting/vercel/public/
 /hosting/vercel/.vercel/
+/hosting/vercel/.generated/
 *.o
 *.a
 *.so

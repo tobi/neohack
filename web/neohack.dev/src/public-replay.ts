@@ -4,14 +4,25 @@ export function replayLink(id: string) {
   return new URL("/dashboard?run=" + encodeURIComponent(id), location.origin)
     .href;
 }
-export function embedCode(id: string) {
+export function embedCode(id: string,manifest?:string) {
   return (
     '<script type="module" src="' +
     location.origin +
     '/component/neohack.js"></script>\n<neohack-world src="' +
-    replayLink(id) +
+    (manifest??replayLink(id)) +
     '" autoplay speed="4" controls style="height:480px"></neohack-world>'
   );
+}
+/** The worker records inputs. This handle only supports deliberate sharing. */
+export class InputReplayRecorder {
+  manifest?:string;
+  constructor(private publish:()=>Promise<{count:number;manifest?:string}>,private prepare:()=>Promise<void>){}
+  record(_frame:Snapshot){}
+  close(){}
+  async flush(){
+    try{await this.prepare();const result=await this.publish();this.manifest=result.manifest;return result.count>0;}
+    catch{return false;}
+  }
 }
 /** Durable public recording queue, independent of the authoritative game save. */
 export class PublicReplayRecorder {

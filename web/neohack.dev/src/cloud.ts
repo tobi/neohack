@@ -21,6 +21,7 @@ export function clearRunUrl() {
 
 export type PlayControl = "manual" | "webmcp" | "bot" | "script" | "playground";
 export type CloudAdventure = {
+  recording?:'inputs';
   branch?: string;
   buildId?: string;
   id: string;

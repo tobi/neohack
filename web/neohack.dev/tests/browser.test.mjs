@@ -919,8 +919,9 @@ test(
     assert.equal(await snapshot(page), null);
     assert.deepEqual(errors, []);
     assert.ok(
-      requests.length > 0 && requests.every((r) => r.method === "GET"),
-      "all gameplay stays inside the browser",
+      requests.length > 0 && requests.every((r) => r.method === "GET" ||
+        /\/api\/(?:runs(?:\/[^/]+\/(?:inputs|checkpoint))?|errors|vaults\/[^/]+\/adventures)$/.test(new URL(r.url).pathname)),
+      "gameplay stays in the browser; writes are background archives, metadata or diagnostics",
     );
     assert.ok(
       requests.every((r) => r.url.startsWith(url)),
@@ -3422,7 +3423,7 @@ test('a suspended cloud store does not block a fresh local adventure or erase it
   page.on('request',request=>{if(/\/api\/vaults\/[^/]+$/.test(new URL(request.url()).pathname))journalReads++;});
   await create(page);
   const first=await snapshot(page);assert.ok(first.sessionId);
-  assert.match(await page.locator('#cloud-status').textContent(),/Online saves unavailable/);
+  assert.match(await page.locator('#cloud-status').textContent(),/Saved here/);
   assert.equal(journalReads,0);
   await page.reload();await page.waitForFunction(()=>!!document.querySelector('pixel-nethack').snapshot);await ready(page);
   assert.equal((await snapshot(page)).sessionId,first.sessionId);

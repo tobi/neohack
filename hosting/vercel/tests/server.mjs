@@ -33,7 +33,7 @@ export function createTestHarness({ store = new MemoryStorage() } = {}) {
     try {
       const url = new URL(req.url, `http://${req.headers.host}`);
       if(url.pathname==='/replay-config.json'){res.writeHead(200,{'content-type':'application/json','access-control-allow-origin':'*'});res.end(JSON.stringify({base:url.origin+'/replay-files/'}));return;}
-      if(url.pathname.startsWith('/replay-files/')){const doc=await publicStore.read(url.pathname.slice('/replay-files/'.length));res.writeHead(doc?200:404,{'content-type':'application/json','access-control-allow-origin':'*'});res.end(JSON.stringify(doc?.value??{error:'not found'}));return;}
+      if(url.pathname.startsWith('/replay-files/')){const doc=await publicStore.read(url.pathname.slice('/replay-files/'.length));res.writeHead(doc?200:404,{'content-type':doc?.value instanceof Uint8Array?'application/gzip':'application/json','access-control-allow-origin':'*'});res.end(doc?.value instanceof Uint8Array?doc.value:JSON.stringify(doc?.value??{error:'not found'}));return;}
       if (url.pathname.startsWith("/api/")) {
         const chunks = [];
         for await (const chunk of req) chunks.push(chunk);

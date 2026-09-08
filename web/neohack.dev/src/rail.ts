@@ -18,7 +18,7 @@ class NeohackRail extends HTMLElement {
     this.root.querySelector('#signin')!.addEventListener('click',()=>void this.authenticate(false));
     this.root.querySelector('form')!.addEventListener('submit',event=>{event.preventDefault();void this.authenticate(true);});
     this.root.querySelector('#logout')!.addEventListener('click',()=>void this.signout());
-    void this.refresh();
+    if(!(location.pathname.replace(/\/$/,'')==='/dashboard'&&new URL(location.href).searchParams.has('run')))void this.refresh();
   }
   private get dialog() { return this.root.querySelector('dialog')!; }
   open() {

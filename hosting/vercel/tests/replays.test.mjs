@@ -1,10 +1,14 @@
+import {inputRecords} from '../../../lib/neonethack/wasm/protocol-reader.mjs';
+import {WasmTransport} from '../../../lib/neonethack/dist/typescript/wasm.js';
+import {gzipSync,gunzipSync} from 'node:zlib';
+import {createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createTestHarness} from './server.mjs';
 import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
 
-test('real cloud run records public scenes, embeds after death and shares a ledger lightbox', {timeout:120000}, async t=>{
+test('real cloud run reconstructs public scenes, embeds after death and shares a ledger lightbox', {timeout:120000}, async t=>{
   const server=createTestHarness();const {url}=await server.listen();
   const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});
   t.after(async()=>{await browser.close();await server.close();});
@@ -31,26 +35,25 @@ test('real cloud run records public scenes, embeds after death and shares a ledg
   const manifest=await (await fetch(manifestURL)).json();
   assert.ok(manifest.count>=25);
   const frames=[];
-  for(const chunk of manifest.chunks){frames.push(...(await (await fetch(new URL(chunk,manifestURL))).json()).frames);}
+  const replay=await WasmTransport.create();try{for await(const record of inputRecords(manifest,manifestURL))frames.push(await replay.playback(record));}finally{await replay.close();}
   assert.equal(frames.length,manifest.count);
   const ledger=await (await fetch(new URL("/api/stats",url))).json();
   assert.equal(ledger.recorded.find(run=>run.id===state.sessionId)?.replayAvailable,true,"a first committed frame invalidates the empty availability cache");
-  const expected=structuredClone(state.observation);delete expected.neighborhood;
+  const expected=structuredClone(state.observation);
   assert.deepEqual(frames.at(-1).observation,expected,'the public recording preserves canonical perceived information');
   assert.deepEqual(frames.at(-1).decision,state.decision);
   assert.deepEqual(frames.at(-1).outcome,state.outcome);
-  assert.ok(!('storage' in frames[0]));assert.ok(!('recording' in frames[0]));
+  assert.equal(manifest.format,'neonethack.inputs');
   assert.ok(!JSON.stringify(frames).includes('vault'));
-  const first={frames:frames.slice(0,25),count:manifest.count};
-  assert.equal((await fetch(endpoint,{method:'PUT',headers:{'content-type':'application/json'},body:'{}'})).status,401);
-  const privateBookmark=page.url();
-  const vault=new URLSearchParams(new URL(privateBookmark).hash.slice(1)).get('vault');
-  const append=(body,token=vault)=>fetch(endpoint,{method:'PUT',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify(body)});
-  assert.equal((await append({index:0,frame:first.frames[0]})).status,200,'an exact retry acknowledges the original frame without rewriting it');
-  assert.equal((await append({index:0,frame:{...first.frames[0],observation:{...first.frames[0].observation,turn:999}}})).status,409,'a changed duplicate cannot replace a recorded frame');
-  assert.equal((await append({index:first.count,frame:{...state,sessionId:'another-run'}})).status,400);
-  assert.equal((await append({index:first.count,frame:state},crypto.randomUUID())).status,403);
-  const afterDenied=await (await fetch(new URL(response.headers.get('location'),endpoint))).json();assert.equal(afterDenied.count,first.count);
+  const privateBookmark=page.url(),vault=new URLSearchParams(new URL(privateBookmark).hash.slice(1)).get('vault');
+  const firstBytes=Buffer.from(await(await fetch(new URL(manifest.chunks[0].path,manifestURL))).arrayBuffer());
+  assert.ok(!gunzipSync(firstBytes).toString().includes(vault),'upload capability is absent from public input bytes');
+  const append=(bytes,token=vault)=>fetch(new URL('/api/runs/'+state.sessionId+'/inputs',url),{method:'PUT',headers:{authorization:'Bearer '+token,'content-type':'application/gzip','x-content-sha256':createHash('sha256').update(bytes).digest('hex')},body:bytes});
+  assert.equal((await append(firstBytes)).status,200,'exact retry does not append twice');
+  const changed=JSON.parse(gunzipSync(firstBytes));changed.records[0].request.params.seed++;
+  assert.equal((await append(gzipSync(JSON.stringify(changed)))).status,409,'a changed duplicate cannot rewrite a committed range');
+  assert.equal((await append(firstBytes,crypto.randomUUID())).status,403);
+  assert.equal((await(await fetch(manifestURL)).json()).count,manifest.count);
   await page.getByLabel('Game menu',{exact:true}).click();
   const summary=await page.getByLabel('Game menu',{exact:true}).boundingBox();const menu=await page.locator('.hud-menu-body').boundingBox();
   assert.ok(menu.y>=summary.y+summary.height && Math.abs(menu.x+menu.width-summary.x-summary.width)<2);
@@ -66,12 +69,12 @@ test('real cloud run records public scenes, embeds after death and shares a ledg
   let releasePage;const heldPage=new Promise(resolve=>{releasePage=resolve;});
   t.after(()=>releasePage());
   let chunkRequests=0;
-  await page.route('**/replay-files/replays/*/chunks/*.json',async route=>{if(++chunkRequests===2)await heldPage;await route.continue();});
+  await page.route('**/replay-files/replays/*/chunks/*.gz',async route=>{if(++chunkRequests===2)await heldPage;await route.continue();});
   await page.goto(link);
   await page.waitForFunction(()=>document.querySelector('neohack-world')?.snapshot?.revision>=2);
   await page.evaluate(()=>document.querySelector('neohack-world').setAttribute('role','wizard'));
   assert.match(await page.locator('neohack-world').locator('#status').textContent(),/Turn/);
-  assert.match(await page.locator('neohack-world').locator('#progress').textContent(),/3 buffered/);
+  assert.match(await page.locator('neohack-world').locator('#progress').textContent(),/actions/);
   releasePage();
 
   await page.waitForFunction(()=>document.querySelector('#replay-lightbox').open && document.querySelector('neohack-world')?.snapshot);
@@ -103,7 +106,7 @@ test('real cloud run records public scenes, embeds after death and shares a ledg
   await page.waitForFunction(()=>document.querySelector('neohack-world').shadowRoot.querySelector('#sound').getAttribute('aria-pressed')==='true');
   await external.getByRole('button',{name:'Pause replay',exact:true}).click();
   await page.waitForFunction(()=>!document.querySelector('neohack-world').sourcePending);
-  await page.evaluate(()=>{const w=document.querySelector('neohack-world');w.seek(w.frames.length-1);w.setAttribute('loop','');w.play(50);});
+  await page.evaluate(async()=>{const w=document.querySelector('neohack-world');await w.seek(w.sourceTotal-1);w.setAttribute('loop','');w.play(50);});
   await page.waitForFunction(()=>Number(document.querySelector('neohack-world').shadowRoot.querySelector('#seek').value)<5);
   await page.evaluate(()=>{window.detachedWorld=document.querySelector('neohack-world');window.detachedWorld.remove();});
   const stopped=await page.evaluate(()=>window.detachedWorld.snapshot.revision);

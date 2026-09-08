@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { Accounts } from "../src/accounts.ts";
 import { vaults } from "../src/vaults.ts";
 import { replay } from '../src/replays.ts';
+import {protocolReplay,protocolCheckpoint} from '../src/protocol-replays.ts';
 import { board } from "../src/board.ts";
 import { configured, Conflict, read } from "../src/storage.ts";
 import { logFailure, failureKind, type Failure } from '../src/observability.ts';
@@ -26,6 +27,10 @@ async function dispatch(request: Request, failure: Failure) {
     }
     const publicReplay=pathname.match(/^\/api\/runs\/([\w-]{1,64})\/replay$/);
     if(publicReplay)return await replay(request,publicReplay[1]);
+    const inputs=pathname.match(/^\/api\/runs\/([A-Za-z0-9_-]{16})\/inputs$/);
+    if(inputs)return await protocolReplay(request,inputs[1]);
+    const checkpoint=pathname.match(/^\/api\/runs\/([A-Za-z0-9_-]{16})\/checkpoint$/);
+    if(checkpoint)return await protocolCheckpoint(request,checkpoint[1]);
     if (pathname === "/api/health") {
       await read("board/index.json"); // Verify access, not just presence of a token.
       return json({ ok: true, storage: "available", platform: "vercel", webmcp: "browser-mediated" });

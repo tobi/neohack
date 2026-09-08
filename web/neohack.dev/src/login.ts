@@ -16,15 +16,15 @@ async function refresh() {
     const title = document.createElement('h3'); title.textContent=run.name;
     const detail = document.createElement('p'); detail.textContent=`${run.control==='bot'?'Automated bot':run.control==='interactive'?'Interactive run':'Run type not recorded'} · ${run.role} · ${run.depth} · Level ${run.level ?? '?'} (peak ${run.maxLevel}) · ${run.turn} turns · ${run.outcome}`;
     const depths = document.createElement('p'); depths.className='muted'; depths.textContent=`Reached: ${run.locations.join(' → ')}. ${run.partial?'Recording begins partway through this run.':'Recorded from the first observation.'}`;
-    const button = document.createElement('button'); button.textContent=`Replay ${run.count} frames`;
+    const button = document.createElement('button'); button.textContent=`Replay ${run.count} ${run.inputRun?'actions':'frames'}`;
     button.onclick=()=>void busy(async()=>{
       const viewer = $('replay') as NeohackWorld;
       viewer.setAttribute('role',run.role); viewer.setAttribute('seed',String(run.seed ?? 0));
       $('playback').hidden=false;
       viewer.setAttribute('autoplay','');
-      viewer.setAttribute('src','/api/account/runs/'+encodeURIComponent(run.id)+'/frames');
+      viewer.setAttribute('src',run.replayUrl??'/api/account/runs/'+encodeURIComponent(run.id)+'/frames');
       const scrub = $<HTMLInputElement>('scrub');scrub.max='0';scrub.value='0';scrub.disabled=true;
-      scrub.oninput=()=>{viewer.pause();viewer.seek(Number(scrub.value));};
+      scrub.oninput=()=>{viewer.pause();void Promise.resolve(viewer.seek(Number(scrub.value))).catch(()=>{});};
       $('play').onclick=()=>viewer.play(Number($<HTMLSelectElement>('speed').value));
       $('pause').onclick=()=>viewer.pause();
       $('playback').scrollIntoView({behavior:'smooth'});
@@ -32,12 +32,12 @@ async function refresh() {
     });
     card.append(title,detail,depths,button);
     const sharing=document.createElement('p');
-    sharing.textContent=run.publishedCount>0?'Public replay · '+run.publishedCount+' frames published.':run.publicId?'Publication pending · your private recording is retained.':'Private recording · only you can view it.';
+    sharing.textContent=run.inputRun?'Anyone with this replay link can watch.':run.publishedCount>0?'Public replay · '+run.publishedCount+' frames published.':run.publicId?'Publication pending · your private recording is retained.':'Private recording · only you can view it.';
     card.append(sharing);
     if(run.publicId && run.publishedCount>0) {
       const link=document.createElement('a');link.href='/dashboard?run='+encodeURIComponent(run.publicId);link.textContent='Open public replay';card.append(link);
     }
-    if(!run.publicId || (run.publishedCount??0)<run.count) {
+    if(!run.inputRun&&(!run.publicId || (run.publishedCount??0)<run.count)) {
       const publish=document.createElement('button');publish.textContent=run.publicId?'Update public replay':'Make public';
       const explanation=document.createElement('p');explanation.className='muted';explanation.textContent='Anyone will be able to watch this run and future recorded frames. Your save, script source and script notes stay private. Published copies may be retained by viewers.';
       publish.onclick=()=>void busy(async()=>{
@@ -85,7 +85,7 @@ async function busy(action:()=>Promise<void>) {
   const buttons = [...document.querySelectorAll('button')]; buttons.forEach(b=>b.disabled=true); status.textContent='Working…';
   try { await action(); } catch(error) { status.textContent=String(error); } finally { buttons.forEach(b=>b.disabled=false); }
 }
-$('replay').addEventListener('replayprogress',event=>{const detail=(event as CustomEvent).detail;const scrub=$<HTMLInputElement>('scrub');scrub.max=String(Math.max(0,detail.length-1));scrub.disabled=!detail.length;status.textContent=detail.length+' frames buffered. Playback can begin.';});
+$('replay').addEventListener('replayprogress',event=>{const detail=(event as CustomEvent).detail;const scrub=$<HTMLInputElement>('scrub');scrub.max=String(Math.max(0,detail.length-1));scrub.disabled=!detail.length;status.textContent=detail.length+(detail.format==='neonethack.inputs'?' recorded actions. Playback is ready.':' frames buffered. Playback can begin.');});
 $('replay').addEventListener('replayframe',event=>{$<HTMLInputElement>('scrub').value=String((event as CustomEvent).detail.index);});
 $('replay').addEventListener('replayload',()=>{status.textContent='Recording loaded. These are browser-reported observations.';});
 $('replay').addEventListener('error',event=>{if(event instanceof CustomEvent)status.textContent=String(event.detail);});

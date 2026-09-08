@@ -1,3 +1,4 @@
+import {createBlockRun} from './published-block-fixture.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
@@ -48,13 +49,13 @@ test('Cloud journal commits are atomic, retry-idempotent and reject stale writer
 
 test('turns do not wait for cloud uploads; a bookmark resumes through C in a fresh browser', { timeout: 60000 }, async t => {
   const { url, browser } = await fixture(t);
-  const original = await browser.newContext();
+  const original = await browser.newContext({serviceWorkers:'block'});
   const page = await original.newPage();
   let release, entered;
   const gate = new Promise(resolve => { release = resolve; });
   const started = new Promise(resolve => { entered = resolve; });
   let first = true;
-  await original.route('**/api/vaults/*', async route => {
+  await original.route('**/api/runs/*/inputs', async route => {
     if (route.request().method() !== 'PUT' || !first) return route.continue();
     first = false;
     const response = await route.fetch();
@@ -73,7 +74,7 @@ test('turns do not wait for cloud uploads; a bookmark resumes through C in a fre
   assert.match(bookmark, /#run=[A-Za-z0-9_-]+&vault=/);
   assert.equal(before.decision.kind, 'confirmation');
   await page.close();
-  const fresh = await browser.newContext();
+  const fresh = await browser.newContext({serviceWorkers:'block'});
   const restored = await fresh.newPage();
   await restored.goto(bookmark);
   await restored.waitForFunction(() => document.querySelector('pixel-nethack').snapshot?.observation);
@@ -96,14 +97,14 @@ test('turns do not wait for cloud uploads; a bookmark resumes through C in a fre
 
 test('lost cloud acknowledgement recovers the durable commit without replaying an action', { timeout: 60000 }, async t => {
   const { url, browser } = await fixture(t);
-  const context = await browser.newContext();
+  const context = await browser.newContext({serviceWorkers:'block'});
   const page = await context.newPage();
   await create(page, url); await synced(page);
   let release, entered;
   const gate = new Promise(resolve => { release = resolve; });
   const accepted = new Promise(resolve => { entered = resolve; });
   let first = true;
-  await context.route('**/api/vaults/*', async route => {
+  await context.route('**/api/runs/*/inputs', async route => {
     if (route.request().method() !== 'PUT' || !first) return route.continue();
     first = false;
     const response = await route.fetch();
@@ -123,13 +124,13 @@ test('lost cloud acknowledgement recovers the durable commit without replaying a
   await context.close();
 });
 
-test('cloud saving waits five idle seconds, resets on play, and flushes on close', { timeout: 60000 }, async t => {
+test('cloud saving waits five idle seconds, resets on play, and explicit sharing bypasses the debounce', { timeout: 60000 }, async t => {
   const { url, browser } = await fixture(t);
-  const page = await browser.newPage();
+  const page = await browser.newPage({serviceWorkers:'block'});
   await create(page, url); await synced(page);
   const uploads = [];
   page.on('request', request => {
-    if (request.method() === 'PUT' && /\/api\/vaults\/[^/]+$/.test(request.url())) uploads.push(Date.now());
+    if (request.method() === 'PUT' && /\/api\/runs\/[^/]+\/inputs$/.test(request.url())) uploads.push(Date.now());
   });
   const waitTurn = () => page.evaluate(async () => {
     const app = document.querySelector('pixel-nethack');
@@ -151,6 +152,7 @@ test('cloud saving waits five idle seconds, resets on play, and flushes on close
   const start = Date.now();
   await page.evaluate(async () => {
     const app = document.querySelector('pixel-nethack');
+    await app.publicRecorder.flush();
     await app.run(() => app.returnToDoorway());
   });
   assert.ok(Date.now() - start < 4000, 'explicit close bypasses the idle wait');
@@ -212,11 +214,11 @@ test('ledger ranks all runs, preserves progress, keeps diagnostics private and r
 });
 
 test('transient cloud failures retry the exact commit in the background without blocking turns',{timeout:60000},async t=>{
- const {url,browser}=await fixture(t);const page=await browser.newPage();await create(page,url);await synced(page);
+ const {url,browser}=await fixture(t);const page=await browser.newPage({serviceWorkers:'block'});await create(page,url);await synced(page);
  const bodies=[];let failed=0;
- await page.route('**/api/vaults/*',async route=>{
+ await page.route('**/api/runs/*/inputs',async route=>{
   if(route.request().method()!=='PUT')return route.continue();
-  bodies.push(route.request().postData());if(failed++<2)return route.fulfill({status:503,body:'temporary failure'});return route.continue();
+  bodies.push(route.request().postDataBuffer().toString('base64'));if(failed++<2)return route.fulfill({status:503,body:'temporary failure'});return route.continue();
  });
  await page.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});
  const before=await snapshot(page);
@@ -228,7 +230,7 @@ test('transient cloud failures retry the exact commit in the background without 
 });
 
 test('UI starts and resumes a local game when both cloud journal and discovery fail',{timeout:60000},async t=>{
-  const {url,browser}=await fixture(t),page=await browser.newPage();
+  const {url,browser}=await fixture(t),page=await browser.newPage({serviceWorkers:'block'});
   await page.route('**/api/vaults/**',route=>route.fulfill({status:200,contentType:'text/plain',body:'Unavailable'}));
   await create(page,url);
   const started=await snapshot(page);assert.ok(started.sessionId);
@@ -267,10 +269,10 @@ test('large exact cloud commits upload below the request limit and recover a los
 });
 
 test('cloud rejection stays in save status and never opens the gameplay error overlay',{timeout:30000},async t=>{
-  const {url,browser}=await fixture(t),page=await browser.newPage();
-  await page.route('**/api/vaults/*',route=>route.request().method()==='PUT'&&!route.request().url().endsWith('/adventures')?route.fulfill({status:403,body:'Refused'}):route.continue());
+  const {url,browser}=await fixture(t),page=await browser.newPage({serviceWorkers:'block'});
+  await page.route('**/api/runs/*/inputs',route=>route.request().method()==='PUT'&&!route.request().url().endsWith('/adventures')?route.fulfill({status:403,body:'Refused'}):route.continue());
   await create(page,url);
-  await page.waitForFunction(()=>document.querySelector('#cloud-status').title.includes('HTTP 403'));
+  await page.waitForFunction(()=>document.querySelector('#cloud-status').textContent.includes('retrying'));
   assert.equal(await page.locator('#error').textContent(),'');
   assert.ok((await snapshot(page)).sessionId);
 });
@@ -288,7 +290,7 @@ test('updated network worker resumes an older package without changing its engin
   await cp(directory+'/'+current.buildId,fixtureDirectory,{recursive:true});
   t.after(()=>rm(fixtureDirectory,{recursive:true,force:true}));
   await writeFile(fixtureDirectory+'/core-worker.mjs',worker);await writeFile(fixtureDirectory+'/manifest.json',JSON.stringify(manifest));
-  const {url,browser}=await fixture(t),page=await browser.newPage();await page.goto(url);
+  const {url,browser}=await fixture(t),page=await browser.newPage({serviceWorkers:'block'});await page.goto(url);
   const result=await page.evaluate(async oldId=>{
     const {createWasm}=await import('/runtime/typescript/wasm.js');
     const current=await (await fetch('/runtime/wasm/current.json')).json();
@@ -304,7 +306,7 @@ test('updated network worker resumes an older package without changing its engin
 });
 
 test('old conflicted vault receives a separate acknowledged backup without losing either copy',{timeout:90000},async t=>{
- const {url,browser}=await fixture(t),page=await browser.newPage();await create(page,url);await synced(page);
+ const {url,browser}=await fixture(t),page=await browser.newPage({serviceWorkers:'block'});await createBlockRun(page,url);await synced(page);
  const endpoint=url+'/api/vaults/'+new URLSearchParams(new URL(page.url()).hash.slice(1)).get('vault');
  const branch=await page.evaluate(()=>document.querySelector('pixel-nethack').saves[0].branch);
  const head=await(await fetch(endpoint+'?branch='+branch)).json();
@@ -332,7 +334,7 @@ test('old conflicted vault receives a separate acknowledged backup without losin
 });
 
 test('metadata retries independently, batches long histories and publishes new runs',{timeout:60000},async t=>{
- const {url,browser}=await fixture(t);const page=await browser.newPage();
+ const {url,browser}=await fixture(t);const page=await browser.newPage({serviceWorkers:'block'});
  await page.route('**/api/health',r=>r.fulfill({status:503,body:'temporary outage'}));
  let deny=true;const batches=[];
  await page.route('**/api/runs',r=>{if(r.request().method()!=='POST')return r.continue();batches.push(JSON.parse(r.request().postData()).runs);return deny?r.fulfill({status:503,body:'retry later'}):r.continue();});
@@ -350,39 +352,39 @@ test('metadata retries independently, batches long histories and publishes new r
 });
 
 test('two browsers can upload different runs in one vault without pausing sync',{timeout:90000},async t=>{
- const {url,browser}=await fixture(t);const first=await browser.newPage();await create(first,url);await synced(first);
+ const {url,browser}=await fixture(t);const first=await browser.newPage({serviceWorkers:'block'});await create(first,url);await synced(first);
  const a=await snapshot(first),bookmark=first.url();
- const testVault=new URLSearchParams(new URL(bookmark).hash.slice(1)).get('vault');const metas=await(await fetch(url+'/api/vaults/'+testVault+'/adventures')).json();assert.ok(metas[0].branch,'acknowledged metadata includes branch');
- const uploaded=await(await fetch(url+'/api/vaults/'+testVault+'?branch='+metas[0].branch)).json();assert.ok(uploaded.files.some(([p])=>p.endsWith('/meta.json')),'cloud branch includes semantic metadata');
- const second=await browser.newPage();await second.goto(bookmark);await second.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId||document.querySelector('#error').textContent);assert.equal(await second.locator('#error').textContent(),'');await synced(second);
+ const testVault=new URLSearchParams(new URL(bookmark).hash.slice(1)).get('vault');
+ const metas=await(await fetch(url+'/api/vaults/'+testVault+'/adventures')).json();assert.equal(metas[0].recording,'inputs');
+ const second=await browser.newPage({serviceWorkers:'block'});await second.goto(bookmark);await second.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId||document.querySelector('#error').textContent);assert.equal(await second.locator('#error').textContent(),'');await synced(second);
  await second.goto(url);await create(second,url);await synced(second);const b=await snapshot(second);assert.notEqual(a.sessionId,b.sessionId);
  await first.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});await synced(first);
  const endpoint=url+'/api/vaults/'+new URLSearchParams(new URL(bookmark).hash.slice(1)).get('vault');
- const copy=await first.evaluate(()=>document.querySelector('pixel-nethack').saves[0].branch);
- const head=await(await fetch(endpoint+'?manifest=1&branch='+copy)).json();
- assert.ok(head.files.some(([p])=>p.includes('/'+a.sessionId+'/')));const secondCopy=await second.evaluate(()=>document.querySelector('pixel-nethack').saves[0].branch);assert.notEqual(copy,secondCopy);
- const other=await(await fetch(endpoint+'?manifest=1&branch='+secondCopy)).json();assert.ok(other.files.some(([p])=>p.includes('/'+b.sessionId+'/')));
- const third=await browser.newPage();await third.goto(bookmark);await third.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId||document.querySelector('#error').textContent);assert.equal(await third.locator('#error').textContent(),'');
+ const config=await(await fetch(url+'/replay-config.json')).json();
+ const getManifest=id=>fetch(new URL('replays/'+id+'/manifest.json',config.base)).then(r=>r.json());
+ const head=await getManifest(a.sessionId),other=await getManifest(b.sessionId);
+ assert.equal(head.id,a.sessionId);assert.equal(other.id,b.sessionId);assert.notEqual(head.chunks[0].path,other.chunks[0].path);
+ const third=await browser.newPage({serviceWorkers:'block'});await third.goto(bookmark);await third.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId||document.querySelector('#error').textContent);assert.equal(await third.locator('#error').textContent(),'');
  assert.equal((await snapshot(third)).observation.turn,(await snapshot(first)).observation.turn);await synced(third);
- const directory=await(await fetch(endpoint+'/adventures')).json();assert.equal(directory.find(s=>s.id===b.sessionId).branch,secondCopy,'backing up one run never redirects another run to an older copied history');
+ const directory=await(await fetch(endpoint+'/adventures')).json();assert.equal(directory.find(s=>s.id===b.sessionId).recording,'inputs','each run retains its own input archive');
 });
 
 test('old local-recovery bookmarks automatically sync after an outage without a toggle',{timeout:60000},async t=>{
- const {url,browser}=await fixture(t),page=await browser.newPage();await create(page,url);await synced(page);const before=await snapshot(page);
- await page.route('**/api/vaults/*',r=>r.request().method()==='PUT'?r.fulfill({status:503,body:'temporary outage'}):r.continue());
+ const {url,browser}=await fixture(t),page=await browser.newPage({serviceWorkers:'block'});await create(page,url);await synced(page);const before=await snapshot(page);
+ await page.route('**/api/runs/*/inputs',r=>r.request().method()==='PUT'?r.fulfill({status:503,body:'temporary outage'}):r.continue());
  const local=new URL(page.url()),hash=new URLSearchParams(local.hash.slice(1));hash.set('local','1');local.hash=hash.toString();await page.goto(local.href);await page.reload();
  await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId);assert.equal((await snapshot(page)).sessionId,before.sessionId);
  await page.evaluate(async()=>{const a=document.querySelector('pixel-nethack');await a.run(()=>a.game.wait());});
  await page.waitForFunction(()=>document.querySelector('#cloud-status').textContent.includes('retrying'));
  assert.equal(await page.locator('#error').textContent(),'');assert.equal(await page.locator('#enable-cloud-backup').count(),0);
- await page.unroute('**/api/vaults/*');await page.evaluate(()=>window.dispatchEvent(new Event('online')));await synced(page);
+ await page.unroute('**/api/runs/*/inputs');await page.evaluate(()=>window.dispatchEvent(new Event('online')));await synced(page);
  assert.equal((await snapshot(page)).observation.turn,before.observation.turn+1);assert.ok(!page.url().includes('local=1'));
  const ledger=await(await fetch(url+'/api/runs/'+before.sessionId)).json();assert.equal(ledger.turn,before.observation.turn+1);
 });
 
 
 test('new and locally saved games enter without cloud reads',{timeout:60000},async t=>{
- const {url,browser}=await fixture(t),page=await browser.newPage();let reads=0;
+ const {url,browser}=await fixture(t),page=await browser.newPage({serviceWorkers:'block'});let reads=0;
  await page.addInitScript(()=>{AbortSignal.any=undefined;});
  await page.route('**/api/vaults/**',route=>{if(route.request().method()==='GET'){reads++;return route.fulfill({status:503,body:'offline'});}return route.continue();});
  await create(page,url);const before=await snapshot(page);assert.equal(reads,0,'new run never restores a cloud vault');
@@ -393,7 +395,7 @@ test('new and locally saved games enter without cloud reads',{timeout:60000},asy
 });
 
 test('slow startup reports its stage without private data and resumes when download finishes',{timeout:45000},async t=>{
- const {url,browser}=await fixture(t),page=await browser.newPage();let release;
+ const {url,browser}=await fixture(t),page=await browser.newPage({serviceWorkers:'block'});let release;
  const gate=new Promise(resolve=>release=resolve);t.after(()=>release());const diagnostics=[];
  await page.route('**/neonethack-core.wasm',async route=>{await gate;await route.continue();});
  page.on('request',r=>{if(new URL(r.url()).pathname==='/api/errors')diagnostics.push(r.postDataJSON());});

@@ -21,17 +21,22 @@ jobs:
           node <<'JS'
           const fs=require('node:fs');
           let records=0,events=0;const counts=new Map();
-          function route(raw){try{const u=new URL(raw,"https://local.invalid"),p=u.searchParams.has("__path")?"/api/"+u.searchParams.get("__path"):u.pathname;return p.replace(/\/api\/vaults\/[^/]+/,"/api/vaults/:vault").replace(/\/api\/runs\/[^/]+/,"/api/runs/:run").replace(/\/api\/account\/.*/,"/api/account/*").match(/^\/api\/(vaults\/:vault(\/adventures)?|runs(\/:run(\/replay)?)?|account(\/\*)?|health|stats|errors)$/)?.[0]??"other";}catch{return "other";}}
+          function route(raw){try{const u=new URL(raw,"https://local.invalid"),p=u.searchParams.has("__path")?"/api/"+u.searchParams.get("__path"):u.pathname;return p.replace(/\/api\/vaults\/[^/]+/,"/api/vaults/:vault").replace(/\/api\/runs\/[^/]+/,"/api/runs/:run").replace(/\/api\/account\/.*/,"/api/account/*").match(/^\/api\/(vaults\/:vault(\/adventures)?|runs(\/:run(\/(replay|inputs|checkpoint))?)?|account(\/\*)?|health|stats|errors)$/)?.[0]??"other";}catch{return "other";}}
           function inspect(value){
             if(typeof value==='string') {try{inspect(JSON.parse(value))}catch{};return;}
             if(!value||typeof value!=='object')return;
-            if(['game_entry_failed','client_diagnostic','request_failed','runtime_timing'].includes(value.event)){
+            if(['game_entry_failed','client_diagnostic','request_failed','runtime_timing','recording_upload_refused'].includes(value.event)){
               const safe={event:value.event};
+              if(value.event==='recording_upload_refused'){
+                if(['/api/runs/:run/inputs','/api/runs/:run/checkpoint'].includes(value.route))safe.route=value.route;
+                if(value.method==='PUT')safe.method=value.method;
+                if(Number.isInteger(value.status)&&value.status>=400&&value.status<600)safe.status=value.status;
+              }
               if(typeof value.code==='string'&&/^[a-z_]{1,48}$/.test(value.code))safe.code=value.code;
               if(['boot','create','resume'].includes(value.kind))safe.kind=value.kind;
               if(typeof value.local==='boolean')safe.local=value.local;
               if(typeof value.buildId==='string'&&/^[a-f0-9]{64}$/.test(value.buildId))safe.buildId=value.buildId;
-              if(['preparation','ownership','assets','compile','local','cloud','engine','ready','action','durability'].includes(value.stage))safe.stage=value.stage;
+              if(['preparation','ownership','assets','compile','local','cloud','engine','ready','action','durability','checkpoint'].includes(value.stage))safe.stage=value.stage;
               if(Number.isSafeInteger(value.duration)&&value.duration>=0&&value.duration<=600000)safe.duration=value.duration;
               if(['slow','complete','failed'].includes(value.outcome))safe.outcome=value.outcome;
               console.log(JSON.stringify(safe));events++;return;

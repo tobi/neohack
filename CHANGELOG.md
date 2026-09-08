@@ -8,8 +8,11 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- New runs record compact action logs instead of copying the map after every move. Backup happens quietly in the background and retries after reconnecting.
+- Replays start from static CDN files and play locally, including in embeds. Real level checkpoints speed up resume and seeking.
+- Install the game for offline play, new adventures and local resumption. Workshop scripts save their source locally before starting; account outages do not stop a test.
+
 - Local adventures open without waiting for cloud downloads. Startup shows its current stage, with slow starts reported privately for diagnosis.
-- Replay recording appends one frame at a time, eliminating growing main-thread pauses during longer runs.
 
 - A conflicting online save no longer blocks starting or resuming local games. Independent backup streams retain both copies.
 

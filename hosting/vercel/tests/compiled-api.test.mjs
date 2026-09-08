@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir,mkdtemp,rm} from 'node:fs/promises';
+import {mkdir,mkdtemp,rm,cp} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {resolve} from 'node:path';
@@ -13,6 +13,7 @@ test('emitted JavaScript starts the API and imports every service without TypeSc
  const out=await mkdtemp(resolve(root,'.vercel/compiled-api-'));
  t.after(()=>rm(out,{recursive:true,force:true}));
  await promisify(execFile)(process.execPath,[resolve(root,'node_modules/typescript/bin/tsc'),'-p',resolve(root,'tsconfig.json'),'--noEmit','false','--outDir',out]);
+ await cp(resolve(root,'.generated'),resolve(out,'.generated'),{recursive:true});
  const {handler}=await import(pathToFileURL(resolve(out,'api/index.js')).href);
  const {storageContext}=await import(pathToFileURL(resolve(out,'src/storage.js')).href);
  await storageContext.run(new MemoryStorage(),async()=>{

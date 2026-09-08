@@ -3,7 +3,9 @@
 A lantern-lit, approachable NetHack client. The live site serves the interface; the
 neonethack WebAssembly package runs the shared C semantic driver and game engine
 in the browser. This example is a client of the public API, with no game rules or
-gameplay HTTP routes. Vercel Functions and private Blob storage keep cloud journals; the local
+gameplay HTTP routes. New runs append protocol inputs locally and back them up as compressed CDN chunks.
+The installed PWA supports offline play and resume. Vercel handles optional uploads
+and account discovery; the local
 Bun server serves static files only. It lives at `web/neohack.dev/`.
 
 ## Play online
