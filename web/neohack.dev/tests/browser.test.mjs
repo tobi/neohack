@@ -2849,7 +2849,7 @@ test("welcome explains all three paths on desktop and mobile", { timeout: 60000 
   const paths = page.locator('#welcome-paths');
   assert.equal(await paths.locator('article').count(), 3);
   assert.match(await paths.innerText(), /JSON protocol/);
-  assert.equal(await paths.getByRole('link', {name:'GitHub ↗', exact:true}).getAttribute('href'), 'https://github.com/tobi/neohack');
+  assert.equal(await page.locator('.rail-github').getAttribute('href'), 'https://github.com/tobi/neohack');
   await page.waitForFunction(() => document.querySelector('#package-status').textContent.includes('Game downloaded'));
   const world = await page.locator('.map-viewport').boundingBox();
   const rail = await paths.boundingBox();
@@ -4077,4 +4077,105 @@ test('classic prefixes dispatch explicit protocol parameters and counts stay nat
   for (const key of ['1','0','s','g','G','m','F']) await page.keyboard.press(key);
   assert.equal((await snapshot(page)).revision,decision.revision);
   assert.equal(await page.locator('#keyboard-prefix').isVisible(),false);
+});
+
+test('inspection stays docked, exposes lore, and keeps numbered actions explicit', async t => {
+  const {page, errors} = await fixture(t);
+  await create(page);
+  const before = await snapshot(page);
+  const pet = before.observation.world.find(cell => cell.occupant?.kind === 'ally');
+  assert.ok(pet?.occupant.appearance);
+  const inspect = point => page.evaluate(({x,y}) => document.querySelector('pixel-nethack').inspectTile(x,y), point);
+  for (const width of [1440,390]) {
+    await page.setViewportSize({width,height:844});
+    await inspect(pet);
+    const card=page.getByRole('dialog',{name:'Tile actions'});
+    const origin=await card.boundingBox();
+    const neighbor=await page.evaluate(({x,y}) => {
+      const cells=document.querySelector('pixel-nethack').game.observation.neighborhood.cells;
+      return [{key:'ArrowLeft',dx:-1},{key:'ArrowRight',dx:1}].find(d=>cells.some(c=>c.x===x+d.dx&&c.y===y));
+    },pet);
+    assert.ok(neighbor);
+    await page.keyboard.press(neighbor.key);
+    assert.equal(Number(await card.getAttribute('data-x')),pet.x+neighbor.dx);
+    const moved=await card.boundingBox();
+    assert.equal(moved.x,origin.x,'arrows do not move the card horizontally');
+    assert.equal(moved.y,origin.y,'arrows do not move the card vertically');
+    await page.keyboard.press(neighbor.dx===-1?'ArrowRight':'ArrowLeft');
+    await page.keyboard.press('/');
+    await page.locator('.lore-entry:not([hidden])').waitFor();
+    assert.equal(await page.locator('#lore-query').inputValue(),pet.occupant.appearance);
+    assert.deepEqual(await snapshot(page),before,'inspection and contextual lore spend no turns or decisions');
+    await page.getByRole('button',{name:'Back to inspection'}).click();
+    await card.waitFor();
+    assert.equal(Number(await card.getAttribute('data-x')),pet.x);
+    assert.equal(Number(await card.getAttribute('data-y')),pet.y);
+    await page.waitForFunction(()=>document.querySelector('.tile-buttons button span')?.textContent==='Walk here');
+    const unavailable=card.locator('.tile-buttons button:disabled').first();
+    if(await unavailable.count()) {
+      await page.keyboard.press(await unavailable.getAttribute('aria-keyshortcuts'));
+      assert.deepEqual(await snapshot(page),before,'disabled shortcuts never send input');
+    }
+    await card.locator('.lore-link').click();
+    await page.locator('.lore-entry:not([hidden])').waitFor();
+    await page.keyboard.press('Escape');
+    await card.waitFor();
+    assert.ok((await card.locator('.lore-icon').boundingBox()).height>=44);
+    const close=await card.getByRole('button',{name:'Close tile actions',exact:true}).boundingBox();
+    assert.ok(close.x>=0&&close.x+close.width<=width&&close.height>=44);
+    await page.screenshot({path:`${root}/test-results/inspection-lore-${width}.png`});
+    await page.keyboard.press('Escape');
+    assert.equal(await card.count(),0);
+  }
+  await inspect(before.observation.you);
+  const search=page.getByRole('dialog',{name:'Tile actions'}).getByRole('button',{name:'Search here',exact:true});
+  const key=await search.getAttribute('aria-keyshortcuts');
+  assert.match(key,/^[1-9]$/);
+  assert.equal(await search.locator('kbd').textContent(),key);
+  await page.keyboard.press(key);
+  await ready(page);
+  assert.equal((await snapshot(page)).observation.turn,before.observation.turn+1,'one numbered shortcut performs one real action');
+  assert.deepEqual(errors,[]);
+});
+
+test('item lore uses the displayed label and returns to the item without changing it', async t => {
+  const {page,errors}=await fixture(t);await create(page);
+  const before=await snapshot(page), item=before.observation.inventory[0];
+  await page.evaluate(item=>document.querySelector('pixel-nethack').itemDetails(item),item);
+  await page.locator('#menu-title .lore-link').click();
+  await page.locator('.lore-entry:not([hidden])').waitFor();
+  assert.equal(await page.locator('#lore-query').inputValue(),item.label);
+  assert.deepEqual(await snapshot(page),before);
+  await page.getByRole('button',{name:'Back to item'}).click();
+  await page.locator('#item-actions').waitFor();
+  assert.equal(await page.locator('#menu-title .lore-link').textContent(),item.label);
+  assert.deepEqual(await snapshot(page),before);
+  assert.deepEqual(errors,[]);
+});
+
+test('closing contextual lore ignores its late result and menu focus blocks inspection shortcuts', async t => {
+  const {page,errors}=await fixture(t);await create(page);
+  const before=await snapshot(page);
+  const pet=before.observation.world.find(cell=>cell.occupant?.kind==='ally');
+  await page.evaluate(async pet=>{
+    const app=document.querySelector('pixel-nethack');
+    const lookup=app.game.lookup.bind(app.game);
+    app.game.lookup=async name=>{
+      const result=await lookup(name);
+      return new Promise(resolve=>{window.finishLore=()=>resolve(result);});
+    };
+    await app.inspectTile(pet.x,pet.y);
+  },pet);
+  await page.keyboard.press('/');
+  await page.waitForFunction(()=>typeof window.finishLore==='function');
+  await page.getByRole('button',{name:'Back to inspection'}).click();
+  const card=page.getByRole('dialog',{name:'Tile actions'});await card.waitFor();
+  await page.evaluate(()=>window.finishLore());
+  assert.equal(await page.locator('.lore-entry').isVisible(),false);
+  assert.equal(await card.getByRole('button',{name:'Close tile actions',exact:true}).evaluate(el=>el===document.activeElement),true,'late lore does not steal focus');
+  await page.getByLabel('Game menu',{exact:true}).click();
+  const action=card.getByRole('button',{name:'Move toward ally'});
+  await page.keyboard.press(await action.getAttribute('aria-keyshortcuts'));
+  assert.deepEqual(await snapshot(page),before,'menu focus cannot issue an inspection action');
+  assert.deepEqual(errors,[]);
 });

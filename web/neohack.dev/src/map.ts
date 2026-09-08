@@ -823,24 +823,6 @@ export class DungeonMap {
       target.style.left = canvas.offsetLeft + Math.max(100, Math.min(canvas.clientWidth - 100, (you.x - this.origin.x + 0.5) * 16 * this.zoom)) + "px";
       target.style.top = canvas.offsetTop + Math.max(120, Math.min(canvas.clientHeight - 160, (you.y - this.origin.y + 0.5) * 16 * this.zoom)) + "px";
     }
-    const panel =
-      canvas.parentElement!.querySelector<HTMLElement>(".tile-actions");
-    if (panel) {
-      const x =
-        (Number(panel.dataset.x) - this.origin.x + 0.5) * 16 * this.zoom;
-      const y = (Number(panel.dataset.y) - this.origin.y) * 16 * this.zoom;
-      let left = x - panel.offsetWidth / 2,
-        top = y - panel.offsetHeight - (STRUCTURE_RISE + 2) * this.zoom;
-      if (top < 8 && x + 16 * this.zoom + panel.offsetWidth < width - 8) {
-        left = x + 16 * this.zoom;
-        top = y - panel.offsetHeight / 2;
-      } else if (top < 8 && x - 16 * this.zoom - panel.offsetWidth > 8) {
-        left = x - 16 * this.zoom - panel.offsetWidth;
-        top = y - panel.offsetHeight / 2;
-      }
-      panel.style.left = `${Math.max(8, Math.min(width - panel.offsetWidth - 8, left))}px`;
-      panel.style.top = `${Math.max(8, Math.min(canvas.clientHeight - panel.offsetHeight - 8, top))}px`;
-    }
     const shift = this.travel(now);
     c.save();
     c.translate(shift.x, shift.y);

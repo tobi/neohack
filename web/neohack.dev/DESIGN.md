@@ -377,6 +377,12 @@ results; the journal preserves the original engine narration.
 
 ## Fullscreen world and walk-in welcome
 
+The site top bar contains the welcome tagline, runtime download status, GitHub,
+account controls and game menu. Keep them out of the welcome card column. At
+narrower widths, metadata and GitHub share a compact second header row; during
+play, hide welcome metadata and keep navigation and the menu in one row. The
+world fills the remaining height. Menu contents remain anchored to their button.
+
 Keep a discreet, small-font `@tobi` link to `https://x.com/tobi` at the welcome
 screen's bottom-right corner. Use readable muted text, a keyboard focus indicator
 and a generous invisible touch target. Respect safe areas and keep it clear of
@@ -449,7 +455,11 @@ explain the question mark in inspection rather than inventing an identify action
 Inspection leads with the clicked occupant, a sprite portrait and an Ally/Creature
 label. Terrain titles apply to empty tiles. Moving toward an ally may swap places;
 moving toward another creature may attack. Make this clear on the action buttons.
-Keep risky actions secondary and provide a compact close control. No auto-action on
+Dock the inspection card at a stable viewport position; arrow/vi inspection changes
+its contents without moving the panel. Keep title, book/close controls and shortcut
+footer visible while the action body scrolls. Actions have numbered key badges,
+arrow keys inspect, / opens lore, and Escape closes. Disabled actions never become
+keyboard inputs. Keep risky actions secondary. No auto-action on
 inspection or focus. All attempts use the API's action offer and observed revision.
 
 Within the sprite pass, draw ground loot and fixtures first, then all mobile actors
@@ -1280,7 +1290,14 @@ single-step movement. Inspecting and previewing consume no game turn or randomne
 Cloud upload failures stay in the compact save status, with detail available on its tooltip. They never open the central gameplay error overlay.
 ### Encyclopedia
 
-The game menu opens the pinned engine’s encyclopedia in a compact searchable book.
+The game menu and a consistent open-book icon open the pinned engine’s encyclopedia
+in a compact searchable book. Dotted creature/terrain names in inspection and item
+detail titles are lookup buttons. Use only perceived appearance names, terrain
+descriptions or the exact displayed item label; never infer an unidentified item
+or creature identity. Category-only creatures offer the book’s search form.
+Contextual lookup pre-fills and opens the entry with a return to inspection/item
+details, provided the same game revision still applies. This first integration
+does not turn arbitrary journal prose into inferred identities.
 Look up a creature, item or place by name; show the engine’s wording with prose
 lines reflowed into paragraphs for narrow screens. This is explicitly lore, not
 identification of the perceived scene. Lookup costs no turns, changes no standing
