@@ -7,7 +7,7 @@ import {
   STRUCTURE_RISE,
   STRUCTURE_OVERHANG,
 } from "./dungeon-art";
-import { categoryMark, drawCreatureArt, drawSymbolArt } from "./symbol-art";
+import { categoryMark, drawCreatureArt, drawSymbolArt, drawItemArt } from "./symbol-art";
 
 import { roles, heroArt } from "./characters";
 
@@ -104,7 +104,7 @@ function drawContents(
   if (pass === "loot" && cell.objects?.length) {
     const object = cell.objects[0]!;
     if (symbols) glyph(c, object.mark, colors[object.color] ?? "#dbc887", x, y);
-    else
+    else if (!drawItemArt(c, object, x, y))
       drawSymbolArt(
         c,
         "object",
@@ -164,7 +164,10 @@ export function cellDescription(cell: Cell) {
     cell.terrain.type.replace(/([A-Z])/g, " $1").toLowerCase() +
     (cell.visible === false ? " · Remembered, out of sight" : "");
   const occupant = cell.occupant;
-  return `${cell.x}, ${cell.y}: ${terrain}${occupant ? (occupant.kind === "self" ? " · You" : ` · ${creatureLabel(occupant)}${occupant.kind === "ally" ? " · Ally" : ""} (${occupant.mark})`) : ""}${cell.objects?.length ? ` · Object ${cell.objects.map((o) => o.mark).join(", ")}` : ""}`;
+  const objects = cell.objects?.map(o => o.known?.appearance
+    ? `${o.known.appearance}${o.known.depictedCreature ? ` of ${o.known.depictedCreature}` : ''} (${o.mark})`
+    : `Object ${o.mark}`).join(', ');
+  return `${cell.x}, ${cell.y}: ${terrain}${occupant ? (occupant.kind === "self" ? " · You" : ` · ${creatureLabel(occupant)}${occupant.kind === "ally" ? " · Ally" : ""} (${occupant.mark})`) : ""}${objects ? ` · ${objects}` : ""}`;
 }
 
 export function actionMessages(snapshot: Snapshot): string[] {
@@ -895,6 +898,8 @@ export class DungeonMap {
               objects: this.observation.here.items.map((item) => ({
                 mark: categoryMark(item.category),
                 color: 7,
+                category: item.category,
+                known: item.known?.appearance ? {appearance: item.known.appearance, depictedCreature: item.known.depictedCreature} : undefined,
               })),
             }
           : cell;

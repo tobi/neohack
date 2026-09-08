@@ -1,5 +1,6 @@
 import { encounterArt, type CreaturePixels } from "./encounter-art";
 import { itemPixels, itemSilhouette } from "./item-art";
+import { equipmentPixels, drawEquipment } from "./equipment-pixels";
 
 /** Original pixel silhouettes for public display categories, never item IDs.
  * A food token also covers remains; a canine token does not identify a species.
@@ -424,9 +425,27 @@ export function categoryMark(category: string): string {
     )[category] ?? ""
   );
 }
-export function inventoryArt(item: { category: string; known?: { appearance?: string } }): string {
+type IllustratedItem = { category?: string; known?: { appearance?: string; depictedCreature?: string } };
+
+/** Draw the same perceived item shape in world, inventory and HUD. */
+export function drawItemArt(c: CanvasRenderingContext2D, item: IllustratedItem, x = 0, y = 0): boolean {
+  const silhouette = itemSilhouette(item.category ?? '', item.known?.appearance, item.known?.depictedCreature);
+  if (!silhouette) return false;
+  if (equipmentPixels[silhouette]) drawEquipment(c, silhouette, x, y);
+  else {
+    const palette: Record<string, string> = { '#': '#20282b', h: '#d4c8a9', o: silhouette === 'chest' ? '#a77c52' : '#a9b39a', s: '#62645a' };
+    for (const [row, pixels] of (itemPixels[silhouette] ?? icons[silhouette]!).entries())
+      for (const [col, pixel] of [...pixels].entries()) if (pixel !== '.') {
+        c.fillStyle = palette[pixel]!;
+        c.fillRect(x + col + 2, y + row + 2, 1, 1);
+      }
+  }
+  return true;
+}
+
+export function inventoryArt(item: IllustratedItem & {category: string}): string {
   const { category } = item;
-  const silhouette = itemSilhouette(category, item.known?.appearance);
+  const silhouette = itemSilhouette(category, item.known?.appearance, item.known?.depictedCreature);
   const key = `${category}:${silhouette ?? "category"}`;
   const cached = inventoryImages.get(key);
   if (cached) return cached;
@@ -434,13 +453,8 @@ export function inventoryArt(item: { category: string; known?: { appearance?: st
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 16;
   const c = canvas.getContext("2d")!;
-  if (silhouette) {
-    const palette: Record<string, string> = { '#': '#20282b', h: '#d4c8a9', o: silhouette === 'chest' ? '#a77c52' : '#a9b39a', s: '#62645a' };
-    for (const [y, row] of (itemPixels[silhouette] ?? icons[silhouette]!).entries())
-      for (const [x, pixel] of [...row].entries()) if (pixel !== '.') {
-        c.fillStyle = palette[pixel]!;
-        c.fillRect(x + 2, y + 2, 1, 1);
-      }
+  if (drawItemArt(c, item)) {
+    // Shared world and inventory artwork has been drawn.
   } else if (['weapon', 'armor', 'tool'].includes(category)) {
     // A class glyph does not pretend an unsupported item is a sword or shirt.
     c.fillStyle = '#d4c8a9';

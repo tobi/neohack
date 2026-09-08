@@ -12,7 +12,7 @@ const nullable = (s: Schema): Schema => ({ anyOf: [s, { type: "null" }] });
 const selection = object({ min: integer, max: integer });
 const item = object({ id: string, label: string, location: enumeration("inventory", "here"), quantity: integer, category: string, actions: array(enumeration("eat", "equip", "remove", "apply", "drink", "read", "zap", "wield", "drop", "throw", "offer", "dip", "rub", "invoke", "quiver", "pickup")), usage: array(enumeration("worn", "wielded", "offhand", "alternate", "quivered", "attached")) }, ["id", "label", "location", "quantity"]);
 const lootItem = object({id: string, label: string, quantity: integer});
-const knownProperties = object({appearance: string, identity: string, beatitude: enumeration("blessed", "uncursed", "cursed"), charges: integer, recharges: integer, enchantment: integer, erosionProof: boolean}, []);
+const knownProperties = object({appearance: string, depictedCreature: string, identity: string, beatitude: enumeration("blessed", "uncursed", "cursed"), charges: integer, recharges: integer, enchantment: integer, erosionProof: boolean}, []);
 item.properties.known = knownProperties;
 item.properties.equipmentTargets = array(object({slot: enumeration(...equipmentSlots), action: enumeration("equip", "wield", "quiver")}));
 item.properties.equipmentSlots = { ...array(enumeration(...equipmentSlots)), uniqueItems: true };
@@ -50,7 +50,7 @@ const cellActions = closed({
   terrain: closed({ type: string, freshness: enumeration("current", "remembered", "unknown"), orientation: enumeration("horizontal", "vertical") }, ["type", "freshness"]),
   door: closed({ lock: enumeration("locked", "unlocked", "unknown"), freshness: enumeration("witnessed", "remembered", "unknown"), observedTurn: integer }, ["lock", "freshness"]),
   occupant: closed({ kind: enumeration("self", "creature", "ally"), mark: string, color: integer, appearance: string, attitude: enumeration("hostile", "peaceful", "tame") }, ["kind"]),
-  objects: array(closed({ mark: string, color: integer, kind: enumeration("boulder") }, ["mark", "color"])),
+  objects: array(closed({ mark: string, color: integer, kind: enumeration("boulder"), category: string, known: closed({appearance: string, depictedCreature: string}, ["appearance"]) }, ["mark", "color"])),
   hazards: array(enumeration("trap", "water", "lava")),
   walkable: nullable(boolean), movement: closed({ relation: enumeration("here", "adjacent", "distant"), intent: enumeration("step", "attemptOpen", "attemptObstacle", "creatureBump", "allyBump", "possiblePush", "unknown"), knownRestriction: enumeration("intactDoorDiagonal", "lockedDoor", "knownTerrainObstacle"), requiresSqueeze: boolean }, ["relation"]),
   actions: { ...array(actionOffer), maxItems: 16 },
@@ -73,7 +73,7 @@ const observation = object({
     x: integer, y: integer, visible: boolean,
     terrain: object({ type: string, knowledge: { const: "remembered" }, freshness: enumeration("current", "remembered", "unknown"), orientation: enumeration("horizontal", "vertical") }, ["type", "knowledge"]),
     occupant: object({ kind: enumeration("self", "creature", "ally"), mark: string, color: integer, appearance: string, attitude: enumeration("hostile", "peaceful", "tame") }, ["kind", "mark"]),
-    objects: array(object({ mark: string, color: integer, kind: enumeration("boulder") }, ["mark", "color"])),
+    objects: array(object({ mark: string, color: integer, kind: enumeration("boulder"), category: string, known: closed({appearance: string, depictedCreature: string}, ["appearance"]) }, ["mark", "color"])),
   }, ["x", "y", "terrain"])), heard: array(string),
 }, ["turn", "location", "you", "vitals", "inventory", "inventoryKnown", "here", "perception", "world", "heard"]);
 /** Responses are additive within v1. Clients replace observations, ignore

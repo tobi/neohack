@@ -141,6 +141,13 @@ void nnh_emit_display(const nnh_known_cell *c, mj_Buf *b)
         mj_key(b, "mark"); mj_strv(b, c->mark);
         mj_key(b, "color"); mj_intv(b, c->color);
         if (c->boulder) { mj_key(b, "kind"); mj_strv(b, "boulder"); }
+        if (c->object_category[0] && c->object_appearance[0]) {
+            mj_key(b, "category"); mj_strv(b, c->object_category);
+            mj_key(b, "known"); mj_obj(b);
+            mj_key(b, "appearance"); mj_strv(b, c->object_appearance);
+            if (c->depicted_creature[0]) { mj_key(b, "depictedCreature"); mj_strv(b, c->depicted_creature); }
+            mj_endobj(b);
+        }
         mj_endobj(b); mj_endarr(b);
     }
 }

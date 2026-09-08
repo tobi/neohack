@@ -230,6 +230,24 @@
                 "enum": [
                   "boulder"
                 ]
+              },
+              "category": {
+                "type": "string"
+              },
+              "known": {
+                "type": "object",
+                "properties": {
+                  "appearance": {
+                    "type": "string"
+                  },
+                  "depictedCreature": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "appearance"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -6726,6 +6744,24 @@
                               "enum": [
                                 "boulder"
                               ]
+                            },
+                            "category": {
+                              "type": "string"
+                            },
+                            "known": {
+                              "type": "object",
+                              "properties": {
+                                "appearance": {
+                                  "type": "string"
+                                },
+                                "depictedCreature": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "appearance"
+                              ],
+                              "additionalProperties": false
                             }
                           },
                           "required": [
@@ -12710,6 +12746,9 @@
                   "appearance": {
                     "type": "string"
                   },
+                  "depictedCreature": {
+                    "type": "string"
+                  },
                   "identity": {
                     "type": "string"
                   },
@@ -12890,6 +12929,9 @@
                     "type": "object",
                     "properties": {
                       "appearance": {
+                        "type": "string"
+                      },
+                      "depictedCreature": {
                         "type": "string"
                       },
                       "identity": {
@@ -13143,6 +13185,24 @@
                       "enum": [
                         "boulder"
                       ]
+                    },
+                    "category": {
+                      "type": "string"
+                    },
+                    "known": {
+                      "type": "object",
+                      "properties": {
+                        "appearance": {
+                          "type": "string"
+                        },
+                        "depictedCreature": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "appearance"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -13267,6 +13327,9 @@
                         "type": "object",
                         "properties": {
                           "appearance": {
+                            "type": "string"
+                          },
+                          "depictedCreature": {
                             "type": "string"
                           },
                           "identity": {

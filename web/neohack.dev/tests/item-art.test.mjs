@@ -15,12 +15,17 @@ test('inventory illustrations distinguish perceived shapes and ignore nicknames'
   t.after(() => browser.close());
   const page = await browser.newPage({viewport: {width: 540, height: 760}, deviceScaleFactor: 1});
   const result = await page.evaluate(async source => {
-    const { inventoryArt } = await import(URL.createObjectURL(new Blob([source], {type: 'text/javascript'})));
+    const { inventoryArt, drawItemArt } = await import(URL.createObjectURL(new Blob([source], {type: 'text/javascript'})));
     document.body.style.cssText = 'margin:0;padding:24px;background:#192421;color:#e5dfcf;font:18px system-ui';
     const samples = [
       ['armor', 'small shield'], ['weapon', 'mace'], ['tool', 'chest'],
       ['armor', 'riding gloves'], ['armor', 'hard shoes'], ['armor', 'plumed helmet'],
       ['armor', 'ornamental cope'], ['armor', 'leather armor'],
+      ['weapon', 'long sword'], ['weapon', 'dagger'], ['weapon', 'curved sword'],
+      ['weapon', 'axe'], ['weapon', 'double-headed axe'], ['weapon', 'spear'],
+      ['weapon', 'vulgar polearm'], ['weapon', 'bow'], ['weapon', 'crossbow'],
+      ['weapon', 'crossbow bolt'], ['weapon', 'war hammer'], ['weapon', 'club'],
+      ['weapon', 'staff'], ['weapon', 'bullwhip'], ['object', 'statue'],
     ];
     const urls = [];
     for (const [category, appearance] of samples) {
@@ -33,12 +38,23 @@ test('inventory illustrations distinguish perceived shapes and ignore nicknames'
       row.append(document.createTextNode(appearance));document.body.append(row);
     }
     const plain=inventoryArt({category:'tool'});
+    const statues = ['human','dog','housecat','raven','python','red dragon'].map(depictedCreature=>({category:'object',known:{appearance:'statue',depictedCreature}}));
+    const statueImages = statues.map(inventoryArt);
+    const worldParity = [...statues,...samples.map(([category,appearance])=>({category,known:{appearance}}))].every(item=>{
+      const canvas=document.createElement('canvas');canvas.width=canvas.height=16;
+      return drawItemArt(canvas.getContext('2d'),item) && canvas.toDataURL()===inventoryArt(item);
+    });
     return {urls, nicknameSafe: plain===inventoryArt({category:'tool',label:'a chest named mace'}),
+      statueImages, worldParity,
       missingSafe: inventoryArt({category:'armor'})!==urls[0],
-      cacheSafe: inventoryArt({category:'armor',known:{appearance:'small shield'}})===urls[0]};
+      cacheSafe: inventoryArt({category:'armor',known:{appearance:'small shield'}})===urls[0],
+      identitySafe: inventoryArt({category:'weapon',known:{identity:'long sword'},label:'long sword'})===inventoryArt({category:'weapon'}),
+      statueSafe: inventoryArt({category:'object',known:{appearance:'statue'},label:'statue of a dragon'})===urls.at(-1)};
   }, source);
   assert.equal(new Set(result.urls).size, result.urls.length);
-  assert.ok(result.nicknameSafe && result.missingSafe && result.cacheSafe);
+  assert.equal(new Set(result.statueImages).size,6);
+  assert.ok(result.worldParity);
+  assert.ok(result.nicknameSafe && result.missingSafe && result.cacheSafe && result.identitySafe && result.statueSafe);
   await mkdir(join(root, 'test-results'), {recursive:true});
   await page.screenshot({path:join(root,'test-results/item-art.png')});
 });

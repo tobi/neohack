@@ -38,6 +38,11 @@ the editable renderers are `src/map.ts`, `src/dungeon-art.ts` and
 and the additional common-encounter silhouettes in `src/encounter-art.ts` are
 original editable drawings for this example.
 
+The equipment grids in `src/item-art.ts` and `src/equipment-pixels.ts` are
+original project drawings, including the 24 weapon shapes and six statue
+designs approved on 2026-09-08. Their exported review atlas is generated from
+those editable grids; it contains no LimeZu or original NetHack tile pixels.
+
 Project-code and original-art licensing is recorded in the repository's
 [notices](../../../lib/neonethack/NOTICE.md).
 

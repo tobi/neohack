@@ -225,8 +225,12 @@ World, neighborhood and `session.actions` share displayed occupant
 `kind`, `appearance`, `mark`, `color` and disclosed `attitude`, plus displayed `objects`. An already
 perceived boulder carries `objects[].kind: "boulder"`, independently of any
 `movement.intent: "possiblePush"` offer. This does not reveal whether a push will
-succeed or what is beyond it. Generic objects have no inferred identity or
-category. Optional display fields may be absent on an older pinned package.
+succeed or what is beyond it. Rendered weapons and statues may also carry `category` and
+`known.appearance`. A statue may carry `known.depictedCreature`, the subject
+shown by its rendered glyph, not a living occupant. These facts describe the
+apparent shape, including disguises and remembered display; they are withheld
+during hallucination. Other generic objects have no inferred identity or category.
+Optional display fields may be absent on an older pinned package.
 The map is not a query of undiscovered level state. Replace the full observation
 on each response; never carry future terrain backward through a replay. Labels,
 marks and colors are presentation data, not object identity or game rules.
@@ -616,7 +620,8 @@ knowledge nor consume input or randomness.
   identities are withheld; this is not the entire interactive chronicle.
 
 Inventory and perceived floor objects have a `known` object. Individual fields
-are omitted when unknown: identified `identity`, known `beatitude`, identified
+are omitted when unknown: perceived `appearance`, a statue’s perceived
+`depictedCreature`, identified `identity`, known `beatitude`, identified
 `charges`/`recharges` or `enchantment`, and known `erosionProof`. Hallucination
 withholds these properties. Absence of a curse/charge field means unknown, not
 uncursed/empty. Nutrition, prayer timers, hidden traps and unseen monster state

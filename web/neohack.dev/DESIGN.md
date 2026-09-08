@@ -266,6 +266,33 @@ Other creature and loot categories use original outlined pixel grids in
 `src/symbol-art.ts`. Food art includes the `%` class of food/remains; it does not
 claim edibility or identify a corpse. No art choice supplies an operation target.
 
+Weapon map/inventory/HUD art uses original editable 16×16 pixel grids in
+`src/equipment-pixels.ts`, with upper-left metal highlights, muted steel, wood
+and brass. Twenty-four weapon shapes cover all 71 weapon definitions' perceived
+appearances in the pinned `objects.h`; related weapons share shapes. The user
+approved all thirty weapon/statue drawings on 2026-09-08. All six statue designs
+now select from structured `known.depictedCreature`: generic, canine, feline,
+bird, serpent and dragon. Unmapped/unknown subjects retain the generic statue.
+The engine emits an observed statue's subject in item knowledge and uses the
+rendered statue glyph for map knowledge, including remembered/apparent statues.
+Weapon map shapes also come from rendered physical appearances. Hallucination
+withholds these structured details. Never infer them from labels, glyph letters,
+nicknames or hidden occupants. World, local, accessible text, inventory and HUD
+use these same perceived facts; symbol mode keeps the original display marks.
+Other map object classes retain their class art unless a current floor item
+explicitly supplies an appearance. There is no extra image request or atlas-load
+race: all views draw the same editable grids synchronously.
+This expands the approved original item-art exception without changing the base
+pack. The inspected LimeZu museum statues (0256–0267) are seated-figure variants,
+not the animal variety requested here. The engine's original tile sources are
+also present but are not the selected web art.
+
+Run `bun scripts/render-equipment.ts` to export the exact runtime grids as a
+transparent eight-column sprite sheet, frame manifest and native/4× preview
+under `test-results/art/equipment/`. The exporter checks grid bounds/palette and
+coverage against the pinned weapon definitions. Source grids are the editable
+recipe; exported review/build artifacts stay out of source and `public/art/`.
+
 Rock-class objects use a broad, raised boulder silhouette in the world, with a
 light crown, dark side face and contact shadow. The sprite extends beyond its
 16px anchor tile. Ground objects render after terrain; mobile actors render afterward in foot

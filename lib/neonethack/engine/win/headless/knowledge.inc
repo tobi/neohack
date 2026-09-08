@@ -83,6 +83,10 @@ static void hl_known_properties(JBuf *jb, struct obj *o)
              * when this object type has no unidentified appearance. */
             jb_key(jb, "appearance");
             jb_str(jb, appearance ? appearance : OBJ_NAME(objects[o->otyp]));
+            if (o->otyp == STATUE && o->corpsenm >= LOW_PM && o->corpsenm < NUMMONS) {
+                jb_key(jb, "depictedCreature");
+                jb_str(jb, mons[o->corpsenm].pmnames[NEUTRAL]);
+            }
         }
         if (o->dknown && objects[o->otyp].oc_name_known) {
             jb_key(jb, "identity"); jb_str(jb, OBJ_NAME(objects[o->otyp]));
