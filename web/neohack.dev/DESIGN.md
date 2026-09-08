@@ -1315,3 +1315,8 @@ Vercel logs; repeated attempts are not suppressed. Raw messages and save links
 are never transmitted.
 
 Local entry opens the existing device journal without downloading a cloud copy. New games never restore a vault. A fresh browser with no local run restores the acknowledged cloud branch. Different device branches are not silently substituted during local entry. Startup displays its current stage and reports bounded slow/complete/failure timings to private operational logs. New run recording appends individual protocol inputs and completion rows; walking never reads or rewrites historical recording rows.
+
+The main game and workshop register a run in the vault directory before its first
+background input upload. This cancellable dependency never delays local play;
+registration failures retain the exact upload batch for retry. Metadata writes
+coalesce the latest run state, and ledger availability does not gate input backup.

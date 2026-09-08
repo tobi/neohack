@@ -91,7 +91,7 @@ function schedule(vault:string,delay:number) {
   const p=pending.get(vault)!;clearTimeout(p.timer);if(p.flight)return;
   p.timer=setTimeout(()=>{
     p.flight=true;const copy=p.saves;
-    void publishCloud(copy,vault).then(()=>{
+    void enqueuePublication(copy,vault).then(()=>{
       p.flight=false;p.attempts=0;
       if(p.saves===copy){pending.delete(vault);p.saved?.();}
       else {p.since=Date.now();schedule(vault,5000);}
@@ -99,6 +99,7 @@ function schedule(vault:string,delay:number) {
   },delay);
 }
 export function queueCloud(saves:CloudAdventure[],vault=playerId(),saved?:()=>void) {
+  rememberMetadata(saves,vault);
   const p=pending.get(vault)??{saves:[],since:Date.now(),attempts:0};
   const updates=new Map(p.saves.map(save=>[save.id,save]));
   for(const save of structuredClone(saves))updates.set(save.id,save);
@@ -110,12 +111,47 @@ window.addEventListener('online',()=>{for(const vault of pending.keys())schedule
 let publication: Promise<void> = Promise.resolve();
 const published = new Map<string, string>();
 const publishedRuns=new Map<string,string>();
-export function publishCloud(saves: CloudAdventure[], vault = playerId()) {
-  const copy = structuredClone(saves).map(save => {
-    const {localStore:_store,savedAt:_time,...publicMetadata} = save as CloudAdventure & {localStore?:string;savedAt?:number};
-    return publicMetadata;
+const latestRuns=new Map<string,CloudAdventure>();
+const directoryRuns=new Map<string,string>();
+const directoryFlights=new Map<string,Promise<void>>();
+function rememberMetadata(saves:CloudAdventure[],vault:string) {
+  for(const save of structuredClone(saves)) {
+    const {localStore:_store,savedAt:_time,...metadata}=save as CloudAdventure & {localStore?:string;savedAt?:number};
+    const key=vault+':'+save.id, old=latestRuns.get(key);
+    if(!old || ((!old.ended || metadata.ended) && metadata.turn>=old.turn))latestRuns.set(key,metadata);
+  }
+}
+// Registration and debounced metadata share the same directory writer. Select
+// the latest per-run value when work starts, not the snapshot that queued it.
+function writeDirectory(ids:string[],vault:string,signal?:AbortSignal) {
+  const next=(directoryFlights.get(vault)??Promise.resolve()).then(async()=>{
+    signal?.throwIfAborted();
+    const runs=ids.map(id=>latestRuns.get(vault+':'+id)!).filter(run=>directoryRuns.get(vault+':'+run.id)!==JSON.stringify(run));
+    if(!runs.length)return;
+    const response=await fetch(`/api/vaults/${vault}/adventures`,{
+      method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(runs),
+      signal:signal?AbortSignal.any([signal,AbortSignal.timeout(10000)]):AbortSignal.timeout(10000),
+    });
+    if(!response.ok)throw Error('Cloud adventure registration was not saved.');
+    for(const run of runs)directoryRuns.set(vault+':'+run.id,JSON.stringify(run));
   });
-  const next = publication.then(() => writeCloud(copy, vault));
+  const settled=next.catch(()=>{});
+  directoryFlights.set(vault,settled);
+  void settled.then(()=>{if(directoryFlights.get(vault)===settled)directoryFlights.delete(vault);});
+  return next;
+}
+/** Only the vault directory is an upload prerequisite; ledger availability is not. */
+export function registerCloudRun(save:CloudAdventure,vault:string,signal:AbortSignal) {
+  rememberMetadata([save],vault);
+  return writeDirectory([save.id],vault,signal);
+}
+export function publishCloud(saves: CloudAdventure[], vault = playerId()) {
+  rememberMetadata(saves,vault);
+  return enqueuePublication(saves,vault);
+}
+function enqueuePublication(saves:CloudAdventure[],vault:string) {
+  const ids=saves.map(save=>save.id);
+  const next = publication.then(() => writeCloud(ids.map(id=>latestRuns.get(vault+':'+id)!), vault));
   publication = next.catch(() => {});
   return next;
 }
@@ -134,10 +170,10 @@ async function writeCloud(saves: CloudAdventure[], vault: string) {
   if(batch.length)batches.push(batch);
   for(const runs of batches) {
     const responses=await Promise.all([
-      fetch(`/api/vaults/${vault}/adventures`,{method:'PUT',headers,body:JSON.stringify(runs),signal:AbortSignal.timeout(10000)}),
+      writeDirectory(runs.map(run=>run.id),vault),
       fetch('/api/runs',{method:'POST',headers,body:JSON.stringify({runs:runs.map(save=>{const {pending:_pending,...meta}=save as CloudAdventure & {pending?:unknown};return meta;})}),signal:AbortSignal.timeout(10000)}),
     ]);
-    if(responses.some(r=>!r.ok))throw Error('Cloud adventure metadata was not saved.');
+    if(!responses[1]!.ok)throw Error('Cloud adventure metadata was not saved.');
     for(const run of runs)publishedRuns.set(vault+':'+run.id,JSON.stringify(run));
   }
   published.set(vault,serialized);

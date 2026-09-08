@@ -73,6 +73,12 @@ record each observation. See [the format and recovery contract](CLOUD_SAVES.md).
 The transport's archive playback/checkpoint methods operate in isolated memory,
 using the exact package. They are not gameplay tools or a way to modify a live run.
 
+An optional `registerUpload(sessionId, signal)` transport callback establishes a
+host's upload prerequisite once per run and transport. It runs outside gameplay
+dispatch and local transactions, receives cancellation on close, and is bounded
+to twelve seconds per attempt. Honor its signal in network work. Failure retries
+the prerequisite with the exact pending upload; it never re-executes game inputs.
+
 ### `indexeddb`
 
 Requires IndexedDB, Web Locks and gzip Compression/Decompression Streams in a

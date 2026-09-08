@@ -51,6 +51,13 @@ earlier batch boundary. The compressed bytes and SHA-256 are retained locally
 before upload. An acknowledgement must identify exactly that hash and end cursor;
 a lost acknowledgement retries identical bytes without re-executing the game.
 
+Before the first upload in a worker, the website registers that run in the vault
+directory through a cancellable background prerequisite. The same directory
+writer coalesces current per-run metadata; ledger publication is independent.
+Registration failure retains the pending compressed bytes and cursor, and retries
+registration rather than a game input. Reload re-establishes the prerequisite from
+local run metadata. Closing the transport cancels it without waiting for network.
+
 `PUT /api/runs/:id/inputs` validates the write capability, sequence, runtime and
 size limits. It publishes an immutable `chunks/<sha256>.gz` object and conditionally
 advances the run head and a hash-named immutable manifest. The mutable

@@ -41,6 +41,7 @@ import {
   playerId, rememberPlayer, requestedRun, showRunUrl, clearRunUrl,
   journalUrl,
   publishCloud,
+  registerCloudRun,
   queueCloud,
   restoreAdventures,
   type PlayControl,
@@ -677,6 +678,11 @@ class PixelNethack extends HTMLElement {
           ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica, replicaBranches: true, replicaRestore: !!sessionId && !preferLocal, replicaSession: sessionId }
           : { kind: "indexeddb", name: this.storeName },
         workerUrl: new URL(`${transportPackage.base}core-worker.mjs`, location.href),
+        registerUpload: async (id,signal) => {
+          const save=this.current?.id===id?this.current:this.saves.find(save=>save.id===id);
+          if(!save)throw Error('Run metadata is not ready for background registration.');
+          await registerCloudRun(save,this.vault,signal);
+        },
         onTiming: ({stage,duration}) => reportTiming(stage,duration,'slow',this.runtimeBuildId),
         onStartup: stage => { this.entryStage=stage;this.text('#loading-detail',({ownership:'Opening your local save…',assets:'Downloading the game…',compile:'Preparing the game…',local:'Reading your local adventure…',cloud:'Downloading your saved adventure…',engine:'Starting the dungeon…',ready:'Entering your adventure…'})[stage]); },
         onReplicaStatus: async ({ state, message, branch, sessions }) => {

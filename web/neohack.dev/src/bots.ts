@@ -12,7 +12,7 @@ import { roles } from './characters';
 import { loadRuntime, runtimePackage } from './runtime-loader';
 import { accountApi } from './account-client';
 import { ScriptRecorder } from './script-recording';
-import {playerId,rememberPlayer,queueCloud,publishCloud,type CloudAdventure} from './cloud';
+import {playerId,rememberPlayer,queueCloud,registerCloudRun,type CloudAdventure} from './cloud';
 import { NeohackWorld } from './component';
 import { isSnapshot } from '../../../lib/neonethack/typescript/client';
 import { toolMethods } from '../../../lib/neonethack/mcp/tools';
@@ -149,10 +149,17 @@ async function refreshBots(){
   }
   void ScriptRecorder.recover(accountId,async metadata=>{
     const {wasm}=await loadRuntime();
-    const transport=await wasm.WasmTransport.create({storage:{kind:'journal',name:metadata.storeName,uploadUrl:new URL('/api/runs/',location.href).href,uploadToken:metadata.vault},workerUrl:new URL('/runtime/wasm/'+metadata.buildId+'/core-worker.mjs',location.href)});
+    const currentPackage=await runtimePackage();
+    const transport=await wasm.WasmTransport.create({storage:{kind:'journal',name:metadata.storeName,uploadUrl:new URL('/api/runs/',location.href).href,uploadToken:metadata.vault},
+      runtimeUrl:new URL('/runtime/wasm/'+metadata.buildId+'/',location.href).href,
+      workerUrl:new URL(currentPackage.base+'core-worker.mjs',location.href),
+      registerUpload:async(id,signal)=>{
+        const info=await transport.recordingInfo(id);if(!info)throw Error('Local script inputs are missing');
+        await registerCloudRun({id,name:metadata.name,role:metadata.role,seed:metadata.seed,buildId:metadata.buildId,control:'bot',automated:true,recording:'inputs',turn:info.summary?.turn??1,ended:info.complete},metadata.vault,signal);
+      }});
     try{
       const info=await transport.recordingInfo(metadata.id);if(!info)throw Error('Local script inputs are missing');
-      await publishCloud([{id:metadata.id,name:metadata.name,role:metadata.role,seed:metadata.seed,buildId:metadata.buildId,control:'bot',automated:true,recording:'inputs',turn:info.summary?.turn??1,ended:info.complete}],metadata.vault);
+      queueCloud([{id:metadata.id,name:metadata.name,role:metadata.role,seed:metadata.seed,buildId:metadata.buildId,control:'bot',automated:true,recording:'inputs',turn:info.summary?.turn??1,ended:info.complete}],metadata.vault);
       const ack=await transport.flushRecording(metadata.id);if(ack.count<info.count)throw Error('Script backup pending');
     }finally{await transport.close();}
   }).catch(()=>{});
@@ -267,13 +274,18 @@ $('test').onclick=()=>void (async()=>{
     if(run.cancelled)return;
     const vault=playerId();rememberPlayer(vault);
     const storeName='neohack-workshop-'+crypto.randomUUID();
-    const recordingOptions={storage:{kind:'journal' as const,name:storeName,uploadUrl:new URL('/api/runs/',location.href).href,uploadToken:vault},workerUrl:new URL(pkg.base+'core-worker.mjs',location.href)};
+    let metadata:CloudAdventure;
+    const recordingOptions={storage:{kind:'journal' as const,name:storeName,uploadUrl:new URL('/api/runs/',location.href).href,uploadToken:vault},workerUrl:new URL(pkg.base+'core-worker.mjs',location.href),
+      registerUpload:async(id:string,signal:AbortSignal)=>{
+        if(!metadata || metadata.id!==id)throw Error('Workshop metadata is not ready for background registration.');
+        await registerCloudRun(metadata,vault,signal);
+      }};
     const api=await wasm.createWasm(recordingOptions);
     run.api=api;if(run.cancelled){await api.close();return;}
     const game=await api.create({...chosen.identity,seed});
     if(run.cancelled){await api.close();return;}
     const world=$('bot-world') as NeohackWorld;world.setAttribute('role',chosen.id);world.setAttribute('seed',String(seed));world.snapshot=game.state;
-    const metadata:CloudAdventure={id:game.id,name:'Workshop',role:chosen.id,seed,buildId:pkg.buildId,control:'bot',automated:true,recording:'inputs',turn:game.observation.turn,ended:false};
+    metadata={id:game.id,name:'Workshop',role:chosen.id,seed,buildId:pkg.buildId,control:'bot',automated:true,recording:'inputs',turn:game.observation.turn,ended:false};
     const remember=(frame:import('neonethack/types').Snapshot)=>{metadata.turn=frame.observation.turn;metadata.ended=frame.ended;metadata.heroLevel=Number(frame.observation.vitals.level)||1;metadata.depthLabel=frame.observation.location.depthLabel;queueCloud([metadata],vault);};
     let ready=false, started=false;
     let calls=0, busy=false, logs=0, halted=false;
@@ -299,7 +311,7 @@ $('test').onclick=()=>void (async()=>{
         const source={version:1 as const,entrypoint:'main.js' as const,files:sourceFiles,compiledFiles:compiled,compiler:{name:'typescript' as const,version:ts.version},...(data.ready.autoloot===undefined?{}:{autoloot:data.ready.autoloot})};
         try{
           run.recorder=await ScriptRecorder.create({id:game.id,owner:accountId,name:data.ready.name,role:chosen.id,seed,buildId:pkg.buildId,source,storeName,vault},async()=>{
-            await publishCloud([metadata],vault);
+            queueCloud([metadata],vault);
             await run.retired;
             const sync=run.cancelled?await wasm.WasmTransport.create(recordingOptions):api.transport as import('neonethack/wasm').WasmTransport;
             try{const ack=await sync.flushRecording(game.id);if(!ack.count)throw Error('Run backup pending');}

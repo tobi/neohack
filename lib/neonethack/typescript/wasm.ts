@@ -20,6 +20,9 @@ export interface WasmOptions {
   onStartup?: (stage: "ownership"|"assets"|"compile"|"local"|"cloud"|"engine"|"ready") => void;
   onDiagnostic?: (message: string) => void;
   onRecorded?: (recording: {id:string;count:number;complete:boolean}) => void;
+  /** Background-only upload prerequisite, once per run/transport. Honor signal
+   * cancellation; failures retry registration without executing game inputs. */
+  registerUpload?: (sessionId: string, signal: AbortSignal) => Promise<void>;
   /** Remote replication is asynchronous; local durability remains awaited. */
   onReplicaStatus?: (status: { state: "queued" | "pending" | "saved" | "retrying" | "error"; message: string; branch?: string; sessions?: string[] }) => void;
 }
@@ -33,11 +36,34 @@ export class WasmTransport implements Transport {
   private tail: Promise<unknown> = Promise.resolve();
   private pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
   private identity = "";
+  private registrations = new Map<number, AbortController>();
   get buildId(): string { return this.identity; }
   private constructor(options: WasmOptions) {
     this.timeoutMs = options.timeoutMs ?? 150_000;
     if (!Number.isFinite(this.timeoutMs) || this.timeoutMs <= 0) throw Error("timeoutMs must be positive");
     this.worker = worker(options.workerUrl ?? new URL("../wasm/core-worker.mjs", import.meta.url), message => {
+      if (message.type === 'cancelRegistration') { this.registrations.get(message.id)?.abort(); return; }
+      if (message.type === 'registerUpload') {
+        if (this.closing || this.failed) return;
+        const controller = new AbortController();
+        this.registrations.set(message.id, controller);
+        const timer = setTimeout(() => controller.abort(), 12000);
+        let abort: () => void;
+        const cancelled = new Promise<never>((_, reject) => {
+          abort = () => reject(Error('Upload registration cancelled'));
+          controller.signal.addEventListener('abort', abort, {once:true});
+        });
+        const registration = Promise.resolve().then(() => {
+          controller.signal.throwIfAborted();
+          return options.registerUpload?.(message.sessionId, controller.signal);
+        });
+        void Promise.race([registration, cancelled]).then(() => true, () => false).then(ok => {
+          clearTimeout(timer); controller.signal.removeEventListener('abort', abort);
+          this.registrations.delete(message.id);
+          if (!this.closing && !this.failed) this.worker.post({type:'uploadRegistered',id:message.id,ok});
+        });
+        return;
+      }
       if(message.type==='recorded'){options.onRecorded?.({id:message.id,count:message.count,complete:message.complete});return;}
       if (message.type === "timing") { options.onTiming?.({stage:message.stage,duration:message.duration}); return; }
       if (message.type === "startup") { options.onStartup?.(message.stage); return; }
@@ -52,7 +78,7 @@ export class WasmTransport implements Transport {
   static async create(options: WasmOptions = {}): Promise<WasmTransport> {
     const transport = new WasmTransport(options);
     try {
-      const initialized = await transport.exchange("init", { options: { storage: options.storage, runtimeUrl: options.runtimeUrl,playbackArchive:options.playbackArchive } });
+      const initialized = await transport.exchange("init", { options: { storage: options.storage, runtimeUrl: options.runtimeUrl,playbackArchive:options.playbackArchive,registerUploads:!!options.registerUpload } });
       transport.identity = initialized.buildId;
       return transport;
     } catch (error) {
@@ -62,9 +88,14 @@ export class WasmTransport implements Transport {
   }
   private fail(error: Error) {
     this.failed ??= error;
+    this.cancelRegistrations();
     for (const pending of this.pending.values()) pending.reject(this.failed);
     this.pending.clear();
     void this.worker.stop();
+  }
+  private cancelRegistrations() {
+    for (const controller of this.registrations.values()) controller.abort();
+    this.registrations.clear();
   }
   private exchange(type: string, payload: Record<string, unknown>): Promise<any> {
     if (this.failed) return Promise.reject(this.failed);
@@ -97,14 +128,24 @@ export class WasmTransport implements Transport {
   checkpoint(index?:number): Promise<unknown> { return this.ordered('checkpoint',{index}); }
   restoreCheckpoint(value:unknown): Promise<void> { return this.ordered('restoreCheckpoint',{value}); }
   restoreCheckpointBytes(value:{bytes:Uint8Array;sha256:string;index:number}):Promise<{index:number;preview:import('./types.js').Snapshot}>{return this.ordered('restoreCheckpointBytes',{value});}
-  flushRecording(sessionId:string):Promise<{count:number;manifest?:string}>{return this.exchange('flushRecording',{sessionId});}
+  flushRecording(sessionId:string):Promise<{count:number;manifest?:string}>{
+    if(this.closing)return Promise.reject(Error('Transport is closed'));
+    return this.exchange('flushRecording',{sessionId});
+  }
   recordingInfo(sessionId:string):Promise<any>{return this.ordered('journalInfo',{sessionId});}
   async close(): Promise<void> {
     if (this.closing) return;
     this.closing = true;
+    this.cancelRegistrations();
     await this.tail;
     try { if (!this.failed) await this.exchange("close", {}); }
-    finally { await this.worker.stop(); }
+    finally {
+      // Background flush requests are deliberately outside tail. Teardown must
+      // settle those callers too, rather than leave their timeout alive.
+      for (const pending of this.pending.values()) pending.reject(Error('Transport is closed'));
+      this.pending.clear();
+      await this.worker.stop();
+    }
   }
 }
 export async function createWasm(options: WasmOptions = {}): Promise<Neonethack> {
