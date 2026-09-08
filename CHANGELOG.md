@@ -8,6 +8,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- New adventures register for online backup before sending their first batch,
+  avoiding temporary access errors while play continues locally. Closing a run
+  cancels pending network work promptly and keeps unsent inputs for later.
 - Agent answers stay bound to the question they were given, so an older answer
   cannot confirm a different action after another player changes the prompt.
 - Phone equipment slots and instructions fit above Automatic pickup, including

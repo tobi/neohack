@@ -84,7 +84,8 @@ Callers pass the short run token and the exact returned `decision.id` as
 question, even when the choices have the same names. See [WebMCP](WEBMCP.md)
 for shared decision, uncertainty and presentation semantics.
 
-Results are in `structuredContent` and a text `content` block for older clients. Structured
+Results are in `structuredContent`; older HTTP clients and WebMCP also receive
+a text `content` block. Structured
 rejections set `isError`; a blocked in-game attempt is not automatically a
 protocol error. Process failures return a textual `isError` explaining that
 execution may be uncertain. Tool listings omit the optional repeated output
