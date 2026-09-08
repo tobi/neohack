@@ -1223,7 +1223,7 @@ hide the underlying HUD. Workshop navigation resets page scrolling and stacks
 mobile run buttons. Replay loading/error messages survive artwork and role redraws;
 loading is never presented as an empty recording.
 
-Hero HUD: level sits at the top right of the identity row; health numbers sit beside Health. Suppress normal hunger/burden labels. Keep the equipped weapon on one line with its existing perceived-appearance icon, ellipsis and full-label tooltip.
+Hero HUD: level sits at the top right of the identity row, with reserved space so long names cannot overlap its label. Keep the complete accessible name even when its visible text is shortened. Health numbers sit beside Health. Suppress normal hunger/burden labels. Keep the equipped weapon on one line with its existing perceived-appearance icon, ellipsis and full-label tooltip.
 
 Character sheet: portrait and canonical stats share the header with the HUD's
 status formatter. Dungeon depth reads `lvl: N`; experience reads Hero level.

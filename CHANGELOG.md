@@ -8,6 +8,7 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Long adventurer names stay clear of the level label on phones and desktop.
 - Long journal messages stay compact over the map; opening the journal still
   shows the full original text.
 - New adventures register for online backup before sending their first batch,
