@@ -1,6 +1,12 @@
 name: Inspect Vercel request failures
 on:
   workflow_dispatch:
+    inputs:
+      since:
+        description: Recent request window
+        type: choice
+        default: 15m
+        options: [5m, 15m, 2h]
 permissions:
   contents: read
 jobs:
@@ -16,8 +22,9 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          LOG_SINCE: ${{ inputs.since || '15m' }}
         run: |
-          npx --yes vercel@59.10.0 logs --project "$VERCEL_PROJECT_ID" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" --environment production --since 2h --expand --limit 500 --json > "$RUNNER_TEMP/requests.jsonl"
+          npx --yes vercel@59.10.0 logs --project "$VERCEL_PROJECT_ID" --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" --environment production --since "$LOG_SINCE" --expand --limit 500 --json > "$RUNNER_TEMP/requests.jsonl"
           node <<'JS'
           const fs=require('node:fs');
           let records=0,events=0;const counts=new Map();
@@ -45,7 +52,7 @@ jobs:
           }
           for(const line of fs.readFileSync(process.env.RUNNER_TEMP+'/requests.jsonl','utf8').split('\n')){
             if(!line.trim())continue;
-            try{const record=JSON.parse(line);records++;const key=route(record.requestPath)+" "+(Number(record.responseStatusCode)||0);counts.set(key,(counts.get(key)||0)+1);inspect(record);if(records===1)console.log(JSON.stringify({keys:Object.keys(record)}));}catch{}
+            try{const record=JSON.parse(line);records++;const status=Number(record.responseStatusCode)||0,key=route(record.requestPath)+" "+status;counts.set(key,(counts.get(key)||0)+1);if(status>=400&&status!==401){const time=new Date(record.timestamp);console.log(JSON.stringify({requestFailure:{at:Number.isFinite(time.getTime())?time.toISOString():null,route:route(record.requestPath),status,deployment:typeof record.deploymentId==='string'&&/^dpl_[a-zA-Z0-9]+$/.test(record.deploymentId)?record.deploymentId:undefined}}));}inspect(record);if(records===1)console.log(JSON.stringify({keys:Object.keys(record)}));}catch{}
           }
           console.log(JSON.stringify({records,events,requests:Object.fromEntries(counts)}));
           JS
