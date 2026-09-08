@@ -11,6 +11,7 @@ export interface MethodParams {
   "session.resume": { sessionId: string };
   "session.close": { sessionId: string };
   "game.move": { sessionId: string; requestId: string; expectedRevision: number; direction: "north" | "northeast" | "east" | "southeast" | "south" | "southwest" | "west" | "northwest" };
+  "game.run": { sessionId: string; requestId: string; expectedRevision: number; direction: "north" | "northeast" | "east" | "southeast" | "south" | "southwest" | "west" | "northwest"; mode?: "normal" | "untilInteresting" | "pastBranches"; noPickup?: boolean };
   "game.wait": { sessionId: string; requestId: string; expectedRevision: number };
   "game.climb": { sessionId: string; requestId: string; expectedRevision: number; direction: "up" | "down" };
   "game.search": { sessionId: string; requestId: string; expectedRevision: number; turns?: number };

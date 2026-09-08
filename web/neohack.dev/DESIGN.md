@@ -631,8 +631,9 @@ C. Show pending/acknowledged/failed cloud saving honestly. Remote uploads must n
 block turns; local pre-input durability and uncertain-request guarantees remain.
 
 Creation uses a bounded dialog with a single scrolling field region and a fixed
-submit footer, including short landscape screens. WASD joins arrows and vi keys
-for movement; F searches. Direction prompts and tile inspection also accept WASD.
+submit footer, including short landscape screens. Lowercase NetHack directions join arrows
+for movement; s searches and comma picks up. Direction prompts and tile inspection
+also accept h/j/k/l and y/u/b/n.
 
 A faint 15×9 classic-symbol neighborhood sits above the direction pad, centered
 on the current player. It uses bundled JetBrains Mono (SIL OFL in public/fonts),
@@ -683,7 +684,7 @@ an explicit share or finish requests a flush. A network failure retains pending
 inputs locally; it never delays the next game action.
 
 Engine map-browsing prompts use a nonmodal position panel with eight cursor
-directions, Help (?), Done/Select and Cancel. WASD/arrows move the cursor; Enter
+directions, Help (?), Done/Select and Cancel. NetHack direction letters/arrows move the cursor; Enter
 or period finishes, Escape cancels, and clicking a map square explicitly selects
 it. The engine-provided cursor is outlined on the map. A scrollable messages
 disclosure preserves the full engine help. Gameplay shortcuts stay suspended.
@@ -1273,7 +1274,7 @@ unexpected stop reason remains visible; normal arrival is silent. Continuing req
 
 Distant tile descriptions come from the public actions query rather than invented
 local affordances. Adjacent direct movement/interaction buttons remain distinct
-from the walking policy. Arrows, WASD and the direction pad still issue direct
+from the walking policy. Arrows, lowercase NetHack directions and the direction pad still issue direct
 single-step movement. Inspecting and previewing consume no game turn or randomness.
 
 Cloud upload failures stay in the compact save status, with detail available on its tooltip. They never open the central gameplay error overlay.
@@ -1327,3 +1328,7 @@ The main game and workshop register a run in the vault directory before its firs
 background input upload. This cancellable dependency never delays local play;
 registration failures retain the exact upload batch for retry. Metadata writes
 coalesce the latest run state, and ledger availability does not gate input backup.
+
+### Classic keyboard commands
+
+Use the pinned Guidebook chapter 4 bindings, keeping arrow movement and dropping WASD. h/j/k/l and y/u/b/n step; uppercase directions execute one native game.run command, with engine stopping and no automatic fight. s searches, comma picks up, period waits, and < / > climb. a/w/d/c/q/r/z/t apply, wield, drop, close, drink, read, zap and throw. f/Z/x/p/E/Q fire, cast, swap, pay, engrave and ready quiver. i opens inventory; ? opens help. Direction decisions and tile inspection use the same lowercase direction layout. Shift-arrows still pan. Native runs settle as one operation; held lowercase movement retains the existing serial cadence. g/G map to game.run modes untilInteresting/pastBranches; m maps to moveWithoutAttack and combines with running via noPickup. F maps to attack. Counts 1–1000 before s or . request native search/rest once; other counted commands are rejected without input. A visible live status shows pending prefixes. Escape/Backspace, menus, another action, blur and hidden tabs clear them. Prefixes never answer a standing decision; never simulate them with ordinary attacks or auto-answer dialogs.

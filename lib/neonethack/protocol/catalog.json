@@ -498,6 +498,71 @@
       "idempotent": true
     },
     {
+      "name": "game.run",
+      "description": "Run using one native movement command. mode normal (default) is uppercase direction; untilInteresting is g plus direction; pastBranches is G plus direction, ignoring corridor forks as stops. noPickup applies the engine m prefix, suppressing pickup and fighting. Engine stopping, peaceful-creature interactions, interruptions and actual elapsed turns remain authoritative; no safety guarantee or client repeat loop. Answer returned decisions separately.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "x-maxBytes": 64,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Session ID from create/resume."
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "x-maxBytes": 128,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+            "description": "Unique operation ID; retry only with the same ID and payload."
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Latest observation revision, not game time."
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "north",
+              "northeast",
+              "east",
+              "southeast",
+              "south",
+              "southwest",
+              "west",
+              "northwest"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "untilInteresting",
+              "pastBranches"
+            ],
+            "description": "normal (default): uppercase direction. untilInteresting: g plus direction, including corridor-fork stops. pastBranches: G plus direction, ignoring corridor forks as stops."
+          },
+          "noPickup": {
+            "type": "boolean",
+            "description": "Apply the native m prefix: suppress pickup and fighting. False/omitted preserves the current automatic pickup configuration."
+          }
+        },
+        "required": [
+          "sessionId",
+          "requestId",
+          "expectedRevision",
+          "direction"
+        ],
+        "additionalProperties": false
+      },
+      "idempotent": true
+    },
+    {
       "name": "game.wait",
       "description": "Request one waiting turn. The engine can refuse when danger is nearby; a zero-turn refusal is blocked, not forced through or reported as a completed turn. This is not a read-only query or a repeated rest. Answer returned decisions separately.",
       "schema": {

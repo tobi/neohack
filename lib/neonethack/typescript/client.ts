@@ -183,6 +183,7 @@ export class Game {
       return r;
     });
   }
+  run(direction: Compass, options: RevisionOptions & Pick<MethodParams["game.run"], "mode" | "noPickup"> = {}) { const {mode,noPickup,...guard}=options; return this.operation("game.run", {direction,...(mode===undefined?{}:{mode}),...(noPickup===undefined?{}:{noPickup})}, guard); }
   move(direction: Compass, options: RevisionOptions = {}) { return this.operation("game.move", { direction }, options); }
   wait(options: RevisionOptions = {}) { return this.operation("game.wait", {}, options); }
   climb(direction: "up" | "down", options: RevisionOptions = {}) { return this.operation("game.climb", { direction }, options); }

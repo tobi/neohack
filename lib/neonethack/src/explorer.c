@@ -5005,7 +5005,7 @@ drive_settle(nhx_t *x, game_t *g, const char *req_id,
         reason = activity == 2 ? "activityStopped" : NULL;
     }
     if (!cancelled && !blocked &&
-        (!strcmp(action, "move") || !strcmp(action, "wait")) &&
+        (!strcmp(action, "move") || !strcmp(action, "run") || !strcmp(action, "wait")) &&
         !pos_changed && turn1 == turn0 && !nfx) {
         blocked = 1;
         reason = "noProgress";
@@ -5133,6 +5133,22 @@ drive_pickup_menu(game_t *g)
     return 1;
 }
 
+/* Translate validated semantic running options into one native command.
+ * Only command-prefix keys are supplied; engine decisions remain explicit. */
+static int run_keys(const char *args, int keys[3])
+{
+    mj_val v; char *direction = NULL, *mode = NULL; int n = 0, no_pickup = 0, code;
+    if (mj_find(args,"direction",&v)) direction = mj_str(v);
+    code = move_code(direction); free(direction);
+    if (mj_find(args,"mode",&v)) mode = mj_str(v);
+    if (mj_find(args,"noPickup",&v)) mj_bool(v,&no_pickup);
+    if (no_pickup) keys[n++] = 'm';
+    if (mode && !strcmp(mode,"untilInteresting")) keys[n++] = 'g';
+    else if (mode && !strcmp(mode,"pastBranches")) keys[n++] = 'G';
+    else code = toupper(code);
+    keys[n++] = code; free(mode); return n;
+}
+
 /* Drive one scripted action to its next resting point. The command key,
  * letters, directions, and confirmations are answered inline; anything
  * needing a real choice suspends with a typed decision. Bounded: at most
@@ -5192,6 +5208,14 @@ drive_loop(nhx_t *x, game_t *g, const char *req_id,
                 g->operation.keypos = 1;
                 bump_once(g, bumped);
                 continue;
+            }
+            if (!strcmp(action, "run")) {
+                int keys[3], count = run_keys(g->operation.args_json, keys);
+                if (g->operation.keypos < count) {
+                    if (answer_key(g, g->pending.id, keys[g->operation.keypos]) < 0)
+                        return envelope_error(g, req_id, action, "engineError", "write failed");
+                    pending_clear(g); g->operation.keypos++; bump_once(g, bumped); continue;
+                }
             }
             if (g->operation.keypos == 1 && (!strcmp(action, "attack") || !strcmp(action, "moveWithoutAttack"))) {
                 if (answer_key(g, g->pending.id, g->operation.dir_code) < 0)
@@ -6838,7 +6862,7 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
         /* no decision stands: drop any stale operation record */
         g->have_operation = 0;
         g->operation.decision_id[0] = '\0';
-        if (!strcmp(action, "move") || !strcmp(action, "wait")) {
+        if (!strcmp(action, "move") || !strcmp(action, "run") || !strcmp(action, "wait")) {
             char *dir = NULL;
             int code = 46, bumped = 0;
             if (mj_find(args, "target", &v) || mj_find(args, "item", &v)) {
@@ -6846,9 +6870,10 @@ run_act(nhx_t *x, game_t *g, const char *args, const char *req_id)
                                      "move takes direction; wait takes no target or item");
                 goto remember;
             }
-            if (!strcmp(action, "move")) {
+            if (!strcmp(action, "move") || !strcmp(action, "run")) {
                 if (mj_find(args, "direction", &v)) dir = mj_str(v);
                 code = move_code(dir); free(dir);
+                if (code > 0 && !strcmp(action, "run")) { int keys[3]; run_keys(args, keys); code = keys[0]; }
                 if (code < 0) {
                     out = envelope_error(g, req_id, action, "badAction", "move needs a compass direction");
                     goto remember;

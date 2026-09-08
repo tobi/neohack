@@ -58,6 +58,13 @@ int main(int argc, char **argv)
     snprintf(sid, sizeof sid, "%s", nnh_result_session(r)); guard.expected_revision = nnh_result_revision(r);
     assert(strstr(nnh_result_json(r), "\"observation\"") && !strstr(nnh_result_json(r), "\"glyph\""));
     nnh_result_free(r);
+    guard.request_id = "counted-search";
+    s = nnh_game_search(x, sid, &guard, 2, &r); success(s,r);
+    guard.expected_revision = nnh_result_revision(r); nnh_result_free(r);
+    guard.request_id = "counted-rest";
+    s = nnh_game_rest(x, sid, &guard, 2, &r); success(s,r);
+    guard.expected_revision = nnh_result_revision(r); nnh_result_free(r);
+    guard.request_id = "wait-1";
     s = nnh_game_wait(x, sid, &guard, &r); success(s, r);
     before = nnh_result_revision(r);
     s = nnh_game_wait(x, sid, &guard, &retry); success(s, retry);
@@ -86,6 +93,11 @@ int main(int argc, char **argv)
         { nnh_item negative = {"item-1", NULL, -1}, named_count = {NULL, "dagger", 2};
           s = nnh_game_drop(x, sid, &guard, &negative, &r); rejected(s, r);
           s = nnh_game_drop(x, sid, &guard, &named_count, &r); rejected(s, r); }
+        { nnh_run_options badmode = {(nnh_run_mode)99, 0}, badflag = {NNH_RUN_NORMAL, 2};
+          s = nnh_game_run(x,sid,&guard,NNH_WEST,&badmode,&r); rejected(s,r);
+          s = nnh_game_run(x,sid,&guard,NNH_WEST,&badflag,&r); rejected(s,r);
+          s = nnh_game_search(x,sid,&guard,0,&r); rejected(s,r);
+          s = nnh_game_rest(x,sid,&guard,1001,&r); rejected(s,r); }
         s = nnh_game_move_without_attack(x, sid, &guard, NNH_UP, &r); rejected(s, r);
         s = nnh_game_kick(x, sid, &guard, &target, &r); rejected(s, r);
         s = nnh_game_wait(x, sid, NULL, &r); rejected(s, r);

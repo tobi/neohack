@@ -147,12 +147,12 @@ sidecar_validate(game_t *g, const char *text)
         mj_raw(field, &size); if (size >= sizeof g->operation.args_json) return "operation arguments exceed limit";
         mj_find(v.p, "action", &field); action = mj_str(field);
         if (!action) return "invalid operation action";
-        if (cmdkey_of(action) < 0 && strcmp(action, "move") && strcmp(action, "wait") && strcmp(action, "climb") && strcmp(action, "inspect") && strcmp(action, "inventory") && strcmp(action, "new_game") && strcmp(action, "configurePickup")) {
+        if (cmdkey_of(action) < 0 && strcmp(action, "move") && strcmp(action, "run") && strcmp(action, "wait") && strcmp(action, "climb") && strcmp(action, "inspect") && strcmp(action, "inventory") && strcmp(action, "new_game") && strcmp(action, "configurePickup")) {
             free(action); return "unbound operation action";
         }
         if (mj_find(v.p, "cmdkey", &field)) mj_int(field, &command);
         if (command != -2 && command != cmdkey_of(action) &&
-            !( (!strcmp(action, "move") || !strcmp(action, "wait")) && strchr("hjklyubn.", (int) command) && command > 0) &&
+            !( (!strcmp(action, "move") || !strcmp(action, "run") || !strcmp(action, "wait")) && strchr(!strcmp(action, "run") ? "HJKLYUBNgGm" : "hjklyubn.", (int) command) && command > 0) &&
             !( !strcmp(action, "climb") && (command == '<' || command == '>')) &&
             !( (!strcmp(action, "equip") || !strcmp(action, "wear")) && command == 'P') &&
             !( (!strcmp(action, "remove") || !strcmp(action, "takeoff")) && command == 'R') &&

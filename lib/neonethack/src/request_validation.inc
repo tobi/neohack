@@ -144,7 +144,7 @@ validate_request(const char *args, const char *tool, const char **why)
     static const char *const actions[] = { "tool", "sessionId", "expectedRevision", "target", NULL };
     static const char *const common[] = { "tool", "sessionId", "requestId", NULL };
     static const char *const create[] = { "tool", "sessionId", "requestId", "seed", "name", "role", "race", "gender", "align", "automaticPickup", NULL };
-    static const char *const act[] = { "tool", "sessionId", "requestId", "expectedRevision", "action", "turns", "direction", "target", "item", "replyTo", "confirm", "choose", "text", "position", "cancel", "automaticPickup", "slot", NULL };
+    static const char *const act[] = { "tool", "sessionId", "requestId", "expectedRevision", "action", "turns", "direction", "target", "item", "replyTo", "confirm", "choose", "text", "position", "cancel", "automaticPickup", "slot", "mode", "noPickup", NULL };
     static const char *const answer[] = { "item", "target", "confirm", "choose", "text", "position", "cancel", NULL };
     const char *const *fields;
     mj_val v;
@@ -248,15 +248,21 @@ validate_request(const char *args, const char *tool, const char **why)
         if (target == 0) REQUEST_BAD("invalidTarget", "here is only an inspection target");
         return NULL;
     }
-    if (cmdkey_of(action) == -2 && strcmp(action, "move") && strcmp(action, "wait") &&
+    if (cmdkey_of(action) == -2 && strcmp(action, "move") && strcmp(action, "run") && strcmp(action, "wait") &&
         strcmp(action, "climb") && strcmp(action, "inspect") && strcmp(action, "inventory") && strcmp(action, "configurePickup"))
         REQUEST_BAD("unsupportedAction", "this action is not bound in this build");
     /* Reject irrelevant parameters instead of quietly doing a different deed. */
     {
         const char *allowed[10] = { "tool", "sessionId", "requestId", "expectedRevision", "action" };
         int n = 5;
-        if (!strcmp(action, "move") || !strcmp(action, "attack") || !strcmp(action, "moveWithoutAttack") || !strcmp(action, "climb")) allowed[n++] = "direction";
+        if (!strcmp(action, "move") || !strcmp(action, "run") || !strcmp(action, "attack") || !strcmp(action, "moveWithoutAttack") || !strcmp(action, "climb")) allowed[n++] = "direction";
         if (!strcmp(action, "inspect") || !strcmp(action, "kick") || !strcmp(action, "open") || !strcmp(action, "close") || !strcmp(action, "chat") || !strcmp(action, "fire") || !strcmp(action, "throw") || !strcmp(action, "zap")) allowed[n++] = "target";
+        if (!strcmp(action,"run")) {
+            char mode[32]; int no_pickup;
+            allowed[n++] = "mode"; allowed[n++] = "noPickup";
+            if (mj_find(args,"mode",&v) && (!request_string(v,1,31,mode) || (strcmp(mode,"normal") && strcmp(mode,"untilInteresting") && strcmp(mode,"pastBranches")))) REQUEST_BAD("invalidArgument","unknown running mode");
+            if (mj_find(args,"noPickup",&v) && !mj_bool(v,&no_pickup)) REQUEST_BAD("invalidArgument","noPickup must be boolean");
+        }
         if (!strcmp(action,"search") || !strcmp(action,"rest")) {
             allowed[n++] = "turns";
             if (mj_find(args,"turns",&v) && !request_integer(v,1,1000)) REQUEST_BAD("invalidArgument","turns must be an integer from 1 to 1000");
@@ -270,7 +276,7 @@ validate_request(const char *args, const char *tool, const char **why)
         allowed[n] = NULL;
         if (!request_fields(args, allowed)) REQUEST_BAD("invalidArgument", "field does not apply to this action; answer subsequent typed decisions separately");
     }
-    if (!strcmp(action, "move") || !strcmp(action, "attack") || !strcmp(action, "moveWithoutAttack") || !strcmp(action, "climb")) {
+    if (!strcmp(action, "move") || !strcmp(action, "run") || !strcmp(action, "attack") || !strcmp(action, "moveWithoutAttack") || !strcmp(action, "climb")) {
         int code;
         if (!mj_find(args, "direction", &v) || !request_string(v, 1, 31, direction) || (code = move_code(direction)) < 0)
             REQUEST_BAD("badAction", "this action requires a direction");

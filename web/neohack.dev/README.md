@@ -67,8 +67,13 @@ Begin button. Then choose a name and one of all thirteen NetHack starting classe
 All thirteen classes use the same native 16×32 character scale. Valkyrie, Wizard
 and Ranger use their default character selections.
 The courtyard is a separate tutorial: it creates no engine session or turns. An optional seed
-is available. Tap WASD, an arrow key or a direction button for one step; hold to walk.
-Search uses F, leaving S available for south.
+is available. Tap h/j/k/l, an arrow key or a direction button for one step; hold to walk.
+y/u/b/n move diagonally. Search uses s; comma picks up. Uppercase directions
+(Shift + direction letter) invoke native NetHack running until the engine stops,
+with actual elapsed turns and explicit decisions preserved. g/G + direction select
+interesting/fork-skipping run modes; m suppresses pickup/fighting and F forces one
+attack. m also combines with running. Counts before s or . (10s, 20.) use native
+search/rest, up to 1,000 turns. Escape or Backspace cancels the pending prefix.
 The first step is immediate, repetition starts after 240 ms and continues at up
 to ten steps per second, awaiting each durable engine result. Rapid deliberate
 taps keep at most one extra step buffered; held repeats never build a queue.

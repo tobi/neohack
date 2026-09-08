@@ -633,6 +633,83 @@
           "const": 1
         },
         "method": {
+          "const": "game.run"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "x-maxBytes": 64,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Session ID from create/resume."
+            },
+            "requestId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-maxBytes": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Unique operation ID; retry only with the same ID and payload."
+            },
+            "expectedRevision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Latest observation revision, not game time."
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "north",
+                "northeast",
+                "east",
+                "southeast",
+                "south",
+                "southwest",
+                "west",
+                "northwest"
+              ]
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "normal",
+                "untilInteresting",
+                "pastBranches"
+              ],
+              "description": "normal (default): uppercase direction. untilInteresting: g plus direction, including corridor-fork stops. pastBranches: G plus direction, ignoring corridor forks as stops."
+            },
+            "noPickup": {
+              "type": "boolean",
+              "description": "Apply the native m prefix: suppress pickup and fighting. False/omitted preserves the current automatic pickup configuration."
+            }
+          },
+          "required": [
+            "sessionId",
+            "requestId",
+            "expectedRevision",
+            "direction"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "method": {
           "const": "game.wait"
         },
         "params": {

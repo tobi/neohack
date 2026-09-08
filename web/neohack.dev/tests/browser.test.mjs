@@ -2914,7 +2914,7 @@ test("creation keeps its submit action visible while all thirteen classes scroll
   }
 });
 
-test("WASD moves in four directions and F searches", async (t) => {
+test("Classic directions move and s searches", async (t) => {
   const { page } = await fixture(t);
   await create(page);
   await page.evaluate(async () => {
@@ -2926,15 +2926,32 @@ test("WASD moves in four directions and F searches", async (t) => {
       return original.call(this, request);
     };
   });
-  for (const [key, direction] of [['w','north'],['a','west'],['s','south'],['d','east']]) {
+  for (const [key, direction] of [['k','north'],['h','west'],['j','south'],['l','east'],['y','northwest'],['u','northeast'],['b','southwest'],['n','southeast']]) {
     await page.keyboard.press(key);
     await ready(page);
     const requests = await page.evaluate(() => window.keyRequests.splice(0));
     assert.ok(requests.some(r => r.method === 'game.move' && r.params.direction === direction), JSON.stringify(requests));
   }
-  await page.keyboard.press('f');
+  await page.keyboard.press('s');
   await ready(page);
-  assert.ok((await page.evaluate(() => window.keyRequests)).some(r => r.method === 'game.search'));
+  assert.ok((await page.evaluate(() => window.keyRequests.splice(0))).some(r => r.method === 'game.search'));
+  await page.keyboard.press('Shift+H');
+  await ready(page);
+  const running = await page.evaluate(() => window.keyRequests.splice(0));
+  assert.equal(running.filter(r => r.method === 'game.run' && r.params.direction === 'west').length, 1);
+  assert.equal(running.some(r => r.method === 'game.move'), false);
+  // No legacy F search or G pickup, and browser shortcuts must not move.
+  const before = (await snapshot(page)).revision;
+  await page.keyboard.press('g');
+  await page.keyboard.press('Control+h');
+  assert.equal((await snapshot(page)).revision, before);
+  await page.keyboard.press('w');
+  await page.locator('#decision[open]').waitFor();
+  const standing = await snapshot(page);
+  await page.keyboard.press('Shift+L');
+  assert.equal((await snapshot(page)).revision, standing.revision);
+  assert.ok((await page.evaluate(() => window.keyRequests)).some(r => r.method === 'game.wield'));
+
 });
 
 test('nearby ASCII stays above the pad and abandoning requires an engine confirmation', async t => {
@@ -2990,7 +3007,7 @@ test('empty item actions are disabled for free and a fountain enables Drink unde
   assert.match(await drink.textContent(), /No eligible items/);
   assert.equal((await snapshot(page)).revision, before.revision);
   await page.locator('#menu .close-dialog').click();
-  await page.keyboard.press('a');
+  await page.keyboard.press('h');
   await ready(page);
   const current = await snapshot(page);
   assert.equal(current.observation.neighborhood.cells.find(c => !c.dx && !c.dy).terrain.type, 'fountain');
@@ -3068,7 +3085,7 @@ test('detection scroll map browsing supports keyboard Help, cursor, Done and dur
   await ready(page);
   const viewed = await snapshot(page);
   assert.equal(viewed.decision.kind,'position');
-  await page.keyboard.press('a'); await ready(page);
+  await page.keyboard.press('h'); await ready(page);
   assert.equal((await snapshot(page)).decision.cursor.x,viewed.decision.cursor.x-1);
   assert.equal((await snapshot(page)).observation.turn,viewed.observation.turn);
   await page.keyboard.press('?'); await ready(page);
@@ -3977,4 +3994,87 @@ test('WebMCP in a transferred tab requires explicit resume before acting again',
   const waited=await call('game.wait',{sessionId:sid});assert.equal(waited.isError,false);
   assert.equal((await snapshot(page)).revision,before.revision+1,"the resumed agent submits exactly one new attempt");
   assert.equal(await snapshot(peer),null);assert.deepEqual(errors,[]);
+});
+
+test('comma picks up and s does not answer a direction decision', async t => {
+  const {page} = await fixture(t);
+  await create(page);
+  await page.keyboard.press('d');
+  await page.locator('#decision[open]').waitFor();
+  // Choose through the actual decision controls, retaining its opaque item ID.
+  const decision = (await snapshot(page)).decision;
+  assert.equal(decision.kind, 'item');
+  const label = decision.options[0].label;
+  await page.locator('#decision').getByRole('button', {name:label, exact:true}).click();
+  await ready(page);
+  await page.keyboard.press(',');
+  await ready(page);
+  const pickup = await snapshot(page);
+  assert.equal(pickup.outcome.action, 'pickup');
+  if (pickup.decision) {
+    await page.locator('#decision').getByRole('button', {name:/Cancel/}).click();
+    await ready(page);
+  }
+  await page.keyboard.press('o');
+  await page.locator('#direction-target').waitFor();
+  const before = await snapshot(page);
+  await page.keyboard.press('s');
+  assert.equal((await snapshot(page)).revision, before.revision);
+  await page.keyboard.press('h');
+  await ready(page);
+  assert.equal((await snapshot(page)).decision, null);
+});
+
+test('classic prefixes dispatch explicit protocol parameters and counts stay native', async t => {
+  const {page} = await fixture(t);
+  await create(page);
+  await page.evaluate(async () => {
+    const {WasmTransport} = await import('/runtime/typescript/wasm.js');
+    const send = WasmTransport.prototype.send;
+    window.prefixRequests = [];
+    WasmTransport.prototype.send = function(request) {
+      window.prefixRequests.push(structuredClone(request));
+      return send.call(this, request);
+    };
+  });
+  const inputs = () => page.evaluate(() => window.prefixRequests.splice(0).filter(r => r.method.startsWith('game.')));
+  for (const [keys,method,params] of [
+    [['m','h'],'game.moveWithoutAttack',{direction:'west'}],
+    [['Shift+F','h'],'game.attack',{direction:'west'}],
+    [['g','h'],'game.run',{direction:'west',mode:'untilInteresting',noPickup:false}],
+    [['Shift+G','h'],'game.run',{direction:'west',mode:'pastBranches',noPickup:false}],
+    [['m','g','h'],'game.run',{direction:'west',mode:'untilInteresting',noPickup:true}],
+    [['m','Shift+G','h'],'game.run',{direction:'west',mode:'pastBranches',noPickup:true}],
+    [['m','Shift+H'],'game.run',{direction:'west',mode:'normal',noPickup:true}],
+    [['1','0','s'],'game.search',{turns:10}],
+    [['2','0','.'],'game.rest',{turns:20}],
+  ]) {
+    const before = await snapshot(page);
+    for (const key of keys.slice(0,-1)) await page.keyboard.press(key);
+    assert.equal((await snapshot(page)).revision,before.revision);
+    assert.equal(await page.locator('#keyboard-prefix').isVisible(),true,keys.join(' '));
+    await page.keyboard.press(keys.at(-1)); await ready(page);
+    const requests = await inputs(); assert.equal(requests.length,1,JSON.stringify(requests));
+    assert.equal(requests[0].method,method);
+    for (const [key,value] of Object.entries(params)) assert.equal(requests[0].params[key],value);
+    assert.equal(await page.locator('#keyboard-prefix').isVisible(),false);
+  }
+  const before = (await snapshot(page)).revision;
+  for (const key of ['1','0','0','1','s']) await page.keyboard.press(key);
+  assert.equal((await snapshot(page)).revision,before);
+  assert.deepEqual(await inputs(),[]);
+  await page.keyboard.press('1'); await page.keyboard.press('0'); await page.keyboard.press('h');
+  assert.equal((await snapshot(page)).revision,before);
+  assert.deepEqual(await inputs(),[]);
+  assert.match(await page.locator('#keyboard-prefix').textContent(),/cancelled/);
+  await page.keyboard.press('m'); await page.keyboard.press('Escape'); await page.keyboard.press('s'); await ready(page);
+  assert.equal((await inputs())[0].method,'game.search');
+  await page.keyboard.press('g');
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  assert.equal(await page.locator('#keyboard-prefix').isVisible(),false);
+  await page.keyboard.press('o'); await page.locator('#direction-target').waitFor();
+  const decision = await snapshot(page);
+  for (const key of ['1','0','s','g','G','m','F']) await page.keyboard.press(key);
+  assert.equal((await snapshot(page)).revision,decision.revision);
+  assert.equal(await page.locator('#keyboard-prefix').isVisible(),false);
 });

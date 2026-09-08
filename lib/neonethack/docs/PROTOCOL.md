@@ -37,7 +37,7 @@ protocol continues to use dotted method names.
 |---|---|
 | Discovery | `protocol.describe` |
 | Session | `session.create`, `session.observe`, `session.resume`, `session.close` |
-| Movement | `game.move`, `game.moveWithoutAttack`, `game.attack`, `game.wait`, `game.climb` |
+| Movement | `game.move`, `game.run`, `game.moveWithoutAttack`, `game.attack`, `game.wait`, `game.climb` |
 | Environment | `game.search`, `game.kick`, `game.open`, `game.close`, `game.pray`, `game.quit` |
 | Items | `game.pickup`, `game.eat`, `game.drink`, `game.wield`, `game.equip`, `game.remove`, `game.read`, `game.apply`, `game.drop`, `game.zap` |
 | Containers | `game.loot` |
@@ -101,6 +101,32 @@ At most one decision is standing. Submit its exact ID and one answer:
 {"kind":"choice","choose":[0,2]}
 {"kind":"text","text":"Elbereth"}
 ```
+
+### Directional movement and counts
+
+| Intent | Operation and parameters | Native command |
+| --- | --- | --- |
+| One ordinary step | game.move {direction} | lowercase direction |
+| Step without pickup or fighting | game.moveWithoutAttack {direction} | m + direction |
+| Force one attack | game.attack {direction} | F + direction |
+| Ordinary running | game.run {direction, mode:"normal"} | uppercase direction |
+| Stop on something interesting, including forks | game.run {direction, mode:"untilInteresting"} | g + direction |
+| Ignore corridor forks as stops | game.run {direction, mode:"pastBranches"} | G + direction |
+| Suppress pickup and fighting during any run mode | game.run {direction, mode, noPickup:true} | m + selected running command |
+| Counted search/rest | game.search / game.rest {turns:1..1000} | native counted occupation |
+
+All inputs also carry sessionId, requestId and expectedRevision. Running mode
+omits to normal; noPickup omits to false. False preserves current automatic
+pickup configuration; it does not enable pickup. Force attack remains distinct
+and cannot be combined with running. Counts belong to search/rest here, not a
+generic repeat parameter or a count of successful movement squares.
+
+Each call executes one native command and settles at its next engine input
+boundary, reporting actual turns and any standing decision. Runs may follow
+corridors and interact with peaceful creatures under engine rules. These modes
+are not safety guarantees. No client loop, automatic warning answer or resumed
+occupation is implied. Retry only the exact original request; free queries and
+resume cannot restart it.
 
 A `position` decision exposes the engine cursor and `mode` (`browse` or `select`).
 Answer with a compass direction to move the cursor, `help` for engine instructions,

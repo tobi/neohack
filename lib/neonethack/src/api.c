@@ -248,10 +248,24 @@ nnh_status nnh_session_create(nnh_context *x, const nnh_identity *i, nnh_result 
 SESSION(observe) SESSION(resume) SESSION(close)
 #define SIMPLE_AS(name, action) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, nnh_result **out) { mj_Buf b; start(&b, "game." #action, sid, g); return finish(x, &b, out); }
 #define SIMPLE(name) SIMPLE_AS(name, name)
-SIMPLE(cast) SIMPLE(enhance) SIMPLE(swap) SIMPLE_AS(two_weapon, twoWeapon) SIMPLE(pay) SIMPLE(engrave) SIMPLE(loot) SIMPLE(wait) SIMPLE(search) SIMPLE(pray) SIMPLE(quit)
+SIMPLE(cast) SIMPLE(enhance) SIMPLE(swap) SIMPLE_AS(two_weapon, twoWeapon) SIMPLE(pay) SIMPLE(engrave) SIMPLE(loot) SIMPLE(wait) SIMPLE(pray) SIMPLE(quit)
 #define DIRECTION_AS(name, action) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, nnh_direction d, nnh_result **out) { mj_Buf b; start(&b, "game." #action, sid, g); mj_key(&b, "direction"); put_direction(&b, d); return finish(x, &b, out); }
 #define DIRECTION(name) DIRECTION_AS(name, name)
 DIRECTION(attack) DIRECTION_AS(move_without_attack, moveWithoutAttack) DIRECTION(move) DIRECTION(climb)
+nnh_status nnh_game_run(nnh_context *x, const char *sid, const nnh_guard *g, nnh_direction d, const nnh_run_options *options, nnh_result **out)
+{
+    static const char *const modes[] = {"normal", "untilInteresting", "pastBranches"};
+    mj_Buf b; start(&b,"game.run",sid,g); mj_key(&b,"direction"); put_direction(&b,d);
+    if (options) {
+        mj_key(&b,"mode");
+        if (options->mode < NNH_RUN_NORMAL || options->mode > NNH_RUN_PAST_BRANCHES) mj_nullv(&b); else mj_strv(&b,modes[options->mode]);
+        mj_key(&b,"noPickup");
+        if (options->no_pickup != 0 && options->no_pickup != 1) mj_nullv(&b); else mj_boolv(&b,options->no_pickup);
+    }
+    return finish(x,&b,out);
+}
+#define COUNTED(name) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, int32_t turns, nnh_result **out) { mj_Buf b; start(&b,"game." #name,sid,g); mj_key(&b,"turns"); mj_intv(&b,turns); return finish(x,&b,out); }
+COUNTED(search) COUNTED(rest)
 #define TARGET(name) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, const nnh_target *t, nnh_result **out) { mj_Buf b; start(&b, "game." #name, sid, g); if (t) { mj_key(&b, "target"); put_target(&b, t); } return finish(x, &b, out); }
 TARGET(fire) TARGET(chat) TARGET(kick) TARGET(open) TARGET(close)
 #define ITEM(name) nnh_status nnh_game_##name(nnh_context *x, const char *sid, const nnh_guard *g, const nnh_item *i, nnh_result **out) { mj_Buf b; start(&b, "game." #name, sid, g); if (i) { mj_key(&b, "item"); put_item(&b, i); } return finish(x, &b, out); }

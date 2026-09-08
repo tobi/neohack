@@ -1739,7 +1739,7 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
 
 .journal-inline { white-space:pre-line; }
 
-#navigation-status {
+#navigation-status, #keyboard-prefix {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1752,7 +1752,7 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
   border: 1px solid #647458;
   font-size: .875rem;
 }
-#navigation-status[hidden], #navigation-stop[hidden] { display: none; }
+#keyboard-prefix[hidden], #navigation-status[hidden], #navigation-stop[hidden] { display: none; }
 #navigation-stop { white-space: nowrap; min-height: 44px; }
 
 /* The encyclopedia is a readable book, with one compact search control. */

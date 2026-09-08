@@ -1,4 +1,4 @@
-/* libneonethack public C API, ABI 2.
+/* libneonethack public C API, ABI 3.
  * No engine headers, terminal keys, global initialization or allocator sharing.
  * Each context owns isolated games. Calls into this library (including close)
  * must be serialized within a process; use separate processes for concurrency.
@@ -12,7 +12,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#define NNH_ABI_VERSION 2
+#define NNH_ABI_VERSION 3
 #define NNH_PROTOCOL_VERSION 1
 #define NNH_MAX_REQUEST_BYTES 4096
 
@@ -51,6 +51,8 @@ typedef enum {
     NNH_NORTH, NNH_NORTHEAST, NNH_EAST, NNH_SOUTHEAST,
     NNH_SOUTH, NNH_SOUTHWEST, NNH_WEST, NNH_NORTHWEST, NNH_UP, NNH_DOWN
 } nnh_direction;
+typedef enum { NNH_RUN_NORMAL, NNH_RUN_UNTIL_INTERESTING, NNH_RUN_PAST_BRANCHES } nnh_run_mode;
+typedef struct { nnh_run_mode mode; int no_pickup; /* exactly 0 or 1 */ } nnh_run_options;
 typedef enum { NNH_TARGET_SELF, NNH_TARGET_DIRECTION } nnh_target_kind;
 typedef struct { nnh_target_kind kind; nnh_direction direction; } nnh_target;
 /* Exactly one of id/name must be non-NULL. NULL item pointer requests selection. */
@@ -94,11 +96,15 @@ nnh_status nnh_session_observe(nnh_context *, const char *session, nnh_result **
 nnh_status nnh_session_resume(nnh_context *, const char *session, nnh_result **);
 nnh_status nnh_session_close(nnh_context *, const char *session, nnh_result **);
 
+/* NULL options: normal uppercase running, automatic pickup unchanged. */
+nnh_status nnh_game_run(nnh_context *, const char *, const nnh_guard *, nnh_direction, const nnh_run_options *, nnh_result **);
 nnh_status nnh_game_move(nnh_context *, const char *, const nnh_guard *, nnh_direction, nnh_result **);
 nnh_status nnh_game_climb(nnh_context *, const char *, const nnh_guard *, nnh_direction, nnh_result **);
 nnh_status nnh_game_wait(nnh_context *, const char *, const nnh_guard *, nnh_result **);
 nnh_status nnh_game_configure_pickup(nnh_context *, const char *, const nnh_guard *, const nnh_automatic_pickup *, nnh_result **);
-nnh_status nnh_game_search(nnh_context *, const char *, const nnh_guard *, nnh_result **);
+/* One native counted occupation; turns is 1..1000, actual execution may stop early. */
+nnh_status nnh_game_search(nnh_context *, const char *, const nnh_guard *, int32_t turns, nnh_result **);
+nnh_status nnh_game_rest(nnh_context *, const char *, const nnh_guard *, int32_t turns, nnh_result **);
 nnh_status nnh_game_quit(nnh_context *, const char *, const nnh_guard *, nnh_result **);
 /* Open perceived floor containers; engine choices retain their decision IDs. */
 nnh_status nnh_game_loot(nnh_context *, const char *, const nnh_guard *, nnh_result **);

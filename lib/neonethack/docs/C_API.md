@@ -44,6 +44,16 @@ SDK's Clang passed the Linux static/shared install/consumer matrix. This is not
 a claim of Windows/macOS portability or cross-host game equivalence, and it
 does not change the serialization requirement.
 
+## Movement and counted occupations
+
+`nnh_game_run(..., direction, options, out)` takes a nullable `nnh_run_options`:
+`mode` is NNH_RUN_NORMAL, NNH_RUN_UNTIL_INTERESTING or NNH_RUN_PAST_BRANCHES;
+`no_pickup` is exactly 0 or 1. NULL uses normal running and preserves automatic
+pickup. `nnh_game_search(..., turns, out)` and `nnh_game_rest(..., turns, out)`
+take 1–1000 requested turns, with engine interruption and refusal preserved.
+Move, move_without_attack and attack retain distinct one-step/one-attack semantics.
+See the [protocol movement table](PROTOCOL.md#directional-movement-and-counts).
+
 ## Ownership
 
 - Config, identity, guard, item, target, answer and JSON inputs are borrowed only
@@ -132,7 +142,7 @@ parameters. Sessions must not be supplied as arbitrary uploaded executables or
 input journals. Native leases and conservative integrity checks are not a
 multi-user authorization system.
 
-ABI version 2 adds the counted item layout; rebuild C consumers against this
+ABI version 3 adds running options and explicit search/rest turn parameters; rebuild C consumers against this
 header. No compatibility adapter or save migration is provided. `config.size` must be
 `sizeof(nnh_config)`; a mismatched layout fails instead of being interpreted as
 another ABI. Protocol version and library version are separate.

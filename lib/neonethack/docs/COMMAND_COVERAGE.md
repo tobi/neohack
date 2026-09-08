@@ -1,6 +1,6 @@
 # Command and knowledge coverage — NEO-28
 
-The shared protocol now has **45 methods, including 37 game operations**. It executes throwing and the final sacrifice, alongside spells, skills and manual interactions. Isolated engine fixtures demonstrate invocation and a genuine ascended result. **No legitimately completed start-to-ascension run has been demonstrated.**
+The shared protocol now has **51 methods, including 39 game operations**. It executes throwing and the final sacrifice, alongside spells, skills and manual interactions. Isolated engine fixtures demonstrate invocation and a genuine ascended result. **No legitimately completed start-to-ascension run has been demonstrated.**
 
 ## Reconciliation and evidence
 
@@ -21,6 +21,7 @@ Initial selectors answer only their first item/target. Subsequent choices remain
 
 | Paths | Fresh real engine evidence | Limits |
 | --- | --- | --- |
+| Running modes | Shared native/WASM manual fixtures: wall/hostile stops, different g/G corridor-fork stops, noPickup floor transfer, paused pickup decision across resume/cancel, invalid parameters, exact retry and cold resume | One native command; no counted runs. Peaceful-creature interactions retain engine behavior. |
 | Throw / counted drop | Shared native/WASM manual-actions contracts: explicit item and direction, partial stack, zero-turn cancellation, stale decision, lost response exact retry, conflicting payload, close/resume | Unprefixed throw/fire may produce engine multishot. No synthetic repeated input. |
 | Offer | Native high-altar fixture; shared native/WASM acquisition-wish and altar fixture, explicit floor confirmation and bound Amulet menu, terminal score and cold receipt | Isolated prepared world; no legitimate full run. |
 | Spells / skills | Shared controlled force-bolt menu/target/replay; earned dagger advancement and known rank | Spell-specific secondary effects and every skill are not exhaustively covered. |
@@ -51,7 +52,7 @@ counted as passing. Native and WASM use the same shared scenario contracts.
 | `node lib/neonethack/scripts/generate.ts --check` | No generated drift |
 | `git diff --check` | Passed |
 
-The counted item layout changes the public C ABI to **2**; rebuild C consumers.
+Running options and explicit search/rest turn parameters change the public C ABI to **3**; rebuild C consumers.
 The semantic protocol remains version 1. Current package/data pins and pending
 context integrity remain mandatory. No save migrations, commit, push or deployment
 are included in this handoff. NEO-28 attachments record source hashes and results.
@@ -94,7 +95,7 @@ This preserves NEO-26's inventory of every non-debug/non-internal extcmdlist ent
 | `engrave` | Supported | Distinct named game operation, explicit engine items, text, targets and confirmations. See scenario matrix; subeffects are not exhaustively covered. |
 | `enhance` | Supported | game.enhance executes earned skill advancement; observation.knowledge.skills is free inspection. |
 | `exploremode` | Excluded | No host/process/report/debug commands; source may be compile-conditional. |
-| `fight` | Supported | game.attack forces one directional attack. game.moveWithoutAttack supplies one no-fight/no-pickup step. Other movement prefixes remain excluded. |
+| `fight` | Supported | game.attack forces one directional attack. game.moveWithoutAttack supplies one no-fight/no-pickup step. game.run mode selects uppercase, g or G running; noPickup supplies m in combination. |
 | `fire` | Supported | Distinct game.fire/quiver/swap/twoWeapon controls; no autoquiver or fire-assist substitution. Explicit hands/slot/target choices. |
 | `force` | Unsupported | No public named binding. See full audit for alternatives and their limits; pay is needed for paid shopping. |
 | `genocided` | Partial | Public observation/actions cover only part of manual information; no complete view parity claim. |
@@ -136,8 +137,8 @@ This preserves NEO-26's inventory of every non-debug/non-internal extcmdlist ent
 | `retravel` | Excluded | One explicit operation at a time; no repeat/travel/prefix surface. |
 | `ride` | Unsupported | No public named binding. See full audit for alternatives and their limits; pay is needed for paid shopping. |
 | `rub` | Supported | Distinct named game operation, explicit engine items, text, targets and confirmations. See scenario matrix; subeffects are not exhaustively covered. |
-| `run` | Excluded | One explicit operation at a time; no repeat/travel/prefix surface. |
-| `rush` | Excluded | One explicit operation at a time; no repeat/travel/prefix surface. |
+| `run` | Supported | game.run mode pastBranches is native G plus direction. |
+| `rush` | Supported | game.run mode untilInteresting is native g plus direction. |
 | `save` | Partial | session.close/resume use durable journals and pinned package; not engine save command. |
 | `saveoptions` | Partial | Ground-pickup subset via game.configurePickup. Other general options and persistence commands are excluded. |
 | `search` | Shipped | Native counted search (1–1000, default 1), with executed-search witnesses and engine interruptions. |
@@ -185,22 +186,22 @@ This preserves NEO-26's inventory of every non-debug/non-internal extcmdlist ent
 | `movesoutheast` | Shipped | game.move direction southeast, one adjacent step. |
 | `movesouth` | Shipped | game.move direction south, one adjacent step. |
 | `movesouthwest` | Shipped | game.move direction southwest, one adjacent step. |
-| `rushwest` | Excluded | No automatic running/rushing or repeated moves. |
-| `rushnorthwest` | Excluded | No automatic running/rushing or repeated moves. |
-| `rushnorth` | Excluded | No automatic running/rushing or repeated moves. |
-| `rushnortheast` | Excluded | No automatic running/rushing or repeated moves. |
-| `rusheast` | Excluded | No automatic running/rushing or repeated moves. |
-| `rushsoutheast` | Excluded | No automatic running/rushing or repeated moves. |
-| `rushsouth` | Excluded | No automatic running/rushing or repeated moves. |
-| `rushsouthwest` | Excluded | No automatic running/rushing or repeated moves. |
-| `runwest` | Excluded | No automatic running/rushing or repeated moves. |
-| `runnorthwest` | Excluded | No automatic running/rushing or repeated moves. |
-| `runnorth` | Excluded | No automatic running/rushing or repeated moves. |
-| `runnortheast` | Excluded | No automatic running/rushing or repeated moves. |
-| `runeast` | Excluded | No automatic running/rushing or repeated moves. |
-| `runsoutheast` | Excluded | No automatic running/rushing or repeated moves. |
-| `runsouth` | Excluded | No automatic running/rushing or repeated moves. |
-| `runsouthwest` | Excluded | No automatic running/rushing or repeated moves. |
+| `rushwest` | Supported | game.run mode pastBranches uses the same native directional rushing behavior as Control-direction. |
+| `rushnorthwest` | Supported | game.run mode pastBranches uses the same native directional rushing behavior as Control-direction. |
+| `rushnorth` | Supported | game.run mode pastBranches uses the same native directional rushing behavior as Control-direction. |
+| `rushnortheast` | Supported | game.run mode pastBranches uses the same native directional rushing behavior as Control-direction. |
+| `rusheast` | Supported | game.run mode pastBranches uses the same native directional rushing behavior as Control-direction. |
+| `rushsoutheast` | Supported | game.run mode pastBranches uses the same native directional rushing behavior as Control-direction. |
+| `rushsouth` | Supported | game.run mode pastBranches uses the same native directional rushing behavior as Control-direction. |
+| `rushsouthwest` | Supported | game.run mode pastBranches uses the same native directional rushing behavior as Control-direction. |
+| `runwest` | Supported | game.run invokes native uppercase directional running; engine stops and decisions apply. |
+| `runnorthwest` | Supported | game.run invokes native uppercase directional running; engine stops and decisions apply. |
+| `runnorth` | Supported | game.run invokes native uppercase directional running; engine stops and decisions apply. |
+| `runnortheast` | Supported | game.run invokes native uppercase directional running; engine stops and decisions apply. |
+| `runeast` | Supported | game.run invokes native uppercase directional running; engine stops and decisions apply. |
+| `runsoutheast` | Supported | game.run invokes native uppercase directional running; engine stops and decisions apply. |
+| `runsouth` | Supported | game.run invokes native uppercase directional running; engine stops and decisions apply. |
+| `runsouthwest` | Supported | game.run invokes native uppercase directional running; engine stops and decisions apply. |
 
 ### Encyclopedia query
 

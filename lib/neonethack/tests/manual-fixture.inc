@@ -30,6 +30,24 @@ void manual_fixture(void)
         struct trap *trap=t_at(x,y);if(trap)deltrap(trap);
         levl[x][y].typ=ROOM;levl[x][y].lit=1;
     }
+    if (!strncmp(svp.plname,"Run",3)) {
+        for(x=34;x<=46;x++)for(y=4;y<=16;y++) {
+            while (svl.level.objects[x][y]) delobj(svl.level.objects[x][y]);
+        }
+        levl[36][10].typ=STONE;
+        if (!strcmp(svp.plname,"RunBranch")) {
+            for(x=34;x<=46;x++)for(y=4;y<=16;y++) levl[x][y].typ=STONE;
+            for(x=37;x<=41;x++) levl[x][10].typ=CORR;
+            levl[38][9].typ=CORR;
+        }
+        if (!strcmp(svp.plname,"RunPickup")) {
+            o=mksobj(GOLD_PIECE,FALSE,FALSE);o->quan=19;o->owt=weight(o);place_object(o,39,10);
+        }
+        if (!strcmp(svp.plname,"RunCreature")) {
+            m=makemon(&mons[PM_LICHEN],u.ux-1,u.uy,NO_MM_FLAGS);
+            m->mpeaceful=0;m->msleeping=1;
+        }
+    }
     ABASE(A_STR)=AMAX(A_STR)=18;
     ABASE(A_INT)=AMAX(A_INT)=18;
     u.uen=u.uenmax=200;u.uhp=u.uhpmax=200;
