@@ -490,6 +490,12 @@ class PixelNethack extends HTMLElement {
       throw Error(
         "Finish or close the human menu first; tool was not submitted.",
       );
+    // Queries of the loaded run do not transfer human control or replace its
+    // Game/DOM: equipment callbacks and local selection still own this revision.
+    if (this.api && this.game && !this.uncertain() &&
+        "sessionId" in request.params && request.params.sessionId === this.game.id &&
+        this.api.low.tools.some(tool => tool.name === request.method.replaceAll(".", "_") && tool.annotations.readOnlyHint))
+      return this.api.transport.send(request);
     this.inputSource = "webmcp";
     if (this.current) {
       this.current.control = "webmcp";

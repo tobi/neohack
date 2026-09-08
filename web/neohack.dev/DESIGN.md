@@ -1233,7 +1233,10 @@ including height-capped sheets on tall phones. Guidance stays above Automatic pi
 Only current engine-provided equipmentTargets highlight; dropping sends the selected slot,
 opaque item ID and captured revision. Tap Choose equipment slot, then a target,
 provides the same explicit operation for touch/keyboard users. Item labels open
-details. No automatic removal, replacement or warning confirmation. Text-map
+details. Free agent queries of the already active, certain run preserve the human
+panel, equipment selection and focus. Agent inputs still invalidate old selection;
+an old target touch never answers a standing question or retries at a new revision.
+No automatic removal, replacement or warning confirmation. Text-map
 access belongs only to Surroundings.
 
 ### Progressive replay delivery

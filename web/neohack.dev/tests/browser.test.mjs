@@ -1587,9 +1587,12 @@ test(
     let state = created.structuredContent;
     assert.deepEqual(await sharedSnapshot(), snapshotPart(state));
     assert.equal(state.presentation.kind,'compact');
+    const humanBeforeQuery = await agentSnapshot(page);
     const full=(await call('session.observe',{sessionId:state.sessionId})).structuredContent;
-    const {summary,operationId,historical,navigation,creatures,requestId,...fullFrame}=full;
-    assert.deepEqual(await agentSnapshot(page),fullFrame,'explicit observation retains the entire shared HUD scene');
+    assert.deepEqual(await agentSnapshot(page), humanBeforeQuery, 'observation preserves the human action outcome and events');
+    assert.deepEqual(full.observation, humanBeforeQuery.observation, 'explicit observation returns the entire shared HUD scene');
+    assert.deepEqual(full.decision, humanBeforeQuery.decision);
+    assert.equal(full.revision, humanBeforeQuery.revision);
     assert.equal(await page.locator("#hero-name").textContent(), "Mira");
     assert.equal(
       await page.locator(".map-viewport").evaluate((el) => el.clientHeight),
@@ -3665,6 +3668,83 @@ test('equipment guidance stays above automatic pickup across phone panel heights
       assert.ok(box.y + box.height <= hint.y, 'guidance stays below equipment');
     }
   }
+});
+
+test('free WebMCP observation preserves live touch equipment intent; input invalidates it', async t => {
+  const { page } = await fixture(t, { touch: true, webmcp: true, setup: page => page.addInitScript(() => {
+    globalThis.equipmentRequests = [];
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function(message, ...args) {
+      if (message?.request) globalThis.equipmentRequests.push(message.request.method);
+      return Reflect.apply(post, this, [message, ...args]);
+    };
+  }) });
+  await page.setViewportSize({ width: 390, height: 667 });
+  await create(page);
+  await page.waitForFunction(() => document.querySelector('pixel-nethack').dataset.webmcp === 'ready');
+  const { call } = await nativeWebMcp(page, t);
+  await page.getByRole('button', { name: /^Backpack/ }).tap();
+  let frame = await snapshot(page);
+  const shieldId = frame.observation.inventory.find(item => item.equipmentSlots?.includes('shield')).id;
+  const shield = frame.observation.inventory.find(item => item.id === shieldId);
+  await page.getByRole('button', { name: 'Remove ' + shield.label, exact: true }).tap();
+  await ready(page);
+  frame = await snapshot(page);
+  const unequipped = frame.observation.inventory.find(item => item.id === shieldId);
+  const choose = page.getByRole('button', { name: 'Choose equipment slot for ' + unequipped.label, exact: true });
+  await choose.tap();
+  const selected = await choose.elementHandle();
+  assert.equal(await choose.getAttribute('aria-pressed'), 'true');
+  const dispatchStart = await page.evaluate(() => globalThis.equipmentRequests.length);
+  const observed = await call('session_observe', { sessionId: frame.sessionId });
+  assert.equal(observed.isError, false);
+  const actions = await call('session_actions', { sessionId: frame.sessionId, target: 'here' });
+  assert.equal(actions.isError, false);
+  const dispatched = await page.evaluate(start => globalThis.equipmentRequests.slice(start), dispatchStart);
+  assert.deepEqual(dispatched, ['session.observe', 'session.actions']);
+  assert.equal((await snapshot(page)).observation.turn, frame.observation.turn);
+  assert.equal(observed.structuredContent.revision, frame.revision);
+  assert.equal(await page.locator('.rightbar').isVisible(), true);
+  assert.equal(await selected.evaluate(el => el.isConnected && document.activeElement === el), true,
+    'the same focused selection control survives a free query');
+  assert.equal(await choose.getAttribute('aria-pressed'), 'true');
+  await page.getByRole('button', { name: 'Equip selected item · Shield', exact: true }).tap();
+  await ready(page);
+  frame = await snapshot(page);
+  assert.deepEqual(frame.observation.inventory.find(item => item.id === shieldId).equipmentSlots, ['shield'],
+    'preserved callbacks still act on the live Game');
+  await call('session_observe', { sessionId: frame.sessionId }); // Refresh agent revision after human equipment input.
+  const dagger = frame.observation.inventory.find(item => item.equipmentSlots?.includes('alternateWeapon'));
+  await page.getByRole('button', { name: 'Choose equipment slot for ' + dagger.label, exact: true }).tap();
+  const oldSlot = await page.locator('[data-slot=weapon]').boundingBox();
+  const quit = await call('game_quit', { sessionId: frame.sessionId });
+  assert.equal(quit.isError, false);
+  assert.ok(quit.structuredContent.decision);
+  await page.touchscreen.tap(oldSlot.x + oldSlot.width / 2, oldSlot.y + oldSlot.height / 2);
+  assert.equal((await snapshot(page)).revision, quit.structuredContent.revision);
+  assert.deepEqual((await snapshot(page)).decision, quit.structuredContent.decision,
+    'an old equipment touch cannot answer the standing question');
+  await page.getByRole('button', { name: 'Cancel action', exact: true }).tap();
+  await ready(page);
+  await call('session_observe', { sessionId: frame.sessionId });
+  await page.getByRole('button', { name: /^Backpack/ }).tap();
+  await page.getByRole('button', { name: 'Choose equipment slot for ' + dagger.label, exact: true }).tap();
+  const dropped = await call('game_drop', { sessionId: frame.sessionId, item: { id: dagger.id } });
+  assert.equal(dropped.isError, false);
+  assert.ok(dropped.structuredContent.revision > frame.revision);
+  await page.getByRole('button', { name: /^Backpack/ }).tap();
+  assert.equal(await page.locator('.selected-item').count(), 0);
+  await page.touchscreen.tap(oldSlot.x + oldSlot.width / 2, oldSlot.y + oldSlot.height / 2);
+  const after = await snapshot(page);
+  assert.equal(after.revision, dropped.structuredContent.revision, 'old target touch cannot submit a new intent');
+  assert.ok(!after.observation.inventory.some(item => item.id === dagger.id));
+  if (await page.locator('#menu[open]').count())
+    await page.getByRole('button', { name: 'Close dialog', exact: true }).tap();
+  for (const tile of await page.locator('.equipment-slot').all()) {
+    const box = await tile.boundingBox();
+    assert.ok(box.y >= 0 && box.y + box.height <= 667 && box.height >= 44);
+  }
+  await page.screenshot({ path: root + '/test-results/equipment-observe-phone.png' });
 });
 
 test('compact equipment targets remain visible while the bag scrolls; touch selection is free',async t=>{
