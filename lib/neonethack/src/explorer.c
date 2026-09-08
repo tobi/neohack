@@ -87,6 +87,7 @@ typedef struct {
     int visibility_known, visible, boulder, trap_base;
     int door_orientation; /* 0 unknown, 1 horizontal frame, 2 vertical frame */
     char appearance[128];
+    char object_category[16], object_appearance[128], depicted_creature[128];
     char attitude[16];
 } cell_t;
 
@@ -118,6 +119,9 @@ perceived_display(const cell_t *source, int self, nnh_known_cell *cell)
     cell->color = source->color;
     snprintf(cell->attitude, sizeof cell->attitude, "%s", source->attitude);
     snprintf(cell->appearance, sizeof cell->appearance, "%s", source->appearance);
+    snprintf(cell->object_category, sizeof cell->object_category, "%s", source->object_category);
+    snprintf(cell->object_appearance, sizeof cell->object_appearance, "%s", source->object_appearance);
+    snprintf(cell->depicted_creature, sizeof cell->depicted_creature, "%s", source->depicted_creature);
     if (source->ch >= 32 && source->ch < 127) {
         cell->mark[0] = (char) source->ch; cell->mark[1] = '\0';
     } else snprintf(cell->mark, sizeof cell->mark, "\\u%04x", source->ch & 0xffff);
@@ -1669,6 +1673,20 @@ ingest(game_t *g, const char *line)
                           }
                         }
                         g->cells[y][x].present = 1;
+                        {
+                            const char *keys[] = { "objectCategory", "objectAppearance", "depictedCreature" };
+                            char *fields[] = { g->cells[y][x].object_category, g->cells[y][x].object_appearance, g->cells[y][x].depicted_creature };
+                            size_t sizes[] = { sizeof g->cells[y][x].object_category, sizeof g->cells[y][x].object_appearance, sizeof g->cells[y][x].depicted_creature };
+                            int i;
+                            for (i = 0; i < 3; i++) {
+                                mj_val v;
+                                fields[i][0] = '\0';
+                                if (mj_find(ecpy, keys[i], &v)) {
+                                    char *value = mj_str(v);
+                                    if (value) { snprintf(fields[i], sizes[i], "%s", value); free(value); }
+                                }
+                            }
+                        }
                         g->cells[y][x].glyph = (int) gg;
                         g->cells[y][x].ch = (int) cc;
                         g->cells[y][x].color = (int) fc;

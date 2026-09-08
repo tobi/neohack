@@ -134,5 +134,26 @@ void manual_fixture(void)
         o=manual_object(SHORT_SWORD,"slot-alternate",1);setuswapwep(o);
         o=manual_object(DART,"slot-quiver",5);setuqwep(o);
     }
+    if (!strncmp(svp.plname,"Art",3)) {
+        const int subjects[] = { PM_HUMAN, PM_DOG, PM_HOUSECAT, PM_RAVEN, PM_PYTHON, PM_RED_DRAGON };
+        int i;
+        for(x=34;x<=46;x++)for(y=4;y<=16;y++) {
+            while (svl.level.objects[x][y]) delobj(svl.level.objects[x][y]);
+            unblock_point(x,y);
+        }
+        for (i=0;i<6;i++) {
+            char name[32];
+            Sprintf(name,"art-statue-%d",i);
+            o=manual_object(STATUE,name,1);o->corpsenm=subjects[i];o->owt=weight(o);
+            o=mksobj(STATUE,FALSE,FALSE);o->corpsenm=subjects[i];o->owt=weight(o);
+            place_object(o,37+i,9);
+        }
+        o=mksobj(CROSSBOW_BOLT,FALSE,FALSE);place_object(o,40,11);
+        o=mksobj(LONG_SWORD,FALSE,FALSE);place_object(o,41,11);
+        /* Rendered disguise must remain an apparent sword, not a monster. */
+        m=makemon(&mons[PM_SMALL_MIMIC],43,10,NO_MM_FLAGS);
+        m->m_ap_type=M_AP_OBJECT;m->mappearance=LONG_SWORD;m->msleeping=1;
+        if (!strcmp(svp.plname,"ArtHallucinated")) make_hallucinated(100L,FALSE,0L);
+    }
     vision_recalc(0);docrt();update_inventory();disp.botl=TRUE;
 }

@@ -1,5 +1,13 @@
 # Dungeon art workshop
 
+Weapon and statue sheet: run `bun scripts/render-equipment.ts` from this client.
+It exports `test-results/art/equipment/{sprites.png,sprites.json,preview.png}`
+from the editable original grids in `src/equipment-pixels.ts`. The manifest
+maps all 71 pinned weapon definitions to 24 shapes and includes all six
+statue designs, selected from structured perceived subjects. See
+[DESIGN.md](../DESIGN.md) for perception limits. The map, inventory
+and HUD draw these same grids directly; there is no asynchronous atlas load.
+
 The live map and this CLI share `src/dungeon-art.ts`: original pixel drawing code,
 with 16px cells, joined wall caps, eight-pixel front faces, staggered paving,
 crevice moss and silhouettes for actual known features. There are no copied vendor

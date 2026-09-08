@@ -30,7 +30,7 @@ export interface CellActions {
   terrain?: { type: string; freshness: "current" | "remembered" | "unknown"; orientation?: "horizontal" | "vertical" };
   door?: { lock: "locked" | "unlocked" | "unknown"; freshness: "witnessed" | "remembered" | "unknown"; observedTurn?: number };
   occupant?: { kind: "self" | "creature" | "ally"; mark?: string; color?: number; appearance?: string; attitude?: "hostile" | "peaceful" | "tame" };
-  objects?: { mark: string; color: number; kind?: "boulder" }[];
+  objects?: { mark: string; color: number; kind?: "boulder"; category?: string; known?: {appearance: string; depictedCreature?: string} }[];
   hazards?: ("trap" | "water" | "lava")[];
   walkable: boolean | null;
   movement: { relation: "here" | "adjacent" | "distant"; intent?: "step" | "attemptOpen" | "attemptObstacle" | "creatureBump" | "allyBump" | "possiblePush" | "unknown"; knownRestriction?: "intactDoorDiagonal" | "lockedDoor" | "knownTerrainObstacle"; requiresSqueeze?: boolean };
@@ -49,7 +49,7 @@ export type Freshness = "current" | "lastKnown" | "unknown";
 export interface ItemRef {
   id: string; label: string; location: "inventory" | "here";
   quantity: number; category: string;
-  known?: {appearance?: string; identity?: string; beatitude?: "blessed" | "uncursed" | "cursed"; charges?: number; recharges?: number; enchantment?: number; erosionProof?: boolean};
+  known?: {appearance?: string; depictedCreature?: string; identity?: string; beatitude?: "blessed" | "uncursed" | "cursed"; charges?: number; recharges?: number; enchantment?: number; erosionProof?: boolean};
   /** Candidate actions from the C resolver; absent when perception is stale. Not safety guarantees. */
   actions?: ("eat" | "equip" | "remove" | "apply" | "drink" | "read" | "zap" | "wield" | "drop" | "throw" | "offer" | "dip" | "rub" | "invoke" | "quiver" | "pickup")[];
 
@@ -66,7 +66,7 @@ export interface Cell {
   visible?: boolean;
   terrain: { type: string; knowledge: "remembered"; freshness?: "current" | "remembered" | "unknown"; orientation?: "horizontal" | "vertical" };
   occupant?: { kind: "self" | "creature" | "ally"; mark: string; color?: number; appearance?: string; attitude?: "hostile" | "peaceful" | "tame" };
-  objects?: { mark: string; color: number; kind?: "boulder" }[];
+  objects?: { mark: string; color: number; kind?: "boulder"; category?: string; known?: {appearance: string; depictedCreature?: string} }[];
 }
 /** Omitted facts are unknown; empty known lists really are empty. */
 export interface PlayerKnowledge {

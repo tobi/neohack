@@ -8,6 +8,11 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- The top bar brings game controls together. Inspection stays in one place,
+  offers numbered shortcuts and opens contextual encyclopedia entries with a
+  return to the same tile or item.
+- Thirty equipment and statue sprites appear consistently on the map, in the
+  backpack and in the HUD, using only perceived shapes and statue subjects.
 - Agents use shorter, consistent commands across browser and native MCP. Item
   actions use explicit item IDs, and each question shows how to answer it;
   inspecting a square provides ready-to-use action arguments.

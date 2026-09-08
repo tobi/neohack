@@ -6,6 +6,16 @@ Original copyright, no-warranty and `dat/license` notices remain intact.
 These notes identify changes; they do not grant a new license for independently
 owned project code. The repository's publication/license review remains open.
 
+## 2026-09-08 — perceived weapon and statue artwork facts
+
+- win/headless/knowledge.inc: expose the depicted creature of a known statue
+  beside its ordinary perceived appearance; withhold it during hallucination.
+- win/headless/winheadless.c: project physical weapon descriptions and statue
+  subjects from the displayed object glyph, including remembered appearances
+  and disguises. Do not inspect floor objects or reveal an underlying monster.
+  Dirty tracking clears these details when the displayed object changes or
+  hallucination withholds them. Queries consume no engine input or randomness.
+
 ## 2026-09-08 — semantic condition feed
 
 - src/botl.c: the headless port evaluates and emits the existing engine

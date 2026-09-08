@@ -21,6 +21,7 @@ typedef struct {
     int door_orientation; /* disclosed frame axis: 0 unknown, 1 horizontal, 2 vertical */
     int occupant; /* 0 none, 1 self, 2 creature, 3 ally: perceived, not hidden */
     char appearance[128], mark[8], attitude[16];
+    char object_category[16], object_appearance[128], depicted_creature[128];
     int color, object; /* rendered object/remains; never a hidden object lookup */
     int boulder, trap;
     int lock; /* 0 unknown, 1 witnessed locked, 2 witnessed unlocked */

@@ -165,6 +165,7 @@ struct hl_cell {
     int visible; /* engine sight, independent of remembered display glyphs */
     int attitude; /* 0 unknown, 1 hostile, 2 peaceful, 3 tame: visible look facts */
     int appearance; /* displayed monster type, never a hidden monster lookup */
+    int object_type, depicted_creature; /* displayed shape/subject + 1; 0 unknown */
     int dirty;
 };
 static struct hl_cell hl_map[ROWNO][COLNO];
@@ -221,7 +222,25 @@ headless_flush(void)
             int appearance = (!Hallucination && glyph_is_monster(c->glyph))
                                  ? glyph_to_mon(c->glyph) + 1 : 0;
             int attitude = 0;
+            int object_type = 0, depicted_creature = 0;
             struct monst *seen = m_at(x, y);
+            /* Only the rendered object, including apparent disguises and
+             * remembered glyphs. No floor object lookup or identification.
+             * Weapons have unshuffled physical descriptions; other classes
+             * may require close inspection and remain class-only here. */
+            if (!Hallucination && glyph_is_object(c->glyph)) {
+                int type = glyph_to_obj(c->glyph);
+                if (type >= 0 && type < NUM_OBJECTS
+                    && (objects[type].oc_class == WEAPON_CLASS || type == STATUE))
+                    object_type = type + 1;
+                if (glyph_is_statue(c->glyph))
+                    depicted_creature = glyph_to_statue_corpsenm(c->glyph) + 1;
+            }
+            if (c->object_type != object_type || c->depicted_creature != depicted_creature) {
+                c->object_type = object_type;
+                c->depicted_creature = depicted_creature;
+                c->dirty = hl_map_dirty = 1;
+            }
             /* Match look's non-hallucinatory, spotted monster information.
              * Disguises, hidden creatures, and remembered glyphs disclose none. */
             if (visible && appearance && !u.uswallow && seen
@@ -287,6 +306,18 @@ headless_flush(void)
             jb_bool(&cells, glyph_is_object(c->glyph) && glyph_to_obj(c->glyph) == BOULDER);
             jb_key(&cells, "visible");
             jb_bool(&cells, c->visible);
+            if (c->object_type) {
+                int type = c->object_type - 1;
+                const char *description = OBJ_DESCR(objects[type]);
+                jb_key(&cells, "objectCategory");
+                jb_str(&cells, type == STATUE ? "object" : "weapon");
+                jb_key(&cells, "objectAppearance");
+                jb_str(&cells, description ? description : OBJ_NAME(objects[type]));
+            }
+            if (c->depicted_creature > 0 && c->depicted_creature <= NUMMONS) {
+                jb_key(&cells, "depictedCreature");
+                jb_str(&cells, mons[c->depicted_creature - 1].pmnames[NEUTRAL]);
+            }
             if (c->attitude) {
                 jb_key(&cells, "attitude");
                 jb_str(&cells, c->attitude == 3 ? "tame" : c->attitude == 2 ? "peaceful" : "hostile");
