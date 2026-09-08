@@ -28,9 +28,10 @@ settings updates and rejected attempts. Read-only queries are not recorded.
 Each input is added to IndexedDB in a strict transaction **before** C receives
 it. A second transaction adds completion evidence and advances a small run
 header. Neither write reads or rewrites the previous inputs. Completion evidence
-contains a response SHA-256 and private core/display RNG boundary fingerprints;
+contains a response SHA-256 and internal core/display RNG boundary fingerprints;
 it does not contain a full observation. These verifier records are outside the
-gameplay observation and receipt surfaces.
+gameplay observation and receipt surfaces. They are included in the unlisted
+archive for replay verification, along with optional engine checkpoints.
 
 A seed alone is not sufficient. The exact engine, data, calendar, options and
 input sequence must agree. [REPLAY.md](REPLAY.md) explains the limits. The C

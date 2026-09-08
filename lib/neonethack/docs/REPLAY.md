@@ -11,6 +11,9 @@ New browser runs use [one append-only protocol input archive](CLOUD_SAVES.md)
 for local durability, CDN backup and local WASM playback. Creation identity and
 calendar are recorded explicitly. Response hashes and RNG boundary evidence
 verify reconstruction; optional exact-package engine checkpoints accelerate it.
+These unlisted archives include verifier evidence and checkpoint internals for
+local reconstruction. They are readable by anyone with the replay URL, while
+gameplay observations and receipts continue to expose perceived information only.
 The public-trace utility below remains a separate opt-in diagnostic export.
 It is not the website's storage path.
 
@@ -161,10 +164,11 @@ It does not hash C struct padding, pointers, or native `unsigned long` storage.
 Counters measure consumed output words, not the number of internal generator
 mixing rounds. Counters remain cumulative across reseeding.
 
-This metadata is confined to private engine input-boundary, final-result and lore-reply
-transport and the session's private `rng.jsonl`. It is not a semantic operation, public observation, public receipt,
-or MCP field. Keep fingerprints private even though they are hashes: they can
-support guesses about deterministic state. The same pinned runtime and calendar
+The low-level runtime carries this metadata in internal engine input-boundary,
+final-result and lore-reply transport and the session's `rng.jsonl`. It is not a
+semantic operation, gameplay observation, public receipt or MCP field. The website
+input archive above deliberately includes it for local replay verification; do
+not feed archive internals into an agent's live perceived scene. The same pinned runtime and calendar
 remain necessary; this does not promise native/WASM state equality.
 
 New sessions mark RNG verification version 1 in private metadata and in the
@@ -178,7 +182,7 @@ marker do not acquire invented historical evidence.
 **Validation status:** native private replay scenarios compare every captured
 boundary. Native and browser WASM damaged-record scenarios verify fail-closed
 resumption, including evidence persisted through IndexedDB reload and exact
-receipt recovery without fingerprint disclosure.
+receipt recovery without fingerprint disclosure in gameplay responses.
 Repeated lore queries preserve both counters and state fingerprints. The driver
 compares each lore reply with the last private input boundary and retires the
 runtime on a mismatch. Native fault scenarios cover lost replies, wrong IDs,
