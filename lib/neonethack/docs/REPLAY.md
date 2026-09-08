@@ -171,7 +171,7 @@ input archive above deliberately includes it for local replay verification; do
 not feed archive internals into an agent's live perceived scene. The same pinned runtime and calendar
 remain necessary; this does not promise native/WASM state equality.
 
-New sessions mark RNG verification version 1 in private metadata and in the
+New sessions mark private integrity version 2 in private metadata and in the
 creation journal; resume rejects disagreement between them. Before answering
 an engine input, the driver durably appends its input-history position, input ID,
 prompt kind and RNG evidence. Final results record a terminal boundary. Resume
@@ -191,8 +191,24 @@ preserves the original journal and standing decision. Free public
 queries append no boundary records. Native/WASM SHA-256 comparisons cover padding
 and streaming boundaries. A native query-volume scenario compares the next exact
 RNG boundary after 400 observation, action-offer and navigation queries with an
-unqueried control. Stronger receipt binding remains pending. Equal RNG evidence is not proof that
+unqueried control. Equal RNG evidence is not proof that
 all non-random hidden engine state is equal.
+
+Version 2 also binds the exact LF-terminated checkpoint records with a private
+SHA-256 chain in `meta.json`. Before appending a record, the driver durably saves
+its intended next chain value. Recovery accepts at most that one exact pending
+record after an interrupted append; a different tail, changed historical text,
+or a shorter committed journal is rejected without rewriting source bytes.
+After the append is durable, the committed anchor advances and the pending value
+is removed. Index files remain rebuildable caches. This adds a metadata commit
+per checkpoint; it does not consume engine turns or RNG draws.
+
+These anchors detect corruption relative to trusted private metadata. They are
+not signatures and do not authenticate a store whose journals and metadata can
+all be rewritten together. They are not copied into public observations or
+receipts. Supported published version-1 sessions retain their existing RNG
+verification without inventing receipt anchors for historical bytes.
+
 
 To measure local costs, build the native engine and run:
 
@@ -202,11 +218,14 @@ node lib/neonethack/scripts/measure-rng-overhead.mjs
 
 This creates a disposable instrumented engine and fresh run, calls the actual
 fingerprint function 2,000 times while checking that its evidence stays unchanged,
-and reports local durability and whole-search timings separately. It never prints
+and reports local durability, a compact atomic metadata-write probe, and
+whole-search timings separately. It never prints
 RNG state or reads an existing run. On Linux x64 / Ryzen Threadripper PRO 7975WX
-(2026-09-07), fingerprint generation averaged 0.099 ms; the 100-sample local
-file-and-directory sync probe had a 0.893 ms median and 1.482 ms p95. A full
-one-turn search had a 15.541 ms median over 30 samples. The durability probe
+(2026-09-07, receipt binding enabled), fingerprint generation averaged 0.106 ms;
+the 100-sample file-and-directory sync probe had a 0.978 ms median. The atomic
+373-byte metadata probe had a 1.584 ms median and 1.987 ms p95; actual pending
+metadata also carries an uncheckpointed receipt and can be larger. A full
+one-turn search had a 20.245 ms median over 30 samples. The durability probe
 includes Node asynchronous overhead, and full search includes all driver/engine
 work. These are not incremental total-latency, WASM, or remote-storage measurements;
 rerun on the target host rather than treating them as performance guarantees.

@@ -110,6 +110,16 @@ record_validate(game_t *g, const char *line, long long sequence,
 
 /* before_input distinguishes an unrecorded earlier request from the current
  * request which is still being committed by record_frame. */
+/* Private SHA-256 chain, anchored atomically alongside the input/RNG version
+ * and revision in meta.json. No digest is added to a public receipt/frame. */
+static void receipt_chain_step(char chain[65],const char *line,size_t length,int append_newline)
+{
+    nh_sha256 state;unsigned char size[8];size_t i;uint64_t n=(uint64_t)length+(append_newline?1:0);
+    for(i=0;i<8;i++){size[i]=(unsigned char)n;n>>=8;}
+    nh_sha_init(&state);nh_sha_update(&state,"neonethack-receipts-v1",21);
+    nh_sha_update(&state,chain,64);nh_sha_update(&state,size,sizeof size);
+    nh_sha_update(&state,line,length);if(append_newline)nh_sha_update(&state,"\n",1);nh_sha_final(&state,chain);
+}
 static int
 record_prepare(game_t *g, int before_input)
 {
@@ -124,6 +134,7 @@ record_prepare(game_t *g, int before_input)
     int fd = -1, tfd = -1, result = -1, read_result, gap, created = 0;
     long long count = 0, bytes = 0, turn = 0, revision = 0, through = -1, gaps = 0;
     size_t length;
+    char chain[65];memset(chain,'0',64);chain[64]=0;
     if (g->lease_fd < 0) return record_error(g, "Recording requires exclusive ownership");
     if (before_input && (g->frame_count >= RECORD_MAX_FRAMES || g->recording_bytes > RECORD_MAX_BYTES - RECORD_MAX_LINE))
         return record_error(g, "Recording limit reached; no new deed was sent");
@@ -159,10 +170,15 @@ record_prepare(game_t *g, int before_input)
         if (count >= RECORD_MAX_FRAMES || !record_validate(g, line, count, &turn, &revision, &through, &gap)) {
             record_error(g, "Corrupt checkpoint journal; no bytes were changed"); goto done;
         }
+        if(g->rng_version>=2)receipt_chain_step(chain,line,length,0);
         if (fprintf(out, "{\"sequence\":%lld,\"offset\":%lld,\"length\":%zu,\"turn\":%lld,\"revision\":%lld,\"gapBefore\":%s}\n",
             count, bytes, length, turn, revision, gap ? "true" : "false") < 0) goto done;
         bytes += (long long) length; count++; gaps += gap;
         free(line); line = NULL;
+    }
+    if(g->rng_version>=2&&!((count==g->frame_count&&!strcmp(chain,g->receipt_chain))||
+        (count==g->frame_count+1&&g->receipt_pending[0]&&!strcmp(chain,g->receipt_pending)))){
+        record_error(g,"Private receipt checkpoint differs; original receipt bytes must be recovered");goto done;
     }
     if (read_result < 0 || fstat(fileno(in), &after) || !record_same(&ds, &after) || bytes != ds.st_size) {
         record_error(g, "Incomplete or changing checkpoint journal; preserve it for explicit salvage"); goto done;
@@ -178,12 +194,14 @@ record_prepare(game_t *g, int before_input)
     if (rename(temp, index) || record_dir_sync(g)) goto done;
     if (count > g->frame_count && through >= (long long) g->nrequests && revision >= g->revision)
         g->recording_gap = 0; /* The previously uncertain append survived whole. */
+    if(g->rng_version>=2){strcpy(g->receipt_chain,chain);g->receipt_pending[0]=0;}
     g->frame_count = count; g->recording_bytes = bytes; g->recording_gaps = gaps;
     if (before_input && ((count && g->revision > revision) ||
         (through >= 0 && (long long) g->nrequests > through))) g->recording_gap = 1;
     if (revision > g->revision) g->revision = revision;
     if (lstat(data, &g->recording_data_stat) || !record_same(&ds, &g->recording_data_stat) ||
         lstat(index, &g->recording_index_stat)) goto done;
+    if(g->rng_version>=2&&sidecar_save(g))goto done;
     g->recording_ready = 1; g->recording_error[0] = 0;
     result = 0;
 done:
@@ -244,10 +262,22 @@ record_frame(game_t *g, const char *request, const char *response)
     mj_key(&b, "response"); mj_rawv(&b, response);
     mj_endobj(&b);
     length = (long long) b.len + 1;
+    if (b.ok && g->rng_version >= 2) {
+        /* Reserve the exact intended tail before appending any journal bytes.
+         * Recovery may accept this one tail after an interrupted fsync. */
+        strcpy(g->receipt_pending, g->receipt_chain);
+        receipt_chain_step(g->receipt_pending, b.buf, b.len, 1);
+        if (sidecar_save(g)) { fclose(f); f = NULL; mj_free(&b); goto data_failed; }
+    }
     ok = b.ok && mj_valid(b.buf) && sequence < RECORD_MAX_FRAMES && length <= RECORD_MAX_LINE && offset + length <= RECORD_MAX_BYTES &&
         fputs(b.buf, f) >= 0 && fputc('\n', f) != EOF && fflush(f) == 0 && fsync(fileno(f)) == 0;
     if (fclose(f)) ok = 0;
-    f = NULL; mj_free(&b);
+    f = NULL;
+    if(ok&&g->rng_version>=2){
+        /* Hash the newline as part of the exact persisted journal record. */
+        strcpy(g->receipt_chain,g->receipt_pending);g->receipt_pending[0]=0;
+    }
+    mj_free(&b);
     if (!ok) goto data_failed;
     /* Compact only duplicate receipts whose exact bytes just became durable.
      * An uncheckpointed receipt must remain in the sidecar across failures.

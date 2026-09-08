@@ -14,6 +14,7 @@
 #include "minjson.h"
 #include "session.h"
 #include "perceived_status.h"
+#include "../engine/include/nh_sha256.h"
 
 #include <ctype.h>
 #include <dirent.h>
@@ -355,6 +356,8 @@ typedef struct game {
     struct stat rng_stat;
     char rng_error[192];
     char rng_last[512];
+    char receipt_pending[65];
+    char receipt_chain[65]; /* private anchor for exact checkpoint bytes */
     struct stat sidecar_stat, input_stat;
     operation_t operation;
     int have_operation;
@@ -639,6 +642,7 @@ sidecar_save(game_t *g)
         mj_key(&b, "boundaryComplete"); mj_boolv(&b, g->boundary_complete && !g->recovery_required);
     }
     if(g->rng_version){mj_key(&b,"rngIntegrityVersion");mj_intv(&b,g->rng_version);}
+    if(g->rng_version>=2){mj_key(&b,"receiptChain");mj_strv(&b,g->receipt_chain);if(g->receipt_pending[0]){mj_key(&b,"receiptPending");mj_strv(&b,g->receipt_pending);}}
     mj_key(&b, "revision"); mj_intv(&b, g->revision);
     mj_key(&b, "frameCount"); mj_intv(&b, g->frame_count);
     mj_key(&b, "recordingGap"); mj_boolv(&b, g->recording_gap);
@@ -783,6 +787,8 @@ sidecar_load(game_t *g)
         if (mj_int(v, &n)) g->frame_count = n;
     }
     if (mj_find(text,"rngIntegrityVersion",&v)) { long long version; if(mj_int(v,&version))g->rng_version=(int)version; }
+    if(mj_find(text,"receiptChain",&v)){char *s=mj_str(v);if(s){snprintf(g->receipt_chain,sizeof g->receipt_chain,"%s",s);free(s);}}
+    if(mj_find(text,"receiptPending",&v)){char *s=mj_str(v);if(s){snprintf(g->receipt_pending,sizeof g->receipt_pending,"%s",s);free(s);}}
     if (mj_find(text, "recordingGap", &v)) mj_bool(v, &g->recording_gap);
     if (mj_find(text, "recordingOnly", &v)) {
         int flag = 0;
@@ -972,6 +978,7 @@ semantic_reload(game_t *g)
     (void)rng_replay_close(g,0);
     g->rng_version = g->rng_have_stat = 0;
     g->rng_error[0] = 0;
+    g->receipt_chain[0] = g->receipt_pending[0] = 0;
     g->sidecar_present = g->sidecar_corrupt = g->recovery_required = g->input_ready = 0;
     g->sidecar_error[0] = g->input_error[0] = 0;
     g->sidecar_input_bytes = -1; g->boundary_complete = 1;
@@ -5810,7 +5817,8 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
     }
     tracked_clear(g);
     g->revision = 0;
-    g->rng_version=1;g->rng_have_stat=0;g->rng_error[0]=0;
+    g->rng_version=2;g->rng_have_stat=0;g->rng_error[0]=0;
+    memset(g->receipt_chain,'0',64);g->receipt_chain[64]=0;
     g->boundary_complete = 0; g->recovery_required = 0; g->sidecar_input_bytes = 0; g->input_ready = 0;
     g->have_operation = 0;
     g->operation.decision_id[0] = '\0';
@@ -5849,7 +5857,7 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
         return fail_envelope(id, req_id, "engineError", "cannot start engine");
     }
     snprintf(line, sizeof line,
-             "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"0.1\",\"runtimeProfile\":1,\"rngIntegrityVersion\":1,\"calendarEpoch\":%lld}}",
+             "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"0.1\",\"runtimeProfile\":1,\"rngIntegrityVersion\":2,\"calendarEpoch\":%lld}}",
              g->runtime_epoch);
     if (send_engine(g, line) < 0 || runtime_ack(g)) {
         free(name);

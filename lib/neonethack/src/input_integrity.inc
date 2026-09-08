@@ -108,7 +108,7 @@ input_validate_range(char **lines, size_t count, size_t start)
                 compatible = protocol && protocol[0] == '0' && (!protocol[1] || protocol[1] == '.');
                 free(protocol);
                 if (!compatible) return "unsupported recorded protocol version";
-                if (mj_find(params.p,"rngIntegrityVersion",&v) && !stored_integer(v,1,1))
+                if (mj_find(params.p,"rngIntegrityVersion",&v) && !stored_integer(v,1,2))
                     return "unsupported recorded RNG integrity version";
                 {
                     mj_val profile, epoch;
