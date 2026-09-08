@@ -1,5 +1,7 @@
 # neonethack
 
+Play live at neohack.dev
+
 **NetHack, without the terminal.** A perception-limited world API in C, with
 TypeScript, MCP and WebAssembly bindings.
 
