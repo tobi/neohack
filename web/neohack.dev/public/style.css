@@ -1749,6 +1749,18 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
 #navigation-status[hidden], #navigation-stop[hidden] { display: none; }
 #navigation-stop { white-space: nowrap; min-height: 44px; }
 
+/* The encyclopedia is a readable book, with one compact search control. */
+.encyclopedia { max-width: 42rem; }
+.lore-search > label { display: block; margin: 1rem 0 .4rem; }
+.lore-search > div { display: flex; gap: .5rem; }
+.encyclopedia .lore-search input { min-width: 0; flex: 1; margin: 0; }
+.lore-search button { flex: none; min-height: 44px; padding: .55rem .8rem; line-height: 1.2; }
+.lore-status { min-height: 1.4em; margin: .6rem 0; }
+.lore-entry { border-top: 1px solid var(--line, #53614b); padding-top: .8rem; }
+.lore-entry h3 { margin: 0 0 .6rem; }
+.lore-copy { overflow-wrap: anywhere; line-height: 1.65; }
+.lore-copy p { margin: .7rem 0; }
+
 /* Dialog shells stay still; only their content regions scroll. */
 #decision[open] { display:flex; flex-direction:column; overflow:hidden; padding:16px; max-height:calc(100dvh - 24px); }
 #decision > :not(#decision-body) { flex-shrink:0; }

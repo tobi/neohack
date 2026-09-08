@@ -3529,6 +3529,33 @@ for(const touch of [false,true])test(`destination selection previews a free C ro
   assert.deepEqual(errors,[]);
 });
 
+test('encyclopedia displays pinned lore without changing the adventure on desktop and phone', async t => {
+  const {page, errors} = await fixture(t);
+  await create(page);
+  const before = await snapshot(page);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({width, height:844});
+    await page.getByLabel('Game menu', {exact:true}).click();
+    await page.getByRole('button', {name:'Encyclopedia', exact:true}).click();
+    const input=page.getByRole('textbox', {name:'Look up a name'});
+    await input.fill('floating eye');
+    await page.getByRole('button', {name:'Look up', exact:true}).click();
+    await page.locator('.lore-entry:not([hidden])').waitFor();
+    assert.ok((await page.locator('.lore-copy').innerText()).length>100);
+    assert.deepEqual(await snapshot(page),before,'reading never changes the scene or standing decision');
+    const box=await page.locator('.lore-search').boundingBox();
+    assert.ok(box.x>=0&&box.x+box.width<=width,'search fits the viewport');
+    const searchButton=await page.locator('.lore-search button').boundingBox();
+    assert.ok(searchButton.height>=44&&searchButton.height<=48,'search remains compact with a full touch target');
+    await input.fill('no-such-entry-in-this-book');
+    await page.getByRole('button', {name:'Look up', exact:true}).click();
+    await page.getByText('No entry for “no-such-entry-in-this-book”. Try another name.').waitFor();
+    assert.deepEqual(await snapshot(page),before);
+    await page.getByRole('button', {name:'Close dialog', exact:true}).click();
+  }
+  assert.deepEqual(errors,[]);
+});
+
 test('double-clicking a known square starts one bounded walking leg',async t=>{
   const {page,errors}=await fixture(t);await create(page);
   const target=await page.evaluate(async()=>{

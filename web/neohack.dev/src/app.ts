@@ -1,5 +1,6 @@
 import { appendReceipt, journalScroll, renderJournalEntry, type JournalEntry } from './journal';
 import { renderHeroHud } from './hero-hud';
+import { encyclopedia } from './encyclopedia';
 import './component';
 import { PublicReplayRecorder,InputReplayRecorder, embedCode, replayLink } from './public-replay';
 import { adventurerName } from './adventurer-names';
@@ -332,7 +333,7 @@ class PixelNethack extends HTMLElement {
         <div class="world-hud">
           <div class="location-hud"><span id="location-heading"></span><span id="turn-pill"></span><span id="cloud-status" role="status"></span></div>
           <details class="hud-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
-            <button id="adventures-button">Your adventures</button><button id="pickup-settings" data-game>Automatic pickup</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button>
+            <button id="adventures-button">Your adventures</button><button id="pickup-settings" data-game>Automatic pickup</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button><button id="encyclopedia-button" data-game>Encyclopedia</button>
             <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
             <button id="copy-embed">Copy run embed</button><p id="public-recording" role="status">Public replays record observed scenes from this visit.</p><button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p><p id="account-recording" role="status"></p><a class="menu-github" href="/component" target="_blank" rel="noopener">Embed the world ↗</a><a class="menu-github" href="/bots" target="_blank" rel="noopener">Ascender workshop ↗</a><a class="menu-github" href="/login" target="_blank" rel="noopener">Your account & replays ↗</a>
           </div></details>
@@ -977,6 +978,13 @@ class PixelNethack extends HTMLElement {
     this.$("#more-actions").onclick = () => this.more();
     this.$("#more-actions").setAttribute("aria-label", "More actions");
     this.$("#credits-button").onclick = () => this.credits();
+    this.$("#encyclopedia-button").onclick = () => {
+      if (!this.game) return;
+      const book = encyclopedia(this.game);
+      this.openMenu('');
+      this.$('#menu-content').append(book);
+      book.querySelector<HTMLInputElement>('input')!.focus();
+    };
     this.$("#zoom-in").onclick = () => {
       this.map.zoomTo(this.map.zoom + 1);
     };
