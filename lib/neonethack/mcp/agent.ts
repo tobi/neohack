@@ -1,8 +1,8 @@
 import {Game, Neonethack, Navigator, NavigationError, WorldError, type Transport} from '../typescript/client.js';
 import type {Method, Request, Response, Snapshot} from '../typescript/types.js';
-import {methods, tools, instructions} from './agent-data.js';
+import {methods, tools, instructions, answers} from './agent-data.js';
 export {tools,instructions};
-type Schema={type?:string;properties?:Record<string,Schema>;required?:string[];additionalProperties?:boolean;oneOf?:Schema[];enum?:unknown[];const?:unknown;items?:Schema;minimum?:number;maximum?:number;minLength?:number;maxLength?:number;minItems?:number;maxItems?:number;uniqueItems?:boolean};
+type Schema={type?:string;properties?:Record<string,Schema>;required?:string[];dependentRequired?:Record<string,string[]>;additionalProperties?:boolean;oneOf?:Schema[];enum?:unknown[];const?:unknown;items?:Schema;minimum?:number;maximum?:number;minLength?:number;maxLength?:number;minItems?:number;maxItems?:number;uniqueItems?:boolean};
 function valid(value:unknown,s:Schema):boolean {
   if(s.oneOf) return s.oneOf.filter(c=>valid(value,c)).length===1;
   if('const' in s && value!==s.const) return false;
@@ -10,7 +10,7 @@ function valid(value:unknown,s:Schema):boolean {
   if(s.type==='object') {
     if(!value || typeof value!=='object' || Array.isArray(value)) return false;
     const v=value as Record<string,unknown>;
-    return !(s.required??[]).some(k=>!(k in v)) && Object.entries(v).every(([k,x])=>s.properties?.[k]?valid(x,s.properties[k]):s.additionalProperties!==false);
+    return !(s.required??[]).some(k=>!(k in v)) && Object.entries(s.dependentRequired??{}).every(([k,needed])=>!(k in v)||needed.every(n=>n in v)) && Object.entries(v).every(([k,x])=>s.properties?.[k]?valid(x,s.properties[k]):s.additionalProperties!==false);
   }
   if(s.type==='array') return Array.isArray(value) && value.length>=(s.minItems??0) && value.length<=(s.maxItems??Infinity) && (!s.uniqueItems || new Set(value.map(v=>JSON.stringify(v))).size===value.length) && value.every(v=>!s.items||valid(v,s.items));
   if(s.type==='string') return typeof value==='string' && value.length>=(s.minLength??0) && value.length<=(s.maxLength??Infinity) && !/[\u0000-\u001f\u007f]/.test(value);
@@ -21,6 +21,14 @@ function valid(value:unknown,s:Schema):boolean {
 const uncertain=(r:Response)=>('outcome' in r && r.outcome.status==='unknown') || ('error' in r && !!r.error && ['incompleteRequest','recoveryRequired','metadataUnavailable','inputHistoryError'].includes(r.error.code));
 const isSnapshot=(r:Response):r is Snapshot=>'observation' in r && 'outcome' in r;
 const creatureId=(s:Snapshot,x:number,y:number)=>`c-${s.sessionId}-${s.revision}-${x}-${y}`;
+const answerFormats=answers as Record<string,{field:string;schema:Schema;instruction:string}>;
+const itemSelector=(input:Record<string,unknown>)=>({id:input.itemId,...(input.quantity!==undefined?{quantity:input.quantity}:{})});
+function questionReply(sessionId:unknown,decision:Record<string,unknown>) {
+  const format=answerFormats[String(decision.kind)];
+  if(!format)return {};
+  const args={sessionId,decisionId:decision.id};
+  return {reply:{tool:'answer',arguments:args,valueSchema:format.schema,instruction:format.instruction},...(decision.cancellable?{cancel:{tool:'cancel',arguments:args}}:{})};
+}
 export function present(response:Response, extra:Record<string,unknown>={}, compact=false):Record<string,unknown> {
   const r=response as unknown as Record<string,unknown>;
   let summary='Perceived information.';
@@ -35,6 +43,16 @@ export function present(response:Response, extra:Record<string,unknown>={}, comp
   // Put the witnessed outcome and actual question first; keep the complete snapshot.
   const {requestId,...rest}=r;
   const result:Record<string,unknown>={summary,...('outcome' in r?{outcome:r.outcome,events:r.events,decision:r.decision}:{}),...(creatures?{creatures}:{}),...rest,...(requestId?{operationId:requestId}:{}),...extra};
+  if(result.decision)Object.assign(result,questionReply(r.sessionId,result.decision as Record<string,unknown>));
+  // Inspect offers executable adapter syntax beside the unchanged low facts.
+  // These are attempts, including needsSelection, never recommended actions.
+  if('cell' in response)result.attempts=response.cell.actions.flatMap(offer=>{
+    if(!('arguments' in offer))return [];
+    const tool=offer.method==='game.move'?'go':methods.find(m=>m.method===offer.method)?.name;
+    if(!tool)return [];
+    const args=offer.method==='game.move'?{to:{x:response.cell.x,y:response.cell.y},force:true}:offer.arguments;
+    return [{tool,arguments:{sessionId:response.sessionId,...args},availability:offer.availability,cost:offer.cost}];
+  });
   if(extra.navigation && !extra.error)delete result.error;
   if((extra.navigation as {actionsTaken?:number}|undefined)?.actionsTaken===0){
     delete result.operationId;
@@ -46,7 +64,7 @@ export function present(response:Response, extra:Record<string,unknown>={}, comp
     const events=result.events as Array<{type:string;kind?:string;mark?:string}>;
     const retained=events.filter(e=>!(e.type==='saw'&&e.kind==='terrain'&&(e.mark==='\\u0000'||e.mark==='\u0000')));
     result.observation=observation;result.events=retained;
-    result.presentation={kind:'compact',omitted:['observation.neighborhood'],omittedClearTerrainEvents:events.length-retained.length,fullObservation:'session_observe',attempts:'session_actions',...(result.operationId?{fullInputReceipt:'receipt'}:{})};
+    result.presentation={kind:'compact',omitted:['observation.neighborhood'],omittedClearTerrainEvents:events.length-retained.length,fullObservation:'observe',attempts:'inspect',...(result.operationId?{fullInputReceipt:'receipt'}:{})};
   }
   return result;
 }
@@ -80,7 +98,7 @@ export class AgentClient {
   async call(name:string,args:Record<string,unknown>={},options:{signal?:AbortSignal}={}):Promise<Record<string,unknown>> {
     const entry=methods.find(m=>m.name===name);
     if(!entry || !valid(args,entry.schema as unknown as Schema)){
-      const message=entry?`Invalid arguments for ${name}; no operation was sent. Call help with {name:"${name}"} for the schema. Item IDs use {item:{id:"returned-id"}}; bare item strings are readable names.`:'Unknown tool; no operation was sent. Call help with {} to list tool names.';
+      const message=entry?`Invalid arguments for ${name}; no operation was sent. Call help with {name:"${name}"} for the schema. Item actions take itemId; answer takes decisionId and value.`:'Unknown tool; no operation was sent. Call help with {} to list tool names.';
       return {version:1,error:{code:'invalidParams',message},summary:message};
     }
     const input=structuredClone(args), sid=typeof input.sessionId==='string'?input.sessionId:undefined;
@@ -99,7 +117,7 @@ export class AgentClient {
       if(entry.method==='session.create' && this.creationUncertain) throw Error('Creation is uncertain. Observe or resume the existing run before creating another.');
       const safe=['session.create','session.resume','session.observe','agent.receipt','agent.retry'].includes(entry.method);
       if(!safe && !game) throw Error('Observe or resume this session first.');
-      if(!safe && sid && this.pending.has(sid)) throw Error('An input is uncertain. Use retry for that exact pending operation, or inspect its receipt; do not submit a new action.');
+      if(!safe && sid && this.pending.has(sid)) throw Error('An input is uncertain. Use recover for that exact pending operation, or inspect its receipt; do not submit a new action.');
       if(!safe && game && game.state.revision!==revision) return {version:1,sessionId:sid,summary:'State changed while this call was queued. Observe before acting.',error:{code:'staleRevision',message:'State changed while this call was queued. Observe before acting.'}};
       if(entry.method==='agent.retry') {
         const request=sid?this.pending.get(sid):undefined;
@@ -126,6 +144,7 @@ export class AgentClient {
           this.adopt(leg.snapshot);return present(leg.snapshot,{navigation:{reason:leg.reason,actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed}},true);
         }
         let method=entry.method, params:Record<string,unknown>={...input};
+        if('itemId' in params){params.item=itemSelector(params);delete params.itemId;delete params.quantity;}
         if(method==='agent.attack') {
           let point=input.target as {x:number;y:number};
           if(typeof input.target==='string') {
@@ -142,8 +161,16 @@ export class AgentClient {
           version:1,sessionId:sid,summary:'The decision changed. Observe and answer the exact returned decisionId; no input submitted.',
           error:{code:'staleDecision',message:'The decision changed. Observe and answer the exact returned decisionId; no input submitted.'},
         };
+        if(method==='decision.answer') {
+          const kind=game!.decision!.kind,format=answerFormats[kind];
+          if(!format||!valid(input.value,format.schema))return {version:1,sessionId:sid,summary:'Value does not match the standing question; no input submitted.',error:{code:'invalidParams',message:'Use the standing question’s reply.valueSchema.'},decision:game!.decision,...questionReply(sid,game!.decision! as unknown as Record<string,unknown>)};
+          let value=input.value;
+          if(kind==='item')value=itemSelector(value as Record<string,unknown>);
+          if(kind==='target'&&value!=='self')value={direction:value};
+          params.answer={kind,[format.field]:value};delete params.value;
+        }
         if(method==='decision.answer' && game!.decision?.kind==='choice') {
-          const answer=input.answer as {kind:string;choose?:Array<number|string>};
+          const answer=params.answer as {kind:string;choose?:Array<number|string>};
           if(answer.kind==='choice' && answer.choose) {
             const resolved:number[]=[];
             for(const selected of answer.choose) {
@@ -152,7 +179,7 @@ export class AgentClient {
               if(candidates.length!==1) return {
                 version:1,sessionId:sid,revision,summary:candidates.length?'Several choices have that name. Select one candidate by ID.':'No choice has that name. Select a displayed name or ID.',
                 clarification:{kind:'choice',reason:candidates.length?'ambiguousName':'unknownName',name:selected},
-                decision:{...game!.decision,options:candidates.length?candidates:game!.decision.options},
+                decision:{...game!.decision,options:candidates.length?candidates:game!.decision.options},...questionReply(sid,game!.decision as unknown as Record<string,unknown>),
               };
               resolved.push(candidates[0]!.id);
             }
@@ -184,7 +211,7 @@ export class AgentClient {
         }
         if(entry.method==='session.create' && !(error instanceof WorldError)) {
           this.creationUncertain=true;
-          throw Error(`Creation reply unavailable; a run may already exist. Do not resubmit session.create. Recover the run token from the owning page or retained invocation, then observe or resume it. ${error instanceof Error?error.message:String(error)}`);
+          throw Error(`Creation reply unavailable; a run may already exist. Do not resubmit create. Recover the run token from the owning page or retained invocation, then observe or resume it. ${error instanceof Error?error.message:String(error)}`);
         }
         if(error instanceof WorldError){this.adopt(error.response);return present(error.response,{},true);}
         throw error;

@@ -60,7 +60,7 @@ try {
   await rpc('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'neohack-pi',version:'1'}});
   await bridge.notify({jsonrpc:'2.0',method:'notifications/initialized'});
   const catalog=(await rpc('tools/list',{})).result.tools;
-  const created=(await rpc('tools/call',{name:'session_create',arguments:{name:'Pi512',seed,role:'valkyrie',race:'dwarf',gender:'female',align:'lawful'}})).result.structuredContent;
+  const created=(await rpc('tools/call',{name:'create',arguments:{name:'Pi512',seed,role:'valkyrie',race:'dwarf',gender:'female',align:'lawful'}})).result.structuredContent;
   if(!created?.sessionId || created.ended)throw Error('No live session created; inspect journal, do not blindly recreate');
   const sessionId=created.sessionId, runId='pi-run'; metadata.sessionId=sessionId;saveMeta();
   const reader=new CompactObservationReader();
@@ -70,7 +70,7 @@ try {
   const operations=createOperationValidators({sessionId});
   harness=createAgentHarness({runId,sessionId,client,records:()=>records,operations});
   await harness.observe({deliberate:true});
-  const excluded=new Set(['session_create','session_resume','session_close','retry','receipt']);
+  const excluded=new Set(['create','resume','suspend','recover','receipt']);
   const tools=catalog.filter(t=>!excluded.has(t.name) && (t.annotations?.readOnlyHint || operations.has(t.name))).map(t=>{
     const inputSchema=structuredClone(t.inputSchema);delete inputSchema.properties?.sessionId;
     if(inputSchema.required)inputSchema.required=inputSchema.required.filter(k=>k!=='sessionId');
@@ -97,7 +97,7 @@ try {
       const call=JSON.parse(body),tool=tools.find(t=>t.name===call.name);
       if(!tool || !call.arguments || typeof call.arguments!=='object' || Array.isArray(call.arguments) || 'sessionId' in call.arguments)throw Error('Invalid bound tool call');
       let result;
-      if(call.name==='session_observe')result=(await harness.observe({deliberate:true})).response;
+      if(call.name==='observe')result=(await harness.observe({deliberate:true})).response;
       else if(tool.annotations?.readOnlyHint){
         const original=catalog.find(t=>t.name===call.name);
         result=(await rpc('tools/call',{name:call.name,arguments:{...call.arguments,...(original.inputSchema.properties?.sessionId?{sessionId}:{})}})).result;

@@ -8,6 +8,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Agents use shorter, consistent commands across browser and native MCP. Item
+  actions use explicit item IDs, and each question shows how to answer it;
+  inspecting a square provides ready-to-use action arguments.
 - Agent observation queries keep your backpack, selected equipment and keyboard
   focus in place. Agent actions still clear outdated equipment selections.
 - Restoring an online backup uses its latest valid level checkpoint before

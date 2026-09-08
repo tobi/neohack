@@ -75,7 +75,7 @@ The default transport is stdio: newline-delimited JSON-RPC initialization,
 server adapter, JavaScript server launcher or bundled JavaScript runtime.
 
 Native MCP and WebMCP share the navigation vocabulary generated from
-`protocol/agent.ts`: `session_create`, `session_observe`, `go`, `explore`,
+`protocol/agent.ts`: `create`, `observe`, `go`, `explore`,
 `descend`, `attack`, named actions and explicit decisions. `help` lists tools
 or gives one tool's schema. The adapter owns request IDs, action revisions and
 response reconstruction; the C driver still validates every semantic operation.
@@ -90,7 +90,7 @@ rejections set `isError`; a blocked in-game attempt is not automatically a
 protocol error. Process failures return a textual `isError` explaining that
 execution may be uncertain. Tool listings omit the optional repeated output
 schema. MCP responses reconstruct perceived state and label compact omissions;
-`session_observe` returns the full observation. Low-level delta consumers can use
+`observe` returns the full observation. Low-level delta consumers can use
 `CompactObservationReader` from `neonethack/mcp`; agents do not merge deltas.
 
 ### Concurrent games and state directories
@@ -101,21 +101,21 @@ isolated NetHack engine process. Calls with the same `sessionId` queue in arriva
 order; different games can execute and replay concurrently. No C contexts are
 called concurrently within one process.
 
-Every `session_create` has a dedicated `SESSIONS/<sessionId>/` directory with its
+Every `create` has a dedicated `SESSIONS/<sessionId>/` directory with its
 private playground, journals, receipts, semantic state and runtime pins. Only
 immutable engine cache entries are shared in the parent directory; their
 publication never replaces an existing entry. The C driver's exclusive leases
 still protect each game's mutable state.
 
-`session_close` releases the worker and engine before replying; its directory
-remains for explicit `session_resume`. Queued calls retain their original
+`suspend` releases the worker and engine before replying; its directory
+remains for explicit `resume`. Queued calls retain their original
 arguments and the shared adapter revision captured at admission. Native MCP does
 not track each HTTP client's last view. Closing and resuming a game does not affect
 other games, and no confirmation or decision answer is automatic. Workers are retained until close or server shutdown; close
 games that no longer need to stay loaded.
 
 A failed or timed-out worker and its engine are retired together. Other games
-remain available. Explicitly resume after a failure; use `retry` for the retained
+remain available. Explicitly resume after a failure; use `recover` for the retained
 exact operation or `receipt` for a known operation ID. Neither repeats a navigation
 leg. A shared most-recent receipt may belong to another participant; inspect its
 identity. Creation has no retry ID, so never blindly resubmit it.

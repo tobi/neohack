@@ -25,7 +25,82 @@ mj_val mcp_agent_method(const char *name)
 }
 int mcp_agent_valid(mj_val method, mj_val args)
 {
-    return method.p && nnh_schema_valid(mcp_field(method.p,"schema"),args.p ? args : (mj_val){"{}"},0);
+    mj_val schema = mcp_field(method.p,"schema");
+    if (!method.p || !nnh_schema_valid(schema,args.p ? args : (mj_val){"{}"},0)) return 0;
+    /* The low validator has no dependentRequired keyword; this dependency
+     * belongs only to the generated agent argument schema. */
+    if (mcp_field(schema.p,"dependentRequired").p && mcp_field(args.p,"quantity").p && !mcp_field(args.p,"itemId").p) return 0;
+    return 1;
+}
+static void item_selector(mj_Buf *b, mj_val args)
+{
+    mj_obj(b); mj_key(b,"id"); mcp_raw(b,mcp_field(args.p,"itemId"));
+    mj_val quantity = mcp_field(args.p,"quantity");
+    if (quantity.p) { mj_key(b,"quantity"); mcp_raw(b,quantity); }
+    mj_endobj(b);
+}
+/* Decode presentation arguments only after exact decision binding. Never
+ * discover a newer question or pick an answer while doing this translation. */
+char *mcp_agent_arguments(mj_val args, mj_val decision_kind)
+{
+    char *kind = mcp_string(decision_kind);
+    mj_val format = kind ? mcp_field(agent_answers,kind) : (mj_val){NULL};
+    mj_val value = mcp_field(args.p,"value");
+    if (kind && (!format.p || !nnh_schema_valid(mcp_field(format.p,"schema"),value,0))) { free(kind); return NULL; }
+    mj_Buf b; mj_init(&b); mj_obj(&b);
+    const char *cursor=args.p; char *key; mj_val member; int next;
+    while ((next=nnh_object_next(&cursor,&key,&member))>0) {
+        if (strcmp(key,"itemId") && strcmp(key,"quantity") && (!kind || strcmp(key,"value"))) { mj_key(&b,key); mcp_raw(&b,member); }
+        free(key);
+    }
+    if(next<0)b.ok=0;
+    if(mcp_field(args.p,"itemId").p){mj_key(&b,"item");item_selector(&b,args);}
+    if(kind){
+        char *field=mcp_string(mcp_field(format.p,"field"));
+        mj_key(&b,"answer");mj_obj(&b);mj_key(&b,"kind");mj_strv(&b,kind);mj_key(&b,field);
+        if(!strcmp(kind,"item"))item_selector(&b,value);
+        else if(!strcmp(kind,"target") && !text_is(value,"self")){mj_obj(&b);mj_key(&b,"direction");mcp_raw(&b,value);mj_endobj(&b);}
+        else mcp_raw(&b,value);
+        mj_endobj(&b);free(field);
+    }
+    free(kind);mj_endobj(&b);return mcp_take(&b);
+}
+static void reply_arguments(mj_Buf *b, mj_val sid, mj_val decision)
+{
+    mj_obj(b);mj_key(b,"sessionId");mcp_raw(b,sid);
+    mj_key(b,"decisionId");mcp_raw(b,mcp_field(decision.p,"id"));mj_endobj(b);
+}
+static void present_decision(mj_Buf *b, mj_val sid, mj_val decision)
+{
+    char *kind=mcp_string(mcp_field(decision.p,"kind"));
+    mj_val format=kind?mcp_field(agent_answers,kind):(mj_val){NULL};free(kind);
+    if(!format.p){mcp_raw(b,decision);return;}
+    mcp_raw(b,decision);
+    mj_key(b,"reply");mj_obj(b);mj_key(b,"tool");mj_strv(b,"answer");
+    mj_key(b,"arguments");reply_arguments(b,sid,decision);
+    mj_key(b,"valueSchema");mcp_raw(b,mcp_field(format.p,"schema"));
+    mj_key(b,"instruction");mcp_raw(b,mcp_field(format.p,"instruction"));mj_endobj(b);
+    int cancellable=0;mj_bool(mcp_field(decision.p,"cancellable"),&cancellable);
+    if(cancellable){mj_key(b,"cancel");mj_obj(b);mj_key(b,"tool");mj_strv(b,"cancel");mj_key(b,"arguments");reply_arguments(b,sid,decision);mj_endobj(b);}
+}
+static void present_attempts(mj_Buf *b, mj_val sid, mj_val cell)
+{
+    mj_key(b,"attempts");mj_arr(b);
+    mj_arr_it it={NULL,1};mj_val offer;
+    while(mj_arr_next(mcp_field(cell.p,"actions").p,&it,&offer)){
+        mj_val arguments=mcp_field(offer.p,"arguments");if(!arguments.p)continue;
+        char *method=mcp_string(mcp_field(offer.p,"method")),*tool=NULL;
+        int move=method&&!strcmp(method,"game.move");
+        if(move)tool=strdup("go");
+        else if(method){mj_arr_it mi={NULL,1};mj_val entry;while(mj_arr_next(agent_methods,&mi,&entry))if(text_is(mcp_field(entry.p,"method"),method)){tool=mcp_string(mcp_field(entry.p,"name"));break;}}
+        free(method);if(!tool)continue;
+        mj_obj(b);mj_key(b,"tool");mj_strv(b,tool);free(tool);
+        mj_key(b,"arguments");mj_obj(b);mj_key(b,"sessionId");mcp_raw(b,sid);
+        if(move){mj_key(b,"to");mj_obj(b);mj_key(b,"x");mcp_raw(b,mcp_field(cell.p,"x"));mj_key(b,"y");mcp_raw(b,mcp_field(cell.p,"y"));mj_endobj(b);mj_key(b,"force");mj_boolv(b,1);}
+        else{const char *cursor=arguments.p;char *key;mj_val value;while(nnh_object_next(&cursor,&key,&value)>0){mj_key(b,key);mcp_raw(b,value);free(key);}}
+        mj_endobj(b);mj_key(b,"availability");mcp_raw(b,mcp_field(offer.p,"availability"));mj_key(b,"cost");mcp_raw(b,mcp_field(offer.p,"cost"));mj_endobj(b);
+    }
+    mj_endarr(b);
 }
 char *mcp_agent_error(const char *code, const char *message)
 {
@@ -141,6 +216,7 @@ char *mcp_agent_present_mode(const char *response, int historical, int compact)
     while ((next = nnh_object_next(&cursor,&key,&value)) > 0) {
         if (!strcmp(key,"summary")) { free(key); continue; }
         if (!strcmp(key,"requestId") && mj_is_null(value)) { free(key); continue; }
+        if (!strcmp(key,"decision")) { mj_key(&b,key);present_decision(&b,mcp_field(response,"sessionId"),value);free(key);continue; }
         if (compact && observation.p && !strcmp(key,"observation")) {
             const char *fields=value.p; char *field; mj_val member; int more;
             mj_key(&b,key); mj_obj(&b);
@@ -165,13 +241,15 @@ char *mcp_agent_present_mode(const char *response, int historical, int compact)
         mj_key(&b,!strcmp(key,"requestId") ? "operationId" : key); mcp_raw(&b,value); free(key);
     }
     if (next < 0) b.ok = 0;
+    mj_val cell=mcp_field(response,"cell");
+    if(cell.p)present_attempts(&b,mcp_field(response,"sessionId"),cell);
     if(compact && observation.p) {
         mj_key(&b,"presentation");mj_obj(&b);
         mj_key(&b,"kind");mj_strv(&b,"compact");
         mj_key(&b,"omitted");mj_arr(&b);mj_strv(&b,"observation.neighborhood");mj_endarr(&b);
         mj_key(&b,"omittedClearTerrainEvents");mj_intv(&b,omitted_clear);
-        mj_key(&b,"fullObservation");mj_strv(&b,"session_observe");
-        mj_key(&b,"attempts");mj_strv(&b,"session_actions");
+        mj_key(&b,"fullObservation");mj_strv(&b,"observe");
+        mj_key(&b,"attempts");mj_strv(&b,"inspect");
         if(mcp_field(response,"requestId").p && !mj_is_null(mcp_field(response,"requestId"))) {mj_key(&b,"fullInputReceipt");mj_strv(&b,"receipt");}
         mj_endobj(&b);
     }

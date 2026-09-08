@@ -37,7 +37,7 @@ only the identity fields you want to choose.
 
 ```sh
 PLAY_DIR=$(mktemp -d)
-agent-browser --json webmcp invoke session_create \
+agent-browser --json webmcp invoke create \
   --params '{"seed":42,"role":"valkyrie"}' > "$PLAY_DIR/create.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/create.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/create.json" > "$PLAY_DIR/frame.json"
@@ -50,7 +50,7 @@ public token through `agent-browser get attr pixel-nethack data-session-id`.
 Observe it for free:
 
 ```sh
-agent-browser --json webmcp invoke session_observe \
+agent-browser --json webmcp invoke observe \
   --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid}')" > "$PLAY_DIR/observe.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/observe.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/observe.json" > "$PLAY_DIR/frame.json"
@@ -67,9 +67,9 @@ MCP manages request IDs, revisions and pending question context. You pass the
 short `sessionId` on every call and choose one operation at a time.
 
 ```sh
-agent-browser webmcp invoke session_actions \
+agent-browser webmcp invoke inspect \
   --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid,target:{direction:"east"}}')"
-agent-browser --json webmcp invoke game_search \
+agent-browser --json webmcp invoke search \
   --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid,turns:1}')" > "$PLAY_DIR/search.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/search.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/search.json" > "$PLAY_DIR/frame.json"
@@ -102,11 +102,11 @@ deliberate adjacent attack. Eligibility is not a safety guarantee.
 Answer a standing question explicitly. For a confirmation you choose to decline:
 
 ```sh
-agent-browser webmcp invoke decision_answer \
-  --params "$(jq -nc --arg sid "$GAME_ID" --arg decision "$(jq -r .decision.id "$PLAY_DIR/frame.json")" '{sessionId:$sid,decisionId:$decision,answer:{kind:"confirmation",confirm:false}}')"
+agent-browser webmcp invoke answer \
+  --params "$(jq -nc --arg sid "$GAME_ID" --arg decision "$(jq -r .decision.id "$PLAY_DIR/frame.json")" '{sessionId:$sid,decisionId:$decision,value:false}')"
 ```
 
-`decision_cancel` takes `sessionId` and the exact returned `decisionId` and works
+`cancel` takes `sessionId` and the exact returned `decisionId` and works
 only for cancellable questions. Both answer and cancel reject old decision IDs;
 read the new question before making another choice. Do not send a revision.
 Item references remain opaque. Choice answers accept returned readable
@@ -115,7 +115,7 @@ names or IDs; an ambiguous name returns candidates. Use `help` with a tool’s
 
 ## Recover and return
 
-After a lost input reply, **do not invoke the action again**. `retry({sessionId})`
+After a lost input reply, **do not invoke the action again**. `recover({sessionId})`
 recovers the adapter’s retained uncertain input or latest receipt, never a whole
 navigation leg. `receipt({sessionId,operationId})` reads a known historical receipt
 without rewinding the world. Observe before choosing another action. If a page
@@ -130,9 +130,9 @@ an automatic retry of the old plan.
 
 Bookmark the run’s full URL. Wait for **Saved online** before switching browsers;
 the URL contains the private vault key. See [cloud saves](CLOUD_SAVES.md).
-`session_close({sessionId})` releases the engine while retaining its journal and
+`suspend({sessionId})` releases the engine while retaining its journal and
 standing decision; it is not in-game quit. Return through the bookmark or
-`session_resume({sessionId})` on the same origin/profile and pinned runtime.
+`resume({sessionId})` on the same origin/profile and pinned runtime.
 
 An instruction for an agent:
 

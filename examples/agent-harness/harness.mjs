@@ -11,9 +11,9 @@ export { bindIntent, validateIntent, createIntentQueue } from './intent.mjs';
 
 const directions = { north:[0,-1], northeast:[1,-1], east:[1,0], southeast:[1,1],
   south:[0,1], southwest:[-1,1], west:[-1,0], northwest:[-1,-1] };
-const meleePossible = new Set(['attack','game_kick','go','explore','descend']);
+const meleePossible = new Set(['attack',"kick",'go','explore','descend']);
 const itemActions = new Map(['eat','wield','equip','remove','drink','read','zap','drop','throw']
-  .map(action => ['game_'+action, action]));
+  .map(action => [action, action]));
 const blocked = (reason, evidence) => Object.assign(new Error(reason), { code:'POLICY_STOP', evidence });
 function currentResult(result) {
   if (result?.state?.status!=='current' || !result.state.snapshot || result.state.pendingRequest!==null)
@@ -42,9 +42,9 @@ export function createAgentHarness({ runId, sessionId, client, operations,
     const frame = state.snapshot;
     await lifecycle.acceptSnapshot(frame);
     lifecycle.assertAllowed('play');
-    if (intent.operation === 'attack' || intent.operation === 'game_kick') {
+    if (intent.operation === 'attack' || intent.operation === "kick") {
       let target = intent.args.target;
-      if (intent.operation === 'game_kick') {
+      if (intent.operation === "kick") {
         const delta = directions[target?.direction];
         if (!delta || !frame.observation.you) throw blocked('Explicit adjacent kick direction required.');
         target = {x:frame.observation.you.x+delta[0], y:frame.observation.you.y+delta[1]};
@@ -62,7 +62,7 @@ export function createAgentHarness({ runId, sessionId, client, operations,
     const itemAction = itemActions.get(intent.operation);
     if (itemAction) {
       const selection = resolveItemSelection(frame, {sessionId,revision:state.revision,
-        id:intent.args.item?.id,action:itemAction});
+        id:intent.args.itemId,action:itemAction});
       if (!selection.ok) throw blocked('Item selection rejected: '+selection.reason,selection);
     }
     return {status:'OK',runId,sessionId,revision:state.revision};
@@ -137,7 +137,7 @@ export function createAgentHarness({ runId, sessionId, client, operations,
     const next = queue.next(snapshot,{goal});
     if (!next.allowed) return next;
     const {command} = next;
-    const operation = command.action === 'attack' ? 'attack' : 'game_'+command.action;
+    const operation = command.action;
     let target = {x:command.target.x,y:command.target.y};
     if (command.action !== 'attack') {
       const dx=target.x-snapshot.observation.you.x,dy=target.y-snapshot.observation.you.y;

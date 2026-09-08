@@ -225,7 +225,7 @@ test('exact recovery archives the old receipt then observes; lost input is never
   assert.equal(recovered.recovered.state.snapshot.revision, 10);
   assert.equal(recovered.state.snapshot.revision, 12);
   assert.equal(recovered.state.pendingRequest, null);
-  assert.deepEqual(calls.map(call => call.name), ['session_observe', 'attack', 'session_observe']);
+  assert.deepEqual(calls.map(call => call.name), ["observe", 'attack', "observe"]);
   assert.equal((await receipts(runDir)).filter(row => row.kind === 'recovery').length, 1);
 });
 
@@ -287,7 +287,7 @@ test('missing exact recovery and failed post-recovery observation remain closed'
   let observed = 0;
   const { client, runDir } = await setup(t, {
     send: async call => {
-      if (call.name !== 'session_observe') throw Error('lost input');
+      if (call.name !== "observe") throw Error('lost input');
       if (++observed > 1) throw Error('lost observation');
       return frame(3);
     }, recoverExact: async () => frame(4),
@@ -400,7 +400,7 @@ if (process.env.NEONETHACK_MCP_TEST_ROOT) {
     await rpc('initialize', { protocolVersion: '2025-11-25', capabilities: {},
       clientInfo: { name: 'snapshot-test', version: '1' } });
     runtime.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
-    const created = (await rpc('tools/call', { name: 'session_create', arguments: {
+    const created = (await rpc('tools/call', { name: "create", arguments: {
       name: 'SnapshotTest', seed: 42, role: 'valkyrie', race: 'dwarf', gender: 'female', align: 'lawful',
     } })).result.structuredContent;
     let loseReply = false;
@@ -413,18 +413,18 @@ if (process.env.NEONETHACK_MCP_TEST_ROOT) {
         return reply;
       },
       recoverExact: async (call, context) => {
-        assert.equal(call.name, 'game_wait');
+        assert.equal(call.name, "wait");
         const operationId = reservations.get(context.reservationId);
         assert.equal(typeof operationId, 'string');
         return rpc('tools/call', { name: 'receipt', arguments: { sessionId: created.sessionId, operationId } });
       },
     });
     const initial = (await client.observe()).state;
-    const waited = await client.call({ name: 'game_wait', arguments: {} });
+    const waited = await client.call({ name: "wait", arguments: {} });
     assert.equal(waited.state.snapshot.observation.turn, initial.snapshot.observation.turn + 1);
-    const eating = await client.play('game_eat');
+    const eating = await client.play("eat");
     assert.equal(eating.state.snapshot.decision.kind, 'item');
-    const cancelled = await client.call({ name: 'decision_cancel', arguments: {
+    const cancelled = await client.call({ name: "cancel", arguments: {
       decisionId: eating.state.snapshot.decision.id,
     } });
     assert.equal(cancelled.state.snapshot.decision, null);
@@ -433,7 +433,7 @@ if (process.env.NEONETHACK_MCP_TEST_ROOT) {
     assert.equal(historical.state.snapshot.revision, cancelled.state.revision);
     await client.observe();
     loseReply = true;
-    await assert.rejects(client.play('game_wait'), /fixture lost committed reply/);
+    await assert.rejects(client.play("wait"), /fixture lost committed reply/);
     await assert.rejects(client.observe(), { code: 'RECOVERY_REQUIRED' });
     const recovered = await client.recover();
     assert.equal(recovered.state.status, 'current');

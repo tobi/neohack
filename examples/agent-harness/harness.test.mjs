@@ -26,7 +26,7 @@ async function setup(t,{initial=frame(),respond,records=()=>[]}={}){
   const sent=[];let current=structuredClone(initial);
   const client=createSnapshotClient({runDir,sessionId,send:async(call,context)=>{
     sent.push(structuredClone(call));
-    if(call.name==='session_observe')return structuredClone(current);
+    if(call.name==="observe")return structuredClone(current);
     if(respond)current=await respond(call,structuredClone(current),context);
     else {current.revision++;current.observation.turn++;current.outcome={action:call.name==='attack'?'attack':call.name.replace('game_',''),status:'completed',turnsElapsed:1,positionChanged:false,effects:['attacked']};}
     return structuredClone(current);
@@ -61,7 +61,7 @@ test('fresh zero-turn bump blocks; rolling heard alone does not invent fresh evi
   const initial=frame();initial.observation.heard=['You move right into the floating eye.'];
   const bump=structuredClone(initial);bump.outcome={action:'moveWithoutAttack',status:'completed',turnsElapsed:0,positionChanged:false,effects:[]};
   bump.events=[{type:'heard',text:initial.observation.heard[0]}];
-  let records=[{request:{jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'game_moveWithoutAttack',arguments:{sessionId,direction:'east'}}},response:{jsonrpc:'2.0',id:1,result:{structuredContent:bump}}}];
+  let records=[{request:{jsonrpc:'2.0',id:1,method:'tools/call',params:{name:"moveWithoutAttack",arguments:{sessionId,direction:'east'}}},response:{jsonrpc:'2.0',id:1,result:{structuredContent:bump}}}];
   const {harness,sent}=await setup(t,{initial,records:()=>records});
   await assert.rejects(harness.dispatch(request()));assert.equal(sent.length,0);
   records=[];await harness.dispatch(request());assert.equal(sent.length,1);
@@ -69,22 +69,22 @@ test('fresh zero-turn bump blocks; rolling heard alone does not invent fresh evi
 test('non-melee retreat stays available beside an eye as an explicit attempt',async t=>{
   const initial=frame();initial.observation.world[1].occupant.appearance='floating eye';
   const {harness,sent}=await setup(t,{initial});
-  await harness.dispatch(request('game_moveWithoutAttack',{direction:'west'}));assert.equal(sent.length,1);
+  await harness.dispatch(request("moveWithoutAttack",{direction:'west'}));assert.equal(sent.length,1);
 });
 test('exact item reference survives presentation and selection; guessed slot never dispatches',async t=>{
   const initial=frame();initial.observation.inventory=[{id:'opaque-ration',label:'a food ration',location:'inventory',quantity:1,actions:['eat'],usage:[],equipmentSlots:[]}];
   const {harness,sent}=await setup(t,{initial});
   const view=await harness.view();assert.equal(view.items.inventory.items[0].id,'opaque-ration');
-  await assert.rejects(harness.dispatch(request('game_eat',{item:{id:'item-f'}})));assert.equal(sent.length,0);
-  await harness.dispatch(request('game_eat',{item:{id:'opaque-ration'}}));assert.equal(sent.length,1);
+  await assert.rejects(harness.dispatch(request("eat",{itemId: 'item-f'})));assert.equal(sent.length,0);
+  await harness.dispatch(request("eat",{itemId: 'opaque-ration'}));assert.equal(sent.length,1);
 });
 test('exact standing decisions remain explicit and are not bypassed by ordinary play',async t=>{
   const initial=frame();initial.decision={id:'exact-question',kind:'confirmation',action:'pray',cancellable:true};
   const {harness,sent}=await setup(t,{initial});
   await assert.rejects(harness.dispatch(request()));
-  await assert.rejects(harness.dispatch(request('decision_answer',{decisionId:'old',answer:{kind:'confirmation',confirm:true}})));
+  await assert.rejects(harness.dispatch(request("answer",{decisionId:'old',value: true})));
   assert.equal(sent.length,0);
-  await harness.dispatch(request('decision_answer',{decisionId:'exact-question',answer:{kind:'confirmation',confirm:true}}));assert.equal(sent.length,1);
+  await harness.dispatch(request("answer",{decisionId:'exact-question',value: true}));assert.equal(sent.length,1);
 });
 test('hunger change after progress stops a walking leg and prevents another automatic leg',async t=>{
   const initial=frame();delete initial.observation.world[1].occupant;
@@ -137,7 +137,7 @@ test('terminal response cancels polling, blocks mutations and keeps deliberate i
   const {harness,sent,runDir}=await setup(t,{respond:(call,s)=>{s.revision++;s.ended=true;s.end={kind:'death',turn:s.observation.turn,cause:'fixture death'};return s;}});
   let canceled=0;harness.lifecycle.registerPlayJob(()=>canceled++);
   await harness.dispatch(request());assert.equal(canceled,1);
-  await assert.rejects(harness.dispatch(request('game_wait',{},2)));assert.equal(sent.length,1);
+  await assert.rejects(harness.dispatch(request("wait",{},2)));assert.equal(sent.length,1);
   await assert.rejects(harness.observe());assert.equal(sent.length,1);
   const output=await inspect(join(runDir,'state.json'));assert.equal(output.exitCode,20);assert.match(output.text,/fixture death/);
 });

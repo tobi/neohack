@@ -112,10 +112,11 @@ builds do not require JavaScript.
   `neonethack/high` adds Hero and script conveniences. The Node default export
   `Nethack` supplies native engine paths; browser transports are explicit.
   Browser-facing modules have no Node or Bun imports.
-- **MCP/WebMCP:** one generated tool per method through native C stdio/HTTP
-  or the browser adapter, preserving schemas, receipts and standing decisions.
+- **MCP/WebMCP:** a generated navigation vocabulary through native C stdio/HTTP
+  or the browser adapter, with complete low-operation coverage, exact receipts
+  and explicitly bound questions. See the [short play guide](docs/AGENT_PLAY.md).
   Compact MCP replies label omitted local action detail and clear-terrain events;
-  session_observe returns the full observation and receipt returns the full input result.
+  observe returns the full observation and receipt returns the full input result.
 
 - **WASM:** [`typescript/wasm.ts`](typescript/wasm.ts) runs the same C core with
   isolated engine workers. Choose volatile memory or explicitly locked,

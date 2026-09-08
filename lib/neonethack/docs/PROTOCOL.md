@@ -27,9 +27,23 @@ a separate mixer, without consuming the engine or host's global random stream.
 The concrete name and seed are recorded before `new_game`; resume reuses them.
 Generated names are ASCII, at most 31 bytes, and contain no identity suffixes.
 
-MCP/WebMCP names use underscores without a product prefix: `session_create`,
-`session_observe`, `game_move`, `decision_answer`, etc. The underlying library
-protocol continues to use dotted method names.
+MCP/WebMCP use the navigation vocabulary generated from `protocol/agent.ts`:
+`create`, `observe`, `inspect`, `go`, `eat`, `answer`, etc. The low library and
+NDJSON retain this document's precise dotted methods and tagged answers.
+Low JavaScript tool discovery uses underscores, such as `session_observe`.
+These are deliberately separate interfaces; obsolete MCP names have no aliases.
+
+MCP item actions take `itemId` and an optional `quantity`; omit both to request
+the engine's selection. A readable name is never accepted as an item ID.
+MCP answers take `{sessionId, decisionId, value}`. The adapter checks the exact
+standing ID before interpreting `value` using that question's kind. Every
+question is accompanied by `reply` with the tool name, bound arguments and
+`valueSchema`, plus `cancel` when cancellable. The original `decision` is unchanged.
+Confirmation values are booleans; text and directions are strings; choices are
+arrays of returned names/IDs; item values are `{itemId, quantity?}`; positions
+are `{x,y}` or the cursor commands. An answer is never inferred or selected.
+`inspect` also returns `attempts` with MCP tool/argument templates beside the
+unchanged low-level cell facts. An offered call does not promise success or safety.
 
 ## Method families
 
@@ -560,23 +574,24 @@ clear events. Known world cells, visibility, uncertainty, apparent creatures,
 objects, hazards, inventory, vitals, real decisions and other events remain
 present. Outcomes, revisions and terminal facts retain their meaning.
 
-Use the free `session_actions` query for detailed attempts at a target.
-`session_observe` returns the full current perceived observation, including the
+Use the free `inspect` query for detailed attempts at a target.
+`observe` returns the full current perceived observation, including the
 neighborhood matrix, without consuming a turn or requiring an input guard:
 
 ```json
-{"name":"session_observe","arguments":{"sessionId":"YOUR_SESSION_ID"}}
+{"name":"observe","arguments":{"sessionId":"YOUR_SESSION_ID"}}
 ```
 
 `receipt` returns the full historical input receipt, including all original
 events and neighborhood offers; it does not update current state. A completed
-`retry` also returns the full historical receipt. Do not treat historical offers
+`recover` also returns the full historical receipt. Do not treat historical offers
 as current or use presentation equality to infer whether an input ran.
-Uncertain input must be recovered through `retry`, never submitted as a new action.
+Uncertain input must be recovered through `recover`, never submitted as a new action.
 
-Item selector strings are perceived readable names. Pass opaque references in
-an object, for example `{"item":{"id":"ground-20"}}`, using the exact returned
-ID rather than a guessed inventory letter or parsed label.
+At the low level, item selector strings are perceived readable names; opaque
+references use `{"item":{"id":"ground-20"}}`. MCP instead takes
+`{"itemId":"ground-20"}`. Use the exact returned ID, never an inventory letter
+or parsed label.
 
 ### Perceived attitude and normalized hunger
 

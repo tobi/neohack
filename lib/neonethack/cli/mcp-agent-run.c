@@ -429,7 +429,7 @@ char *mcp_agent_execute(nnh_context *ctx, mcp_agent_state *s, const char *method
     int safe = !strcmp(method,"session.create") || !strcmp(method,"session.resume") || !strcmp(method,"session.observe");
     if (!safe) {
         if (!s->snapshot) return mcp_agent_error("agentError","Observe or resume this run first.");
-        if (s->pending) return mcp_agent_error("uncertainExecution","An input is uncertain. Retry the retained exact operation; do not submit new input.");
+        if (s->pending) return mcp_agent_error("uncertainExecution","An input is uncertain. Use recover for the retained exact operation; do not submit new input.");
         if (number(s->snapshot,"revision",-1) != seen) return mcp_agent_error("staleRevision","State changed while this call was queued. Observe before acting.");
     }
     if (!strcmp(method,"agent.attack")) return attack(ctx,s,args,seen,operation);
@@ -439,9 +439,15 @@ char *mcp_agent_execute(nnh_context *ctx, mcp_agent_state *s, const char *method
         free(id);
         if (!matches) return mcp_agent_error("staleDecision","The decision changed. Observe and answer the exact returned decisionId; no input submitted.");
     }
-    if (!strcmp(method,"decision.answer")) return answer_choice(ctx,s,args,seen,operation);
+    if (!strcmp(method,"decision.answer")) {
+        char *normalized=mcp_agent_arguments(args,mcp_field(mcp_field(s->snapshot,"decision").p,"kind"));
+        if(!normalized)return mcp_agent_error("invalidParams","Value does not match the standing question’s reply.valueSchema; no input submitted.");
+        char *response=answer_choice(ctx,s,(mj_val){normalized},seen,operation);free(normalized);return response;
+    }
     if (!strcmp(method,"agent.go") || !strcmp(method,"agent.explore") || !strcmp(method,"agent.descend")) return navigate(ctx,s,method,args,operation);
-    char *response = step(ctx,s,method,args,seen,operation);
+    char *normalized=mcp_agent_arguments(args,(mj_val){NULL});
+    if(!normalized)return mcp_agent_error("invalidParams","Cannot decode arguments; no input submitted.");
+    char *response = step(ctx,s,method,(mj_val){normalized},seen,operation);free(normalized);
     if (!strcmp(method,"session.close") && !failed(response)) { free(s->snapshot); s->snapshot = NULL; }
     return response;
 }

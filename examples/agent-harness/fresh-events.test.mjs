@@ -16,7 +16,7 @@ function fixture() {
   };
   return { records: [{ request, response }], snapshot: { sessionId: 'fixture-session', revision: 7 } };
 }
-function mcp(f = fixture(), name = 'game_moveWithoutAttack') {
+function mcp(f = fixture(), name = "moveWithoutAttack") {
   const { request, response } = f.records[0];
   const { sessionId, direction } = request.params;
   f.records = [
@@ -45,7 +45,7 @@ test('old rolling eye text without a fresh heard event is never a bump', () => {
 test('a newer completed query supersedes a real bump at the same revision', () => {
   const f = mcp();
   const request = structuredClone(f.records[0]); request.message.id = 2;
-  request.message.params.name = 'session_observe';
+  request.message.params.name = "observe";
   const response = structuredClone(f.records[1]); response.message.id = 2;
   Object.assign(response.message.result.structuredContent.outcome, { action: 'observe', turnsElapsed: 0 });
   response.message.result.structuredContent.events = [];
@@ -124,7 +124,7 @@ test('only the exact witnessed heard message counts, not lore or mention of an e
 
 test('MCP pairs match outer IDs and preserve call identity without invented input revisions', () => {
   const f = mcp();
-  assert.equal(latestCompletedPair(f.records).request.params.name, 'game_moveWithoutAttack');
+  assert.equal(latestCompletedPair(f.records).request.params.name, "moveWithoutAttack");
   assert.equal(freshEyeBumpEvidence(f).evidence.callId, 1);
   f.records[1].message.id = '1';
   assert.equal(latestCompletedPair(f.records), null);
@@ -184,7 +184,7 @@ test('pending, duplicate and orphan MCP records fail closed, including a later q
     f => { f.records.shift(); },
     f => { f.records.splice(1, 0, { direction: 'request', message: { ...f.records[0].message, id: 2 } }); },
     f => { f.records[1].message.result.isError = true; },
-    f => { f.records[0].message.params.name = 'session_observe'; },
+    f => { f.records[0].message.params.name = "observe"; },
   ]) {
     const f = mcp(); change(f); assert.equal(freshEyeBumpEvidence(f).evidence, null);
   }

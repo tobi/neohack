@@ -24,10 +24,9 @@ const validators = () => new Map([
   ['attack', args => Object.keys(args).join() === 'target'
     && Object.keys(args.target ?? {}).sort().join() === 'x,y'
     && Number.isInteger(args.target.x) && Number.isInteger(args.target.y)],
-  ['decision_answer', args => Object.keys(args).sort().join() === 'answer,decisionId'
-    && typeof args.decisionId === 'string' && args.answer?.kind === 'confirmation'
-    && typeof args.answer.confirm === 'boolean'],
-  ['decision_cancel', args => Object.keys(args).join() === 'decisionId'
+  ["answer", args => Object.keys(args).sort().join() === 'decisionId,value'
+    && typeof args.decisionId === 'string' && typeof args.value === 'boolean'],
+  ["cancel", args => Object.keys(args).join() === 'decisionId'
     && typeof args.decisionId === 'string'],
   ['go', args => Object.keys(args).sort().join() === 'maxActions,to'
     && Number.isInteger(args.to?.x) && Number.isInteger(args.to?.y)],
@@ -134,7 +133,7 @@ for (const [name, input, code] of [
   ['truthy approval', { approved: 'yes' }, 'APPROVAL'],
   ['typo operation', { operation: 'attak' }, 'OPERATION'],
   ['raw tool', { operation: 'act' }, 'OPERATION'],
-  ['unenabled operation', { operation: 'game_eat' }, 'OPERATION'],
+  ['unenabled operation', { operation: "eat" }, 'OPERATION'],
   ['invalid arguments', { args: { target: 'anything' } }, 'ARGUMENTS'],
   ['identity override', { args: { target: { x: 11, y: 10 }, sessionId: 'session-b' } }, 'ARGUMENTS'],
   ['receipt override', { args: { target: { x: 11, y: 10 }, operationId: 'fake' } }, 'ARGUMENTS'],
@@ -170,16 +169,16 @@ for (const change of [
 test('standing decisions require exact explicit answers or cancellation', async t => {
   const state = initialState();
   state.snapshot.decision = { id: 'decision-new', kind: 'confirmation', cancellable: true };
-  for (const operation of ['attack', 'decision_answer', 'decision_cancel']) {
+  for (const operation of ['attack', "answer", "cancel"]) {
     const f = await fixture(t, { state });
     const args = operation === 'attack' ? intent().args : { decisionId: 'decision-old',
-      ...(operation === 'decision_answer' ? { answer: { kind: 'confirmation', confirm: false } } : {}) };
+      ...(operation === "answer" ? { value: false } : {}) };
     await blocked(f, intent({ operation, args }), 'DECISION');
   }
-  for (const operation of ['decision_answer', 'decision_cancel']) {
+  for (const operation of ["answer", "cancel"]) {
     const f = await fixture(t, { state });
-    const args = { decisionId: 'decision-new', ...(operation === 'decision_answer'
-      ? { answer: { kind: 'confirmation', confirm: false } } : {}) };
+    const args = { decisionId: 'decision-new', ...(operation === "answer"
+      ? { value: false } : {}) };
     await f.dispatch(intent({ operation, args }));
     assert.equal(f.outbound.length, 1);
     assert.deepEqual(f.outbound[0].arguments, { ...args, sessionId: 'session-a', expectedRevision: 4 });
@@ -188,7 +187,7 @@ test('standing decisions require exact explicit answers or cancellation', async 
 
 test('no standing decision is never invented by the dispatcher', async t => {
   const f = await fixture(t);
-  await blocked(f, intent({ operation: 'decision_cancel', args: { decisionId: 'invented' } }), 'DECISION');
+  await blocked(f, intent({ operation: "cancel", args: { decisionId: 'invented' } }), 'DECISION');
 });
 
 test('navigation requires an explicit finite action bound', async t => {
@@ -243,12 +242,12 @@ test('configuration has no unguarded or generic-operation fallback', () => {
 });
 
 test('retreat and ranged attempts are supported only with explicit validators', async t => {
-  for (const operation of ['game_moveWithoutAttack', 'game_throw']) {
+  for (const operation of ["moveWithoutAttack", "throw"]) {
     const f = await fixture(t);
     await blocked(f, intent({ operation }), 'OPERATION');
     let calls = 0;
-    const validArgs = operation === 'game_throw'
-      ? { item: { id: 'item-fixture' }, target: { direction: 'west' } }
+    const validArgs = operation === "throw"
+      ? { itemId: 'item-fixture', target: { direction: 'west' } }
       : { direction: 'west' };
     const dispatch = createDispatcher({ runId: 'run-a', guard: allow,
       operations: new Map([[operation, args => JSON.stringify(args) === JSON.stringify(validArgs)]]),
@@ -295,7 +294,7 @@ test('supplied input gates are enforced, including neighborhood gate and exact d
   assert.equal(f.outbound.length, 1);
   state.snapshot.decision = { id: 'decision-new', kind: 'confirmation' };
   state.snapshot.inputGate = { state: 'decision', decisionId: 'decision-old' };
-  const answer = intent({ operation: 'decision_cancel', args: { decisionId: 'decision-new' } });
+  const answer = intent({ operation: "cancel", args: { decisionId: 'decision-new' } });
   await blocked(await fixture(t, { state }), answer, 'INPUT_GATE');
   state.snapshot.inputGate.decisionId = 'decision-new';
   const exact = await fixture(t, { state });

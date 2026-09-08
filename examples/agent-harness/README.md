@@ -22,7 +22,7 @@ creates one fresh game, and starts the installed Pi CLI with `vllm/current`.
 Pi uses its existing model configuration (including the context limit).
 Built-in tools, discovered extensions, skills, prompt templates and context
 files are disabled; the explicitly loaded extension exposes only the supported
-MCP queries and guarded harness actions. No bash, read, edit or write tools are
+MCP queries and guarded harness actions. No shell or filesystem tools are
 available to the model. This is tool isolation, not an OS sandbox.
 
 Use `--seed 217`, `--model vllm/current`, `--minutes 60`, or
@@ -85,7 +85,7 @@ await runner.observe({deliberate: true});
 const {state} = await runner.view();
 await runner.dispatch({
   runId, sessionId, expectedRevision: state.revision,
-  operation: 'game_wait', args: {}, approved: true,
+  operation: 'wait', args: {}, approved: true,
 });
 ```
 
@@ -113,7 +113,7 @@ the durable reservation-linked journal after a process restart.
   per-run client lock. All writers must use the same local `runDir`.
 - Guards reject errors, wrong runs/revisions, uncertain coordinates, nearby eye
   appearances, and action-local eye bumps for melee-capable intents. Explicit
-  `game_moveWithoutAttack` and ranged throws remain available as attempts.
+  `moveWithoutAttack` and ranged throws remain available as attempts.
   “Clear” means this limited policy found no signal; it is not a safety guarantee.
 - Item actions require an exact currently returned reference and offered action.
   Labels, letters, corpse species, and glyphs do not establish identity, freshness,
@@ -167,3 +167,20 @@ The twelve focused modules correspond to audit tasks 42–53. The composed
 `harness.mjs`, shared-catalog `operations.mjs`, read-only `inspect.mjs` and their
 integration tests ensure those fixes operate together. The BB Pi context-clear
 fix belongs to its separate BB repository, not this harness.
+
+## Discovery usability check
+
+`node examples/agent-harness/discovery-check.mjs --out /tmp/mcp-discovery` runs
+an opt-in, bounded fresh Pi model exercise against a disposable local native MCP.
+It needs the built engine and a configured Pi (`vllm/current` by default). The model receives
+only a plain-language task, live discovery and returned replies; no tool-name
+cheat sheet or argument repair. At most nine tool calls and two minutes, no automatic retries,
+and no production traffic. Raw evidence remains private in the selected output
+directory; `summary.json` records sanitized results and limitations. This is a
+usability sample, separate from fixed policy/seed gameplay benchmarks.
+
+The September 8 check using `vllm/current` passed with six calls: create,
+observe, inspect, pray, answer(false), suspend. Observe and inspect were
+concurrent free reads. All 54 live schemas were available; the host supplied
+no argument corrections. Native/WASM contract tests separately cover all six
+question kinds. One model sample does not establish a general success rate.

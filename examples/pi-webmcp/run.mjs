@@ -3,7 +3,7 @@
  * bun examples/pi-webmcp/run.mjs [--minutes 60] [--model vllm/current] [--headed]
  * bun examples/pi-webmcp/run.mjs --check   # read-only WebMCP discovery/help
  * Prerequisites: Bun, Pi configured with a model, agent-browser with Chrome.
- * One file is both the launcher and Pi extension. Config is agent-browser.toml.
+ * Config is agent-browser.toml; extension.mjs binds Pi's file tools separately.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,13 +20,13 @@ const NETHACK_DOCS = `# Playing NeoHack through WebMCP
 
 You play NetHack in the actual NeoHack browser game. Aim for ascension: retrieve
 and offer the Amulet of Yendor. There are no weakened game rules or hidden-state
-privileges. Your tools are the page's named WebMCP operations plus read and write.
-Use read/write for these instructions, your notes, checkpoints and final report.
+privileges. Your tools are the page's named WebMCP operations plus read_file and write_file.
+Use read_file/write_file for these instructions, your notes, checkpoints and final report.
 No bash, JavaScript-evaluation or general browser-control tool is available.
 
 ## Starting and retaining a game
 Read the discovered schemas, then deliberately create one character using
-session_create. A dwarven lawful female Valkyrie is a reasonable starting choice.
+create. A dwarven lawful female Valkyrie is a reasonable starting choice.
 Record its exact opaque sessionId in PROGRESS.md. Use that ID for every subsequent
 operation. Never create a replacement to recover a failed or uncertain request.
 The browser profile and Pi session are retained by the launcher. Runtime upgrades
@@ -34,8 +34,8 @@ must not silently resume an old game on a different engine. Stop after death or
 ascension; save the exact end facts. Do not restart a hero in this invocation.
 
 ## Reading the scene
-session_observe gives perceived state and genuine standing decisions for free.
-Consult session_actions, session_lookup, session_navigation, session_route and
+observe gives perceived state and genuine standing decisions for free.
+Consult inspect, lookup, navigation, route and
 help when you need their documented information. Use help for exact operation
 arguments; the discovered schemas are authoritative. MCP/WebMCP navigation is
 higher-level than the precise semantic library; there is no generic act/raw-key
@@ -54,8 +54,8 @@ use short legs, inspect their actual stop reason and replan after interruption.
 A knownWalking route policy is not proof of physical impossibility. Search
 plausible dead ends for secret doors instead of repeating refused moves forever.
 An action's eligibility means an attempt is offered, not that it will succeed.
-Use decision_answer with the exact current decisionId and explicit typed answer,
-or decision_cancel. Do not silently confirm warnings or resume occupations.
+Use answer with the exact current decisionId and explicit value matching reply.valueSchema,
+or cancel. Do not silently confirm warnings or resume occupations.
 Check the returned state after every attack. A dead/moved target is not permission
 to attack the same square again. Zero elapsed turns can be legitimate, including
 terminal events. Exact end.kind and cause outrank the intended action summary.
@@ -82,7 +82,7 @@ compaction. Write a final report with witnessed outcomes and log references,
 separating confirmed defects, policy mistakes and hypotheses. The launcher keeps
 webmcp.jsonl, browser profile, Pi transcript and Pi session files. A transport
 failure can mean input executed: stop and report uncertainty, never retry blindly.
-Read/write are real Pi filesystem tools, not a filesystem sandbox; stay in this
+read_file/write_file are real Pi filesystem tools, not a filesystem sandbox; stay in this
 run directory. The host handles navigation, tool binding and deadline shutdown.
 `;
 
@@ -102,15 +102,15 @@ async function browser(config, args) {
   if(result.success!==true)throw Error(JSON.stringify(result));
   return result;
 }
-function pageTools(result, origin) {
+export function pageTools(result, origin) {
   if(!Array.isArray(result.data?.tools))throw Error('WebMCP discovery returned no tool array');
   const tools=result.data.tools.filter(t=>t.origin===origin);
   const names=new Set();
   for(const tool of tools){
-    if(typeof tool.name!=='string'||!tool.inputSchema||!tool.frameId||names.has(tool.name)||['read','write'].includes(tool.name))throw Error('Invalid, duplicate or conflicting WebMCP tool');
+    if(typeof tool.name!=='string'||!tool.inputSchema||!tool.frameId||names.has(tool.name)||['read_file','write_file'].includes(tool.name))throw Error('Invalid, duplicate or conflicting WebMCP tool');
     names.add(tool.name);
   }
-  if(!names.has('session_create')||!names.has('session_observe')||!names.has('help'))throw Error('The configured page does not expose NeoHack WebMCP');
+  if(!names.has('create')||!names.has('observe')||!names.has('help'))throw Error('The configured page does not expose NeoHack WebMCP');
   return tools;
 }
 async function invoke(config, tool, args) {
@@ -126,16 +126,18 @@ async function invoke(config, tool, args) {
   }catch(error){journal(config,{id,type:'uncertain',error:error.message});throw error;}
 }
 
-// Pi explicitly loads this same file as its sole extension.
-export default async function(pi) {
+// The explicit extension supplies Pi's own file tools, avoiding game-read collisions.
+export default async function(pi, {createReadToolDefinition,createWriteToolDefinition}) {
   const configPath=process.env.NEOHACK_WEBMCP_RUN;
   if(!configPath)throw Error('Use bun examples/pi-webmcp/run.mjs');
   const config=JSON.parse(fs.readFileSync(configPath,'utf8'));
   const tools=JSON.parse(fs.readFileSync(path.join(config.runDir,'tools.json'),'utf8'));
+  pi.registerTool({...createReadToolDefinition(config.runDir),name:'read_file',label:'Read file'});
+  pi.registerTool({...createWriteToolDefinition(config.runDir),name:'write_file',label:'Write file'});
   let busy=false,uncertain=false;
   pi.on('session_start',async(_event,ctx)=>{
-    const actual=pi.getActiveTools(), expected=['read','write',...tools.map(t=>t.name)];
-    if(actual.length!==expected.length||actual.some(name=>!expected.includes(name)))throw Error('Unexpected Pi tools; only read, write and WebMCP are allowed');
+    const actual=pi.getActiveTools(), expected=['read_file','write_file',...tools.map(t=>t.name)];
+    if(actual.length!==expected.length||actual.some(name=>!expected.includes(name)))throw Error('Unexpected Pi tools; only read_file, write_file and WebMCP are allowed');
     fs.writeFileSync(path.join(config.runDir,'pi-ready.json'),JSON.stringify({tools:actual,model:ctx.model?.id,provider:ctx.model?.provider,contextWindow:ctx.model?.contextWindow},null,2));
   });
   for(const tool of tools){
@@ -156,7 +158,7 @@ export default async function(pi) {
 
 async function main(){
   const {values}=parseArgs({options:{config:{type:'string',default:path.join(path.dirname(script),'agent-browser.toml')},minutes:{type:'string'},model:{type:'string'},output:{type:'string'},headed:{type:'boolean',default:false},check:{type:'boolean'},'check-pi':{type:'boolean'},help:{type:'boolean'}}});
-  if(values.help){console.log('bun examples/pi-webmcp/run.mjs [--minutes 60] [--model vllm/current] [--config FILE.toml] [--output NEW_DIR] [--check] [--check-pi] [--headed]\n--headed forces a visible agent-browser window.\nPi tools: read, write, and the configured page\'s WebMCP tools. --check only discovers tools and invokes read-only help; it never creates a game or starts Pi. --check-pi tests Pi read/write + WebMCP help only.');return;}
+  if(values.help){console.log('bun examples/pi-webmcp/run.mjs [--minutes 60] [--model vllm/current] [--config FILE.toml] [--output NEW_DIR] [--check] [--check-pi] [--headed]\n--headed forces a visible agent-browser window.\nPi tools: read_file, write_file, and the configured page\'s WebMCP tools. --check only discovers tools and invokes read-only help; it never creates a game or starts Pi. --check-pi tests Pi read_file/write_file + WebMCP help only.');return;}
   const settings=Bun.TOML.parse(fs.readFileSync(values.config,'utf8'));
   const minutes=Number(values.minutes??settings.pi?.minutes),timeoutMs=Number(settings.webmcp?.timeout_ms);
   if(!Number.isFinite(minutes)||minutes<=0||minutes>1440||!Number.isSafeInteger(timeoutMs)||timeoutMs<1000||timeoutMs>300000)throw Error('Invalid duration or timeout in configuration');
@@ -182,23 +184,23 @@ async function main(){
     if(values['check-pi'])tools=tools.filter(t=>t.name==='help');
     fs.writeFileSync(path.join(runDir,'tools.json'),JSON.stringify(tools,null,2));
     if(values.check){
-      const result=await invoke(config,tools.find(t=>t.name==='help'),{name:'session_observe'});
+      const result=await invoke(config,tools.find(t=>t.name==='help'),{name:'observe'});
       fs.writeFileSync(path.join(runDir,'check.json'),JSON.stringify(result,null,2));
       if(result?.isError)throw Error('Read-only WebMCP help failed');
       console.log(`Verified ${tools.length} page tools and read-only help. No game created.`);return;
     }
-    const prompt=values['check-pi'] ? 'Read NETHACK.md using read. Invoke help with name session_observe. Write check-report.md using write, stating what the help returned. Then finish. This is a read-only binding check: do not create a game.' : `Read NETHACK.md, then play one new NeoHack game through the provided WebMCP tools, aiming for ascension. Keep PROGRESS.md current, and write report.md at the end. Continue until terminal state, uncertain execution or deadline ${new Date(config.deadline).toISOString()}. Tools are read, write and page WebMCP only. Do not merely describe a plan; play.`;
+    const prompt=values['check-pi'] ? 'Read NETHACK.md using read_file. Invoke help with name observe. Write check-report.md using write_file, stating what the help returned. Then finish. This is a read-only binding check: do not create a game.' : `Read NETHACK.md, then play one new NeoHack game through the provided WebMCP tools, aiming for ascension. Keep PROGRESS.md current, and write report.md at the end. Continue until terminal state, uncertain execution or deadline ${new Date(config.deadline).toISOString()}. Tools are read_file, write_file and page WebMCP only. Do not merely describe a plan; play.`;
     const fd=fs.openSync(path.join(runDir,'pi.jsonl'),'wx'),err=fs.openSync(path.join(runDir,'pi.stderr.log'),'wx');
     child=spawn(settings.pi.command,['--model',values.model??settings.pi.model,'--thinking',settings.pi.thinking,
-      '--no-extensions','--no-skills','--no-prompt-templates','--no-context-files',
-      '--tools',['read','write',...tools.map(t=>t.name)].join(','),'--extension',script,
+      '--no-builtin-tools','--no-extensions','--no-skills','--no-prompt-templates','--no-context-files',
+      '--tools',['read_file','write_file',...tools.map(t=>t.name)].join(','),'--extension',path.join(path.dirname(script),'extension.mjs'),
       '--session-dir',path.join(runDir,'pi-sessions'),'--mode','json','--print',
       '--system-prompt',NETHACK_DOCS,prompt],
       {cwd:runDir,env:{...process.env,NEOHACK_WEBMCP_RUN:configPath},stdio:['ignore',fd,err]});
     fs.closeSync(fd);fs.closeSync(err);
     process.once('SIGINT',stop);process.once('SIGTERM',stop);
     timer=setTimeout(stop,Math.max(1,config.deadline-Date.now()));
-    console.log(`Pi ${values.model??settings.pi.model}: read + write + ${tools.length} WebMCP tools. Ctrl-C stops the run.`);
+    console.log(`Pi ${values.model??settings.pi.model}: read_file + write_file + ${tools.length} WebMCP tools. Ctrl-C stops the run.`);
     const result=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',(code,signal)=>resolve({code,signal}));});
     fs.writeFileSync(path.join(runDir,'exit.json'),JSON.stringify(result,null,2));
     process.exitCode=result.code??0;

@@ -19,7 +19,7 @@ async function running() {
 test('run009 id168 pattern: terminal response cancels queued mutations and permits deliberate final reads', async () => {
   const lifecycle = await running();
   const sent = [];
-  const queued = new Set(['attack', 'pray', 'decision_answer']);
+  const queued = new Set(['attack', 'pray', "answer"]);
   for (const name of queued) lifecycle.registerPlayJob(() => queued.delete(name));
   lifecycle.assertAllowed('play');
   sent.push('attack');
@@ -29,10 +29,10 @@ test('run009 id168 pattern: terminal response cancels queued mutations and permi
   assert.throws(() => lifecycle.assertAllowed('play', { deliberate: true }), LifecycleBlockedError);
   assert.throws(() => lifecycle.assertAllowed('observe'), LifecycleBlockedError);
   lifecycle.assertAllowed('observe', { deliberate: true });
-  sent.push('session_observe');
+  sent.push("observe");
   await lifecycle.acceptSnapshot(terminal(609));
   lifecycle.assertAllowed('export', { deliberate: true });
-  assert.deepEqual(sent, ['attack', 'session_observe']);
+  assert.deepEqual(sent, ['attack', "observe"]);
   assert.equal(lifecycle.status().exitCode, LIFECYCLE_EXIT_CODES.terminal);
   assert.equal(JSON.parse(JSON.stringify(lifecycle.status())).state, 'terminal');
 });
