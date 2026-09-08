@@ -62,6 +62,8 @@ jobs:
       - run: make -C lib/neonethack wasm
       - run: npm run --prefix lib/neonethack test:wasm
       - run: node --test examples/benchmark/test.mjs examples/benchmark/leaderboard.test.mjs examples/cli-mcp-bot/tests/advisor.test.mjs
+      - name: Chronicle evidence selection and exact static replay (no model calls)
+        run: node --test examples/chronicle/*.test.mjs
       - name: Sandboxed browser example and IndexedDB contracts
         run: |
           # GitHub's Ubuntu image includes Google's installed, sandbox-capable

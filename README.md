@@ -62,8 +62,10 @@ prerequisites, CMake/Ninja recipes and the public APIs.
 
 - `examples/workshop/` — runs the same JavaScript example projects used by `/bots`
   against the native engine in Node.
+- [`examples/chronicle/`](examples/chronicle/README.md) — condenses a static replay
+  into witnessed incidents and a one-page comic epic using Muse Spark 1.3.
 - `hosting/vercel/` — static delivery, private journals/accounts, public ledger
-  and observation recordings; no server-side gameplay simulation.
+  and immutable input recordings; no server-side gameplay simulation.
 
 Use `neonethack/low` for the complete named protocol API and `neonethack/high`
 for the Hero/script API. The Node default `Nethack` constructor supplies native
