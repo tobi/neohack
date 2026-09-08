@@ -9,11 +9,16 @@ export async function loadRuntime() {
 }
 export async function runtimePackage(buildId?: string, signal?: AbortSignal) {
   if (!buildId) {
-    const response = await fetch('/runtime/wasm/current.json', {signal: signal ? AbortSignal.any([signal,AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000), cache:'no-cache'});
-    if (!response.ok) throw Error('Cannot select the current game package.');
-    const current = await response.json();
-    if (current.version !== 1) throw Error('Invalid current game package metadata.');
-    buildId = current.buildId;
+    const controller=new AbortController(),abort=()=>controller.abort();
+    const timer=setTimeout(abort,15000);
+    signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
+    try {
+      const response = await fetch('/runtime/wasm/current.json', {signal:controller.signal,cache:'no-cache'});
+      if (!response.ok) throw Error('Cannot select the current game package.');
+      const current = await response.json();
+      if (current.version !== 1) throw Error('Invalid current game package metadata.');
+      buildId = current.buildId;
+    } finally {clearTimeout(timer);signal?.removeEventListener('abort',abort);}
   }
   if (typeof buildId !== 'string' || !/^[a-f0-9]{64}$/.test(buildId)) throw Error('Invalid game package identity.');
   return {buildId, base:`/runtime/wasm/${buildId}/`};

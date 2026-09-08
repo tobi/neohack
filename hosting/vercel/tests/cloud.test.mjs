@@ -383,6 +383,7 @@ test('old local-recovery bookmarks automatically sync after an outage without a 
 
 test('new and locally saved games enter without cloud reads',{timeout:60000},async t=>{
  const {url,browser}=await fixture(t),page=await browser.newPage();let reads=0;
+ await page.addInitScript(()=>{AbortSignal.any=undefined;});
  await page.route('**/api/vaults/**',route=>{if(route.request().method()==='GET'){reads++;return route.fulfill({status:503,body:'offline'});}return route.continue();});
  await create(page,url);const before=await snapshot(page);assert.equal(reads,0,'new run never restores a cloud vault');
  await page.reload();await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation);
