@@ -9,7 +9,8 @@ jobs:
   library:
     name: Library / Node ${{ matrix.node }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Includes a second build/test pass from the extracted release archives.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
