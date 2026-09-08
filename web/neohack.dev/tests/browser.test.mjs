@@ -1600,6 +1600,7 @@ test(
     const decline = await call(
       "decision.answer",
       args("web-decline", {
+        decisionId: state.decision.id,
         answer: { kind: "confirmation", confirm: false },
       }),
     );
@@ -1697,6 +1698,34 @@ test(
     assert.deepEqual(errors, []);
   },
 );
+
+test('native WebMCP rejects an old confirmation after a human opens a different question', async t => {
+  const { page, errors } = await fixture(t, { webmcp: true });
+  const { call } = await nativeWebMcp(page, t);
+  const created = await call('session_create', { name: 'Decision audit', role: 'valkyrie', race: 'human', gender: 'female', align: 'lawful', seed: 9 });
+  const sessionId = created.structuredContent.sessionId;
+  const prayer = (await call('game_pray', { sessionId })).structuredContent;
+  assert.equal(prayer.decision.kind, 'confirmation');
+  await page.getByRole('button', { name: 'No, not now', exact: true }).click();
+  await ready(page);
+  await page.getByLabel('Game menu', { exact: true }).click();
+  await page.getByRole('button', { name: 'Abandon run', exact: true }).click();
+  await ready(page);
+  const quit = (await call('session_observe', { sessionId })).structuredContent;
+  assert.notEqual(quit.decision.id, prayer.decision.id);
+  const stale = await call('decision_answer', { sessionId, decisionId: prayer.decision.id, answer: { kind: 'confirmation', confirm: true } });
+  assert.equal(stale.isError, true);
+  assert.equal(stale.structuredContent.error.code, 'staleDecision');
+  assert.equal(stale.structuredContent.operationId, undefined);
+  const unchanged = await snapshot(page);
+  assert.equal(unchanged.ended, false);
+  assert.equal(unchanged.revision, quit.revision);
+  assert.equal(unchanged.observation.turn, quit.observation.turn);
+  assert.deepEqual(unchanged.decision, quit.decision);
+  assert.equal((await call('decision_cancel', { sessionId, decisionId: quit.decision.id })).isError, false);
+  assert.equal((await snapshot(page)).decision, null);
+  assert.deepEqual(errors, []);
+});
 
 test(
   "title remains interactive during library downloads and acquires no store until entry",
