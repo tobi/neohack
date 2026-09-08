@@ -1,5 +1,4 @@
 import {replayFrames} from './replay-frames.ts';
-import type {Snapshot} from '../../../lib/neonethack/dist/typescript/types.js';
 import {publishReplay} from './publish-replay.ts';
 import {publicReplayConfigured} from './public-replay-store.ts';
 import {markRecorded} from './ledger-store.ts';
@@ -7,6 +6,11 @@ import { createHash } from 'node:crypto';
 import { read, update, immutable, storage, type Storage } from './storage.ts';
 
 const availability = new WeakMap<Storage, {expires:number; ids:Promise<Set<string>>}>();
+// Publication fields are allowlisted here; importing engine source types would
+// make the independently deployed Vercel function depend on the library tree.
+function recordingFrame(f:any,id:string) {
+  return {version:1 as const,sessionId:id,requestId:f.requestId,revision:f.revision,ended:f.ended,observation:f.observation,outcome:f.outcome,events:f.events,decision:f.decision,end:f.end};
+}
 /** Only committed public recordings count; private account recordings stay private. */
 export async function publicReplayIds() {
   const backend=storage(), cached=availability.get(backend);
@@ -52,11 +56,11 @@ export async function replay(request: Request, id: string) {
   // Already-published clients send one frame; current clients send exact batches.
   if(body?.frame && body.frames===undefined)body.frames=[body.frame];
   if(!Array.isArray(body?.frames)||!body.frames.length||body.frames.length>128||!Number.isInteger(body.index)||body.index<0||body.index+body.frames.length>100000)return json({error:'Invalid recording batch'},400);
-  const frames:Snapshot[]=[],publishedRefs:string[]=[];
+  const frames:Array<ReturnType<typeof recordingFrame>>=[],publishedRefs:string[]=[];
   for(const f of body.frames){
     if(!f || f.version!==1 || f.sessionId!==id || !Number.isSafeInteger(f.revision) || f.revision<0 || !f.outcome || !Array.isArray(f.events) || typeof f.ended!=='boolean' || !Array.isArray(f.observation?.inventory) || !Number.isFinite(f.observation?.turn) || !Array.isArray(f.observation?.world) || f.observation.world.length>10000 || !Array.isArray(f.observation.heard) || !f.observation.vitals || typeof f.observation.location?.depthLabel!=='string')return json({error:'Invalid frame'},400);
     // Explicit allowlist: private journals/capabilities never enter public frames.
-    const frame={version:1 as const,sessionId:id,requestId:f.requestId,revision:f.revision,ended:f.ended,observation:f.observation,outcome:f.outcome,events:f.events,decision:f.decision,end:f.end};
+    const frame=recordingFrame(f,id);
     // A lost acknowledgement from a published writer may refer to the original
     // full observation. Accept those exact committed bytes without rewriting it.
     publishedRefs.push('objects/'+createHash('sha256').update(JSON.stringify(frame)).digest('hex')+'.json');
