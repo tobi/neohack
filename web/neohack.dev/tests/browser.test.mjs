@@ -2363,6 +2363,26 @@ test("fresh engine perception supplies floor beneath initially seen loot and com
   assert.equal(pet.terrain.type, "floor");
 });
 
+test('hero names stay clear of the level label at phone and desktop widths', async t => {
+  const { page } = await fixture(t, { webmcp: true });
+  const { call } = await nativeWebMcp(page, t);
+  for (const name of ['Browser Container', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcde']) {
+    const created = await call('session_create', { name, role: 'valkyrie', seed: 4 });
+    assert.equal(created.isError, false);
+    for (const width of [320, 390, 800, 1440]) {
+      await page.setViewportSize({ width, height: 844 });
+      const label = await page.locator('#hero-name').boundingBox();
+      const level = await page.locator('#hero-level').boundingBox();
+      assert.ok(label.x + label.width <= level.x, `hero name clears the level label at ${width}px`);
+      assert.equal(await page.locator('#hero-name').textContent(), name, 'accessible name remains complete');
+      if (name === 'Browser Container' && (width === 390 || width === 1440)) {
+        await page.screenshot({ path: `${root}/test-results/hero-name-${width}.png` });
+      }
+    }
+    await call('session_close', { sessionId: created.structuredContent.sessionId });
+  }
+});
+
 test('counted-action journal batches stay compact on phones and preserve full journal text', async t => {
   const { page } = await fixture(t, { webmcp: true });
   const { call } = await nativeWebMcp(page, t);
