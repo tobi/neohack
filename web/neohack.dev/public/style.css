@@ -1415,6 +1415,12 @@ dialog p {
 #recent-messages p { margin: 5px 0; opacity: .65; }
 #recent-messages p:first-child { opacity: .4; }
 #recent-messages p:last-child { opacity: .85; }
+#recent-messages p:has(.journal-inline) { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+#recent-messages .journal-inline { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal; }
+#recent-messages .journal-repeat { flex-shrink: 0; }
+@media (max-width: 600px), (max-height: 500px) {
+  #recent-messages .journal-inline { -webkit-line-clamp: 1; }
+}
 .journal-preview-tools { order: -1; display: flex; justify-content: flex-end; height: 36px; }
 #journal-preview .journal-preview-tools button { pointer-events: auto; width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 10px; border: 0; background: transparent; box-shadow: none; }
 #journal-preview .journal-preview-tools button span { display: grid; place-items: center; width: 24px; height: 24px; background: #172123; border: 1px solid #66735f; font-size: 16px; line-height: 1; }

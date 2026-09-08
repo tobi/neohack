@@ -2334,6 +2334,37 @@ test("fresh engine perception supplies floor beneath initially seen loot and com
   assert.equal(pet.terrain.type, "floor");
 });
 
+test('counted-action journal batches stay compact on phones and preserve full journal text', async t => {
+  const { page } = await fixture(t, { webmcp: true });
+  const { call } = await nativeWebMcp(page, t);
+  const created = await call('session_create', { name: 'Journal audit', role: 'valkyrie', seed: 4 });
+  const sessionId = created.structuredContent.sessionId;
+  const rested = await call('game_rest', { sessionId, turns: 800 });
+  assert.equal(rested.isError, false);
+  const entry = page.locator('#recent-messages .journal-inline').filter({ hasText: 'Count:' }).last();
+  const text = await entry.textContent();
+  assert.ok(text.includes('\n'), 'real counted action supplies a multiline event batch');
+  for (const viewport of [{ width: 390, height: 844 }, { width: 740, height: 390 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    const row = entry.locator('..');
+    const box = await row.boundingBox();
+    const lineHeight = await row.evaluate(el => parseFloat(getComputedStyle(el).lineHeight));
+    const lines = viewport.width <= 600 || viewport.height <= 500 ? 1 : 2;
+    assert.ok(box.height <= lines * lineHeight + 1, 'ordinary preview batches stay bounded');
+    await page.screenshot({ path: `${root}/test-results/journal-batch-${viewport.width}.png` });
+    await page.getByRole('button', { name: 'Collapse recent messages', exact: true }).click();
+    assert.equal(await page.locator('#recent-messages').isVisible(), false);
+    const collapsed = await page.locator('#journal-preview').boundingBox();
+    assert.ok(collapsed.height <= 44, 'collapsed preview contains only its controls');
+    assert.equal((await snapshot(page)).revision, rested.structuredContent.revision);
+    await page.getByRole('button', { name: 'Expand recent messages', exact: true }).click();
+  }
+  await page.getByRole('button', { name: 'Expand journal', exact: true }).click();
+  const full = page.locator('.journal-entry .journal-inline').filter({ hasText: 'Count:' }).last();
+  assert.equal(await full.textContent(), text, 'full journal keeps the complete original batch');
+  assert.equal(await full.evaluate(el => getComputedStyle(el).whiteSpace), 'pre-line');
+});
+
 test("mobile journal preview is on by default and collapses without consuming a turn", async t => {
   const { page } = await fixture(t, { touch: true });
   await page.setViewportSize({ width: 390, height: 844 });

@@ -484,6 +484,10 @@ When field notes are closed, the last three journal messages sit faintly at bott
 right on desktop. On mobile, place the preview beneath the top HUD, clear of the
 player, stairs and bottom actions. Show it expanded by default; three single-line
 entries truncate visually, while the full journal retains the original text. A
+counted action's multiline event batch follows the same compact preview rule;
+desktop previews allow two lines per ordinary batch, with repeat counts kept visible.
+Only the full journal preserves its line breaks; engine-marked scrolls keep their
+separate reading link and four-source-line classification. A
 small chevron collapses/expands the preview, and a separate small arrow opens the
 full journal. Both have 44px touch targets around compact 24px visible controls.
 Keep the user’s collapsed choice through subsequent actions. Direction shortcuts
