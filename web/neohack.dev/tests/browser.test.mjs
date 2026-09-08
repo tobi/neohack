@@ -3461,6 +3461,24 @@ test('equipment drag uses a real candidate and leaves rejected items untouched',
  await page.screenshot({path:root+'/test-results/equipment-drag-mobile.png'});
 });
 
+test('equipment guidance stays above automatic pickup across phone panel heights', async t => {
+  const { page } = await fixture(t, { touch: true });
+  await create(page);
+  await page.getByRole('button', { name: /Backpack/ }).click();
+  for (const height of [667, 741, 844, 932]) {
+    await page.setViewportSize({ width: 390, height });
+    const hint = await page.locator('.sheet-equip-feedback').boundingBox();
+    const pickup = await page.locator('.pickup-shortcut').boundingBox();
+    assert.ok(hint.y + hint.height <= pickup.y,
+      `equipment guidance must not overlap automatic pickup at 390x${height}`);
+    for (const tile of await page.locator('.equipment-slot').all()) {
+      const box = await tile.boundingBox();
+      assert.ok(box.height >= 44, 'equipment targets retain touch height');
+      assert.ok(box.y + box.height <= hint.y, 'guidance stays below equipment');
+    }
+  }
+});
+
 test('compact equipment targets remain visible while the bag scrolls; touch selection is free',async t=>{
  const {page}=await fixture(t,{touch:true});await page.setViewportSize({width:390,height:667});await create(page);await page.getByRole('button',{name:/Backpack/}).click();
  let frame=await snapshot(page),shield=frame.observation.inventory.find(i=>i.equipmentSlots?.includes('shield'));

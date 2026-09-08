@@ -129,6 +129,7 @@
 }
 .sheet-equipment {
   min-height: 0;
+  container: equipment / size;
 }
 .sheet-section-heading {
   font:
@@ -374,6 +375,9 @@
   .sheet-identity h3 {
     font-size: 18px;
   }
+}
+/* The capped sheet can be short even in a tall phone viewport. */
+@container equipment (max-height: 380px) {
   .equipment-board {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: repeat(5, 44px);

@@ -1223,9 +1223,10 @@ Hero HUD: level sits at the top right of the identity row; health numbers sit be
 
 Character sheet: portrait and canonical stats share the header with the HUD's
 status formatter. Dungeon depth reads `lvl: N`; experience reads Hero level.
-Equipment stays visible beside an independently scrolling bag. On shorter
-viewports the board becomes a compact three-column slot grid. Only current
-engine-provided equipmentTargets highlight; dropping sends the selected slot,
+Equipment stays visible beside an independently scrolling bag. When the equipment
+column has limited height, the board becomes a compact three-column slot grid,
+including height-capped sheets on tall phones. Guidance stays above Automatic pickup.
+Only current engine-provided equipmentTargets highlight; dropping sends the selected slot,
 opaque item ID and captured revision. Tap Choose equipment slot, then a target,
 provides the same explicit operation for touch/keyboard users. Item labels open
 details. No automatic removal, replacement or warning confirmation. Text-map
