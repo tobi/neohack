@@ -8,6 +8,8 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Long journal messages stay compact over the map; opening the journal still
+  shows the full original text.
 - New adventures register for online backup before sending their first batch,
   avoiding temporary access errors while play continues locally. Closing a run
   cancels pending network work promptly and keeps unsent inputs for later.
