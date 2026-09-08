@@ -42,6 +42,13 @@ the verified prefix, completes its single reserved tail once, then retains the
 original request ID and receipt. Missing committed rows, gaps and changed
 fingerprints stop restoration; they are not truncated or silently repaired.
 
+Cold cloud restore imports every authoritative input before fetching the newest
+optional checkpoint. Shared download checks and normal local checkpoint restore
+validate its checksum, decoded package and cursor. A missing or invalid checkpoint
+falls back to input replay; an interrupted or corrupt input download remains an
+import failure. A later retry continues from the durable input cursor. Historical
+inputs remain available for exact receipts even when checkpoint resume skips them.
+
 ## Bounded asynchronous upload
 
 After five seconds idle, or thirty seconds of ongoing activity, the worker reads
