@@ -80,12 +80,28 @@ async function fixture(
 // Exercise Chromium's real tool registry and invocation path, never app callbacks.
 // Current Chrome exposes agent automation through the CDP WebMCP domain;
 // Chromium 148 exposes its earlier native testing interface instead.
-async function nativeWebMcp(page, t) {
-  const native = await rawNativeWebMcp(page, t);
+async function nativeWebMcp(page, t, session) {
+  const native = await rawNativeWebMcp(page, t, session);
+  const { methods } = await import("../../../lib/neonethack/dist/mcp/agent-data.js");
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const registered = new Set((await native.list()).map(tool => tool.name));
+    const missing = methods.filter(tool => !registered.has(tool.name));
+    if (!missing.length) break;
+    if (Date.now() >= deadline)
+      throw Error("Native WebMCP registry not ready: " + missing.map(tool => tool.name).join(", "));
+    // CDP enable completion does not mean that toolsAdded has been delivered.
+    // Poll only discovery; never retry an invocation or an uncertain game input.
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
   return { ...native, call: async (...args) => {
     const result = await native.call(...args);
     if (result.structuredContent) {
-      assert.deepEqual(JSON.parse(result.content[0].text), result.structuredContent);
+      if (result.isError && result.structuredContent.error?.code === 'cancelled' && result.content?.length === 0) {
+        assert.equal(result.structuredContent.error.message, 'Tool call cancelled before submission.');
+      } else {
+        assert.deepEqual(JSON.parse(result.content[0].text), result.structuredContent);
+      }
     }
     return result;
   } };
@@ -95,8 +111,8 @@ async function agentSnapshot(page) {
   if(!state)return null;
   const {requestId,...frame}=state;return frame;
 }
-async function rawNativeWebMcp(page, t) {
-  const cdp = await page.context().newCDPSession(page);
+async function rawNativeWebMcp(page, t, session) {
+  const cdp = session ?? await page.context().newCDPSession(page);
   t.after(() => cdp.detach().catch(() => {}));
   const registered = new Map();
   const key = tool => tool.frameId + ":" + tool.name;
@@ -122,7 +138,7 @@ async function rawNativeWebMcp(page, t) {
   }
   return {
     list: async () => {
-      // A protocol round trip drains preceding native registry events.
+      // Read currently delivered events. Later registration can still be pending.
       await cdp.send("Runtime.evaluate", { expression: "void 0" });
       return [...registered.values()];
     },
@@ -1691,13 +1707,105 @@ test(
     assert.ok(
       retired.removed ||
         (retired.isError &&
-          /cancelled before submission/.test(retired.content[0].text)),
+          retired.structuredContent?.error?.code === 'cancelled' &&
+          /cancelled before submission/.test(retired.structuredContent.error.message)),
     );
     await page.goto("about:blank");
     assert.equal((await native.list()).length, 0);
     assert.deepEqual(errors, []);
   },
 );
+
+test('native WebMCP waits for registration while the title is already interactive', async t => {
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  t.after(() => release());
+  const workers = [];
+  const { page, errors } = await fixture(t, {
+    webmcp: true,
+    setup: async page => {
+      page.on('worker', worker => workers.push(worker.url()));
+      await page.route('**/runtime/typescript/wasm.js', async route => {
+        await held;
+        await route.continue();
+      });
+    },
+  });
+  let settled = false;
+  const opening = nativeWebMcp(page, t);
+  // Observe failures without swallowing them; the awaited promise below owns them.
+  opening.then(() => { settled = true; }, () => { settled = true; });
+  try {
+    await page.waitForTimeout(100);
+    assert.equal(settled, false, 'an interactive title is not a ready tool registry');
+    assert.equal(await snapshot(page), null);
+    assert.equal(workers.length, 0, 'waiting for discovery cannot start a game');
+    release();
+    const native = await opening;
+    const created = await native.call('session_create', { name: 'Registry audit', role: 'valkyrie', seed: 9 });
+    assert.equal(created.isError, false);
+    assert.equal((await snapshot(page)).sessionId, created.structuredContent.sessionId);
+    assert.equal((await snapshot(page)).observation.turn, 1);
+    assert.deepEqual(errors, []);
+  } finally {
+    release();
+    await opening.catch(() => {});
+  }
+});
+
+test('native WebMCP waits for actual registry events after CDP enable completes', { timeout: 15000 }, async t => {
+  const { page, errors } = await fixture(t, { webmcp: true });
+  await page.waitForFunction(() => document.querySelector('pixel-nethack').dataset.webmcp === 'ready');
+  const session = await page.context().newCDPSession(page);
+  const enabled = Promise.withResolvers(), arrived = Promise.withResolvers(), held = [];
+  let released = false, invokes = 0, settled = false;
+  const release = () => { released = true; for (const deliver of held.splice(0)) deliver(); };
+  const gated = {
+    on(name, listener) {
+      session.on(name, name === 'WebMCP.toolsAdded' ? event => {
+        if (released) listener(event); else held.push(() => listener(event));
+        arrived.resolve();
+      } : listener);
+    },
+    off: (name, listener) => session.off(name, listener),
+    detach: () => session.detach(),
+    async send(name, params) {
+      if (name === 'WebMCP.invokeTool') invokes++;
+      try {
+        const result = await session.send(name, params);
+        if (name === 'WebMCP.enable') enabled.resolve(true);
+        return result;
+      } catch (error) {
+        if (name === 'WebMCP.enable') {
+          if (String(error).includes("'WebMCP.enable' wasn't found")) enabled.resolve(false);
+          else enabled.reject(error);
+        }
+        throw error;
+      }
+    },
+  };
+  const opening = nativeWebMcp(page, t, gated);
+  opening.then(() => { settled = true; }, () => { settled = true; });
+  try {
+    if (!await enabled.promise) { t.skip('This Chromium provides the earlier native testing interface, not CDP WebMCP.'); return; }
+    await arrived.promise;
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(settled, false, 'enable completion alone cannot make the registry ready');
+    assert.equal(invokes, 0);
+    assert.equal(await snapshot(page), null);
+    release();
+    const native = await opening;
+    const created = await native.call('session_create', { name: 'Event audit', role: 'valkyrie', seed: 9 });
+    assert.equal(invokes, 1, 'one invocation after the real native events arrive');
+    assert.equal(created.isError, false);
+    assert.equal((await snapshot(page)).sessionId, created.structuredContent.sessionId);
+    assert.equal((await snapshot(page)).observation.turn, 1);
+    assert.deepEqual(errors, []);
+  } finally {
+    release();
+    await opening.catch(() => {});
+  }
+});
 
 test('native WebMCP rejects an old confirmation after a human opens a different question', async t => {
   const { page, errors } = await fixture(t, { webmcp: true });
