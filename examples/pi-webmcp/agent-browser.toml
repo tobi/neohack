@@ -1,0 +1,12 @@
+# Configuration for run.mjs (agent-browser itself reads JSON, not TOML).
+# The launcher opens this page and binds its actual WebMCP tool schemas to Pi.
+[webmcp]
+url = "https://neohack.dev"
+command = "agent-browser"
+timeout_ms = 60000
+
+[pi]
+command = "pi"
+model = "vllm/current"
+thinking = "medium"
+minutes = 60

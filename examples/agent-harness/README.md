@@ -9,6 +9,39 @@ The caller chooses each action. Walking executes one bounded leg, and repeated
 combat requires a separately bound target intent. There is no autonomous player,
 automatic meal selection, warning acceptance, session creation, or retry loop.
 
+## Run Pi with MCP tools only
+
+From the repository root:
+
+```sh
+node examples/agent-harness/run-pi.mjs --minutes 60
+```
+
+This builds native MCP and the TypeScript reader, installs local dependencies,
+creates one fresh game, and starts the installed Pi CLI with `vllm/current`.
+Pi uses its existing model configuration (including the context limit).
+Built-in tools, discovered extensions, skills, prompt templates and context
+files are disabled; the explicitly loaded extension exposes only the supported
+MCP queries and guarded harness actions. No bash, read, edit or write tools are
+available to the model. This is tool isolation, not an OS sandbox.
+
+Use `--seed 217`, `--model vllm/current`, `--minutes 60`, or
+`--output /absolute/new/directory` to choose the run. Default output is a new
+`~/neohack-pi-...` directory. An existing output directory is rejected.
+`--library` selects another built source checkout. Build prerequisites are the
+same as native library development; `build.log` retains failures.
+
+The foreground command stops on Pi completion, terminal state, unresolved
+execution or its deadline. Ctrl-C stops both Pi and MCP and preserves evidence.
+It does not automatically restart a hero or resume an interrupted run.
+`run.json` records session identity, Pi's actual active tools/context limit,
+and stop reason. `mcp.jsonl`, `client/`, `sessions/`, `pi.jsonl`, and
+`pi-sessions/` retain requests, receipts, snapshots, game saves and conversation.
+The binding exposes the harness's explicitly supported action subset; excluded
+operations (including session lifecycle and unsupported inventory actions) are
+not advertised. Exact recovery after uncertain execution requires separate
+inspection; the command never retries input automatically.
+
 ## Install and inspect
 
 Use Node 22.18 or newer from this repository checkout:
