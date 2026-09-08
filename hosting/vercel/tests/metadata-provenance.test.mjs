@@ -48,7 +48,39 @@ test('mixed script, bot and playground control labels keep existing replacement 
     assert.equal((await fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({runs:[run]})})).status,200);
    }
    const directory=(await(await fetch(endpoint)).json()).find(r=>r.id===id),ledger=await(await fetch(new URL('/api/runs/'+id,url))).json();
-   for(const run of [directory,ledger]){assert.equal(run.control,to);assert.equal(run.automated,to!=='manual')}
+   const stats=await(await fetch(new URL('/api/stats',url))).json();
+   for(const run of [directory,ledger,stats.best.find(run=>run.id===id)]){assert.equal(run.control,to);assert.equal(run.automated,to!=='manual')}
   }
  }finally{await server.close()}
+});
+
+test('equal-timestamp delayed indexing agrees with the authoritative WebMCP record',async t=>{
+ t.mock.method(Date,'now',()=>1788840000000);
+ const server=createTestHarness(),{url}=await server.listen();
+ let release;const gate=new Promise(resolve=>release=resolve);
+ let entered;const paused=new Promise(resolve=>entered=resolve);
+ const id='projection-tie',write=server.store.write.bind(server.store);
+ let held=false;
+ server.store.write=async(path,value,etag)=>{
+  await write(path,value,etag);
+  if(!held && path==='ledger/runs/'+id+'.json' && value.run.control==='manual'){
+   held=true;entered();await gate;
+  }
+ };
+ let old;
+ try {
+  const publish=control=>fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({runs:[{id,name:'Hero',role:'valkyrie',turn:7,ended:false,control,automated:control!=='manual',buildId:'a'.repeat(64)}]})});
+  old=publish('manual');await paused;
+  assert.equal((await publish('webmcp')).status,200);
+  release();assert.equal((await old).status,200);
+  const record=await(await fetch(new URL('/api/runs/'+id,url))).json();
+  const stats=await(await fetch(new URL('/api/stats',url))).json();
+  const shard=[...server.store.docs.entries()].filter(([path])=>path.startsWith('ledger/shards/')).map(([,doc])=>doc.value.entries[id]?.run).find(Boolean);
+  t.diagnostic(JSON.stringify({updatedAt:record.updatedAt,record:record.control,shard:shard.control,summary:stats.best.find(run=>run.id===id).control}));
+  assert.equal(record.updatedAt,1788840000000);
+  for(const run of [record,shard,stats.best.find(run=>run.id===id)]){
+   assert.equal(run.control,'webmcp');assert.equal(run.automated,true);
+   assert.equal(run.id,id);assert.equal(run.turn,7);assert.equal(run.buildId,'a'.repeat(64));
+  }
+ }finally{release();await old;await server.close()}
 });

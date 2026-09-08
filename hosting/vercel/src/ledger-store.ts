@@ -51,7 +51,12 @@ async function indexEntries(shard: number, entries: Entry[]) {
           (recorded && !prior?.recorded)
         ) {
           doc.entries[run.id] = {
-            run: newer(prior?.run, run) ? run : prior!.run,
+            // Indexing may arrive after a newer write with the same timestamp.
+            run: newer(prior?.run, run)
+              ? prior?.run.control === "webmcp" && run.control === "manual"
+                ? { ...run, control: "webmcp", automated: true }
+                : run
+              : prior!.run,
             recorded: recorded || prior?.recorded || false,
           };
           doc.version++;
