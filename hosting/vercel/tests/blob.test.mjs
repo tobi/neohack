@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { gzipSync } from "node:zlib";
 import { storage, Conflict } from "../src/storage.ts";
+import { publicReplayStorage } from "../src/public-replay-store.ts";
 const require = createRequire(import.meta.url);
 const blobRequire = createRequire(require.resolve("@vercel/blob"));
 const { MockAgent, setGlobalDispatcher, getGlobalDispatcher } =
@@ -10,7 +11,11 @@ const { MockAgent, setGlobalDispatcher, getGlobalDispatcher } =
 
 test("real Blob SDK bypasses cached reads and sends create-only / matching-ETag writes", async (t) => {
   const original = process.env.BLOB_READ_WRITE_TOKEN;
+  const originalPublic = process.env.PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN;
+  const originalOrigin = process.env.PUBLIC_REPLAY_ORIGIN;
   process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_fixture_unused";
+  process.env.PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_fixture_unused";
+  process.env.PUBLIC_REPLAY_ORIGIN = "https://fixture.public.blob.vercel-storage.com";
   const agent = new MockAgent(),
     previous = getGlobalDispatcher();
   agent.disableNetConnect();
@@ -20,6 +25,10 @@ test("real Blob SDK bypasses cached reads and sends create-only / matching-ETag 
     await agent.close();
     if (original === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
     else process.env.BLOB_READ_WRITE_TOKEN = original;
+    if (originalPublic === undefined) delete process.env.PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN;
+    else process.env.PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN = originalPublic;
+    if (originalOrigin === undefined) delete process.env.PUBLIC_REPLAY_ORIGIN;
+    else process.env.PUBLIC_REPLAY_ORIGIN = originalOrigin;
   });
   const reads = agent.get("https://fixture.private.blob.vercel-storage.com");
   reads
@@ -67,5 +76,11 @@ test("real Blob SDK bypasses cached reads and sends create-only / matching-ETag 
     storage().write("doc.json", { count: 3 }, '"one"'),
     Conflict,
   );
+  // No public CDN interceptor exists: CAS metadata must use the management API.
+  writes.intercept({ method: "GET", path: "/api/blob?url=replays%2Frun%2Fmanifest.json" })
+    .reply(200, { ...reply, etag: '"current-public"', uploadedAt: new Date().toISOString() });
+  assert.deepEqual(await publicReplayStorage().head("replays/run/manifest.json"), {
+    etag: '"current-public"',
+  });
   agent.assertNoPendingInterceptors();
 });

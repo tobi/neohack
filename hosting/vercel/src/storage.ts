@@ -12,6 +12,7 @@ import {
 export type Document = { value: any; etag: string };
 export interface Storage {
   read(path: string): Promise<Document | null>;
+  head?(path: string): Promise<{ etag: string } | null>;
   write(path: string, value: unknown, etag?: string): Promise<void>;
   list(prefix: string): Promise<string[]>;
 }

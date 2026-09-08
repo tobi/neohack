@@ -157,7 +157,10 @@ at recording time. Chunks are create-only and content-addressed; the latest
 immutable playlist is published after every referenced chunk exists. The
 `manifest.json` discovery alias advances with ETag compare-and-swap, but may be
 cached; exact upload acknowledgements and embed links never depend on its age.
-A losing older publisher cannot roll it back. Manifest caching lasts 60 seconds;
+Publishers read the current ETag with Blob's management `head()` API, then read
+the authoritative private run head before attempting the conditional write.
+Public `get({useCache:false})` still reads cached content and cannot supply this
+token reliably. A losing older publisher cannot roll it back. Manifest caching lasts 60 seconds;
 immutable chunks cache for one year. Replay links are unlisted and readable by
 anyone who has the link. Upload authority, account associations, script source and
 notes stay in the separate private store. Checkpoints use immutable hash-named

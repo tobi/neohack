@@ -280,13 +280,14 @@ test("an older publisher cannot roll back a newer input prefix or checkpoint", a
   const gate = new Promise((r) => (release = r)),
     paused = new Promise((r) => (entered = r));
   let hold = true;
-  cdn.read = async (path) => {
+  cdn.head = async (path) => {
+    const current = await read(path);
     if (hold && path.endsWith("/manifest.json")) {
       hold = false;
       entered();
       await gate;
     }
-    return read(path);
+    return current ? { etag: current.etag } : null;
   };
   const older = send(1);
   await paused;
@@ -315,8 +316,8 @@ test("an older publisher cannot roll back a newer input prefix or checkpoint", a
   release();
   assert.equal((await older).status, 200);
   assert.deepEqual(
-    await read("replays/" + id + "/manifest.json"),
-    newer,
+    (await read("replays/" + id + "/manifest.json")).value,
+    newer.value,
     "old publication cannot replace either the newer cursor or checkpoint index",
   );
   assert.equal(newer.value.count, 3);
@@ -439,4 +440,31 @@ test("fresh-device resume resolves immutable acknowledged data even while the CD
     403,
   );
   assert.deepEqual(await cdn.read(immutablePath), latest);
+  // Vercel's public get(useCache:false) still reads its CDN. The management
+  // head API supplies the current CAS token without downloading cached content.
+  cdn.head = async (path) => {
+    const current = await read(path);
+    return current ? { etag: current.etag } : null;
+  };
+  const third = await send(2);
+  assert.match(third.manifest, /manifest-[a-f0-9]{64}\.json$/);
+  const checkpoint = gzipSync("parked runtime checkpoint");
+  const responseCheckpoint = await storageContext.run(store, () =>
+    publicReplayContext.run(cdn, () =>
+      protocolCheckpoint(new Request(endpoint.replace(/inputs$/, "checkpoint"), {
+        method: "PUT",
+        headers: {
+          authorization: "Bearer " + vault,
+          "x-checkpoint-index": "3",
+          "x-content-sha256": hash(checkpoint),
+        },
+        body: checkpoint,
+      }), id),
+    ),
+  );
+  assert.equal(responseCheckpoint.status, 200);
+  const published = await read("replays/" + id + "/manifest.json");
+  assert.equal(published.value.count, 3);
+  assert.equal(published.value.checkpoints.length, 1);
+  assert.notEqual((await responseCheckpoint.json()).manifest, third.manifest);
 });

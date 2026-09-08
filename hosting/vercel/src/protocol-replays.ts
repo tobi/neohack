@@ -51,13 +51,17 @@ async function publishManifest(id: string) {
   const store = publicReplayStorage(),
     manifestPath = "replays/" + id + "/manifest.json";
   for (let attempt = 0; attempt < 12; attempt++) {
-    const doc = await read("input-runs/" + id + ".json"),
-      current = await store.read(manifestPath);
-    if (current && current.value.format !== "neonethack.inputs")
-      throw Error("Published archive uses another format");
+    // Read the public CAS token BEFORE the authoritative private head. An
+    // older publisher can then only write the latest committed generation or
+    // lose CAS to a newer publisher; cached public content is never authority.
+    const current: { etag: string; value?: any } | null = store.head
+        ? await store.head(manifestPath)
+        : await store.read(manifestPath),
+      doc = await read("input-runs/" + id + ".json");
     const manifest = inputManifest(id, doc);
     const immutablePath = await immutableManifest(id, manifest);
-    if (current?.value.generation >= doc.generation) return immutablePath;
+    if (current?.value?.generation >= doc.generation)
+      return immutablePath;
     try {
       await store.write(manifestPath, manifest, current?.etag);
       return immutablePath;
@@ -248,7 +252,8 @@ export async function protocolReplay(request: Request, id: string) {
     path = "input-runs/" + id + ".json";
   let initial = await read(path);
   if (!initial) {
-    if (await publicReplayStorage().read("replays/" + id + "/manifest.json"))
+    const publicStore = publicReplayStorage(), existingPath = "replays/" + id + "/manifest.json";
+    if (await (publicStore.head ? publicStore.head(existingPath) : publicStore.read(existingPath)))
       return json({ error: "This run already has a published archive" }, 409);
     const adventures = await read("vaults/" + token + "/adventures.json");
     const run = adventures?.values?.find((r: any) => r.id === id);
