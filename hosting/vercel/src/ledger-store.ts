@@ -81,6 +81,10 @@ async function writeRun(run: Run, recorded = false) {
       if (newer(doc.run, run))
         doc.run = {
           ...run,
+          // Match the client's sticky WebMCP attribution across owner handoff.
+          ...(doc.run?.control === "webmcp" && run.control === "manual"
+            ? { control: "webmcp", automated: true }
+            : {}),
           maxLevel: Math.max(run.maxLevel ?? 0, doc.run?.maxLevel ?? 0),
         };
       return doc.run!;

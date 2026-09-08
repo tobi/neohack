@@ -58,6 +58,11 @@ Registration failure retains the pending compressed bytes and cursor, and retrie
 registration rather than a game input. Reload re-establishes the prerequisite from
 local run metadata. Closing the transport cancels it without waiting for network.
 
+Directory and ledger updates retain established WebMCP attribution when a later
+manual snapshot arrives, including delayed same-turn writes from a former tab.
+Other control labels retain their existing replacement behavior. This attribution
+rule does not order other same-turn metadata or change journal ownership.
+
 `PUT /api/runs/:id/inputs` validates the write capability, sequence, runtime and
 size limits. It publishes an immutable `chunks/<sha256>.gz` object and conditionally
 advances the run head and a hash-named immutable manifest. The mutable

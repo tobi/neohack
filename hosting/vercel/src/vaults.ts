@@ -84,7 +84,11 @@ if(query.get('manifest')==='1')return json({version:1,revision:doc.revision,file
         for(const value of data) {
           if(!value || typeof value.id!=="string")continue;
           const old:any=values.get(value.id);
-          if(!old || ((!old.ended || value.ended) && (value.turn??0)>=(old.turn??0)))values.set(value.id,value);
+          if(!old || ((!old.ended || value.ended) && (value.turn??0)>=(old.turn??0))) {
+            // A former owner's manual snapshot must not erase WebMCP use.
+            values.set(value.id,old?.control==='webmcp' && value.control==='manual'
+              ? {...value,control:'webmcp',automated:true} : value);
+          }
         }
         doc.values=[...values.values()];
       },
