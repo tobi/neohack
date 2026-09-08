@@ -3,6 +3,8 @@
 /*-Copyright (c) Michael Allison, 2006. */
 /* NetHack may be freely redistributed.  See license for details. */
 
+/* neonethack modification, 2026-09-08: semantic conditions are independent
+ * of visual status toggles. See CHANGES.neonethack.md. */
 #include "hack.h"
 
 extern const char *const hu_stat[]; /* defined in eat.c */
@@ -1144,7 +1146,13 @@ bot_via_windowport(void)
      * configurations) should ameliorate that.]
      */
 
-#define test_if_enabled(c) if (condtests[(c)].enabled) condtests[(c)].test
+    /* The headless status stream is semantic self-state. Keep the engine
+     * predicates (including held/grab/holding distinctions), but do not hide
+     * them behind optional visual status choices. Other ports retain those
+     * choices. This computes no holder name or other monster knowledge. */
+#define condition_enabled(c) \
+    (windowprocs.wp_id == wp_headless || condtests[(c)].enabled)
+#define test_if_enabled(c) if (condition_enabled((c))) condtests[(c)].test
 
     condtests[bl_foodpois].test = condtests[bl_termill].test = FALSE;
     if (Sick) {
@@ -1209,12 +1217,12 @@ bot_via_windowport(void)
 
     if (gm.multi < 0) {
         cond_cache_prepA();
-        if (condtests[bl_unconsc].enabled
+        if (condition_enabled(bl_unconsc)
             && cache_nomovemsg && !cache_avail[0]) {
                 cache_reslt[0] = (!u.usleep && unconscious());
                 cache_avail[0] = TRUE;
         }
-        if (condtests[bl_parlyz].enabled
+        if (condition_enabled(bl_parlyz)
             && cache_multi_reason && !cache_avail[1]) {
                 cache_reslt[1] = (!strncmp(cache_multi_reason, "paralyzed", 9)
                                  || !strncmp(cache_multi_reason, "frozen", 6));
@@ -1224,9 +1232,9 @@ bot_via_windowport(void)
             condtests[bl_unconsc].test = cache_reslt[0];
         } else if (cache_avail[1] && cache_reslt[1]) {
             condtests[bl_parlyz].test = cache_reslt[1];
-        } else if (condtests[bl_sleeping].enabled && u.usleep) {
+        } else if (condition_enabled(bl_sleeping) && u.usleep) {
             condtests[bl_sleeping].test = TRUE;
-        } else if (condtests[bl_busy].enabled) {
+        } else if (condition_enabled(bl_busy)) {
             condtests[bl_busy].test = TRUE;
         }
     } else {
@@ -1238,11 +1246,12 @@ bot_via_windowport(void)
         gb.blstats[idx][BL_CONDITION].a.a_ulong |= conditions[(c)].mask
 
     for (i = 0; i < CONDITION_COUNT; ++i) {
-        if (condtests[i].enabled
+        if (condition_enabled(i)
              /* && i != bl_holding  */ /* uncomment to suppress UHold */
                 && condtests[i].test)
             cond_setbit(i);
     }
+#undef condition_enabled
 #undef cond_bitset
 
     /*

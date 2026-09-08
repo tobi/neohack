@@ -6,6 +6,20 @@ Original copyright, no-warranty and `dat/license` notices remain intact.
 These notes identify changes; they do not grant a new license for independently
 owned project code. The repository's publication/license review remains open.
 
+## 2026-09-08 — semantic condition feed
+
+- src/botl.c: the headless port evaluates and emits the existing engine
+  condition tests regardless of optional visual status enable flags. This
+  includes held/grab/holding and the existing opt-in control states. Other
+  window ports keep their visual choices. No combat, escape, timing, RNG or
+  holder-identity rules change; set_ustuck already requests a status refresh.
+- Scoped source review of other opt-in tests: bare hands and glowing hands
+  use hero equipment/self-state; ice and submerged use underfoot/environment
+  state; slippery and wounded legs use hero conditions; trapped and tethered
+  use the hero's active trap; holding uses the hero's sticky form; busy,
+  paralyzed, sleeping and unconscious retain the engine's existing inactivity
+  classification. This review does not claim a witnessed regression for each.
+
 ## 2026-09-08 — pickup review perception
 
 - win/headless/winheadless.c: flush the engine's already-rendered display

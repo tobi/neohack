@@ -1,8 +1,8 @@
 # Engine fork audit
 
 The base is [NetHack `04834a9`](https://github.com/NetHack/NetHack/tree/04834a93165482a28257bac282543e3583658622).
-The 2026-09-07 shipping-source comparison found **1,237 unchanged upstream
-files, 29 modified upstream files, and 14 added files**. These counts describe
+The 2026-09-08 shipping-source comparison found **1,236 unchanged upstream
+files, 30 modified upstream files, and 14 added files**. These counts describe
 the engine source inventory, not generated headers, installed data or binaries.
 Run the audit again after engine work; the count is a dated measurement.
 
@@ -64,6 +64,7 @@ comparison is covered. Several files have more than one reason to remain.
 | `src/end.c` | Separate lifesaving from actual death, capture terminal cause before disclosure and score after final accounting. Suppress the postmortem disclosure quiz. Do not infer terminal facts from a message or automatically answer a live warning. |
 | `src/insight.c`, `src/weapon.c` | Reuse existing chronicle/skill naming and disclosure logic, including spoiler exclusions and skill eligibility. Helpers need private engine tables/functions; copying those tables to the port would increase semantic duplication. |
 | `src/lock.c` | Emit lock-state witnesses next to the actual player-visible disclosure. A free raw-door query would reveal hidden state. |
+| `src/botl.c` | Compute headless self-state conditions independently of optional visual status toggles, using the existing engine predicates. This avoids copying held/grab/holding and other condition rules into the window port or clients. |
 | `src/pickup.c` | Bind offered object IDs, combined container transfers, witnessed loot and explicit pickup review. Retain original transfer, burden, billing and trap functions. This is an intentional interaction change and should not be described as a passive display hook. |
 | `src/pager.c`, `src/objnam.c` | Reuse the real encyclopedia matcher with a separate text sink and restore name scratch buffers around free queries. Ordinary window capture could alter a suspended prompt or journal. |
 | `src/rnd.c` | Count actual core/display RNG words and reseeds; fingerprint canonical ISAAC64 state for the private replay channel. Public observation equality cannot verify this state. |

@@ -222,6 +222,13 @@ normalized; the engine's empty normal labels mean `not_hungry` and
 types are generated from the response schema. These states disclose no exact
 nutrition, prayer timer, piety or undiscovered intrinsic properties.
 
+`vitals.condition` uses the engine's self-state tests independently of optional
+visual status toggles. In particular, `held` appears when the hero is held (or
+swallowed), `grabbed` retains the engine's drowning-grab distinction, and
+`grasping` means a sticky hero is holding a monster. Acquisition and release
+are reflected at the next observed input boundary. These conditions do not
+identify an unseen holder. Bounded navigation stops when conditions change.
+
 An operation can spend many turns without another opportunity for input.
 `turnsElapsed` reports the complete interval to the returned input boundary,
 including sleep or paralysis. Read ordered `heard` and `felt` events to narrate

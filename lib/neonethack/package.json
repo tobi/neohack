@@ -81,7 +81,7 @@
     "build:example": "npm run build && node scripts/build-example.mjs",
     "serve:example": "node scripts/serve-example.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "test:wasm": "npm run build && node --test tests/wasm/runtime.test.mjs tests/wasm/semantic-perception.test.mjs tests/wasm/reference-client.test.mjs tests/wasm/self-state.test.mjs tests/wasm/warnings.test.mjs tests/wasm/position.test.mjs tests/wasm/text-decisions.test.mjs tests/wasm/manual-actions.test.mjs tests/wasm/manual-fixture.test.mjs",
+    "test:wasm": "npm run build && node --test tests/wasm/runtime.test.mjs tests/wasm/semantic-perception.test.mjs tests/wasm/reference-client.test.mjs tests/wasm/self-state.test.mjs tests/wasm/held.test.mjs tests/wasm/warnings.test.mjs tests/wasm/position.test.mjs tests/wasm/text-decisions.test.mjs tests/wasm/manual-actions.test.mjs tests/wasm/manual-fixture.test.mjs",
     "test:browser": "npm run build:example && node --test tests/wasm/browser.test.mjs tests/wasm/lifecycle.test.mjs tests/wasm/protocol-recording.test.mjs tests/wasm/protocol-format.test.mjs",
     "check:tools": "npm run build && node scripts/check-tools.mjs",
     "audit:engine": "node scripts/audit-engine-fork.mjs"

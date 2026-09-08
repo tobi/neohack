@@ -25,9 +25,12 @@ export function present(response:Response, extra:Record<string,unknown>={}, comp
   const r=response as unknown as Record<string,unknown>;
   let summary='Perceived information.';
   if('error' in response && response.error) summary=response.error.message;
-  else if(isSnapshot(response)) summary=response.ended ? `Run ended: ${response.end?.cause ?? response.outcome.status}.` : `${response.outcome.action}: ${response.outcome.status}; ${response.outcome.turnsElapsed} turns elapsed.${response.decision ? ` Answer the ${response.decision.kind} decision: ${response.decision.about}` : ''}`;
+  else if(isSnapshot(response)) summary=`${response.outcome.action}: ${response.outcome.status}; ${response.outcome.turnsElapsed} turns elapsed.${response.decision ? ` Answer the ${response.decision.kind} decision: ${response.decision.about}` : ''}`;
   else if('kind' in response) summary=response.kind==='lore' ? (response.found?'Encyclopedia lore; reference text, not an observation.':'No encyclopedia entry found.') : response.kind==='route' ? `Known walking route: ${response.distance===null?'none known':`${response.distance} steps`}.` : response.kind==='navigation' ? `${response.frontiers.length} reachable unvisited frontiers; ${response.waysDown.length} remembered downward stairs.` : 'Perceived attempts for this square.';
   if(extra.navigation) { const leg=extra.navigation as {reason:string;actionsTaken:number;turnsElapsed:number};summary=`Navigation: ${leg.reason}; ${leg.actionsTaken} actions, ${leg.turnsElapsed} turns elapsed.`; }
+  // Terminal facts lead even when a navigation leg or error supplies the detail.
+  // A disconnected close ends the session connection, but the run can resume.
+  if(isSnapshot(response) && response.ended && response.end?.kind!=='disconnected') summary=`Run ended (${response.end?.kind ?? 'unknown'})${response.end?.cause ? `: ${response.end.cause}` : ''}. ${summary}`;
   const creatures=isSnapshot(response) ? response.observation.world.filter(c=>c.occupant && c.occupant.kind!=='self').map(c=>({id:creatureId(response,c.x,c.y),position:{x:c.x,y:c.y},...c.occupant})) : undefined;
   // Put the witnessed outcome and actual question first; keep the complete snapshot.
   const {requestId,...rest}=r;

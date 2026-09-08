@@ -120,6 +120,20 @@ char *mcp_agent_present_mode(const char *response, int historical, int compact)
         if (asprintf(&summary,"Navigation: %s; %lld actions, %lld turns elapsed.",reason ? reason : "unknown",actions,turns) < 0) summary = NULL;
         free(reason);
     }
+    /* Terminal facts lead even when navigation or an error supplies the detail.
+     * A disconnected close ends the connection, but the run can resume. */
+    int ended = 0; mj_val ended_value = mcp_field(response,"ended");
+    if (ended_value.p) mj_bool(ended_value,&ended);
+    mj_val end = mcp_field(response,"end");
+    if (ended && !text_is(mcp_field(end.p,"kind"),"disconnected")) {
+        char *kind = mcp_string(mcp_field(end.p,"kind"));
+        char *cause = mcp_string(mcp_field(end.p,"cause"));
+        char *detail = summary; summary = NULL;
+        if (asprintf(&summary,"Run ended (%s)%s%s.%s%s",kind ? kind : "unknown",
+                     cause && *cause ? ": " : "",cause ? cause : "",
+                     detail ? " " : "",detail ? detail : "") < 0) summary = NULL;
+        free(kind); free(cause); free(detail);
+    }
     mj_key(&b,"summary"); mj_strv(&b,summary ? summary : "Perceived information."); free(summary);
     /* Preserve all response members exactly, except the agent-facing ID name. */
     const char *cursor = response; char *key; mj_val value; int next;
