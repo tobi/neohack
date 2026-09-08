@@ -180,6 +180,20 @@ test(
       [],
       "watching makes no dynamic API request, upload or account lookup",
     );
+    // Hold a real decoded response at the component boundary. Detachment must
+    // invalidate it even when it completes after the viewer has been removed.
+    const detached=await viewer.evaluate(async()=>{
+      const world=document.querySelector('neohack-world'),player=world.inputPlayback;
+      let release,ready;const gate=new Promise(r=>release=r),started=new Promise(r=>ready=r);
+      const seek=player.seek.bind(player);
+      player.seek=async index=>{const frame=await seek(index);ready();await gate;return frame;};
+      const pending=world.seek(0);await started;
+      const before=world.snapshot;let frames=0;world.addEventListener('frame',()=>frames++);
+      world.remove();release();await pending;
+      return {before,after:world.snapshot,frames,retained:!!world.inputPlayback};
+    });
+    assert.deepEqual(detached.after,detached.before,'a late decoded input cannot update a removed viewer');
+    assert.equal(detached.frames,0);assert.equal(detached.retained,false);
     const embed = createServer((_req, res) => {
       res.setHeader("content-type", "text/html");
       res.end(

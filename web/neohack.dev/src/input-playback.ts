@@ -32,12 +32,17 @@ export class InputPlayback {
       "/runtime/wasm/" + this.manifest.buildId + "/",
       import.meta.url,
     );
-    this.transport = await wasm.WasmTransport.create({
+    const transport = await wasm.WasmTransport.create({
       storage: { kind: "memory" },
       runtimeUrl: base.href,
       workerUrl: new URL("core-worker.mjs", base),
       playbackArchive: { manifest: this.manifest, url: this.url.href },
     });
+    if (this.closed || this.signal.aborted) {
+      await transport.close();
+      throw Error("Replay cancelled");
+    }
+    this.transport = transport;
     this.records = inputRecords(this.manifest, this.url, {
       signal: this.signal,
     });

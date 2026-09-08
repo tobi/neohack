@@ -55,7 +55,7 @@ export class NeohackWorld extends HTMLElement {
     if(this.hasAttribute('src')) void this.loadSource();
     this.dispatchEvent(new CustomEvent('ready'));
   }
-  disconnectedCallback() { this.loading?.abort();void this.inputPlayback?.close(); this.audio?.dispose(); this.audio = undefined; this.pause(); this.map?.destroy(); this.map = undefined; }
+  disconnectedCallback() { this.loading?.abort();const player=this.inputPlayback;this.inputPlayback=undefined;this.inputStepping=false;void player?.close(); this.audio?.dispose(); this.audio = undefined; this.pause(); this.map?.destroy(); this.map = undefined; }
   attributeChangedCallback(name:string, old:string|null, value:string|null) {
     if(old === value) return;
     if(name === 'src' && this.isConnected) void this.loadSource();
@@ -218,8 +218,9 @@ export class NeohackWorld extends HTMLElement {
       this.dispatchEvent(new CustomEvent('replayframe',{detail:{index,length:player.manifest.count}}));
       return {index,length:player.manifest.count};
     }catch(error){
+      if(this.inputPlayback!==player)return {index,length:player.manifest.count};
       this.pause();this.sourceMessage=error instanceof Error?error.message:String(error);this.paint();throw error;
-    }finally{this.inputStepping=false;this.updateControls();}
+    }finally{if(this.inputPlayback===player){this.inputStepping=false;this.updateControls();}}
   }
   play(interval = 250 / this.speed) {
     if(!Number.isFinite(interval) || interval < 50 || interval > 10000) throw Error('Interval must be 50–10000 ms');
