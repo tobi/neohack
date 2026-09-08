@@ -690,7 +690,7 @@ class PixelNethack extends HTMLElement {
     const replica = sourceUrl.href;
     if (requestedRun() && !replica && !this.saves.some(save => save.id === requestedRun()!.id)) throw Error("The cloud save could not be reached. Retry this bookmark when connected; no new game was started.");
     this.inputRecording=inputRecording;
-    const transportPackage = buildId&&!this.inputRecording ? await runtimePackage(undefined, this.preloadAbort.signal) : selected;
+    const transportPackage = buildId ? await runtimePackage(undefined, this.preloadAbort.signal) : selected;
     const wasm = await this.runtime.wasm.createWasm({
       runtimeUrl: new URL(selected.base, location.href).href,
       storage: this.inputRecording?{kind:'journal',name:this.storeName,uploadUrl:new URL('/api/runs/',location.href).href,uploadToken:this.vault,archiveConfigUrl:new URL('/replay-config.json',location.href).href}:replica

@@ -13,6 +13,40 @@ const sha = (bytes: Uint8Array | string) =>
   createHash("sha256").update(bytes).digest("hex");
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
+function manifestUrl(path: string, request: Request) {
+  const base =
+    process.env.PUBLIC_REPLAY_ORIGIN ??
+    new URL("/replay-files/", request.url).href;
+  return new URL(path, base.endsWith("/") ? base : base + "/").href;
+}
+async function immutableManifest(id: string, manifest: any) {
+  const bytes = JSON.stringify(manifest),
+    path = "replays/" + id + "/manifest-" + sha(bytes) + ".json",
+    store = publicReplayStorage();
+  try {
+    await store.write(path, manifest);
+  } catch (e) {
+    if (!(e instanceof Conflict)) throw e;
+    if (JSON.stringify((await store.read(path))?.value) !== bytes)
+      throw Error("Immutable manifest differs");
+  }
+  return path;
+}
+function inputManifest(id: string, doc: any) {
+  return {
+    format: "neonethack.inputs",
+    version: 1,
+    generation: doc.generation,
+    id,
+    buildId: doc.buildId,
+    count: doc.count,
+    chunks: doc.chunks,
+    checkpoints: doc.checkpoints ?? [],
+    role: doc.role,
+    seed: doc.seed,
+    complete: doc.complete,
+  };
+}
 async function publishManifest(id: string) {
   const store = publicReplayStorage(),
     manifestPath = "replays/" + id + "/manifest.json";
@@ -21,27 +55,17 @@ async function publishManifest(id: string) {
       current = await store.read(manifestPath);
     if (current && current.value.format !== "neonethack.inputs")
       throw Error("Published archive uses another format");
-    if (current?.value.generation >= doc.generation) return;
-    const manifest = {
-      format: "neonethack.inputs",
-      version: 1,
-      generation: doc.generation,
-      id,
-      buildId: doc.buildId,
-      count: doc.count,
-      chunks: doc.chunks,
-      checkpoints: doc.checkpoints ?? [],
-      role: doc.role,
-      seed: doc.seed,
-      complete: doc.complete,
-    };
+    const manifest = inputManifest(id, doc);
+    const immutablePath = await immutableManifest(id, manifest);
+    if (current?.value.generation >= doc.generation) return immutablePath;
     try {
       await store.write(manifestPath, manifest, current?.etag);
-      return;
+      return immutablePath;
     } catch (e) {
       if (!(e instanceof Conflict) || attempt === 11) throw e;
     }
   }
+  throw Error("Manifest publication did not complete");
 }
 export async function protocolCheckpoint(request: Request, id: string) {
   if (request.method !== "PUT")
@@ -114,11 +138,11 @@ export async function protocolCheckpoint(request: Request, id: string) {
     },
   );
   if (rejected) return rejected;
-  await publishManifest(id);
-  return json({ index, hash });
+  const published = await publishManifest(id);
+  return json({ index, hash, manifest: manifestUrl(published, request) });
 }
 export async function protocolReplay(request: Request, id: string) {
-  if (request.method !== "PUT")
+  if (request.method !== "PUT" && request.method !== "GET")
     return json({ error: "Method not allowed" }, 405);
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin)
@@ -126,6 +150,21 @@ export async function protocolReplay(request: Request, id: string) {
   const token = request.headers.get("authorization")?.replace(/^Bearer /, "");
   if (!token || !/^[0-9a-f-]{36}$/i.test(token))
     return json({ error: "Upload authority required" }, 401);
+  if (request.method === "GET") {
+    const doc = await read("input-runs/" + id + ".json");
+    if (!doc) return json({ error: "Run is not backed up yet" }, 404);
+    if (doc.owner !== sha(token))
+      return json({ error: "Upload authority differs" }, 403);
+    // Fresh-device restore resolves its exact immutable prefix through private
+    // metadata. Watching never calls this endpoint. Repair an interrupted
+    // publication using committed inputs only; no engine is run here.
+    return json({
+      manifest: manifestUrl(
+        await immutableManifest(id, inputManifest(id, doc)),
+        request,
+      ),
+    });
+  }
   if (!publicReplayConfigured())
     return json({ error: "Replay publication unavailable" }, 503);
   const reader = request.body?.getReader();
@@ -309,16 +348,9 @@ export async function protocolReplay(request: Request, id: string) {
   if (accepted) return accepted;
   // Ack only after static publication. A lost response republishes this same
   // committed prefix and returns the same range/hash without another game step.
-  const manifestPath = "replays/" + id + "/manifest.json";
-  await publishManifest(id);
+  const manifestPath = await publishManifest(id);
   if (body.from === 0) await markRecorded(id);
-  const base =
-    process.env.PUBLIC_REPLAY_ORIGIN ??
-    new URL("/replay-files/", request.url).href;
-  const manifestUrl = new URL(
-    manifestPath,
-    base.endsWith("/") ? base : base + "/",
-  ).href;
+  const publishedUrl = manifestUrl(manifestPath, request);
   if (accountId)
     await update<any, void>(
       "accounts/" + accountId + "/runs/" + id + ".json",
@@ -334,10 +366,11 @@ export async function protocolReplay(request: Request, id: string) {
           control: initial.control,
           automated: initial.control === "bot",
           buildId: body.buildId,
-          replayUrl: manifestUrl,
+          replayUrl: publishedUrl,
           inputRun: true,
         };
+        doc.run.replayUrl = publishedUrl;
       },
     );
-  return json({ through, hash, manifest: manifestUrl });
+  return json({ through, hash, manifest: publishedUrl });
 }

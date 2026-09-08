@@ -223,6 +223,13 @@ test(
     await context.close();
     const restoredContext = await browser.newContext(),
       restored = await restoredContext.newPage();
+    await restoredContext.route("**/replays/**/manifest.json", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...manifest, count: 0, chunks: [] }),
+      }),
+    );
     await restored.goto(bookmark);
     await restored.waitForFunction(
       () =>

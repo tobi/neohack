@@ -52,7 +52,10 @@ a lost acknowledgement retries identical bytes without re-executing the game.
 
 `PUT /api/runs/:id/inputs` validates the write capability, sequence, runtime and
 size limits. It publishes an immutable `chunks/<sha256>.gz` object and conditionally
-advances the run head and static manifest. Previous chunks are never downloaded
+advances the run head and a hash-named immutable manifest. The mutable
+`manifest.json` is only a discovery alias; acknowledgements and embed links pin
+the exact immutable playlist, so CDN invalidation cannot hide acknowledged data.
+Previous chunks are never downloaded
 or concatenated on normal upload. Errors leave the local log and exact pending
 batch intact. Reconnect retries quietly. Upload latency is outside the action
 promise; closing a tab can leave a prefix pending until the browser returns.
@@ -67,8 +70,11 @@ ledger index is already designed for millions of entries.
 ## Resume and level checkpoints
 
 Local resume reads the input log using the recorded package. A fresh device first
-imports static manifest/chunk files from the CDN, retaining its import cursor if
-download is interrupted. A different runtime pin is refused. Existing published
+resolves the latest immutable playlist through authenticated
+`GET /api/runs/:id/inputs`, then imports static manifest/chunk files from the CDN, retaining its import cursor if
+download is interrupted. The current network worker may service an older pin;
+the semantic C driver, engine, static data and checkpoint identity still come
+from that recorded package. A different engine pin is refused. Existing published
 pins and recorded histories are not replaced on deployment.
 
 After a level transition, a quiescent WASM checkpoint can accelerate subsequent

@@ -151,10 +151,12 @@ and [Observability](https://vercel.com/docs/observability).
 
 Public replay playback makes **no dynamic function requests**. The static
 /replay-config.json gives the public Blob origin. The viewer reads
-replays/<id>/manifest.json and its relative chunks/<hash>.gz input files directly
+replays/<id>/manifest-<hash>.json and its relative chunks/<hash>.gz input files directly
 from that origin, including on a cold load. Upload functions publish those files
 at recording time. Chunks are create-only and content-addressed; the latest
-manifest advances with ETag compare-and-swap after every referenced chunk exists.
+immutable playlist is published after every referenced chunk exists. The
+`manifest.json` discovery alias advances with ETag compare-and-swap, but may be
+cached; exact upload acknowledgements and embed links never depend on its age.
 A losing older publisher cannot roll it back. Manifest caching lasts 60 seconds;
 immutable chunks cache for one year. Replay links are unlisted and readable by
 anyone who has the link. Upload authority, account associations, script source and

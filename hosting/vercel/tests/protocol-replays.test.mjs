@@ -365,3 +365,78 @@ test("a new upload authority cannot claim a previously published run identifier"
   );
   assert.equal(await store.read("input-runs/" + id + ".json"), null);
 });
+
+test("fresh-device resume resolves immutable acknowledged data even while the CDN alias is stale", async () => {
+  const store = new MemoryStorage(),
+    cdn = new MemoryStorage(),
+    vault = randomUUID();
+  await store.write("vaults/" + vault + "/adventures.json", {
+    values: [{ id, buildId, role: "wizard" }],
+  });
+  const invoke = (request) =>
+    storageContext.run(store, () =>
+      publicReplayContext.run(cdn, () => protocolReplay(request, id)),
+    );
+  const endpoint = "https://neohack.dev/api/runs/" + id + "/inputs";
+  const send = async (index) => {
+    const bytes = gzipSync(
+      JSON.stringify({
+        format: "neonethack.inputs",
+        version: 1,
+        id,
+        buildId,
+        from: index,
+        records: [record(index)],
+        complete: false,
+      }),
+    );
+    return (
+      await invoke(
+        new Request(endpoint, {
+          method: "PUT",
+          headers: {
+            authorization: "Bearer " + vault,
+            "x-content-sha256": hash(bytes),
+          },
+          body: bytes,
+        }),
+      )
+    ).json();
+  };
+  const first = await send(0),
+    old = await cdn.read("replays/" + id + "/manifest.json");
+  const next = await send(1);
+  assert.notEqual(first.manifest, next.manifest);
+  assert.match(next.manifest, /manifest-[a-f0-9]{64}\.json$/);
+  const immutablePath = new URL(next.manifest).pathname.slice(
+      "/replay-files/".length,
+    ),
+    latest = await cdn.read(immutablePath);
+  assert.equal(latest.value.count, 2);
+  assert.equal(
+    hash(JSON.stringify(latest.value)),
+    next.manifest.match(/manifest-([a-f0-9]{64})/)[1],
+  );
+  const read = cdn.read.bind(cdn);
+  cdn.read = async (path) =>
+    path.endsWith("/manifest.json") ? old : read(path);
+  // Simulate a stale public read. CAS still rejects overwriting the newer alias;
+  // immutable publication itself must stay available for exact-prefix restore.
+  const response = await invoke(
+    new Request(endpoint, { headers: { authorization: "Bearer " + vault } }),
+  );
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).manifest, next.manifest);
+  assert.equal((await invoke(new Request(endpoint))).status, 401);
+  assert.equal(
+    (
+      await invoke(
+        new Request(endpoint, {
+          headers: { authorization: "Bearer " + randomUUID() },
+        }),
+      )
+    ).status,
+    403,
+  );
+  assert.deepEqual(await cdn.read(immutablePath), latest);
+});

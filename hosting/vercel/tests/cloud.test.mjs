@@ -291,18 +291,20 @@ test('updated network worker resumes an older package without changing its engin
   t.after(()=>rm(fixtureDirectory,{recursive:true,force:true}));
   await writeFile(fixtureDirectory+'/core-worker.mjs',worker);await writeFile(fixtureDirectory+'/manifest.json',JSON.stringify(manifest));
   const {url,browser}=await fixture(t),page=await browser.newPage({serviceWorkers:'block'});await page.goto(url);
-  const result=await page.evaluate(async oldId=>{
+  for(const kind of ['indexeddb','journal']){
+  const result=await page.evaluate(async ([oldId,kind])=>{
     const {createWasm}=await import('/runtime/typescript/wasm.js');
     const current=await (await fetch('/runtime/wasm/current.json')).json();
     const old=[oldId];
     const base=id=>new URL('/runtime/wasm/'+id+'/',location.href).href;
-    const storage={kind:'indexeddb',name:'pinned-network-update'};
+    const storage={kind,name:'pinned-network-update-'+kind};
     let api=await createWasm({storage,workerUrl:new URL('core-worker.mjs',base(old[0]))});let id,observation;
     try{const game=await api.create({name:'Pinned',seed:42,role:'wizard'});id=game.id;observation=structuredClone(game.observation);}finally{await api.close();}
     api=await createWasm({storage,workerUrl:new URL('core-worker.mjs',base(current.buildId)),runtimeUrl:base(old[0])});
     try{const game=await api.resume(id);return {pin:api.transport.buildId,expected:old[0],observation,resumed:game.observation};}finally{await api.close();}
-  },manifest.buildId);
+  },[manifest.buildId,kind]);
   assert.equal(result.pin,result.expected);assert.deepEqual(result.resumed,result.observation);
+  }
 });
 
 test('old conflicted vault receives a separate acknowledged backup without losing either copy',{timeout:90000},async t=>{
