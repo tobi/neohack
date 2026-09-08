@@ -341,7 +341,7 @@ test('metadata retries independently, batches long histories and publishes new r
  let deny=true;const batches=[];
  await page.route('**/api/runs',r=>{if(r.request().method()!=='POST')return r.continue();batches.push(JSON.parse(r.request().postData()).runs);return deny?r.fulfill({status:503,body:'retry later'}):r.continue();});
  await create(page,url);const id=(await snapshot(page)).sessionId;
- await page.evaluate(()=>{const a=document.querySelector('pixel-nethack');a.saves.push(...Array.from({length:105},(_,i)=>({id:'history-'+i,name:'History',role:'wizard',turn:i,ended:true,pending:{requestId:'PRIVATE-REQUEST'}})));a.persist();});
+ await page.evaluate(()=>{const a=document.querySelector('pixel-nethack');for(let i=0;i<105;i++){const id='history-'+i,save={id,name:'History',role:'wizard',turn:i,ended:true,pending:{version:1,method:'game.wait',params:{sessionId:id,expectedRevision:0,requestId:'PRIVATE-REQUEST'}}};a.saves.push(save);a.persist(save);}});
  await page.waitForTimeout(6000);deny=false;
  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
  for(let i=0;i<40;i++){if((await(await fetch(url+'/api/runs?limit=1000')).json()).length===106)break;await page.waitForTimeout(500);}
@@ -349,7 +349,7 @@ test('metadata retries independently, batches long histories and publishes new r
  assert.ok(batches.every(b=>b.length<=50));assert.ok(!JSON.stringify(batches).includes('PRIVATE-REQUEST'));
  const vault=new URLSearchParams(new URL(page.url()).hash.slice(1)).get('vault');
  const privateRuns=await (await fetch(url+'/api/vaults/'+vault+'/adventures')).json();assert.equal(privateRuns.length,106);
- assert.ok(privateRuns.some(r=>r.pending?.requestId==='PRIVATE-REQUEST'),'private pending receipt context stays in private metadata');
+ assert.ok(privateRuns.some(r=>r.pending?.params?.requestId==='PRIVATE-REQUEST'),'private pending receipt context stays in private metadata');
  await synced(page);assert.equal(await page.locator('#error').textContent(),'');
 });
 
@@ -408,4 +408,47 @@ test('slow startup reports its stage without private data and resumes when downl
  const slow=diagnostics.find(d=>d.code==='runtime_timing'&&d.timing.outcome==='slow');assert.ok(slow);assert.equal(slow.timing.stage,'assets');assert.deepEqual(Object.keys(slow).sort(),['buildId','code','timing']);
  release();await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation);
  const bad=await fetch(url+'/api/errors',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:'runtime_timing',timing:{stage:'private-vault-token',duration:1,outcome:'slow'}})});assert.equal(bad.status,400);
+});
+
+test('concurrent tabs back up separate local runs and both bookmarks restore on a fresh device',{timeout:90000},async t=>{
+  const {url,browser}=await fixture(t), context=await browser.newContext({serviceWorkers:'block'});
+  const first=await context.newPage();await create(first,url);
+  const second=await context.newPage();await create(second,url);
+  const bookmarks=[first.url(),second.url()];
+  assert.equal(new URLSearchParams(new URL(bookmarks[0]).hash.slice(1)).get('vault'),new URLSearchParams(new URL(bookmarks[1]).hash.slice(1)).get('vault'));
+  await Promise.all([first,second].map(page=>page.evaluate(async()=>{const app=document.querySelector('pixel-nethack');for(let i=0;i<3;i++)await app.run(()=>app.game.wait());})));
+  await Promise.all([synced(first),synced(second)]);
+  const states=await Promise.all([snapshot(first),snapshot(second)]);
+  const vault=new URLSearchParams(new URL(bookmarks[0]).hash.slice(1)).get('vault');
+  const directory=await(await fetch(url+'/api/vaults/'+vault+'/adventures')).json();
+  assert.equal(directory.length,2);
+  for(const state of states){
+    const row=directory.find(row=>row.id===state.sessionId);
+    assert.equal(row.turn,state.observation.turn);assert.equal(row.localStore,undefined);
+  }
+  const fresh=await browser.newContext({serviceWorkers:'block'});
+  const tabs=await Promise.all([fresh.newPage(),fresh.newPage()]);
+  await Promise.all(tabs.map((tab,i)=>tab.goto(bookmarks[i])));
+  for(const [i,tab] of tabs.entries()){
+    await tab.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation);
+    assert.deepEqual((await snapshot(tab)).observation,states[i].observation);
+    assert.equal((await snapshot(tab)).sessionId,states[i].sessionId);
+    assert.equal(await tab.locator('#error').isVisible(),false);
+  }
+});
+
+test('a published shared-store run hands off while a new adventure remains independent',{timeout:60000},async t=>{
+  const {url,browser}=await fixture(t),context=await browser.newContext({serviceWorkers:'block'});
+  const original=await context.newPage();await createBlockRun(original,url);
+  const bookmark=original.url(),state=await snapshot(original);
+  const newer=await context.newPage();await create(newer,url);
+  assert.notEqual((await snapshot(newer)).sessionId,state.sessionId);
+  assert.deepEqual((await snapshot(original)).observation,state.observation);
+  const recipient=await context.newPage();await recipient.goto(bookmark);
+  await recipient.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation);
+  assert.deepEqual((await snapshot(recipient)).observation,state.observation);
+  await original.getByRole('button',{name:'Play here',exact:true}).waitFor();
+  const before=await snapshot(newer);
+  await newer.evaluate(async()=>{const app=document.querySelector('pixel-nethack');await app.run(()=>app.game.wait());});
+  assert.equal((await snapshot(newer)).observation.turn,before.observation.turn+1);
 });

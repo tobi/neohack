@@ -8,6 +8,7 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Different tabs can play independent adventures. Opening the same run transfers it safely, with a Play here button in the previous tab and no lost or repeated moves.
 - Search the game's encyclopedia from the menu, with readable lore on desktop and phone. Reading costs no turns and works offline.
 - Agent exploration can cover several frontiers within an explicit action budget, stopping for decisions and changes in health, hunger or conditions.
 - Older recordings upload in bounded batches and recover an interrupted upload without duplicating replay steps.

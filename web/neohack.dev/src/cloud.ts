@@ -99,7 +99,10 @@ function schedule(vault:string,delay:number) {
   },delay);
 }
 export function queueCloud(saves:CloudAdventure[],vault=playerId(),saved?:()=>void) {
-  const p=pending.get(vault)??{saves:[],since:Date.now(),attempts:0};p.saves=structuredClone(saves);pending.set(vault,p);if(saved){p.saved=saved;schedule(vault,0);return;}
+  const p=pending.get(vault)??{saves:[],since:Date.now(),attempts:0};
+  const updates=new Map(p.saves.map(save=>[save.id,save]));
+  for(const save of structuredClone(saves))updates.set(save.id,save);
+  p.saves=[...updates.values()];pending.set(vault,p);if(saved){p.saved=saved;schedule(vault,0);return;}
   if(!p.attempts)schedule(vault,Math.max(0,Math.min(5000,p.since+30000-Date.now())));
 }
 window.addEventListener('online',()=>{for(const vault of pending.keys())schedule(vault,0);});
@@ -108,7 +111,10 @@ let publication: Promise<void> = Promise.resolve();
 const published = new Map<string, string>();
 const publishedRuns=new Map<string,string>();
 export function publishCloud(saves: CloudAdventure[], vault = playerId()) {
-  const copy = structuredClone(saves);
+  const copy = structuredClone(saves).map(save => {
+    const {localStore:_store,savedAt:_time,...publicMetadata} = save as CloudAdventure & {localStore?:string;savedAt?:number};
+    return publicMetadata;
+  });
   const next = publication.then(() => writeCloud(copy, vault));
   publication = next.catch(() => {});
   return next;

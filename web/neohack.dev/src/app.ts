@@ -1,3 +1,5 @@
+import {claimTabStore} from './tab-lease';
+import {readAdventures,writeAdventure,changedAdventure,type Adventure} from './adventure-index';
 import { appendReceipt, journalScroll, renderJournalEntry, type JournalEntry } from './journal';
 import { renderHeroHud } from './hero-hud';
 import { encyclopedia } from './encyclopedia';
@@ -57,35 +59,6 @@ const directions: [Compass, string][] = [
   ["south", "↓"],
   ["southeast", "↘"],
 ];
-type Adventure = {
-  recording?:'inputs';
-  branch?: string;
-  id: string;
-  buildId?: string;
-  vaultId?: string;
-  accountId?: string;
-  name: string;
-  role: string;
-  actualClass?: string;
-  randomClass?: boolean;
-  seed?: number;
-  seedSpecified?: boolean;
-  turn: number;
-  ended: boolean;
-  heroLevel?: number;
-  maxLevel?: number;
-  maxDepth?: number;
-  depthLabel?: string;
-  gold?: number;
-  kills?: number;
-  experience?: number;
-  gotAmulet?: boolean;
-  endKind?: string;
-  score?: number;
-  control?: PlayControl;
-  automated?: boolean;
-  pending?: Request;
-};
 const escape = (text: unknown) =>
   String(text ?? "").replace(
     /[&<>"']/g,
@@ -100,6 +73,22 @@ class PixelNethack extends HTMLElement {
   private vault = "";
   private storeName = "";
   private indexKey = "";
+  private tabLease?: Awaited<ReturnType<typeof claimTabStore>>;
+  private yielding = false;
+  private transferredRun?: string;
+  private settled: Promise<unknown> = Promise.resolve();
+  private storageChanged = (event: StorageEvent) => {
+    if (event.storageArea !== localStorage || !event.key || !this.indexKey) return;
+    try {
+      if (event.key === this.indexKey) this.readSaves();
+      else if (event.key.startsWith(this.indexKey + ':') && event.newValue) {
+        const save = changedAdventure(event.key,event.newValue);
+        if (save.id !== this.current?.id) this.saves = [save,...this.saves.filter(s => s.id !== save.id)];
+      } else return;
+      this.controls();
+    }
+    catch (error) { this.metadataHealthy=false; this.error(error); }
+  };
   private runtime!: Awaited<ReturnType<typeof loadRuntime>>;
   private preparation!: Promise<void>;
   private titleReady = false;
@@ -251,7 +240,7 @@ class PixelNethack extends HTMLElement {
     if(current.recording==='inputs'){
       if(this.publicSession!==frame.sessionId){
         this.publicSession=frame.sessionId;this.publicRecorder?.close();
-        this.publicRecorder=new InputReplayRecorder(()=>this.inputTransport!.flushRecording(frame.sessionId),()=>publishCloud(this.saves,this.vault));
+        this.publicRecorder=new InputReplayRecorder(()=>this.inputTransport!.flushRecording(frame.sessionId),()=>publishCloud(this.saves.filter(save=>save.id===frame.sessionId),this.vault));
       }
       return;
     }
@@ -259,7 +248,7 @@ class PixelNethack extends HTMLElement {
       if(this.publicSession!==frame.sessionId){
         this.publicSession=frame.sessionId;this.text('#copy-embed','Copy run embed');
         this.publicRecorder?.close();
-        this.publicRecorder=new PublicReplayRecorder(frame.sessionId,this.vault,()=>publishCloud(this.saves,this.vault),message=>{if(this.publicSession!==frame.sessionId)return;const node=this.querySelector('#public-recording');if(node)node.textContent=message;});
+        this.publicRecorder=new PublicReplayRecorder(frame.sessionId,this.vault,()=>publishCloud(this.saves.filter(save=>save.id===frame.sessionId),this.vault),message=>{if(this.publicSession!==frame.sessionId)return;const node=this.querySelector('#public-recording');if(node)node.textContent=message;});
       }
       this.publicRecorder?.record(frame);
     }
@@ -390,6 +379,7 @@ class PixelNethack extends HTMLElement {
     window.addEventListener("blur", this.stopMovement);
     window.addEventListener("account-dialog-open", this.stopMovement);
     window.addEventListener("accountchange", this.accountChanged);
+    window.addEventListener("storage", this.storageChanged);
     document.addEventListener("visibilitychange", this.visibilityChanged);
     window.addEventListener('online',this.onlineRecording);
     document.addEventListener("focusin", this.focusChanged);
@@ -413,7 +403,7 @@ class PixelNethack extends HTMLElement {
       })
       .catch((error) => this.error(error));
     this.preparation = this.prepareRuntime();
-    void this.preparation.then(() => this.openLinkedRun()).catch((error) => { reportError(error,this.runtimeBuildId,{kind:"boot",local:!!requestedRun()?.local}); this.error(error); this.entryRecovery(requestedRun()?.id); });
+    void this.preparation.then(() => this.openLinkedRun()).catch((error) => { reportError(error,this.runtimeBuildId,{kind:"boot",local:!!requestedRun()?.local}); this.error(error); this.entryRecovery(requestedRun()?.id,error); });
     this.controls();
   }
   private async openLinkedRun() {
@@ -431,33 +421,8 @@ class PixelNethack extends HTMLElement {
     }, { name: "Your adventurer", role: "ranger", resume: true, sessionId:linked.id });
   }
   private readSaves() {
-    const raw = localStorage.getItem(this.indexKey);
-    if (raw) {
-      const data: unknown = JSON.parse(raw);
-      if (
-        !Array.isArray(data) ||
-        data.some(
-          (s) =>
-            !s ||
-            typeof s.id !== "string" ||
-            typeof s.name !== "string" ||
-            typeof s.role !== "string" ||
-            typeof s.turn !== "number" ||
-            typeof s.ended !== "boolean" ||
-            (s.seed !== undefined &&
-              (!Number.isInteger(s.seed) ||
-                s.seed < 0 ||
-                s.seed > 4294967295)) ||
-            (s.pending &&
-              (s.pending.version !== 1 ||
-                !s.pending.params ||
-                s.pending.params.sessionId !== s.id ||
-                typeof s.pending.params.requestId !== "string")),
-        )
-      )
-        throw Error("The adventure list is damaged. It has not been replaced.");
-      this.saves = data;
-    } else this.saves = [];
+    this.saves = readAdventures(this.indexKey, STORE + '-' + this.vault).map(save =>
+      save.id === this.current?.id ? this.current : save);
   }
   private warm(buildId?: string) {
     // Speculative warmup is optional; the verified runtime load retries on entry.
@@ -512,7 +477,9 @@ class PixelNethack extends HTMLElement {
   }
   /** Same protocol as MCP. Human and agent input share one UI reservation. */
   private async webRequest(request: Request): Promise<Response> {
-    if (this.busy || this.movement.inFlight)
+    if ('sessionId' in request.params && (request.params.sessionId === this.transferredRun || this.yielding) && request.method !== 'session.resume')
+      return {version:1,sessionId:request.params.sessionId,error:{code:'clientNotActive',message:'This run moved to another tab. Use session.resume explicitly to play it here; this tool was not submitted.'}};
+    if (this.busy || this.yielding || this.movement.inFlight)
       throw Error(
         "Client busy; this tool was not submitted. Try the exact request again after the current action settles.",
       );
@@ -536,7 +503,7 @@ class PixelNethack extends HTMLElement {
       try {
         const params = request.params as Record<string, unknown>;
         let save = this.saves.find((s) => s.id === params.sessionId);
-        await this.connectRuntime(typeof params.sessionId === "string" ? params.sessionId : undefined);
+        await this.connectRuntime(typeof params.sessionId === "string" ? params.sessionId : undefined, request.method === 'session.create');
         save = this.saves.find((s) => s.id === params.sessionId);
         if ("requestId" in params && save?.pending) {
           // Object property order is immaterial; retain every argument and value.
@@ -570,6 +537,7 @@ class PixelNethack extends HTMLElement {
             save = {
               id: response.sessionId,
               buildId: this.runtimeBuildId,
+              localStore: this.storeName,
               ...(this.inputRecording?{recording:'inputs' as const}:{}),
               name:
                 typeof params.name === "string" ? params.name : "Adventurer",
@@ -634,7 +602,7 @@ class PixelNethack extends HTMLElement {
               );
               this.current = save;
             }
-            this.persist();
+            this.persist(save);
           }
         }
       } catch (error) {
@@ -659,11 +627,12 @@ class PixelNethack extends HTMLElement {
     if (!this.isConnected || this.preloadAbort.signal.aborted)
       throw Error("Game interface closed before opening storage.");
   }
-  private async connectRuntime(sessionId?: string) {
+  private async connectRuntime(sessionId?: string, newRun = false) {
     this.assertConnected();
+    if (this.api && !newRun && (!sessionId || sessionId === this.game?.id)) return;
     this.vault = playerId();
-    this.storeName = `${STORE}-${this.vault}`;
-    this.indexKey = `${this.storeName}:adventures`;
+    this.indexKey = `${STORE}-${this.vault}:adventures`;
+    this.readSaves();
     rememberPlayer(this.vault);
     const preferLocal = !!requestedRun()?.local;
     let buildId: string | undefined, remoteBranch: string | undefined;
@@ -678,108 +647,156 @@ class PixelNethack extends HTMLElement {
     }
     const selected = await runtimePackage(buildId, this.preloadAbort.signal);
     const inputRecording=!sessionId||this.saves.find(save=>save.id===sessionId)?.recording==='inputs';
-    if (this.api && this.runtimeBuildId === selected.buildId && this.inputRecording===inputRecording) return;
-    if (this.api) { const previous = this.api; this.api = null; await previous.close(); }
-    // Speculative downloads must never gate opening the actual runtime.
-    void this.warm(selected.buildId);
-    this.assertConnected();
-    ++this.cloudStatusGeneration;
-    this.cloudEnabled = true;
-    this.text("#cloud-status", "Saved here · syncing in the background");
-    const sourceBranch=remoteBranch ?? this.saves.find(save=>save.id===sessionId)?.branch ?? this.saves.find(save=>save.branch)?.branch;
-    const sourceUrl=new URL(journalUrl(this.vault));if(sourceBranch)sourceUrl.searchParams.set('branch',sourceBranch);
-    const replica = sourceUrl.href;
-    if (requestedRun() && !replica && !this.saves.some(save => save.id === requestedRun()!.id)) throw Error("The cloud save could not be reached. Retry this bookmark when connected; no new game was started.");
-    this.inputRecording=inputRecording;
-    const transportPackage = buildId ? await runtimePackage(undefined, this.preloadAbort.signal) : selected;
-    const wasm = await this.runtime.wasm.createWasm({
-      runtimeUrl: new URL(selected.base, location.href).href,
-      storage: this.inputRecording?{kind:'journal',name:this.storeName,uploadUrl:new URL('/api/runs/',location.href).href,uploadToken:this.vault,archiveConfigUrl:new URL('/replay-config.json',location.href).href}:replica
-        ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica, replicaBranches: true, replicaRestore: !!sessionId && !preferLocal, replicaSession: sessionId }
-        : { kind: "indexeddb", name: this.storeName },
-      workerUrl: new URL(`${transportPackage.base}core-worker.mjs`, location.href),
-      onTiming: ({stage,duration}) => reportTiming(stage,duration,'slow',this.runtimeBuildId),
-      onStartup: stage => { this.entryStage=stage;this.text('#loading-detail',({ownership:'Opening your local save…',assets:'Downloading the game…',compile:'Preparing the game…',local:'Reading your local adventure…',cloud:'Downloading your saved adventure…',engine:'Starting the dungeon…',ready:'Entering your adventure…'})[stage]); },
-      onReplicaStatus: async ({ state, message, branch, sessions }) => {
-        if (!this.isConnected) return;
-        if (state === "error" && message.includes("conflicts with remote progress")) {
-          reportError(Error(message),this.runtimeBuildId);
-        }
-        const generation = ++this.cloudStatusGeneration;
-        if (state === "saved") {
-          if(branch){for(const save of this.saves)if(save.id===this.game?.id && sessions?.includes(save.id))save.branch=branch;localStorage.setItem(this.indexKey,JSON.stringify(this.saves));}
-          this.text("#cloud-status","Saved here · online save pending");
-          queueCloud(this.saves, this.vault,()=>{if(this.isConnected && generation===this.cloudStatusGeneration)this.text("#cloud-status","Saved online");});
-          return;
-        }
-        if (generation !== this.cloudStatusGeneration) return;
-        this.text("#cloud-status", state === "pending" ? "Saving online…" : state === "queued" ? "Saved here" : state === "retrying" ? "Saved here · retrying online" : "Saved here · cloud sync paused");
-        this.$("#cloud-status").title = state === "error" ? message : "";
-      },
-    });
-    this.inputTransport=this.inputRecording?wasm.transport as import('neonethack/wasm').WasmTransport:undefined;
-    // Opening may finish after this element has been removed. Never adopt that
-    // late worker/store owner, even if the same element was reattached meanwhile.
-    try { this.assertConnected(); }
-    catch (error) { await wasm.close(); throw error; }
-    // A title tab may have waited while another tab updated adventure metadata.
-    // Refresh only after acquiring ownership, before any request can persist it.
+    const saved = this.saves.find(save => save.id === sessionId);
+    const storeName = sessionId
+      ? saved?.localStore ?? (inputRecording ? 'neohack-run-' + sessionId : STORE + '-' + this.vault)
+      : this.api && !newRun ? this.storeName : 'neohack-run-' + crypto.randomUUID();
+    if (this.api && this.runtimeBuildId === selected.buildId && this.inputRecording===inputRecording && this.storeName===storeName) return;
+    await this.closeRuntime();
+    this.game = null; this.current = null;
+    this.storeName = storeName;
+    this.text('#loading-detail', 'Opening your adventure in this tab…');
+    this.tabLease = await claimTabStore(storeName, this.preloadAbort.signal, () => this.yieldRun());
     try {
-      this.readSaves();
-      if (sessionId && !this.saves.length && this.cloudEnabled) {
-        const remote = await restoreAdventures(this.vault);
-        if (remote?.length) this.saves = remote;
+      this.assertConnected();
+      // Speculative downloads must never gate opening the actual runtime.
+      void this.warm(selected.buildId);
+      this.assertConnected();
+      ++this.cloudStatusGeneration;
+      this.cloudEnabled = true;
+      this.text("#cloud-status", "Saved here · syncing in the background");
+      const sourceBranch=remoteBranch ?? this.saves.find(save=>save.id===sessionId)?.branch ?? this.saves.find(save=>save.branch)?.branch;
+      const sourceUrl=new URL(journalUrl(this.vault));if(sourceBranch)sourceUrl.searchParams.set('branch',sourceBranch);
+      const replica = sourceUrl.href;
+      if (requestedRun() && !replica && !this.saves.some(save => save.id === requestedRun()!.id)) throw Error("The cloud save could not be reached. Retry this bookmark when connected; no new game was started.");
+      this.inputRecording=inputRecording;
+      const transportPackage = buildId ? await runtimePackage(undefined, this.preloadAbort.signal) : selected;
+      const wasm = await this.runtime.wasm.createWasm({
+        runtimeUrl: new URL(selected.base, location.href).href,
+        storage: this.inputRecording?{kind:'journal',name:this.storeName,uploadUrl:new URL('/api/runs/',location.href).href,uploadToken:this.vault,archiveConfigUrl:new URL('/replay-config.json',location.href).href}:replica
+          ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica, replicaBranches: true, replicaRestore: !!sessionId && !preferLocal, replicaSession: sessionId }
+          : { kind: "indexeddb", name: this.storeName },
+        workerUrl: new URL(`${transportPackage.base}core-worker.mjs`, location.href),
+        onTiming: ({stage,duration}) => reportTiming(stage,duration,'slow',this.runtimeBuildId),
+        onStartup: stage => { this.entryStage=stage;this.text('#loading-detail',({ownership:'Opening your local save…',assets:'Downloading the game…',compile:'Preparing the game…',local:'Reading your local adventure…',cloud:'Downloading your saved adventure…',engine:'Starting the dungeon…',ready:'Entering your adventure…'})[stage]); },
+        onReplicaStatus: async ({ state, message, branch, sessions }) => {
+          if (!this.isConnected) return;
+          if (state === "error" && message.includes("conflicts with remote progress")) {
+            reportError(Error(message),this.runtimeBuildId);
+          }
+          const generation = ++this.cloudStatusGeneration;
+          if (state === "saved") {
+            if(branch && this.current && sessions?.includes(this.current.id)){this.current.branch=branch;this.persist();}
+            this.text("#cloud-status","Saved here · online save pending");
+            queueCloud(this.current ? [this.current] : [], this.vault,()=>{if(this.isConnected && generation===this.cloudStatusGeneration)this.text("#cloud-status","Saved online");});
+            return;
+          }
+          if (generation !== this.cloudStatusGeneration) return;
+          this.text("#cloud-status", state === "pending" ? "Saving online…" : state === "queued" ? "Saved here" : state === "retrying" ? "Saved here · retrying online" : "Saved here · cloud sync paused");
+          this.$("#cloud-status").title = state === "error" ? message : "";
+        },
+      });
+      this.inputTransport=this.inputRecording?wasm.transport as import('neonethack/wasm').WasmTransport:undefined;
+      // Opening may finish after this element has been removed. Never adopt that
+      // late worker/store owner, even if the same element was reattached meanwhile.
+      try { this.assertConnected(); }
+      catch (error) { await wasm.close(); throw error; }
+      // A title tab may have waited while another tab updated adventure metadata.
+      // Refresh only after acquiring ownership, before any request can persist it.
+      try {
+        const imported = this.saves.find(save => save.id === sessionId);
+        this.readSaves();
+        if (imported && !this.saves.some(save => save.id === sessionId)) this.saves.unshift(imported);
+        const active = this.saves.find(save => save.id === sessionId);
+        if (active) active.localStore = storeName;
+        if (sessionId && !this.saves.length && this.cloudEnabled) {
+          const remote = await restoreAdventures(this.vault);
+          if (remote?.length) this.saves = remote;
+        }
+      } catch (error) {
+        this.metadataHealthy = false;
+        await wasm.close();
+        throw error;
+      }
+      const api = new this.runtime.client.Neonethack({
+        send: async (request) => {
+          // Keep the exact outgoing request in display metadata before forwarding.
+          // The engine's IndexedDB journal remains the authoritative receipt store.
+          // This permits a deliberate same-ID check after abrupt page loss.
+          const params = request.params;
+          const record =
+            "requestId" in params
+              ? this.saves.find((s) => s.id === params.sessionId)
+              : undefined;
+          if (record) {
+            record.pending = structuredClone(request);
+            this.persist(record);
+          }
+          const response = await wasm.transport.send(request);
+          const unresolved =
+            (this.runtime.client.isSnapshot(response) &&
+              response.outcome.status === "unknown") ||
+            ("error" in response && response.error?.code === "incompleteRequest");
+          if (record && !unresolved) {
+            record.pending = undefined;
+            try {
+              this.persist(record);
+            } catch (error) {
+              record.pending = structuredClone(request);
+              throw error;
+            }
+          }
+          return response;
+        },
+        close: () => wasm.close(),
+      });
+      try {
+        const description = await api.describe();
+        this.assertConnected();
+        if (
+          description.capabilities.persistence !== "indexeddb" ||
+          description.capabilities.durability !== "indexeddb-transaction"
+        ) throw Error("Durable browser saves are unavailable. No adventure was started.");
+        this.api = api;
+        this.runtimeBuildId = selected.buildId;
+        this.transferredRun = undefined;
+      } catch (error) {
+        await api.close();
+        throw error;
       }
     } catch (error) {
-      this.metadataHealthy = false;
-      await wasm.close();
+      await this.closeRuntime();
       throw error;
     }
-    const api = new this.runtime.client.Neonethack({
-      send: async (request) => {
-        // Keep the exact outgoing request in display metadata before forwarding.
-        // The engine's IndexedDB journal remains the authoritative receipt store.
-        // This permits a deliberate same-ID check after abrupt page loss.
-        const params = request.params;
-        const record =
-          "requestId" in params
-            ? this.saves.find((s) => s.id === params.sessionId)
-            : undefined;
-        if (record) {
-          record.pending = structuredClone(request);
-          this.persist();
-        }
-        const response = await wasm.transport.send(request);
-        const unresolved =
-          (this.runtime.client.isSnapshot(response) &&
-            response.outcome.status === "unknown") ||
-          ("error" in response && response.error?.code === "incompleteRequest");
-        if (record && !unresolved) {
-          record.pending = undefined;
-          try {
-            this.persist();
-          } catch (error) {
-            record.pending = structuredClone(request);
-            throw error;
-          }
-        }
-        return response;
-      },
-      close: () => wasm.close(),
-    });
+  }
+  private async closeRuntime() {
+    const api = this.api, lease = this.tabLease;
+    this.api = null; this.tabLease = undefined;
+    this.publicRecorder?.close(); this.publicRecorder = undefined; this.publicSession = '';
+    this.inputTransport = undefined;
+    try { await api?.close(); }
+    finally { lease?.release(); }
+  }
+  private async yieldRun() {
+    this.yielding = true;
+    this.stopMovement();
+    // Let the accepted input and its exact receipt finish before retiring C.
+    await this.settled;
+    const save = this.current;
     try {
-      const description = await api.describe();
-      this.assertConnected();
-      if (
-        description.capabilities.persistence !== "indexeddb" ||
-        description.capabilities.durability !== "indexeddb-transaction"
-      ) throw Error("Durable browser saves are unavailable. No adventure was started.");
-      this.api = api;
-      this.runtimeBuildId = selected.buildId;
-    } catch (error) {
-      await api.close();
-      throw error;
-    }
+      await this.closeRuntime();
+      this.transferredRun = save?.id;
+      this.game = null; this.current = null;
+      if (!this.isConnected) return;
+      for (const dialog of this.querySelectorAll<HTMLDialogElement>('dialog[open]')) dialog.close();
+      this.closePanel(); this.render();
+      if (save) {
+        this.openMenu('<h2 id="menu-title">Playing in another tab</h2><p>This adventure moved to the tab you just opened. Your progress is saved.</p><div class="dialog-actions" id="tab-actions"></div>');
+        this.$('#tab-actions').append(
+          this.button('Play here', () => this.resume(save), 'primary'),
+          this.button('Start a new adventure', () => this.newAdventure()));
+      }
+    } finally { this.yielding = false; }
   }
   disconnectedCallback() {
     this.navigationAbort?.abort();
@@ -794,14 +811,13 @@ class PixelNethack extends HTMLElement {
     window.removeEventListener("blur", this.stopMovement);
     window.removeEventListener("account-dialog-open", this.stopMovement);
     window.removeEventListener("accountchange", this.accountChanged);
+    window.removeEventListener("storage", this.storageChanged);
     document.removeEventListener("visibilitychange", this.visibilityChanged);
     window.removeEventListener('online',this.onlineRecording);
     document.removeEventListener("focusin", this.focusChanged);
     this.stopMovement();
     this.map.destroy();
-    const api = this.api;
-    this.api = null;
-    void api?.close();
+    void this.settled.finally(() => this.closeRuntime());
   }
   private $(selector: string) {
     return this.querySelector<HTMLElement>(selector)!;
@@ -816,7 +832,7 @@ class PixelNethack extends HTMLElement {
     reportError(error, this.runtimeBuildId);
     const message = error instanceof Error ? error.message : String(error);
     this.text("#error", message.includes("Another worker or tab owns this WASM store")
-      ? "This game is open in another tab. Close that tab, or choose Save & return to doorway there, then try again here. Your save has not been changed."
+      ? "An older game tab is still holding this save. Reload that tab once to enable automatic handoff. New adventures can already run independently."
       : message);
     this.show("#error", true);
   }
@@ -1060,6 +1076,7 @@ class PixelNethack extends HTMLElement {
     return (
       !!this.game &&
       !this.busy &&
+      !this.yielding &&
       !this.game.decision &&
       !this.game.state.ended &&
       !this.uncertain() &&
@@ -1072,7 +1089,13 @@ class PixelNethack extends HTMLElement {
     );
   }
   private entryStage = "preparation";
-  private async run(action: () => Promise<unknown>, entry?: { name: string; role: string; resume?: boolean; sessionId?:string }) {
+  private run(action: () => Promise<unknown>, entry?: { name: string; role: string; resume?: boolean; sessionId?:string }) {
+    if (this.busy || this.yielding) return Promise.resolve();
+    const result = this.performRun(action,entry);
+    this.settled = result.catch(() => {});
+    return result;
+  }
+  private async performRun(action: () => Promise<unknown>, entry?: { name: string; role: string; resume?: boolean; sessionId?:string }) {
     if (this.busy) return;
     const started=performance.now();
     this.entryStage='preparation';
@@ -1103,7 +1126,7 @@ class PixelNethack extends HTMLElement {
       await action();
       completed = true;
     } catch (e) {
-      if(entry) { reportError(e,this.runtimeBuildId,{kind:entry.resume?"resume":"create",local:!!requestedRun()?.local}); this.entryRecovery(entry.sessionId); }
+      if(entry) { reportError(e,this.runtimeBuildId,{kind:entry.resume?"resume":"create",local:!!requestedRun()?.local}); this.entryRecovery(entry.sessionId,e); }
       this.error(e);
     } finally {
       clearTimeout(slow);
@@ -1111,10 +1134,8 @@ class PixelNethack extends HTMLElement {
       // A discovery call, rejected start or agent session.close can finish on
       // the title screen. Retire its transport too, so no invisible worker
       // keeps the whole origin's save store locked while this client is idle.
-      if (!this.game && this.api) {
-        const api = this.api;
-        this.api = null;
-        try { await api.close(); }
+      if (!this.game) {
+        try { await this.closeRuntime(); }
         catch (error) { this.error(error); }
       }
       if (this.game && this.current) {
@@ -1189,14 +1210,14 @@ class PixelNethack extends HTMLElement {
     save.control = control;
     save.automated = control !== "manual";
   }
-  private persist() {
+  private persist(save = this.current) {
     if (!this.metadataHealthy)
       throw Error(
         "Adventure metadata is unavailable; the stored list has not been overwritten.",
       );
-    localStorage.setItem(this.indexKey, JSON.stringify(this.saves));
-    if (this.cloudEnabled) {
-      queueCloud(this.saves,this.vault);
+    if (save) writeAdventure(this.indexKey, save);
+    if (this.cloudEnabled && save) {
+      queueCloud([save],this.vault);
     }
 
   }
@@ -1932,7 +1953,7 @@ class PixelNethack extends HTMLElement {
         this.game = null;
         this.current = null;
         await this.preparation;
-        await this.connectRuntime();
+        await this.connectRuntime(undefined, true);
         const automaticPickup = pickup.value();
         this.game = await this.api!.create({ ...role.identity, name, seed, automaticPickup });
         if (!rememberPickup(automaticPickup)) this.pickupMemoryNotice();
@@ -1940,6 +1961,7 @@ class PixelNethack extends HTMLElement {
         this.current = {
           id: this.game.id,
           buildId: this.runtimeBuildId,
+          localStore: this.storeName,
           ...(this.inputRecording?{recording:'inputs' as const}:{}),
           vaultId: this.vault,
           name,
@@ -1967,7 +1989,14 @@ class PixelNethack extends HTMLElement {
     const url=new URL(location.href);url.hash=new URLSearchParams({run:id,vault:this.vault,local:"1"}).toString();
     location.replace(url.href);location.reload();
   }
-  private entryRecovery(id?:string) {
+  private entryRecovery(id?:string,error?:unknown) {
+    if (id && /other tab|worker or tab owns/.test(String(error))) {
+      this.openMenu('<h2 id="menu-title">Waiting for the other tab</h2><p>That tab has not released this adventure yet. You can try again or play a different adventure here.</p><div class="dialog-actions" id="tab-actions"></div>');
+      const save = this.saves.find(save => save.id === id);
+      if (save) this.$('#tab-actions').append(this.button('Play here',()=>this.resume(save),'primary'));
+      this.$('#tab-actions').append(this.button('Start a new adventure',()=>this.newAdventure()));
+      return;
+    }
     if(!id || requestedRun()?.local)return;
     this.openMenu('<h2 id="menu-title">Return to your local adventure</h2><p>Online recovery could not open this run. Try the copy stored in this browser, with automatic background backup. Its original engine and save checks still apply.</p><p>Your cloud copy and pending upload will be kept.</p><div id="entry-recovery"></div>');
     this.$("#entry-recovery").append(this.button("Open local copy",()=>this.openLocalCopy(id),"primary"));
@@ -1995,8 +2024,7 @@ class PixelNethack extends HTMLElement {
     await this.game?.close();
     this.game = null;
     this.current = null;
-    await this.api?.close();
-    this.api = null;
+    await this.closeRuntime();
     clearRunUrl();
   }
   private adventures() {

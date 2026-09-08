@@ -462,8 +462,7 @@ test("held walking stops after a committed move whose response is lost", async (
   );
   const pending = await page.evaluate(
     () =>
-      JSON.parse(localStorage.getItem(document.querySelector("pixel-nethack").indexKey))[0]
-        .pending,
+      JSON.parse(localStorage.getItem(document.querySelector("pixel-nethack").indexKey + ":" + document.querySelector("pixel-nethack").current.id)).pending,
   );
   assert.equal(pending.method, "game.move");
   await page.keyboard.up(run.key);
@@ -857,7 +856,7 @@ test(
       prayer.observation.turn,
     );
     assert.equal((await snapshot(page)).decision, null);
-    // The same origin/store cannot quietly open a second game owner.
+    // The same run transfers to the requested tab without competing writers.
     const competitor = await context.newPage();
     await competitor.goto(url);
     await competitor.waitForFunction(
@@ -871,16 +870,12 @@ test(
     await competitor
       .getByRole("button", { name: /^Continue previous run/ })
       .click();
-    await competitor.locator("#error").waitFor({ state: "visible" });
-    assert.match(
-      await competitor.locator("#error").textContent(),
-      /open in another tab/i,
-    );
-    assert.equal(
-      await snapshot(competitor),
-      null,
-      "a competing engine cannot open the save",
-    );
+    await competitor.waitForFunction(() => document.querySelector('pixel-nethack').snapshot?.observation);
+    assert.equal((await snapshot(competitor)).sessionId, first.sessionId);
+    assert.equal(await competitor.locator('#error').isVisible(), false);
+    await page.getByRole('button', {name:'Play here',exact:true}).click();
+    await page.waitForFunction(() => document.querySelector('pixel-nethack').snapshot?.observation);
+    await ready(page);
     await competitor.close();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({
@@ -985,8 +980,8 @@ test(
     const pending = await page.evaluate(
       () =>
         JSON.parse(
-          localStorage.getItem(document.querySelector("pixel-nethack").indexKey),
-        )[0].pending,
+          localStorage.getItem(document.querySelector("pixel-nethack").indexKey + ":" + document.querySelector("pixel-nethack").current.id),
+        ).pending,
     );
     assert.equal(pending.method, "game.wait");
     assert.equal(pending.params.sessionId, first.sessionId);
@@ -1797,7 +1792,7 @@ test(
     await page.close();
     await create(waiting, "wizard", 21);
     const saves = await waiting.evaluate(() =>
-      JSON.parse(localStorage.getItem(document.querySelector("pixel-nethack").indexKey)),
+      document.querySelector("pixel-nethack").saves.map(save => JSON.parse(localStorage.getItem(document.querySelector("pixel-nethack").indexKey + ":" + save.id))),
     );
     assert.equal(saves.length, 2);
     assert.ok(saves.some((save) => save.id === first));
@@ -2445,9 +2440,9 @@ test("dungeon loading scene covers creation and previous-run resume without extr
   const delayEntry = () => page.evaluate(() => {
     const app = document.querySelector("pixel-nethack");
     const connect = app.connectRuntime.bind(app);
-    app.connectRuntime = async () => {
+    app.connectRuntime = async (...args) => {
       await new Promise(resolve => { globalThis.releaseEntry = resolve; });
-      return connect();
+      return connect(...args);
     };
   });
   await delayEntry();
@@ -3583,4 +3578,117 @@ test('double-clicking a known square starts one bounded walking leg',async t=>{
   assert.ok((await snapshot(page)).revision>target.revision);
   assert.equal(await page.evaluate(()=>document.querySelector('pixel-nethack').walkCalls),1);
   assert.deepEqual(errors,[]);
+});
+
+test('different tabs play independent runs offline and retain both metadata records', {timeout:60000}, async t => {
+  const {page,context,url,errors} = await fixture(t);
+  await create(page,'valkyrie',9);
+  const first = await snapshot(page), bookmark = page.url();
+  const peer = await context.newPage(); await peer.goto(url);
+  await create(peer,'wizard',21);
+  const second = await snapshot(peer), peerBookmark = peer.url();
+  assert.notEqual(first.sessionId,second.sessionId);
+  assert.notEqual(await page.evaluate(()=>document.querySelector('pixel-nethack').storeName),await peer.evaluate(()=>document.querySelector('pixel-nethack').storeName));
+  await context.setOffline(true);
+  await Promise.all([page,peer].map(tab => tab.evaluate(async()=>{
+    const app=document.querySelector('pixel-nethack');
+    for(let i=0;i<3;i++)await app.run(()=>app.game.wait());
+  })));
+  const advanced = await Promise.all([snapshot(page),snapshot(peer)]);
+  assert.equal(advanced[0].observation.turn,first.observation.turn+3);
+  assert.equal(advanced[1].observation.turn,second.observation.turn+3);
+  for(const tab of [page,peer]){
+    const entries=await tab.evaluate(()=>{
+      const app=document.querySelector('pixel-nethack');
+      return app.saves.map(s=>JSON.parse(localStorage.getItem(app.indexKey+':'+s.id)));
+    });
+    assert.equal(entries.length,2);
+    for(const state of advanced)assert.equal(entries.find(s=>s.id===state.sessionId).turn,state.observation.turn);
+    assert.equal(await tab.locator('#error').isVisible(),false);
+  }
+  // Bun has no service worker: reconnect for the document fetch, keep every API
+  // unavailable so each run must be resumed entirely from its own local journal.
+  await context.setOffline(false); await context.route('**/api/**',route=>route.abort());
+  await Promise.all([page.goto(bookmark),peer.goto(peerBookmark)]);
+  for(const [i,tab] of [page,peer].entries()){
+    await tab.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation);await ready(tab);
+    assert.deepEqual((await snapshot(tab)).observation,advanced[i].observation);
+    assert.equal((await snapshot(tab)).sessionId,advanced[i].sessionId);
+  }
+  assert.deepEqual(errors,[]);
+});
+
+test('a bookmarked run hands off its standing decision and can be claimed back', {timeout:60000}, async t => {
+  const {page,context,errors} = await fixture(t);
+  await create(page);
+  await page.evaluate(async()=>{const app=document.querySelector('pixel-nethack');await app.run(()=>app.game.pray());});
+  const standing=await snapshot(page), bookmark=page.url();
+  assert.equal(standing.decision.kind,'confirmation');
+  const peer=await context.newPage(); await peer.goto(bookmark);
+  await peer.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.decision);
+  await page.getByRole('button',{name:'Play here',exact:true}).waitFor();
+  assert.equal(await snapshot(page),null);
+  assert.deepEqual((await snapshot(peer)).observation,standing.observation);
+  assert.deepEqual((await snapshot(peer)).decision,standing.decision);
+  assert.equal(await peer.locator('#error').isVisible(),false);
+  await peer.evaluate(async()=>{const app=document.querySelector('pixel-nethack');await app.run(()=>app.game.cancel(app.game.decision.id));});
+  const cancelled=await snapshot(peer);
+  await page.getByRole('button',{name:'Play here',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation);await ready(page);
+  assert.equal(await snapshot(peer),null);
+  assert.deepEqual((await snapshot(page)).observation,cancelled.observation);
+  assert.equal((await snapshot(page)).decision,null);
+  assert.equal((await snapshot(page)).revision,cancelled.revision);
+  await page.screenshot({path:`${root}/test-results/tab-handoff-active.png`});
+  await peer.setViewportSize({width:390,height:844});
+  await peer.screenshot({path:`${root}/test-results/tab-handoff-mobile.png`});
+  assert.deepEqual(errors,[]);
+});
+
+test('tab handoff waits for an accepted input receipt and never repeats the action', {timeout:60000}, async t => {
+  const {page,context,errors}=await fixture(t);
+  await create(page,'valkyrie',9);const before=await snapshot(page),bookmark=page.url();
+  await page.evaluate(()=>{
+    const app=document.querySelector('pixel-nethack'),send=app.api.transport.send.bind(app.api.transport);
+    app.api.transport.send=async request=>{
+      const response=await send(request);
+      if(request.method==='game.wait'){
+        globalThis.acceptedTurn=response.observation.turn;
+        await new Promise(resolve=>{globalThis.releaseReceipt=resolve;});
+      }
+      return response;
+    };
+    void app.run(()=>app.game.wait());
+  });
+  await page.waitForFunction(()=>typeof globalThis.releaseReceipt==='function');
+  const peer=await context.newPage();await peer.goto(bookmark);
+  await page.waitForFunction(()=>document.querySelector('pixel-nethack').yielding);
+  assert.equal(await snapshot(peer),null,'second engine cannot enter during an unfinished input');
+  await page.evaluate(()=>globalThis.releaseReceipt());
+  await peer.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation);await ready(peer);
+  const after=await snapshot(peer);
+  assert.equal(after.observation.turn,before.observation.turn+1);
+  assert.equal(after.revision,before.revision+1);
+  const journal=await peer.evaluate(()=>{const app=document.querySelector('pixel-nethack');return app.inputTransport.recordingInfo(app.game.id);});
+  assert.equal(journal.count,2,'creation and exactly one accepted wait');
+  assert.equal(await snapshot(page),null);
+  assert.deepEqual(errors,[]);
+});
+
+test('WebMCP in a transferred tab requires explicit resume before acting again',{timeout:60000},async t=>{
+  const {page,context,errors}=await fixture(t,{webmcp:true});const {call}=await nativeWebMcp(page,t);
+  const created=await call('session.create',{name:'Tab agent',role:'valkyrie',seed:9});
+  assert.equal(created.isError,false);const sid=created.structuredContent.sessionId;
+  const peer=await context.newPage();await peer.goto(page.url());
+  await peer.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId);
+  await page.getByRole('button',{name:'Play here',exact:true}).waitFor();
+  const before=await snapshot(peer);
+  const refused=await call('game.wait',{sessionId:sid});
+  assert.equal(refused.isError,true);assert.match(JSON.stringify(refused),/moved to another tab/);
+  assert.deepEqual(await snapshot(peer),before);
+  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+  const resumed=await call('session.resume',{sessionId:sid});assert.equal(resumed.isError,false);
+  const waited=await call('game.wait',{sessionId:sid});assert.equal(waited.isError,false);
+  assert.equal((await snapshot(page)).revision,before.revision+1,"the resumed agent submits exactly one new attempt");
+  assert.equal(await snapshot(peer),null);assert.deepEqual(errors,[]);
 });

@@ -420,9 +420,9 @@ starts. New games select `/runtime/wasm/current.json`; resume selects the record
 `/runtime/wasm/<buildId>/` package. Hosted verified packages are retained across
 deployments. Incompatible local development fixtures are disposable, but no
 published run is silently upgraded or migrated. Idle title tabs do not compete
-for save ownership. Active engines still require the exclusive store lock, and a tab
-refreshes adventure metadata after acquiring it so waiting title tabs cannot overwrite
-another tab's saved progress. Failed speculative downloads are retried by the verified
+for save ownership. New adventures have separate local stores; active engines
+retain exclusive ownership of their own store. Run metadata uses separate keys,
+so tabs cannot overwrite another adventure's progress. Failed speculative downloads are retried by the verified
 runtime loader on entry; they must not freeze the courtyard.
 
 ## Browser agent access
@@ -579,9 +579,20 @@ run moves to the front of the existing save list.
 
 Idle title screens release the WASM transport after WebMCP discovery, failed
 starts and agent session close. Closing preserves pending decisions for resume.
-A second active tab stays excluded and explains how to release the first tab
-without deleting browser data; the client never steals its lock or retries game
-input automatically.
+New adventures get independent stores and can be played concurrently in different
+tabs, including offline. The shared adventure list has one metadata key per run;
+each tab writes and publishes only the run it owns. Existing published saves keep
+their original stores and runtime pins.
+
+Opening the same bookmark requests a cooperative handoff through BroadcastChannel
+and a Web Lock. The old tab stops held movement/navigation, finishes its accepted
+input and receipt, then closes its engine before releasing ownership. It offers
+Play here or Start a new adventure. Focus changes never take ownership back.
+The new tab restores the actual journal and standing decision; it never forks the
+run or repeats an uncertain input. An agent in the old tab must explicitly resume
+before acting again. The worker's exclusive store lock remains the final guard.
+If an old or suspended page cannot cooperate, entry times out without changing
+its save; a different new adventure still has an independent store.
 
 ### Map mode and focus feedback
 

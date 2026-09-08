@@ -118,11 +118,13 @@ keyboard focus, modal dialogs, reduced-motion support and narrow-screen layouts.
 
 ## Saves and uncertainty
 
-Browser IndexedDB uses the explicit store `neonethack-pixel-v2-${vault}`. It requires
-Web Locks and a secure context (localhost or HTTPS), with one owner per origin
-and store. Saves are committed by the library before input is acknowledged.
-There is no memory fallback. The adventure index (names, IDs, role, seed, last turn and
-any unresolved request) is localStorage metadata; it is not a replacement journal.
+Each new adventure gets a separate `neohack-run-*` IndexedDB store, recorded in
+its local metadata. Web Locks and a secure context (localhost or HTTPS) ensure one
+writer per store while different tabs can play different adventures. Published
+saves retain their original stores and runtime pins. Saves are committed by the
+library before input is acknowledged. There is no memory fallback. Adventure
+metadata (names, IDs, role, seed, last turn and any unresolved request) uses one
+localStorage key per run, preventing competing whole-list writes; it is not a replacement journal.
 The exact outgoing request is recorded in that metadata before it is forwarded;
 failure to record it prevents input. Malformed metadata is reported, not silently
 reset. The UI offers an explicit
@@ -148,7 +150,7 @@ bun run --cwd web/neohack.dev test
 Uses actual engine worlds in sandboxed Chromium (`CHROMIUM` can override its path),
 fresh browser stores, all thirteen starting paths, no-turn inspection, held movement,
 bounded tap buffering, release/blur/wall stops, one-shot actions, item cancellation,
-a warning across abrupt reload, ownership exclusion,
+a warning across abrupt reload, independent tabs and cooperative ownership handoff,
 static-server boundaries and desktop/mobile screenshots. Generated screenshots
 live in ignored `test-results/`. No saved user games are test fixtures.
 
@@ -195,8 +197,10 @@ receipt semantics, package pins and native browser verification.
 The title courtyard loads its art independently, imports the public libraries in
 background, and warms the current engine package in the browser
 cache. It does not open IndexedDB or create an engine until starting/resuming or an
-explicit WebMCP call. Returning to the doorway releases ownership. Two active game
-tabs still cannot write the same store; close the other game tab before resuming.
+explicit WebMCP call. Returning to the doorway releases ownership. Opening a run
+already active in another updated tab transfers it after that tab's accepted input
+finishes. The previous tab offers Play here or a new adventure. Neither focus
+changes nor subsequent agent actions silently claim it back.
 
 New engine packages expose apparent creature names from their displayed glyphs.
 Recognizable creatures need no attack or identify action to lose the question mark.
