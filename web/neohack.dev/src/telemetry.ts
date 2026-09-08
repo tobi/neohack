@@ -20,3 +20,10 @@ export function reportError(error: unknown, buildId = "", entry?: {kind:"create"
 }
 window.addEventListener("error", event => reportError(event.error ?? event.message));
 window.addEventListener("unhandledrejection", event => reportError(event.reason));
+
+const timingCounts=new Map<string,number>();
+/** Bounded categorical timings only; no save identity, locations, or game text. */
+export function reportTiming(stage:string,duration:number,outcome:'slow'|'complete'|'failed',buildId=''){
+ const key=stage+outcome,count=timingCounts.get(key)??0;if(count>=5)return;timingCounts.set(key,count+1);
+ void fetch('/api/errors',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:'runtime_timing',buildId,timing:{stage,duration:Math.min(600000,Math.round(duration)),outcome}}),keepalive:true}).catch(()=>{});
+}

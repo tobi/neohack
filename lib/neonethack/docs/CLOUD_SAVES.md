@@ -51,6 +51,8 @@ retry or stale base, and checks that every referenced block is present. An
 acknowledgement lost during page shutdown is reconciled from the durable outbox;
 no game action is executed to recover a transport acknowledgement.
 
+The storage layer can adopt a cloud seed when its local journal still matches its last acknowledged copy. The website only requests that seed when the requested session is absent locally; new games and existing local sessions never wait for cloud restoration. Local entry retains the device’s exact branch, including pending decisions.
+
 A browser whose local journal still matches its last acknowledged copy can
 refresh from a newer cloud revision after validation. Unsynced or conflicting
 local progress is retained instead of overwritten. The website gives each browser

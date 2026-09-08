@@ -91,6 +91,7 @@ export function sanitizeRun(
 const json = (value: unknown, status = 200) =>
   Response.json(value, { status, headers: { "cache-control": "no-store" } });
 const codes = new Set([
+  "runtime_timing",
   "store_owned",
   "cloud_conflict",
   "runtime_unavailable",
@@ -144,6 +145,12 @@ export async function board(request: Request) {
     )
       return json({ error: "invalid diagnostic" }, 400);
     if (body.entry !== undefined && (!body.entry || !["create","resume","boot"].includes(body.entry.kind) || typeof body.entry.local !== "boolean")) return json({error:"invalid entry diagnostic"},400);
+    if(body.code==='runtime_timing'){
+      const v=body.timing;
+      if(!v||!['preparation','ownership','assets','compile','local','cloud','engine','ready','action','durability'].includes(v.stage)||!['slow','complete','failed'].includes(v.outcome)||!Number.isSafeInteger(v.duration)||v.duration<0||v.duration>600000)return json({error:'invalid timing'},400);
+      console.info(JSON.stringify({event:'runtime_timing',stage:v.stage,duration:v.duration,outcome:v.outcome,buildId:body.buildId||undefined}));
+      return new Response(null,{status:204});
+    }
     console.warn(JSON.stringify({ event: body.entry ? "game_entry_failed" : "client_diagnostic", code: body.code, buildId: body.buildId || undefined, ...(body.entry ? {kind:body.entry.kind,local:body.entry.local} : {}) }));
     return new Response(null, { status: 204 });
   }

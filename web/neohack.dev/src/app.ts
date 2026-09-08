@@ -6,7 +6,7 @@ import { adventurerName } from './adventurer-names';
 import { renderCharacterSheet, equipmentDescription } from './character-sheet';
 import { actionIcon } from "./action-icons";
 import { accountApi, RunRecorder } from './account-client';
-import { reportError } from "./telemetry";
+import { reportError, reportTiming } from "./telemetry";
 // Public package entry points, served together by Bun under /runtime/.
 import type {
   Neonethack,
@@ -655,7 +655,7 @@ class PixelNethack extends HTMLElement {
     let buildId: string | undefined, remoteBranch: string | undefined;
     if (sessionId) {
       let saved = this.saves.find(save => save.id === sessionId);
-      if (!preferLocal) {
+      if (!preferLocal && !saved) {
         const remote = await restoreAdventures(this.vault);
         if (remote) { remoteBranch=remote.find(save=>save.id===sessionId)?.branch;if(!saved){this.saves = remote; saved = this.saves.find(save=>save.id===sessionId);} }
       }
@@ -665,7 +665,8 @@ class PixelNethack extends HTMLElement {
     const selected = await runtimePackage(buildId, this.preloadAbort.signal);
     if (this.api && this.runtimeBuildId === selected.buildId) return;
     if (this.api) { const previous = this.api; this.api = null; await previous.close(); }
-    await this.warm(selected.buildId);
+    // Speculative downloads must never gate opening the actual runtime.
+    void this.warm(selected.buildId);
     this.assertConnected();
     ++this.cloudStatusGeneration;
     this.cloudEnabled = true;
@@ -678,9 +679,11 @@ class PixelNethack extends HTMLElement {
     const wasm = await this.runtime.wasm.createWasm({
       runtimeUrl: new URL(selected.base, location.href).href,
       storage: replica
-        ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica, replicaBranches: true, replicaRestore: !preferLocal }
+        ? { kind: "indexeddb", name: this.storeName, replicaUrl: replica, replicaBranches: true, replicaRestore: !!sessionId && !preferLocal, replicaSession: sessionId }
         : { kind: "indexeddb", name: this.storeName },
       workerUrl: new URL(`${transportPackage.base}core-worker.mjs`, location.href),
+      onTiming: ({stage,duration}) => reportTiming(stage,duration,'slow',this.runtimeBuildId),
+      onStartup: stage => { this.entryStage=stage;this.text('#loading-detail',({ownership:'Opening your local save…',assets:'Downloading the game…',compile:'Preparing the game…',local:'Reading your local adventure…',cloud:'Downloading your saved adventure…',engine:'Starting the dungeon…',ready:'Entering your adventure…'})[stage]); },
       onReplicaStatus: async ({ state, message, branch, sessions }) => {
         if (!this.isConnected) return;
         if (state === "error" && message.includes("conflicts with remote progress")) {
@@ -706,7 +709,7 @@ class PixelNethack extends HTMLElement {
     // Refresh only after acquiring ownership, before any request can persist it.
     try {
       this.readSaves();
-      if (!this.saves.length && this.cloudEnabled) {
+      if (sessionId && !this.saves.length && this.cloudEnabled) {
         const remote = await restoreAdventures(this.vault);
         if (remote?.length) this.saves = remote;
       }
@@ -1043,8 +1046,12 @@ class PixelNethack extends HTMLElement {
       )
     );
   }
+  private entryStage = "preparation";
   private async run(action: () => Promise<unknown>, entry?: { name: string; role: string; resume?: boolean; sessionId?:string }) {
     if (this.busy) return;
+    const started=performance.now();
+    this.entryStage='preparation';
+    const slow=entry?setTimeout(()=>reportTiming(this.entryStage,performance.now()-started,'slow',this.runtimeBuildId),10000):undefined;
     this.closeTile();
     const game = this.game;
     const before = this.uncertain() ? null : game?.state;
@@ -1074,6 +1081,8 @@ class PixelNethack extends HTMLElement {
       if(entry) { reportError(e,this.runtimeBuildId,{kind:entry.resume?"resume":"create",local:!!requestedRun()?.local}); this.entryRecovery(entry.sessionId); }
       this.error(e);
     } finally {
+      clearTimeout(slow);
+      if(entry || performance.now()-started>250)reportTiming(entry?this.entryStage:'action',performance.now()-started,completed?'complete':'failed',this.runtimeBuildId);
       // A discovery call, rejected start or agent session.close can finish on
       // the title screen. Retire its transport too, so no invisible worker
       // keeps the whole origin's save store locked while this client is idle.

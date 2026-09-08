@@ -9,7 +9,7 @@ export async function loadRuntime() {
 }
 export async function runtimePackage(buildId?: string, signal?: AbortSignal) {
   if (!buildId) {
-    const response = await fetch('/runtime/wasm/current.json', {signal, cache:'no-cache'});
+    const response = await fetch('/runtime/wasm/current.json', {signal: signal ? AbortSignal.any([signal,AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000), cache:'no-cache'});
     if (!response.ok) throw Error('Cannot select the current game package.');
     const current = await response.json();
     if (current.version !== 1) throw Error('Invalid current game package metadata.');

@@ -1285,3 +1285,5 @@ It does not bypass damaged journals, missing runtime pins or another tab’s loc
 Every create/resume failure reports a bounded category and entry mode to private
 Vercel logs; repeated attempts are not suppressed. Raw messages and save links
 are never transmitted.
+
+Local entry opens the existing device journal without downloading a cloud copy. New games never restore a vault. A fresh browser with no local run restores the acknowledged cloud branch. Different device branches are not silently substituted during local entry. Startup displays its current stage and reports bounded slow/complete/failure timings to private operational logs. Public replay recording appends individual IndexedDB rows; walking never reads or rewrites its historical frame queue.

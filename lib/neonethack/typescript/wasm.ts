@@ -4,7 +4,7 @@ import { worker, type WorkerPort } from "../wasm/worker-port.mjs";
 
 export type WasmStorage =
   | { kind: "memory" }
-  | { kind: "indexeddb"; name: string; replicaUrl?: string; replicaBranches?: boolean; replicaRestore?: boolean };
+  | { kind: "indexeddb"; name: string; replicaUrl?: string; replicaBranches?: boolean; replicaRestore?: boolean; replicaSession?: string };
 export interface WasmOptions {
   /** Exact pinned compiler/data package; network-worker updates do not change this identity. */
   runtimeUrl?: string;
@@ -13,6 +13,8 @@ export interface WasmOptions {
   /** Relocate the entire dist/wasm directory together, not individual binaries. */
   workerUrl?: URL;
   timeoutMs?: number;
+  onTiming?: (timing: {stage:"durability";duration:number}) => void;
+  onStartup?: (stage: "ownership"|"assets"|"compile"|"local"|"cloud"|"engine"|"ready") => void;
   onDiagnostic?: (message: string) => void;
   /** Remote replication is asynchronous; local durability remains awaited. */
   onReplicaStatus?: (status: { state: "queued" | "pending" | "saved" | "retrying" | "error"; message: string; branch?: string; sessions?: string[] }) => void;
@@ -32,6 +34,8 @@ export class WasmTransport implements Transport {
     this.timeoutMs = options.timeoutMs ?? 150_000;
     if (!Number.isFinite(this.timeoutMs) || this.timeoutMs <= 0) throw Error("timeoutMs must be positive");
     this.worker = worker(options.workerUrl ?? new URL("../wasm/core-worker.mjs", import.meta.url), message => {
+      if (message.type === "timing") { options.onTiming?.({stage:message.stage,duration:message.duration}); return; }
+      if (message.type === "startup") { options.onStartup?.(message.stage); return; }
       if (message.type === "replica") { options.onReplicaStatus?.({ state: message.state, message: message.message, branch:message.branch, sessions:message.sessions }); return; }
       if (message.type === "diagnostic") { options.onDiagnostic?.(message.text); return; }
       if (message.type === "fatal") { this.fail(Error(message.message)); return; }

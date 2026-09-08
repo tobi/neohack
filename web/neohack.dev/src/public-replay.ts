@@ -1,4 +1,4 @@
-import { replayOutbox } from "./replay-outbox";
+import { replayOutbox, appendReplayFrame } from "./replay-outbox";
 import type { Snapshot } from "neonethack/types";
 export function replayLink(id: string) {
   return new URL("/dashboard?run=" + encodeURIComponent(id), location.origin)
@@ -38,19 +38,7 @@ export class PublicReplayRecorder {
     delete copy.observation.neighborhood;
     this.tail = this.tail
       .then(async () => {
-        await replayOutbox(this.key, (queue) => {
-          if (queue.frames.some((f) => f.revision === copy.revision)) return;
-          const bytes = new TextEncoder().encode(JSON.stringify(copy)).length;
-          if (
-            queue.frames.length >= 500 ||
-            queue.bytes + bytes > 32 * 1024 * 1024
-          )
-            throw Error(
-              "Recording paused: local queue is full. Saved frames remain available.",
-            );
-          queue.frames.push(copy);
-          queue.bytes += bytes;
-        });
+        await appendReplayFrame(this.key, copy);
         this.status("Replay local · publishes when this run settles");
       })
       .catch((error) => {

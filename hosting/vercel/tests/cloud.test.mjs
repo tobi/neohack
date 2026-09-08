@@ -84,13 +84,13 @@ test('turns do not wait for cloud uploads; a bookmark resumes through C in a fre
   await restored.evaluate(async () => { const app = document.querySelector('pixel-nethack'); await app.run(() => app.game.answer(app.game.decision.id, { kind: 'confirmation', confirm: false })); });
   assert.equal((await snapshot(restored)).observation.turn, before.observation.turn);
   await synced(restored);
-  const latest = await snapshot(restored);
+
   await fresh.close();
   const returning = await original.newPage();
   await returning.goto(bookmark);
   await returning.waitForFunction(() => document.querySelector('pixel-nethack').snapshot?.observation);
-  assert.deepEqual((await snapshot(returning)).observation, latest.observation);
-  assert.equal((await snapshot(returning)).decision, null, 'an unchanged older browser cache refreshes from the newer cloud journal');
+  assert.deepEqual((await snapshot(returning)).observation, before.observation);
+  assert.deepEqual((await snapshot(returning)).decision, before.decision, 'local-first entry preserves this browser’s exact pending decision rather than replacing it with another browser’s branch');
   await original.close();
 });
 
@@ -378,4 +378,29 @@ test('old local-recovery bookmarks automatically sync after an outage without a 
  await page.unroute('**/api/vaults/*');await page.evaluate(()=>window.dispatchEvent(new Event('online')));await synced(page);
  assert.equal((await snapshot(page)).observation.turn,before.observation.turn+1);assert.ok(!page.url().includes('local=1'));
  const ledger=await(await fetch(url+'/api/runs/'+before.sessionId)).json();assert.equal(ledger.turn,before.observation.turn+1);
+});
+
+
+test('new and locally saved games enter without cloud reads',{timeout:60000},async t=>{
+ const {url,browser}=await fixture(t),page=await browser.newPage();let reads=0;
+ await page.route('**/api/vaults/**',route=>{if(route.request().method()==='GET'){reads++;return route.fulfill({status:503,body:'offline'});}return route.continue();});
+ await create(page,url);const before=await snapshot(page);assert.equal(reads,0,'new run never restores a cloud vault');
+ await page.reload();await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation);
+ assert.equal((await snapshot(page)).sessionId,before.sessionId);assert.equal(reads,0,'local resume never downloads remote headers or blocks');
+ await page.evaluate(async()=>{const app=document.querySelector('pixel-nethack');await app.run(()=>app.game.wait());});
+ assert.equal((await snapshot(page)).observation.turn,before.observation.turn+1);
+});
+
+test('slow startup reports its stage without private data and resumes when download finishes',{timeout:45000},async t=>{
+ const {url,browser}=await fixture(t),page=await browser.newPage();let release;
+ const gate=new Promise(resolve=>release=resolve);t.after(()=>release());const diagnostics=[];
+ await page.route('**/neonethack-core.wasm',async route=>{await gate;await route.continue();});
+ page.on('request',r=>{if(new URL(r.url()).pathname==='/api/errors')diagnostics.push(r.postDataJSON());});
+ await page.goto(url);await page.waitForFunction(()=>!document.querySelector('#new-adventure').disabled);
+ await page.getByRole('button',{name:'Begin your adventure',exact:true}).click();await page.getByRole('button',{name:'Enter the dungeon →',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('#loading-detail').textContent==='Downloading the game…');
+ await new Promise(resolve=>setTimeout(resolve,10500));
+ const slow=diagnostics.find(d=>d.code==='runtime_timing'&&d.timing.outcome==='slow');assert.ok(slow);assert.equal(slow.timing.stage,'assets');assert.deepEqual(Object.keys(slow).sort(),['buildId','code','timing']);
+ release();await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation);
+ const bad=await fetch(url+'/api/errors',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:'runtime_timing',timing:{stage:'private-vault-token',duration:1,outcome:'slow'}})});assert.equal(bad.status,400);
 });

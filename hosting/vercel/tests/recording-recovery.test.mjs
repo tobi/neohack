@@ -18,7 +18,7 @@ test('replay outbox survives reload and exact uploads recover from a lost acknow
  assert.equal(attempts,0,'recording a real turn performs no replay PUT before flush');
  await page.evaluate(()=>document.querySelector('pixel-nethack').publicRecorder.flush());
  assert.ok(attempts>0,'explicit flush starts publication');
- const queued=await page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('neohack-public-recordings-v1');r.onsuccess=()=>{const db=r.result,q=db.transaction('queues').objectStore('queues').getAll();q.onsuccess=()=>{resolve(q.result.flatMap(q=>q.frames).length);db.close();};};r.onerror=()=>reject(r.error);}));assert.ok(queued>=2);
+ const queued=await page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('neohack-public-recordings-v1');r.onsuccess=()=>{const db=r.result,q=db.transaction('frames').objectStore('frames').count();q.onsuccess=()=>{resolve(q.result);db.close();};};r.onerror=()=>reject(r.error);}));assert.ok(queued>=2);
  // Same-origin reload recovers the durable frames even though no replay PUT was acknowledged.
  await page.reload();await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId && document.querySelector('pixel-nethack').publicRecorder);
  blocked=false;
@@ -35,4 +35,24 @@ test('replay outbox survives reload and exact uploads recover from a lost acknow
  assert.equal(writer.status,200,'writer reconciliation is JSON, not a playback redirect');
  const checkpoint=await writer.json();assert.equal(checkpoint.count,manifest.count);assert.equal(checkpoint.revision,state.revision);
  assert.ok(uploaded.length>=2);assert.equal(uploaded[0],uploaded[1],'lost ack retries the exact index and frame');
+});
+
+
+test('recording appends bounded rows without reading historical frame payloads',{timeout:60000},async t=>{
+ const server=createTestHarness();const {url}=await server.listen();const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(async()=>{await browser.close();await server.close();});const page=await browser.newPage();
+ await page.goto(new URL('/dashboard',url).href);
+ await page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('neohack-public-recordings-v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('queues');r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,tx=db.transaction('queues','readwrite');tx.objectStore('queues').put({frames:[{revision:7}],index:2,bytes:16},'retained-recording');tx.oncomplete=()=>{db.close();resolve();};};}));
+ await page.goto(String(url));await page.waitForFunction(()=>!document.querySelector('#new-adventure').disabled);
+ await page.getByRole('button',{name:'Begin your adventure',exact:true}).click();await page.getByRole('button',{name:'Enter the dungeon →',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation&&document.querySelector('pixel-nethack').getAttribute('aria-busy')==='false');
+ const result=await page.evaluate(async()=>{
+   const app=document.querySelector('pixel-nethack'),recorder=app.publicRecorder;await recorder.tail;
+   const reads=[],originalGet=IDBObjectStore.prototype.get,originalAll=IDBObjectStore.prototype.getAll;
+   IDBObjectStore.prototype.get=function(...args){if(this.transaction.db.name==='neohack-public-recordings-v1')reads.push(this.name);return originalGet.apply(this,args);};
+   IDBObjectStore.prototype.getAll=function(...args){if(this.transaction.db.name==='neohack-public-recordings-v1')reads.push(this.name+':all');return originalAll.apply(this,args);};
+   try {for(let i=1;i<=120;i++)recorder.record({...app.snapshot,revision:app.snapshot.revision+i});await recorder.tail;return {reads,stopped:recorder.stopped};}
+   finally {IDBObjectStore.prototype.get=originalGet;IDBObjectStore.prototype.getAll=originalAll;}
+ });
+ const retained=await page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('neohack-public-recordings-v1');r.onerror=()=>reject(r.error);r.onsuccess=()=>{const db=r.result,q=db.transaction('queues').objectStore('queues').get('retained-recording');q.onsuccess=()=>{resolve(q.result);db.close();};};}));assert.deepEqual(retained,{frames:[{revision:7}],index:2,bytes:16});
+ assert.equal(result.stopped,false);assert.equal(result.reads.length,120);assert.ok(result.reads.every(name=>name==='heads'),'only small counters are read, regardless of queue size');
 });
