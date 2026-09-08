@@ -8,6 +8,8 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Restoring an online backup uses its latest valid level checkpoint before
+  replaying the remaining actions. The full action history stays intact.
 - Agent-assisted adventures retain their WebMCP attribution when another tab
   sends an older manual-play summary.
 - Long adventurer names stay clear of the level label on phones and desktop.
