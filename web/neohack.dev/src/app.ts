@@ -34,6 +34,7 @@ import {
 } from "./map";
 import { creatureArtUrl, inventoryArt } from "./symbol-art";
 import { MovementInput } from "./movement-input";
+import { describeCommand, arrowLetters, type CommandIntent } from "./command-input";
 import type { WebMcpRegistration } from "/runtime/typescript/webmcp.js";
 import { loadRuntime, warmPackage, runtimePackage } from "./runtime-loader";
 import {
@@ -99,9 +100,11 @@ class PixelNethack extends HTMLElement {
   private game: Game | null = null;
   private busy = false;
   private inspectionVersion=0;
-  private keyCount = "";
-  private keyRunPrefix: "" | "g" | "G" | "F" = "";
-  private keyNoPickup = false;
+  private keyDraft = "";
+  private commandOpen = false;
+  private commandPointerDown = (e: PointerEvent) => {
+    if (this.commandOpen && !this.querySelector("#keyboard-prefix")?.contains(e.target as Node)) this.clearKeyPrefix();
+  };
   private navigationNotice="";
   private navigationAbort: AbortController | null = null;
   private cloudStatusGeneration = 0;
@@ -211,6 +214,7 @@ class PixelNethack extends HTMLElement {
     }
   };
   private focusChanged = (e: FocusEvent) => {
+    if ((e.target as HTMLElement).closest("#keyboard-prefix")) { this.movement.stop(); return; }
     if (
       (e.target as HTMLElement).closest(
         'input,textarea,select,[contenteditable="true"],dialog',
@@ -278,7 +282,7 @@ class PixelNethack extends HTMLElement {
     this.innerHTML = `
 
       <main id="main" tabindex="-1">
-        <div class="map-viewport"><canvas id="dungeon" tabindex="0" aria-label="Dungeon entrance. Use arrow keys to walk into the hall."></canvas><button id="enter-gate" aria-label="Walk into the glowing gate and create an adventurer" title="Enter the dungeon"></button></div>
+        <div class="map-viewport"><canvas id="dungeon" tabindex="0" aria-label="Dungeon entrance. Use arrow keys to walk into the hall."></canvas><section id="keyboard-prefix" class="command-composer" aria-label="Command builder" hidden><div class="command-entry"><label for="command-input" aria-label="Command">›</label><input id="command-input" aria-label="Command" aria-describedby="command-about command-help" placeholder="20s · mh" autocomplete="off" autocapitalize="off" spellcheck="false" autocorrect="off"><button id="command-cancel" aria-label="Cancel command" title="Cancel command (Escape)">×</button></div><p id="command-about" role="status"></p><div id="command-completions" aria-label="Next keys"></div><p id="command-help">Esc cancels · Tab to choose a hint</p></section><button id="enter-gate" aria-label="Walk into the glowing gate and create an adventurer" title="Enter the dungeon"></button></div>
         <section id="welcome-copy" class="intro-title"><p class="eyebrow">A LITTLE COURAGE. A DEEP DUNGEON.</p><h1>neo<span>nethack</span></h1><p>The old world has an open door.</p><a class="paths-jump" href="#welcome-paths">Play, bring an agent, or build something new ↓</a></section>
         <section id="welcome-actions" class="intro-controls" aria-label="Learn to walk">
           <p id="intro-instruction">Walk into the light</p>
@@ -352,7 +356,7 @@ class PixelNethack extends HTMLElement {
                 `<button data-move="${d}" data-game aria-label="Move ${d}">${g}</button>`,
             )
             .join("")}</div></div>
-          <div class="action-dock"><div id="keyboard-prefix" role="status" hidden></div><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><button data-action="pickup" data-game>Pick up<kbd>,</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="pray" data-game>Pray</button><button id="more-actions" data-game>More actions</button></div>
+          <div class="action-dock"><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><button data-action="pickup" data-game>Pick up<kbd>,</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="pray" data-game>Pray</button><button id="more-actions" data-game>More actions</button></div>
           <nav class="side-nav" aria-label="Adventure views"><button data-view="inventory">Backpack <span id="inventory-count"></span><kbd>i</kbd></button><button data-view="surroundings">Surroundings</button><button data-view="journal">Journal</button></nav></div>
         </section>
         <aside class="ground-loot" id="ground-loot" aria-label="On the ground" hidden><h2>On the ground</h2><p>At your feet · choose what to take</p><div id="ground-items"></div></aside>
@@ -373,6 +377,7 @@ class PixelNethack extends HTMLElement {
       } else this.inspectTile(x, y, false, walk);
     });
     this.bind();
+    this.bindCommandInput();
     this.hudLayout = new ResizeObserver(() => {
       const top = this.getBoundingClientRect().top;
       const bottom = Math.max(...[".hero-hud", ".location-hud"].map(selector => this.$(selector).getBoundingClientRect().bottom));
@@ -815,6 +820,7 @@ class PixelNethack extends HTMLElement {
     } finally { this.yielding = false; }
   }
   disconnectedCallback() {
+    this.removeEventListener("pointerdown", this.commandPointerDown, true);
     this.navigationAbort?.abort();
     this.publicRecorder?.close();
     this.publicSession="";
@@ -1073,7 +1079,7 @@ class PixelNethack extends HTMLElement {
       () => {
         if (!this.game) this.map.resetIntro();
         this.controls();
-        this.menuReturn?.focus();
+        if (!this.commandOpen) this.menuReturn?.focus();
       },
     );
     this.querySelector<HTMLDialogElement>("#decision")!.addEventListener(
@@ -2174,6 +2180,7 @@ class PixelNethack extends HTMLElement {
     this.openMenu(
       '<h2 id="menu-title">A few more possibilities.</h2><p class="subtle">Choose an action. If it needs an item, direction, or permission, you’ll be asked.</p><div class="more-grid" id="more-grid"></div>',
     );
+    this.$("#more-grid").append(this.button("Type a command", () => { this.closeMenu(); this.showKeyDraft("", true); }));
     for (const [action, label] of Object.entries({
       drink: "Drink",
       read: "Read",
@@ -2543,52 +2550,163 @@ class PixelNethack extends HTMLElement {
     if (!dialog.open) dialog.showModal();
     body.querySelector<HTMLElement>("button,input")?.focus();
   }
-  private clearKeyPrefix(message = "") {
-    this.keyCount = ""; this.keyRunPrefix = ""; this.keyNoPickup = false;
-    const hint = this.querySelector<HTMLElement>("#keyboard-prefix");
-    if (hint) { hint.textContent = message; hint.hidden = !message; }
-  }
-  private prefixKey(e: KeyboardEvent, move: Record<string, Compass>) {
-    if (e.key === "Shift" || e.key === "CapsLock") return false;
-    if (!this.playable() || this.querySelector(".hud-menu[open], .rightbar:not([hidden])")) { this.clearKeyPrefix(); return false; }
-    const pending = () => !!(this.keyCount || this.keyRunPrefix || this.keyNoPickup);
-    const invalid = (message: string) => { e.preventDefault(); this.clearKeyPrefix(message); return true; };
-    if (e.key === "Backspace" && pending()) {
-      e.preventDefault(); this.clearKeyPrefix(); return true;
-    }
-    if (/^[0-9]$/.test(e.key)) {
-      if (this.keyRunPrefix || this.keyNoPickup) return invalid("Put counts before commands. This count was cancelled.");
-      this.keyCount = (this.keyCount + e.key).slice(0,5);
-    } else if (["m", "g", "G", "F"].includes(e.key)) {
-      if (this.keyCount) return invalid("Counts currently apply to s (search) and . (rest). Command cancelled.");
-      if (e.key === "m") {
-        if (this.keyNoPickup || this.keyRunPrefix === "F") return invalid("Invalid movement prefix. Command cancelled.");
-        this.keyNoPickup = true;
-      } else {
-        if (this.keyRunPrefix || (e.key === "F" && this.keyNoPickup)) return invalid("Invalid movement prefix. Command cancelled.");
-        this.keyRunPrefix = e.key as "g" | "G" | "F";
+  private bindCommandInput() {
+    const box = this.$("#keyboard-prefix"),
+      input = this.querySelector<HTMLInputElement>("#command-input")!;
+    box.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        this.clearKeyPrefix();
+        this.$("#dungeon").focus({ preventScroll: true });
+        return;
       }
-    } else if (pending()) {
-      e.preventDefault();
-      const count = this.keyCount, prefix = this.keyRunPrefix, noPickup = this.keyNoPickup;
-      const uppercase = e.key.length === 1 && "HJKLYUBN".includes(e.key);
-      const direction = move[e.key] ?? (uppercase && noPickup && !prefix ? move[e.key.toLowerCase()] : undefined);
-      this.clearKeyPrefix(); this.movement.stop();
-      if (count) {
-        if (Number(count) < 1 || Number(count) > 1000) this.clearKeyPrefix("Search and rest counts must be 1–1000. Command cancelled.");
-        else if (e.key === "s") void this.run(() => this.game!.search({turns:Number(count)}));
-        else if (e.key === ".") void this.run(() => this.game!.rest({turns:Number(count)}));
-        else this.clearKeyPrefix("Counts currently apply to s (search) and . (rest). Command cancelled.");
-      } else if (!direction) this.clearKeyPrefix("Choose a direction after a movement prefix. Command cancelled.");
-      else if (prefix === "F") void this.run(() => this.game!.attack(direction));
-      else if (prefix === "g" || prefix === "G" || uppercase) void this.run(() => this.game!.run(direction,{mode:prefix === "g" ? "untilInteresting" : prefix === "G" ? "pastBranches" : "normal",noPickup}));
-      else void this.run(() => this.game!.moveWithoutAttack(direction));
-      return true;
-    } else return false;
-    e.preventDefault(); this.movement.stop();
-    const hint = this.$("#keyboard-prefix");
-    hint.textContent = this.keyCount ? this.keyCount + (Number(this.keyCount) < 1 || Number(this.keyCount) > 1000 ? " — invalid count (1–1000); Escape cancels" : " — s to search, . to rest; Escape cancels") : (this.keyNoPickup ? "m" : "") + this.keyRunPrefix + " — choose a direction; Escape cancels";
-    hint.hidden = false;
+      if (
+        e.target !== input ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey ||
+        e.isComposing
+      )
+        return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        return;
+      } // Never choose a hint implicitly.
+      const letter = arrowLetters[e.key];
+      if (letter && describeCommand(this.keyDraft).directional && !e.shiftKey) {
+        e.preventDefault();
+        this.showKeyDraft(this.keyDraft + letter);
+        return;
+      }
+    });
+    input.addEventListener("input", (e) => {
+      if (this.commandOpen && !(e as InputEvent).isComposing)
+        this.showKeyDraft(input.value);
+    });
+    input.addEventListener("compositionend", () => {
+      if (this.commandOpen) this.showKeyDraft(input.value);
+    });
+    this.$("#command-cancel").onclick = () => {
+      this.clearKeyPrefix();
+      this.$("#dungeon").focus({ preventScroll: true });
+    };
+    this.addEventListener("pointerdown", this.commandPointerDown, { capture: true });
+    box.addEventListener("focusout", (e) => {
+      if (e.relatedTarget && !box.contains(e.relatedTarget as Node))
+        this.clearKeyPrefix();
+    });
+  }
+  private clearKeyPrefix() {
+    if (
+      this.querySelector("#keyboard-prefix")?.contains(document.activeElement)
+    )
+      this.$("#dungeon").focus({ preventScroll: true });
+    this.keyDraft = "";
+    this.commandOpen = false;
+    const input = this.querySelector<HTMLInputElement>("#command-input");
+    if (input) input.value = "";
+    this.querySelector<HTMLElement>("#keyboard-prefix")?.setAttribute(
+      "hidden",
+      "",
+    );
+  }
+  private showKeyDraft(value: string, focus = false) {
+    if (
+      !this.playable() ||
+      this.querySelector(
+        "dialog[open], .hud-menu[open], .rightbar:not([hidden])",
+      )
+    ) {
+      this.clearKeyPrefix();
+      return;
+    }
+    const draft = describeCommand(value);
+    if (draft.intent) {
+      this.executeKeyCommand(draft.intent);
+      return;
+    }
+    this.movement.stop();
+    this.keyDraft = value;
+    this.commandOpen = true;
+    const box = this.$("#keyboard-prefix"),
+      input = this.querySelector<HTMLInputElement>("#command-input")!;
+    box.hidden = false;
+    box.dataset.invalid = String(!!draft.error);
+    if (input.value !== value) input.value = value;
+    input.setAttribute("aria-invalid", String(!!draft.error));
+    this.text("#command-about", draft.description);
+    const list = this.$("#command-completions");
+    list.replaceChildren();
+    list.classList.toggle("has-directions", !!draft.directional);
+    const directions = document.createElement("div");
+    directions.className = "command-directions";
+    const alternatives = document.createElement("div");
+    alternatives.className = "command-alternatives";
+    const revision = this.game!.state.revision,
+      game = this.game!;
+    for (const hint of draft.hints) {
+      const button = this.button("", () => {
+        if (
+          this.commandOpen &&
+          this.keyDraft === value &&
+          this.game === game &&
+          game.state.revision === revision
+        )
+          this.showKeyDraft(hint.value, true);
+      });
+      button.type = "button";
+      button.title = hint.label;
+      button.setAttribute("aria-label", hint.key + " — " + hint.label);
+      const key = document.createElement("kbd");
+      key.textContent = hint.key;
+      button.append(key);
+      const label = document.createElement("span");
+      label.textContent = hint.direction
+        ? hint.label.split(" ")[0]!
+        : hint.label;
+      button.append(label);
+      button.dataset.completion = hint.value;
+      if (hint.direction) {
+        button.dataset.direction = hint.key;
+        directions.append(button);
+      } else alternatives.append(button);
+    }
+    if (draft.directional) list.append(directions);
+    if (alternatives.childElementCount) list.append(alternatives);
+    if (draft.directional && !alternatives.childElementCount) {
+      const note = document.createElement("p");
+      note.className = "command-direction-note";
+      note.textContent = "Choose a direction. Arrow keys work too.";
+      list.append(note);
+    }
+    this.map.positionCommandInput();
+    if (focus) {
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(value.length, value.length);
+    }
+  }
+  private executeKeyCommand(intent: CommandIntent) {
+    this.clearKeyPrefix();
+    this.movement.stop();
+    this.$("#dungeon").focus({ preventScroll: true });
+    if (!this.playable()) return;
+    const g = this.game!;
+    if (intent.kind === "search" || intent.kind === "rest")
+      void this.run(() => g[intent.kind]({ turns: intent.turns }));
+    else if (intent.kind === "run")
+      void this.run(() =>
+        g.run(intent.direction, {
+          mode: intent.mode,
+          noPickup: intent.noPickup,
+        }),
+      );
+    else void this.run(() => g[intent.kind](intent.direction));
+  }
+  private prefixKey(e: KeyboardEvent) {
+    if (!/^[0-9mgGF]$/.test(e.key) || !this.playable()) return false;
+    e.preventDefault();
+    this.showKeyDraft(e.key, true);
     return true;
   }
   private key(e: KeyboardEvent) {
@@ -2750,7 +2868,7 @@ class PixelNethack extends HTMLElement {
       );
       return;
     }
-    if (this.prefixKey(e, move)) return;
+    if (this.prefixKey(e)) return;
     if ("HJKLYUBN".includes(e.key) && e.key.length === 1) {
       e.preventDefault();
       this.movement.stop();
@@ -2781,7 +2899,7 @@ class PixelNethack extends HTMLElement {
   }
   private guide() {
     this.openMenu(
-      `<h2 id="menu-title">A small guide to a very big world.</h2><p>Find the Amulet of Yendor in the depths, and bring it back. Getting there is a story of curiosity, decisions, and learning from a short life or two.</p><div class="guide-section"><h3>01 / Take your time</h3><p>This is turn-based. Reading, inspecting the map, and opening your backpack cost nothing. An action can take time; the journal tells you what happened.</p></div><div class="guide-section"><h3>02 / Try one thing</h3><p>Tap h j k l, an arrow, or a direction button for one step; hold to walk. Release to stop repeating. Rapid taps keep at most one extra step buffered. Walking pauses at walls, nearby creatures, damage, and decisions. Press again deliberately to interact. Search around you, open a door, or pick up something interesting.</p></div><div class="guide-section"><h3>03 / Listen to the dungeon</h3><p>Hunger, danger, and strange objects are part of the adventure. Read warnings before answering. If eating or reading is interrupted, choose the action again only when you want to continue.</p></div><div class="guide-section"><h3>04 / Know what you know</h3><p>The map shows remembered terrain and currently perceived occupants. Creature and object art represents the visible NetHack category, not an exact identity. A green underline marks an ally. Use @ in the corner menu to show the original symbols. Raised stone edges frame corridors; recessed gaps lead toward unexplored space, where the layout is still unknown. Click a tile or open Surroundings for a text description.</p></div><dl class="key-list"><dt>h j k l / Arrows</dt><dd>Tap to step · hold to walk</dd><dt>y u b n</dt><dd>Move diagonally</dd><dt>Shift + h j k l y u b n</dt><dd>Native NetHack run until an obstacle or something interesting; stops before fighting</dd><dt>. / s / , / e / o</dt><dd>Wait / search / pick up / eat / open</dd><dt>&lt; / &gt;</dt><dd>Go upstairs / downstairs</dd><dt>Enter / arrow keys / Escape</dt><dd>Inspect here / nearby tiles / return</dd><dt>a / w / d / c / q / r / z / t</dt><dd>Apply / wield / drop / close / drink / read / zap / throw</dd><dt>f / Z / x / p / E / Q</dt><dd>Fire / cast / swap weapons / pay / engrave / ready quiver</dd><dt>i / ?</dt><dd>Backpack / this guide</dd><dt>Mouse wheel / middle drag</dt><dd>Zoom / look around without taking a turn</dd><dt>Shift + arrows</dt><dd>Pan the map without moving</dd></dl><p class="save-explanation">Use g + direction to stop at interesting things, G + direction to continue past corridor forks, m + direction to avoid pickup and fighting, and F + direction to force one attack. m combines with g, G or an uppercase direction. Type a count before s or . (for example 10s or 20.) for native search/rest, up to 1,000 turns. Escape or Backspace cancels a pending prefix. Other command counts are unsupported. Item selection and warnings use explicit dialogs.</p><p class="save-explanation">Your game saves after each completed action, on this browser and address. Clearing site data removes saves. Keep the same game version to return to an older adventure.</p>`,
+      `<h2 id="menu-title">A small guide to a very big world.</h2><p>Find the Amulet of Yendor in the depths, and bring it back. Getting there is a story of curiosity, decisions, and learning from a short life or two.</p><div class="guide-section"><h3>01 / Take your time</h3><p>This is turn-based. Reading, inspecting the map, and opening your backpack cost nothing. An action can take time; the journal tells you what happened.</p></div><div class="guide-section"><h3>02 / Try one thing</h3><p>Tap h j k l, an arrow, or a direction button for one step; hold to walk. Release to stop repeating. Rapid taps keep at most one extra step buffered. Walking pauses at walls, nearby creatures, damage, and decisions. Press again deliberately to interact. Search around you, open a door, or pick up something interesting.</p></div><div class="guide-section"><h3>03 / Listen to the dungeon</h3><p>Hunger, danger, and strange objects are part of the adventure. Read warnings before answering. If eating or reading is interrupted, choose the action again only when you want to continue.</p></div><div class="guide-section"><h3>04 / Know what you know</h3><p>The map shows remembered terrain and currently perceived occupants. Creature and object art represents the visible NetHack category, not an exact identity. A green underline marks an ally. Use @ in the corner menu to show the original symbols. Raised stone edges frame corridors; recessed gaps lead toward unexplored space, where the layout is still unknown. Click a tile or open Surroundings for a text description.</p></div><dl class="key-list"><dt>h j k l / Arrows</dt><dd>Tap to step · hold to walk</dd><dt>y u b n</dt><dd>Move diagonally</dd><dt>Shift + h j k l y u b n</dt><dd>Native NetHack run until an obstacle or something interesting; stops before fighting</dd><dt>. / s / , / e / o</dt><dd>Wait / search / pick up / eat / open</dd><dt>&lt; / &gt;</dt><dd>Go upstairs / downstairs</dd><dt>Enter / arrow keys / Escape</dt><dd>Inspect here / nearby tiles / return</dd><dt>a / w / d / c / q / r / z / t</dt><dd>Apply / wield / drop / close / drink / read / zap / throw</dd><dt>f / Z / x / p / E / Q</dt><dd>Fire / cast / swap weapons / pay / engrave / ready quiver</dd><dt>i / ?</dt><dd>Backpack / this guide</dd><dt>Mouse wheel / middle drag</dt><dd>Zoom / look around without taking a turn</dd><dt>Shift + arrows</dt><dd>Pan the map without moving</dd></dl><p class="save-explanation">Use g + direction to stop at interesting things, G + direction to continue past corridor forks, m + direction to avoid pickup and fighting, and F + direction to force one attack. m combines with g, G or an uppercase direction. Type a count before s or . (for example 10s or 20.) for native search/rest, up to 1,000 turns. The command box below your hero shows clickable next-key hints. Backspace edits; Escape cancels. Other command counts are unsupported. Item selection and warnings use explicit dialogs.</p><p class="save-explanation">Your game saves after each completed action, on this browser and address. Clearing site data removes saves. Keep the same game version to return to an older adventure.</p>`,
     );
   }
   private credits() {

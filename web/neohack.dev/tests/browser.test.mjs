@@ -2944,6 +2944,7 @@ test("Classic directions move and s searches", async (t) => {
   const before = (await snapshot(page)).revision;
   await page.keyboard.press('g');
   await page.keyboard.press('Control+h');
+  await page.keyboard.press('Escape');
   assert.equal((await snapshot(page)).revision, before);
   await page.keyboard.press('w');
   await page.locator('#decision[open]').waitFor();
@@ -4066,7 +4067,8 @@ test('classic prefixes dispatch explicit protocol parameters and counts stay nat
   await page.keyboard.press('1'); await page.keyboard.press('0'); await page.keyboard.press('h');
   assert.equal((await snapshot(page)).revision,before);
   assert.deepEqual(await inputs(),[]);
-  assert.match(await page.locator('#keyboard-prefix').textContent(),/cancelled/);
+  assert.match(await page.locator('#keyboard-prefix').textContent(),/No action taken/);
+  await page.keyboard.press('Escape');
   await page.keyboard.press('m'); await page.keyboard.press('Escape'); await page.keyboard.press('s'); await ready(page);
   assert.equal((await inputs())[0].method,'game.search');
   await page.keyboard.press('g');
@@ -4077,4 +4079,62 @@ test('classic prefixes dispatch explicit protocol parameters and counts stay nat
   for (const key of ['1','0','s','g','G','m','F']) await page.keyboard.press(key);
   assert.equal((await snapshot(page)).revision,decision.revision);
   assert.equal(await page.locator('#keyboard-prefix').isVisible(),false);
+});
+
+test('hero command box edits drafts and offers explicit accessible completions', async t => {
+  const {page,errors}=await fixture(t); await create(page);
+  const before=await snapshot(page);
+  await page.keyboard.type('20');
+  const input=page.getByRole('textbox',{name:'Command',exact:true});
+  assert.equal(await input.inputValue(),'20');
+  await page.keyboard.press('Enter');
+  assert.equal((await snapshot(page)).revision,before.revision);
+  await page.keyboard.press('Backspace');
+  assert.equal(await input.inputValue(),'2');
+  await page.keyboard.type('0');
+  assert.match(await page.locator('#command-about').innerText(),/20 turns/);
+  const geometry=await page.evaluate(()=>{
+    const app=document.querySelector('pixel-nethack'),map=app.map,you=app.snapshot.observation.you;
+    const canvas=document.querySelector('#dungeon').getBoundingClientRect(),box=document.querySelector('#keyboard-prefix').getBoundingClientRect();
+    return {left:box.left,right:box.right,top:box.top,bottom:box.bottom,
+      foot:canvas.top+(you.y-map.origin.y+1)*16*map.zoom,
+      center:canvas.left+(you.x-map.origin.x+.5)*16*map.zoom};
+  });
+  assert.ok(geometry.top>=geometry.foot);
+  assert.ok(Math.abs((geometry.left+geometry.right)/2-geometry.center)<2);
+  await page.screenshot({path:resolve(root,'test-results/command-count-desktop.png')});
+  await input.fill('20sh');
+  assert.equal(await input.getAttribute('aria-invalid'),'true');
+  assert.equal((await snapshot(page)).revision,before.revision,'a pasted multi-command string never partially executes');
+  await input.fill('20');
+  await page.locator('[data-completion="20s"]').click(); await ready(page);
+  assert.equal(await page.locator('#keyboard-prefix').isVisible(),false);
+  assert.equal((await snapshot(page)).outcome.action,'search');
+  const after=await snapshot(page);
+  await page.keyboard.press('m');
+  await page.locator('[data-completion="mg"]').click();
+  assert.equal(await input.inputValue(),'mg');
+  assert.match(await page.locator('#command-about').innerText(),/No pickup or fighting/);
+  await page.keyboard.press('Tab');
+  assert.equal((await snapshot(page)).revision,after.revision);
+  await input.focus();
+  await page.setViewportSize({width:390,height:844});
+  await page.waitForTimeout(100);
+  const box=await page.locator('#keyboard-prefix').boundingBox();
+  assert.ok(box.x>=0 && box.x+box.width<=390 && box.y>=0 && box.y+box.height<=844);
+  for(const button of await page.locator('#keyboard-prefix button').all()) {
+    const rect=await button.boundingBox(); assert.ok(rect.height>=44);
+  }
+  await page.screenshot({path:resolve(root,'test-results/command-movement-mobile.png')});
+  await page.keyboard.press('Escape');
+  assert.equal((await snapshot(page)).revision,after.revision);
+  await page.getByRole('button',{name:'More actions',exact:true}).click();
+  await page.getByRole('button',{name:'Type a command',exact:true}).click();
+  assert.equal(await input.inputValue(),'');
+  await page.locator('[data-completion="F"]').click();
+  assert.match(await page.locator('#command-about').innerText(),/Force one attack/);
+  await page.keyboard.press('ArrowLeft'); await ready(page);
+  assert.equal((await snapshot(page)).outcome.action,'attack');
+  assert.equal(await page.locator('#keyboard-prefix').isVisible(),false);
+  assert.deepEqual(errors,[]);
 });

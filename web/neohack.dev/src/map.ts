@@ -383,6 +383,8 @@ export class DungeonMap {
   ) {
     this.observer = new ResizeObserver(() => this.draw());
     this.observer.observe(canvas.parentElement!);
+    window.visualViewport?.addEventListener("resize", this.viewportChanged);
+    window.visualViewport?.addEventListener("scroll", this.viewportChanged);
     this.reducedMotion.addEventListener("change", this.motionChanged);
     document.addEventListener("visibilitychange", this.motionChanged);
     this.motionChanged();
@@ -595,6 +597,8 @@ export class DungeonMap {
     this.clearMessages();
     this.sound.dispose();
     this.observer.disconnect();
+    window.visualViewport?.removeEventListener("resize", this.viewportChanged);
+    window.visualViewport?.removeEventListener("scroll", this.viewportChanged);
     cancelAnimationFrame(this.animation);
     this.reducedMotion.removeEventListener("change", this.motionChanged);
     document.removeEventListener("visibilitychange", this.motionChanged);
@@ -741,6 +745,41 @@ export class DungeonMap {
         { duration: 160 },
       );
   }
+  private viewportChanged = () => this.positionCommandInput();
+  positionCommandInput() {
+    const parent = this.canvas.parentElement!;
+    const box = parent.querySelector<HTMLElement>("#keyboard-prefix");
+    const you = this.observation?.you;
+    if (!box || box.hidden || !you) return;
+    const rect = parent.getBoundingClientRect(),
+      viewport = window.visualViewport;
+    const minTop = Math.max(8, (viewport?.offsetTop ?? 0) - rect.top + 8);
+    const bottom =
+      Math.min(
+        parent.clientHeight,
+        (viewport?.offsetTop ?? 0) +
+          (viewport?.height ?? innerHeight) -
+          rect.top,
+      ) - 8;
+    box.style.maxHeight = Math.max(100, bottom - minTop) + "px";
+    const x =
+      this.canvas.offsetLeft + (you.x - this.origin.x + 0.5) * 16 * this.zoom;
+    const head =
+      this.canvas.offsetTop + (you.y - this.origin.y) * 16 * this.zoom;
+    const below = head + 16 * this.zoom + 10;
+    const top =
+      below + box.offsetHeight <= bottom ? below : head - box.offsetHeight - 10;
+    box.style.left =
+      Math.max(
+        8,
+        Math.min(
+          parent.clientWidth - box.offsetWidth - 8,
+          x - box.offsetWidth / 2,
+        ),
+      ) + "px";
+    box.style.top =
+      Math.max(minTop, Math.min(bottom - box.offsetHeight, top)) + "px";
+  }
   private positionMessages(now = performance.now()) {
     const canvas = this.canvas;
     const shift = this.travel(now);
@@ -818,6 +857,7 @@ export class DungeonMap {
       y: Math.round(((you?.y ?? 10) + .5 - height / (32 * scale) + this.offset.y) * 16) / 16,
     };
     this.positionMessages(now);
+    this.positionCommandInput();
     const target = canvas.parentElement!.querySelector<HTMLElement>("#direction-target");
     if (target && you) {
       target.style.left = canvas.offsetLeft + Math.max(100, Math.min(canvas.clientWidth - 100, (you.x - this.origin.x + 0.5) * 16 * this.zoom)) + "px";

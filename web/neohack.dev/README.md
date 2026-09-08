@@ -73,7 +73,7 @@ y/u/b/n move diagonally. Search uses s; comma picks up. Uppercase directions
 with actual elapsed turns and explicit decisions preserved. g/G + direction select
 interesting/fork-skipping run modes; m suppresses pickup/fighting and F forces one
 attack. m also combines with running. Counts before s or . (10s, 20.) use native
-search/rest, up to 1,000 turns. Escape or Backspace cancels the pending prefix.
+search/rest, up to 1,000 turns. An editable box beneath the hero shows clickable completions. Backspace edits; Escape cancels. More actions → Type a command opens it on touch devices.
 The first step is immediate, repetition starts after 240 ms and continues at up
 to ten steps per second, awaiting each durable engine result. Rapid deliberate
 taps keep at most one extra step buffered; held repeats never build a queue.
