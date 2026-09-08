@@ -8,6 +8,8 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Agent-assisted adventures retain their WebMCP attribution when another tab
+  sends an older manual-play summary.
 - Long adventurer names stay clear of the level label on phones and desktop.
 - Long journal messages stay compact over the map; opening the journal still
   shows the full original text.
