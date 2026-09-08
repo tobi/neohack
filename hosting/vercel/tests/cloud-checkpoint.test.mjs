@@ -4,7 +4,8 @@ import {decodeCheckpoint,encodeCheckpoint} from '../../../lib/neonethack/wasm/ch
 import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
 import {createTestHarness} from './server.mjs';
 test('cloud checkpoints skip a genuine level prefix; cache failures replay inputs and interrupted inputs resume safely',{timeout:120000},async t=>{
-const server=createTestHarness(),{url}=await server.listen(),browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,chromiumSandbox:true});
+const server=createTestHarness(),{url}=await server.listen(),browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});
+let releaseCheckpoint;const checkpointGate=new Promise(resolve=>releaseCheckpoint=resolve);let heldCheckpointRequests=0;
 const timer=setTimeout(()=>void browser.close(),120000);let phase='live';const replayed={};
 try {
  const context=await browser.newContext({serviceWorkers:'block'}),page=await context.newPage();
@@ -26,6 +27,7 @@ try {
    return route.fulfill({response,json:manifest});
   }
   if(path.includes('/checkpoints/')){
+   if(phase==='cloudTimeout'){heldCheckpointRequests++;await checkpointGate;return route.fulfill({response}).catch(()=>{});}
    if(phase==='cloudUnavailable')return route.fulfill({status:404,body:'Not found'});
    if(phase==='cloudCorrupt')return route.fulfill({response,body:Buffer.from('corrupt optional checkpoint')});
    if(['cloudWrongPin','cloudWrongIndex'].includes(phase))return route.fulfill({status:200,body:Buffer.from(wrong.bytes)});
@@ -62,7 +64,7 @@ try {
   let t=begin('local');transport=await WasmTransport.create(opts);const opened=performance.now();api=new Neonethack(transport);game=await api.resume(id);equal(scene(game.state),scene(expected));rows.push({phase:'local',openMs:opened-t,resumeMs:performance.now()-opened});
   begin('localReceipt');equal(await transport.send(receiptReq),exactReceipt);await api.close();
   t=begin('full');transport=await WasmTransport.create({workerUrl:opts.workerUrl});let whole;for(const record of records)whole=await transport.playback(record);equal(whole,expected);rows.push({phase:'full',totalMs:performance.now()-t});equal(await transport.send(receiptReq),exactReceipt);await transport.close();
-  for(const mode of ['cloud','cloudMissing','cloudUnavailable','cloudCorrupt','cloudWrongPin','cloudWrongIndex','cloudInterrupted','cloudCorruptInput']){
+  for(const mode of ['cloud','cloudMissing','cloudUnavailable','cloudCorrupt','cloudWrongPin','cloudWrongIndex','cloudInterrupted','cloudCorruptInput','cloudTimeout']){
    t=begin(mode);const cloudOptions={...opts,storage:{...storage,name:mode+'-'+crypto.randomUUID(),...(['cloudMissing','cloudWrongPin','cloudWrongIndex'].includes(mode)?{uploadUrl:undefined}:{})}};
    transport=await WasmTransport.create(cloudOptions);const cloudOpen=performance.now();api=new Neonethack(transport);
    if(['cloudInterrupted','cloudCorruptInput'].includes(mode)){
@@ -72,6 +74,15 @@ try {
     begin(mode+'Recovered');transport=await WasmTransport.create(cloudOptions);api=new Neonethack(transport);
    }
    game=await api.resume(id);equal(scene(game.state),scene(expected));rows.push({phase:mode,openMs:cloudOpen-t,resumeMs:performance.now()-cloudOpen});
+   if(mode==='cloudTimeout'){
+    const elapsed=performance.now()-cloudOpen;
+    if(elapsed<9500||elapsed>30000)throw Error('Checkpoint timeout was not bounded near ten seconds');
+    const imported=await openProtocolStore(cloudOptions.storage.name),h=await imported.header(id);
+    if(h.count!==header.count||h.importing||await imported.checkpoint(id))throw Error('Timed-out cache changed completed import state');
+    equal(await imported.range(id,0,128),records);
+    if((await imported.upload(id)).count!==header.count)throw Error('Timed-out cache lost import acknowledgement');
+    imported.close();
+   }
    begin(mode+'Receipt');equal(await transport.send(receiptReq),exactReceipt);await api.close();
   }
   // Static archive restore and seek: all network requests in this phase are static.
@@ -82,9 +93,11 @@ try {
  });
  const suffix=Array.from({length:result.suffix},(_,i)=>result.checkpoint.index+i),full=Array.from({length:result.inputs},(_,i)=>i);
  for(const phase of ['local','cloud','cloudInterruptedRecovered','cloudCorruptInputRecovered','static'])assert.deepEqual(replayed[phase],suffix,phase+' replays suffix only');
- for(const phase of ['full','cloudMissing','cloudUnavailable','cloudCorrupt','cloudWrongPin','cloudWrongIndex'])assert.deepEqual(replayed[phase],full,phase+' replays the authoritative log');
+ for(const phase of ['full','cloudMissing','cloudUnavailable','cloudCorrupt','cloudWrongPin','cloudWrongIndex','cloudTimeout'])assert.deepEqual(replayed[phase],full,phase+' replays the authoritative log');
  for(const phase of ['cloudInterrupted','cloudCorruptInput'])assert.deepEqual(replayed[phase],[],'input failure cannot start checkpoint or engine replay');
+ assert.equal(heldCheckpointRequests,1,'one cache download remained held through its real timeout');
+ releaseCheckpoint();
  t.diagnostic(JSON.stringify({...result,replayed}));
-}finally{clearTimeout(timer);await browser.close();await server.close()}
+}finally{releaseCheckpoint();clearTimeout(timer);await browser.close();await server.close()}
 
 });
