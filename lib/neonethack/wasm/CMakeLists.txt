@@ -56,7 +56,8 @@ foreach(target neonethack-core neonethack-engine)
     "-ffile-prefix-map=${CMAKE_BINARY_DIR}=build"
     "-ffile-prefix-map=${lua_SOURCE_DIR}=lua")
   set_target_properties(${target} PROPERTIES SUFFIX ".mjs" RUNTIME_OUTPUT_DIRECTORY "${ARTIFACTS}")
-  target_link_options(${target} PRIVATE -sASYNCIFY=1 -sASYNCIFY_STACK_SIZE=262144
+  set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/wasm/checkpoint-runtime.inc")
+  target_link_options(${target} PRIVATE "--post-js=${CMAKE_CURRENT_SOURCE_DIR}/wasm/checkpoint-runtime.inc" -sASYNCIFY=1 -sASYNCIFY_STACK_SIZE=262144
     -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sSTACK_SIZE=8MB
     -sENVIRONMENT=web,worker,node -sMODULARIZE=1 -sEXPORT_ES6=1 -sFORCE_FILESYSTEM=1)
 endforeach()

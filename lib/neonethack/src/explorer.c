@@ -31,6 +31,33 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+/* Private recorded-creation identity, supplied only by the WASM journal host.
+ * Game defaults and compatible identity selection still belong to shared C. */
+EM_JS(double, nnh_recorded_epoch, (), {
+    return globalThis.__nnhHost?.creation?.epoch ?? -1;
+});
+EM_JS(int, nnh_recorded_id, (char *id, int size), {
+    const value=globalThis.__nnhHost?.creation?.id;
+    if(!value)return 0;
+    stringToUTF8(value,id,size);return 1;
+});
+EM_JS(int, nnh_protocol_journal, (), {return globalThis.__nnhHost?.protocolJournal?1:0;});
+EM_JS(void, nnh_protocol_rng, (const char *record), {
+    if(globalThis.__nnhHost?.protocolJournal&&globalThis.__nnhHost.witnesses)
+        globalThis.__nnhHost.witnesses.push(JSON.parse(UTF8ToString(record)));
+});
+EM_ASYNC_JS(char *, nnh_protocol_receipt, (const char *sid, const char *rid), {
+    try {
+        const value=await globalThis.__nnhHost.receipt(UTF8ToString(sid),UTF8ToString(rid));
+        if(!value)return 0;
+        const bytes=lengthBytesUTF8(value)+1,ptr=_malloc(bytes);
+        if(ptr)stringToUTF8(value,ptr,bytes);return ptr;
+    } catch(error){globalThis.__nnhHost.diagnostic(String(error));return 0;}
+});
+#endif
+
 #define MAP_W 80
 #define MAP_H 21
 #define NSTATUS 27
@@ -624,9 +651,8 @@ sidecar_save(game_t *g)
         /* Keep the durable journal as the single historical copy. Only a
          * response not yet checkpointed needs duplication in this boundary. */
         size_t kept = 0;
-        for (e = g->requests; e && kept < 64; e = e->next) {
+        for (e = g->requests; e && kept < 64; e = e->next, kept++) {
             if (!e->result || e->checkpointed) continue;
-            kept++;
             mj_obj(&b);
             mj_key(&b, "rid"); mj_strv(&b, e->rid);
             mj_key(&b, "argsKey"); mj_strv(&b, e->args_key);
@@ -1104,6 +1130,9 @@ req_saved_result(game_t *g, req_entry_t *e)
     int gap, fd;
     FILE *f;
     if (e->result) return strdup(e->result);
+#ifdef __EMSCRIPTEN__
+    if (nnh_protocol_journal()) return nnh_protocol_receipt(g->id, e->rid);
+#endif
     if (snprintf(path, sizeof path, "%s/perceptions.jsonl", g->dir) >= (int) sizeof path) return NULL;
     fd = record_regular(path, O_RDONLY);
     if (fd < 0) return NULL;
@@ -5698,6 +5727,9 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
     char line[1024];
     int r;
     long long ev_from;
+#ifdef __EMSCRIPTEN__
+    if (nnh_recorded_epoch() >= 0) runtime_epoch = (long long) nnh_recorded_epoch();
+#endif
     if (mj_find(args, "sessionId", &v) && (s = mj_str(v)) != NULL) {
         if (!valid_id(s)) {
             free(s);
@@ -5706,6 +5738,9 @@ run_new_game(nhx_t *x, const char *args, const char *req_id)
         snprintf(id, sizeof id, "%s", s);
         free(s);
     } else {
+#ifdef __EMSCRIPTEN__
+        if (!nnh_recorded_id(id, sizeof id))
+#endif
         if (gen_session_id(id, sizeof id) < 0)
             return fail_envelope("", req_id, "runtimeUnavailable", "cannot generate a random session id");
     }

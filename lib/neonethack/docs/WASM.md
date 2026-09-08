@@ -62,6 +62,17 @@ including pending decisions and exact retry receipts. Closing the transport,
 reloading the page or terminating the worker loses this store. It is not a save
 to disk. Discovery reports `durability:"none"`.
 
+### `journal` (website runs)
+
+Use `{kind:'journal',name:'my-runs'}` for append-only protocol input persistence.
+IndexedDB and Web Locks are required. An input reservation commits before C is
+called; immutable completion evidence commits before its response resolves.
+Optional `uploadUrl`, `uploadToken` and `archiveConfigUrl` enable quiet background
+backup and static cloud restoration. This mode does not mirror MEMFS files or
+record each observation. See [the format and recovery contract](CLOUD_SAVES.md).
+The transport's archive playback/checkpoint methods operate in isolated memory,
+using the exact package. They are not gameplay tools or a way to modify a live run.
+
 ### `indexeddb`
 
 Requires IndexedDB, Web Locks and gzip Compression/Decompression Streams in a

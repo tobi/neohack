@@ -5,6 +5,15 @@ Runtime **profile 1** additionally records the game calendar and isolates the
 supported options/configuration inputs. Discovery advertises
 `capabilities.runtimeProfile: 1`; absence on an older library is not a guarantee.
 
+## Website input archives
+
+New browser runs use [one append-only protocol input archive](CLOUD_SAVES.md)
+for local durability, CDN backup and local WASM playback. Creation identity and
+calendar are recorded explicitly. Response hashes and RNG boundary evidence
+verify reconstruction; optional exact-package engine checkpoints accelerate it.
+The public-trace utility below remains a separate opt-in diagnostic export.
+It is not the website's storage path.
+
 ## Profile 1: fixed creation calendar in UTC
 
 New worlds record `runtimeProfile: 1` and `calendarEpoch` in their private

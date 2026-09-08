@@ -64,6 +64,9 @@ static int rng_boundary(game_t *g,long long id,const char *kind,const char *para
     mj_key(&b,"inputId");mj_intv(&b,id);mj_key(&b,"kind");mj_strv(&b,kind);
     mj_key(&b,"rng");mj_rawv(&b,fingerprint);mj_endobj(&b);free(fingerprint);record=mj_take(&b);
     if(!record)return rng_fail(g,"cannot allocate private RNG record");
+#ifdef __EMSCRIPTEN__
+    nnh_protocol_rng(record);
+#endif
     if(g->replaying){
         char expected[1024];size_t length;
         if(!g->rng_reader||!fgets(expected,sizeof expected,g->rng_reader)){

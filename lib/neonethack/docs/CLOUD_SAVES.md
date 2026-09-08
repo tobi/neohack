@@ -1,101 +1,109 @@
-# Browser runs and cloud journals
+# Local runs, input archives and online backup
 
-The live client gives an active run a stable URL:
+The website runs NetHack locally in a browser worker. Once its pinned package is
+available, network access is optional for starting, playing and resuming a local
+run. The installed PWA caches the shell, artwork and current runtime; supported
+older runtime caches survive an application update.
+
+Bookmark the full play URL:
 
 ```text
-https://neohack.dev/#run=SESSION_ID&vault=PRIVATE_VAULT_KEY
+https://neohack.dev/#run=SESSION_ID&vault=UPLOAD_CAPABILITY
 ```
 
-Bookmark the whole URL. Opening it selects that vault, restores its journal when
-needed, and calls the public `session.resume` operation. The same C semantic
-core that serves native clients replays the recorded inputs and restores the
-standing decision. The browser does not recreate game rules or invent answers.
+The fragment never accompanies the page request. Keep this bookmark private:
+the vault capability can upload and find runs. Sharing a replay instead gives a
+static manifest URL with only the unguessable run ID. Anyone with that replay
+link can read the recorded game. Script source, script notes and account identity
+remain separate, authenticated data.
 
-The fragment is not sent with the page request. The vault key authorizes access
-to that vault's saved adventures, so keep the URL private. It is not a public
-spectator link. Separate vaults use separate local databases and Web Locks.
-The deployment must serve the same origin for the page and its journal API.
+## One authoritative input log
 
-## What is saved
+New website and workshop runs use the WASM `journal` storage mode and the
+`neonethack.inputs` version 1 format. They record creation settings, the chosen
+seed, creation UTC epoch, opaque run ID, exact runtime build ID, and ordered
+client-to-engine protocol requests. This includes decision answers, cancellation,
+settings updates and rejected attempts. Read-only queries are not recorded.
 
-No engine heap or rendered map is uploaded. Persistence contains the C driver's
-input journal, runtime identity, semantic boundary metadata, request reservations
-and receipts. Perception recordings retain exact historical responses needed for
-request recovery; they are not engine-memory snapshots.
+Each input is added to IndexedDB in a strict transaction **before** C receives
+it. A second transaction adds completion evidence and advances a small run
+header. Neither write reads or rewrites the previous inputs. Completion evidence
+contains a response SHA-256 and private core/display RNG boundary fingerprints;
+it does not contain a full observation. These verifier records are outside the
+gameplay observation and receipt surfaces.
 
-A seed alone is insufficient: the recorded creation calendar, options profile,
-engine/data identity and target also matter. See [replay guarantees](REPLAY.md).
-Receipts and pending-context metadata cannot be discarded merely because the
-engine can regenerate its world. A reserved request with no receipt remains
-uncertain, and replay must not treat it as a new action.
+A seed alone is not sufficient. The exact engine, data, calendar, options and
+input sequence must agree. [REPLAY.md](REPLAY.md) explains the limits. The C
+semantic driver continues to own actual execution and exact request receipts.
+A missing completion is an uncertain reserved input, not permission to issue a
+fresh action in the old process. Restoration reconstructs a fresh process from
+the verified prefix, completes its single reserved tail once, then retains the
+original request ID and receipt. Missing committed rows, gaps and changed
+fingerprints stop restoration; they are not truncated or silently repaired.
 
-## Local durability and background replication
+## Bounded asynchronous upload
 
-Every active website run attempts background backup automatically. A local
-recovery bookmark may skip remote restoration, but never disables uploading.
-Offline play resumes syncing when the connection returns, without a toggle.
+After five seconds idle, or thirty seconds of ongoing activity, the worker reads
+only the next unacknowledged range. Batches contain at most 128 input records,
+at most 1 MiB decoded and 512 KiB compressed. Large counted actions cause an
+earlier batch boundary. The compressed bytes and SHA-256 are retained locally
+before upload. An acknowledgement must identify exactly that hash and end cursor;
+a lost acknowledgement retries identical bytes without re-executing the game.
 
-C pre-input `fsync` boundaries still wait for strict IndexedDB transactions.
-Remote latency is outside that boundary. After a completed protocol request, a
-five-second inactivity debounce batches the latest committed journal data for upload,
-with a thirty-second maximum delay during continuous play. One upload
-runs at a time; new input can continue while it is in flight. Unchanged
-content-addressed blocks are not resent. Vercel stores immutable blocks separately
-in private Blob storage and conditionally commits the file manifest, exact request
-digest and revision using its ETag. A stale writer cannot replace newer progress.
-Upload requests are bounded to fit Vercel Functions' payload limit.
+`PUT /api/runs/:id/inputs` validates the write capability, sequence, runtime and
+size limits. It publishes an immutable `chunks/<sha256>.gz` object and conditionally
+advances the run head and static manifest. Previous chunks are never downloaded
+or concatenated on normal upload. Errors leave the local log and exact pending
+batch intact. Reconnect retries quietly. Upload latency is outside the action
+promise; closing a tab can leave a prefix pending until the browser returns.
+An account can associate the run for later discovery, but is not needed to play.
 
-Each upload has a durable commit ID and base revision. Network retries send the
-same immutable upload. The server accepts an identical retry, rejects a changed
-retry or stale base, and checks that every referenced block is present. An
-acknowledgement lost during page shutdown is reconciled from the durable outbox;
-no game action is executed to recover a transport acknowledgement.
+These are separate immutable batch files, with no mutable growing tail. At scale,
+storage consists mainly of compressed requests rather than repeated maps; a
+batch requires one chunk publication and small head/manifest updates. Accounts
+and ledger indexing have additional costs. This format does not claim the existing
+ledger index is already designed for millions of entries.
 
-The storage layer can adopt a cloud seed when its local journal still matches its last acknowledged copy. The website only requests that seed when the requested session is absent locally; new games and existing local sessions never wait for cloud restoration. Local entry retains the device’s exact branch, including pending decisions.
+## Resume and level checkpoints
 
-A browser whose local journal still matches its last acknowledged copy can
-refresh from a newer cloud revision after validation. Unsynced or conflicting
-local progress is retained instead of overwritten. The website gives each browser
-copy a durable random backup-stream ID, stored alongside its local journal.
-Streams use separate conditional Blob manifests under the same private vault.
-A new stream starts with a full verified snapshot; later commits send only changed
-blocks. A returning browser keeps its stream. A fresh browser restores the
-acknowledged stream named in the adventure directory, then backs up independently.
-Neither browser overwrites the other’s history. The former shared vault head and
-any uncertain pre-stream outbox are retained. No engine journal is rewritten.
-Hash, manifest or reference failures reject the journal before installing it.
+Local resume reads the input log using the recorded package. A fresh device first
+imports static manifest/chunk files from the CDN, retaining its import cursor if
+download is interrupted. A different runtime pin is refused. Existing published
+pins and recorded histories are not replaced on deployment.
 
-**Saved online** means the cloud journal and adventure metadata were acknowledged.
-**Saving online…** means local progress is durable but newer changes may not yet
-be available on another device. Closing a runtime explicitly flushes pending
-uploads; abruptly closing a tab can leave unsynced progress in that browser.
-Each request has a ten-second timeout. Network failures, HTTP 408/429 and server
-errors retry in the background with exponential backoff capped at one minute.
-The durable outbox retains the exact commit ID, base and body across retries and
-reloads; newer local work waits behind that acknowledgement. The UI says
-“Saved here · retrying online”, without an error toast for temporary failures.
-Within one stream, conflicting writers, refused access and invalid acknowledgement identities stop replication
-and retain local progress for explicit recovery. Close makes a bounded flush
-attempt; abrupt termination can still leave pending local work.
+After a level transition, a quiescent WASM checkpoint can accelerate subsequent
+resume and seeking. It includes the actual engine and C-driver linear memory,
+Asyncify continuation, virtual files, open file positions, host queues and package
+identity. A full response is included only as its display preview. A response
+alone cannot restore hidden state, RNG, inventory identity or pending decisions.
+Compression runs in a separate worker; the boundary memory copy still has a
+finite cost. Checkpoints are optional caches, limited to 4 MiB compressed and
+captured on first entry to a level, then at most once per 256 inputs for repeat
+visits to that level. Decoded checkpoints are limited to
+256 MiB. Invalid caches fall back to full verified input replay; bad
+inputs do not. Checkpoint ABI is tied to the exact runtime package.
 
-Network-worker updates are independent of the pinned C/WASM package. Existing
-runs retain their exact engine and static-data identity. Adventure metadata and
-ledger updates retry independently in batches of at most fifty, so a long history
-or a temporary ledger outage cannot stop journal uploads. Only acknowledged
-backup streams are advertised for remote resumption.
+## Watching
 
-WASM resumption requires the same package identity. Incompatible development
-packages are refused, not silently substituted or migrated.
+The viewer reads the static manifest and hash-named chunks directly from Blob/CDN,
+then executes the recorded inputs in an isolated local WASM runtime. It can show
+the first scene before later chunks arrive, and seek from a preceding checkpoint.
+Watching performs no account lookup, upload, ledger request or dynamic replay
+assembly. A foreign-origin embed uses the same static files under ordinary CORS
+and its host page's worker/CSP policy. Old published observation archives remain
+readable by their existing viewer; new runs do not write that format.
 
-## Performance reproduction
+## Verification
 
-A fresh real WASM run followed by three search turns previously triggered 93
-whole-store PUTs, totaling about 1.51 MB. With 100 ms of simulated server latency,
-each search took about 2 seconds. The background batching implementation reduced
-this trace to one approximately 24 KB upload; searches took 20–24 ms with the
-same latency. These are local Chromium measurements, not production latency
-claims.
+`tests/wasm/protocol-recording.test.mjs` exercises real WASM/IndexedDB loss,
+pending decisions, cold exact receipts, missing rows, runtime pins, RNG equality
+and a real level-transition checkpoint. `protocol-format.test.mjs` tests binary
+bounds, playlist integrity, debounce, lost acknowledgements and chunk limits.
+The Vercel protocol tests exercise publication failure, static progressive and
+cross-origin playback, fresh-device restore and installed PWA offline reload.
 
-`hosting/vercel/tests/cloud.test.mjs` runs the actual Vercel handlers with an isolated conditional-write store and
-sandboxed Chromium to check atomic commits, stale writers, a held server
-acknowledgement, fresh-browser C resumption and lost-acknowledgement recovery.
+The separate `indexeddb` block-replication mode remains supported for already
+published website saves and explicit library consumers; see [WASM.md](WASM.md).
+It is not used for new website/workshop recordings. Clearing browser storage can
+still delete unsynced inputs, and storage quota failures remain real durability
+errors rather than offline notices.

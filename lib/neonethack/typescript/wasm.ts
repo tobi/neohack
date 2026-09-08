@@ -4,8 +4,11 @@ import { worker, type WorkerPort } from "../wasm/worker-port.mjs";
 
 export type WasmStorage =
   | { kind: "memory" }
+  | { kind: "journal"; name: string; uploadUrl?:string; uploadToken?:string; archiveConfigUrl?:string }
   | { kind: "indexeddb"; name: string; replicaUrl?: string; replicaBranches?: boolean; replicaRestore?: boolean; replicaSession?: string };
 export interface WasmOptions {
+  /** Static archive source for cold receipt reconstruction during checkpoint playback. */
+  playbackArchive?:{manifest:unknown;url:string};
   /** Exact pinned compiler/data package; network-worker updates do not change this identity. */
   runtimeUrl?: string;
   /** Defaults to volatile memory. IndexedDB also requires browser Web Locks. */
@@ -13,9 +16,10 @@ export interface WasmOptions {
   /** Relocate the entire dist/wasm directory together, not individual binaries. */
   workerUrl?: URL;
   timeoutMs?: number;
-  onTiming?: (timing: {stage:"durability";duration:number}) => void;
+  onTiming?: (timing: {stage:"durability"|"checkpoint";duration:number}) => void;
   onStartup?: (stage: "ownership"|"assets"|"compile"|"local"|"cloud"|"engine"|"ready") => void;
   onDiagnostic?: (message: string) => void;
+  onRecorded?: (recording: {id:string;count:number;complete:boolean}) => void;
   /** Remote replication is asynchronous; local durability remains awaited. */
   onReplicaStatus?: (status: { state: "queued" | "pending" | "saved" | "retrying" | "error"; message: string; branch?: string; sessions?: string[] }) => void;
 }
@@ -34,6 +38,7 @@ export class WasmTransport implements Transport {
     this.timeoutMs = options.timeoutMs ?? 150_000;
     if (!Number.isFinite(this.timeoutMs) || this.timeoutMs <= 0) throw Error("timeoutMs must be positive");
     this.worker = worker(options.workerUrl ?? new URL("../wasm/core-worker.mjs", import.meta.url), message => {
+      if(message.type==='recorded'){options.onRecorded?.({id:message.id,count:message.count,complete:message.complete});return;}
       if (message.type === "timing") { options.onTiming?.({stage:message.stage,duration:message.duration}); return; }
       if (message.type === "startup") { options.onStartup?.(message.stage); return; }
       if (message.type === "replica") { options.onReplicaStatus?.({ state: message.state, message: message.message, branch:message.branch, sessions:message.sessions }); return; }
@@ -47,7 +52,7 @@ export class WasmTransport implements Transport {
   static async create(options: WasmOptions = {}): Promise<WasmTransport> {
     const transport = new WasmTransport(options);
     try {
-      const initialized = await transport.exchange("init", { options: { storage: options.storage, runtimeUrl: options.runtimeUrl } });
+      const initialized = await transport.exchange("init", { options: { storage: options.storage, runtimeUrl: options.runtimeUrl,playbackArchive:options.playbackArchive } });
       transport.identity = initialized.buildId;
       return transport;
     } catch (error) {
@@ -75,12 +80,25 @@ export class WasmTransport implements Transport {
     });
   }
   send(request: Request): Promise<Response> {
+    return this.ordered('request',{request});
+  }
+  private ordered(type:string,payload:Record<string,unknown>):Promise<any>{
     if (this.closing) return Promise.reject(Error("Transport is closed"));
-    const copy = structuredClone(request);
-    const run = this.tail.then(() => this.exchange("request", { request: copy }));
+    const copy = structuredClone(payload);
+    const run = this.tail.then(() => this.exchange(type,copy));
     this.tail = run.then(() => undefined, () => undefined);
     return run;
   }
+  /** Input archives use the exact package in isolated memory; no live store or uploads. */
+  playback(record: unknown): Promise<Response> { return this.ordered('playback',{record}); }
+  playbackBatch(records: unknown[]): Promise<Response> { return this.ordered('playbackBatch',{records}); }
+  /** Archive-verification evidence, separate from the gameplay observation. */
+  integrity():Promise<unknown[]>{return this.ordered('integrity',{});}
+  checkpoint(index?:number): Promise<unknown> { return this.ordered('checkpoint',{index}); }
+  restoreCheckpoint(value:unknown): Promise<void> { return this.ordered('restoreCheckpoint',{value}); }
+  restoreCheckpointBytes(value:{bytes:Uint8Array;sha256:string;index:number}):Promise<{index:number;preview:import('./types.js').Snapshot}>{return this.ordered('restoreCheckpointBytes',{value});}
+  flushRecording(sessionId:string):Promise<{count:number;manifest?:string}>{return this.exchange('flushRecording',{sessionId});}
+  recordingInfo(sessionId:string):Promise<any>{return this.ordered('journalInfo',{sessionId});}
   async close(): Promise<void> {
     if (this.closing) return;
     this.closing = true;

@@ -113,6 +113,11 @@ record_validate(game_t *g, const char *line, long long sequence,
 static int
 record_prepare(game_t *g, int before_input)
 {
+#ifdef __EMSCRIPTEN__
+    /* The host has already committed the exact public request before C runs.
+     * Its input log replaces observation archives, not input/receipt guards. */
+    if (nnh_protocol_journal()) {g->recording_ready=1;return 0;}
+#endif
     char data[PATH_MAX], index[PATH_MAX], meta[PATH_MAX], temp[PATH_MAX], *line = NULL;
     struct stat ds, is, after;
     FILE *in = NULL, *out = NULL;
@@ -193,6 +198,18 @@ done:
 static int
 record_frame(game_t *g, const char *request, const char *response)
 {
+#ifdef __EMSCRIPTEN__
+    if (nnh_protocol_journal()) {
+        mj_val id;
+        if(mj_find(request,"requestId",&id)){
+            char *rid=mj_str(id);req_entry_t *entry=rid?req_lookup(g,rid):NULL;
+            if(entry&&entry->result&&!strcmp(entry->result,response))entry->checkpointed=1;
+            free(rid);
+        }
+        g->frame_count++;g->recording_gap=0;
+        return sidecar_save(g);
+    }
+#endif
     char data[PATH_MAX], index[PATH_MAX], meta[PATH_MAX], temp[PATH_MAX];
     FILE *f = NULL;
     mj_Buf b;
