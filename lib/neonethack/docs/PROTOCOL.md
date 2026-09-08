@@ -119,6 +119,9 @@ text, or a confirmation default. It cannot undo time already spent. Wrong
 answer shapes and stale IDs do not advance the engine. No client should restart
 the initiating action to continue a pending decision.
 
+MCP/WebMCP also require the exact returned `decisionId` on answer and cancel;
+the adapter never substitutes a newer standing question for a caller’s old answer.
+
 Use the returned `decision.id` as `decision.answer.params.decisionId` or
 `decision.cancel.params.decisionId`; the standing neighborhood
 `inputGate.decisionId` matches it. An explicit `confirm:false` answers the

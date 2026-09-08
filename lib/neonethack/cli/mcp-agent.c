@@ -64,7 +64,7 @@ char *mcp_agent_help(mj_val args)
 /* Add only adapter-owned guards to already schema-validated arguments. The
  * public input schema rejects caller-supplied guards before this function. */
 char *mcp_agent_request(const char *method, mj_val args, long long revision,
-                        const char *request_id, const char *decision_id)
+                        const char *request_id)
 {
     mj_Buf b; mj_init(&b); mj_obj(&b);
     mj_key(&b,"version"); mj_intv(&b,1);
@@ -72,13 +72,12 @@ char *mcp_agent_request(const char *method, mj_val args, long long revision,
     mj_key(&b,"params"); mj_obj(&b);
     const char *cursor = args.p ? args.p : "{}"; char *key; mj_val value; int next;
     while ((next = nnh_object_next(&cursor,&key,&value)) > 0) {
-        if (!strcmp(key,"requestId") || !strcmp(key,"expectedRevision") || !strcmp(key,"decisionId")) b.ok = 0;
+        if (!strcmp(key,"requestId") || !strcmp(key,"expectedRevision")) b.ok = 0;
         mj_key(&b,key); mcp_raw(&b,value); free(key);
     }
     if (next < 0) b.ok = 0;
     if (revision >= 0) { mj_key(&b,"expectedRevision"); mj_intv(&b,revision); }
     if (request_id) { mj_key(&b,"requestId"); mj_strv(&b,request_id); }
-    if (decision_id) { mj_key(&b,"decisionId"); mj_strv(&b,decision_id); }
     mj_endobj(&b); mj_endobj(&b); return mcp_take(&b);
 }
 int mcp_agent_uncertain(const char *response)

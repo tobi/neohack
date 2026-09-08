@@ -46,9 +46,9 @@ Keep the short `sessionId` returned by creation. The low protocol also requires 
 unique `requestId` and the last observed revision for input; the typed client
 manages these. A stale revision means look again and reconsider.
 
-MCP and WebMCP expose navigation: pass the session token without request,
-revision or decision IDs. Use `go({sessionId,to:{x,y}})` for a bounded navigation
-leg, `attack({sessionId,target})` for a deliberate adjacent attack, and `help` for
+MCP and WebMCP expose navigation: pass the session token without request
+or revision IDs. Answer and cancel also require the exact returned `decisionId`.
+Use `go({sessionId,to:{x,y}})` for a bounded navigation leg, `attack({sessionId,target})` for a deliberate adjacent attack, and `help` for
 brief discovery or one tool's schema. `force:true` on `go` attempts an adjacent
 ordinary move; it does not force an attack or bypass an engine question. Results
 include a witnessed summary and a self-contained perceived observation. Compact results label the omitted neighborhood attempts and clear-grid events; use free `session_observe` for the full current frame and `receipt` for the full input events. `retry` recovers the adapter's retained uncertain input or its most recent

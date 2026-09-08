@@ -28,14 +28,21 @@ The adapter preserves `readOnlyHint`. Calls return `structuredContent`,
 summary and a complete observation; agents do not merge deltas.
 
 Pass the short `sessionId` back on calls. The adapter owns request IDs, its
-last observed revision, and the standing decision ID; callers still choose
-actual answers, item references and confirmations. Invalid or extra arguments
+last observed revision; callers supply the exact returned `decision.id` as
+`decisionId` on every `decision_answer` and `decision_cancel`, along with their
+chosen answer or confirmation. An old ID is rejected before resolving named
+choices or submitting input, even if the new prompt has the same kind or labels.
+Closing/resuming the same pending question preserves its ID; a later question
+gets a different ID. Invalid or extra arguments
 are rejected before dispatch. A stale revision requires observation and a new
-judgment, not an automatic retry.
+judgment, not an automatic retry. Native MCP captures the shared run adapter
+revision when a call arrives; it does not track each HTTP client’s last view.
+HTTP client metadata does not establish ownership or decision authority.
+Decision identity remains explicit across connections and participants.
 
 Choice options include a readable `name` alongside their numeric `id` and
 displayed `label`. MCP accepts either names or IDs in `answer.choose`. Names
-are aliases for the current question, not durable identities. An ambiguous
+are aliases scoped to the supplied `decisionId`, not durable identities. An ambiguous
 name returns the matching candidates under the same standing decision; select
 one by ID. An unknown name returns the available choices. Neither clarification
 submits engine input. Item selections continue to use opaque item references.

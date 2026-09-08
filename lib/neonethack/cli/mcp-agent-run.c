@@ -62,13 +62,7 @@ static char *step(nnh_context *ctx, mcp_agent_state *s, const char *method, mj_v
 {
     int mutation = !strncmp(method,"game.",5) || !strncmp(method,"decision.",9);
     int query_guard = !strcmp(method,"session.actions") || !strcmp(method,"session.route") || !strcmp(method,"session.navigation");
-    char *decision = NULL;
-    if (!strncmp(method,"decision.",9)) {
-        decision = mcp_string(mcp_field(mcp_field(s->snapshot,"decision").p,"id"));
-        if (!decision) return mcp_agent_error("agentError","There is no standing decision.");
-    }
-    char *request = mcp_agent_request(method,args,mutation || query_guard ? seen : -1,mutation ? operation : NULL,decision);
-    free(decision);
+    char *request = mcp_agent_request(method,args,mutation || query_guard ? seen : -1,mutation ? operation : NULL);
     char *response = dispatch(ctx,s,request,mutation,0); free(request); return response;
 }
 static char *params(const char *sid, const char *key, mj_val value)
@@ -397,6 +391,7 @@ static char *answer_choice(nnh_context *ctx, mcp_agent_state *s, mj_val args, lo
     if (!ids) return mcp_agent_error("agentError","Cannot resolve choices; no input submitted.");
     mj_Buf b; mj_init(&b); mj_obj(&b);
     mj_key(&b,"sessionId"); mcp_raw(&b,mcp_field(args.p,"sessionId"));
+    mj_key(&b,"decisionId"); mcp_raw(&b,mcp_field(args.p,"decisionId"));
     mj_key(&b,"answer"); mj_obj(&b); mj_key(&b,"kind"); mj_strv(&b,"choice");
     mj_key(&b,"choose"); mcp_raw(&b,(mj_val){ids}); mj_endobj(&b); mj_endobj(&b);
     char *p = mcp_take(&b); free(ids);
@@ -427,7 +422,7 @@ char *mcp_agent_execute(nnh_context *ctx, mcp_agent_state *s, const char *method
         char *sid = mcp_string(mcp_field(args.p,"sessionId"));
         char *op = mcp_string(mcp_field(args.p,"operationId"));
         char *p = params(sid,NULL,(mj_val){NULL});
-        char *request = mcp_agent_request("session.receipt",(mj_val){p},-1,op,NULL);
+        char *request = mcp_agent_request("session.receipt",(mj_val){p},-1,op);
         char *response = dispatch(ctx,s,request,0,1);
         free(sid); free(op); free(p); free(request); return response;
     }
@@ -438,6 +433,12 @@ char *mcp_agent_execute(nnh_context *ctx, mcp_agent_state *s, const char *method
         if (number(s->snapshot,"revision",-1) != seen) return mcp_agent_error("staleRevision","State changed while this call was queued. Observe before acting.");
     }
     if (!strcmp(method,"agent.attack")) return attack(ctx,s,args,seen,operation);
+    if (!strncmp(method,"decision.",9)) {
+        char *id = mcp_string(mcp_field(args.p,"decisionId"));
+        int matches = id && same(mcp_field(mcp_field(s->snapshot,"decision").p,"id"),id);
+        free(id);
+        if (!matches) return mcp_agent_error("staleDecision","The decision changed. Observe and answer the exact returned decisionId; no input submitted.");
+    }
     if (!strcmp(method,"decision.answer")) return answer_choice(ctx,s,args,seen,operation);
     if (!strcmp(method,"agent.go") || !strcmp(method,"agent.explore") || !strcmp(method,"agent.descend")) return navigate(ctx,s,method,args,operation);
     char *response = step(ctx,s,method,args,seen,operation);

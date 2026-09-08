@@ -135,6 +135,10 @@ export class AgentClient {
           if(query.cell.movement.relation!=='adjacent'||!move?.arguments||!('direction' in move.arguments))throw Error('Choose an adjacent square for an attack.');
           method='game.attack';params={sessionId:sid,direction:move.arguments.direction};
         }
+        if(method.startsWith('decision.') && input.decisionId!==game!.decision?.id) return {
+          version:1,sessionId:sid,summary:'The decision changed. Observe and answer the exact returned decisionId; no input submitted.',
+          error:{code:'staleDecision',message:'The decision changed. Observe and answer the exact returned decisionId; no input submitted.'},
+        };
         if(method==='decision.answer' && game!.decision?.kind==='choice') {
           const answer=input.answer as {kind:string;choose?:Array<number|string>};
           if(answer.kind==='choice' && answer.choose) {
@@ -154,10 +158,6 @@ export class AgentClient {
         }
         if(method.startsWith('game.')||method.startsWith('decision.')) {
           params.requestId=globalThis.crypto.randomUUID();params.expectedRevision=revision;
-          if(method.startsWith('decision.')) {
-            if(!game!.decision)throw Error('There is no standing decision.');
-            params.decisionId=game!.decision.id;
-          }
         } else if(method==='session.actions'||method==='session.route'||method==='session.navigation')params.expectedRevision=revision;
         if(options.signal?.aborted) throw Error('Tool call cancelled before submission.');
         const response=await this.api.transport.send({version:1,method,params} as Request);

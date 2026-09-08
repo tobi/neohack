@@ -48,11 +48,10 @@ int main(int argc, char **argv)
         assert(mcp_agent_valid(definition,args));
         char *method = mcp_string(mcp_field(definition.p,"method"));
         char *request_id = mcp_string(mcp_field(line,"operationId"));
-        char *decision_id = mcp_string(mcp_field(line,"decisionId"));
         long long revision = -1; mj_int(mcp_field(line,"revision"),&revision);
-        char *out = mcp_agent_request(method,args,revision,request_id,decision_id);
+        char *out = mcp_agent_request(method,args,revision,request_id);
         assert(out); puts(out);
-        free(out); free(line); free(name); free(method); free(request_id); free(decision_id);
+        free(out); free(line); free(name); free(method); free(request_id);
         return 0;
     }
     if (argc == 2 && (!strcmp(argv[1],"present") || !strcmp(argv[1],"present-compact"))) {
@@ -88,9 +87,9 @@ int main(int argc, char **argv)
     char small[3]; nnh_choice_name("魔法",small,sizeof small); assert(!strcmp(small,""));
     mcp_agent_state choices = {0};
     choices.snapshot = strdup("{\"revision\":4,\"decision\":{\"id\":\"question\",\"kind\":\"choice\",\"options\":[{\"id\":1,\"name\":\"same\",\"label\":\"Same\"},{\"id\":2,\"name\":\"same\",\"label\":\"Same!\"}]}}");
-    char *clarified = mcp_agent_execute(NULL,&choices,"decision.answer",(mj_val){"{\"sessionId\":\"abcdefghijklmnop\",\"answer\":{\"kind\":\"choice\",\"choose\":[\"same\"]}}"},4,"unused");
+    char *clarified = mcp_agent_execute(NULL,&choices,"decision.answer",(mj_val){"{\"sessionId\":\"abcdefghijklmnop\",\"decisionId\":\"question\",\"answer\":{\"kind\":\"choice\",\"choose\":[\"same\"]}}"},4,"unused");
     assert(clarified && strstr(clarified,"ambiguousName") && !choices.pending && !choices.last); free(clarified);
-    clarified = mcp_agent_execute(NULL,&choices,"decision.answer",(mj_val){"{\"sessionId\":\"abcdefghijklmnop\",\"answer\":{\"kind\":\"choice\",\"choose\":[\"missing\"]}}"},4,"unused");
+    clarified = mcp_agent_execute(NULL,&choices,"decision.answer",(mj_val){"{\"sessionId\":\"abcdefghijklmnop\",\"decisionId\":\"question\",\"answer\":{\"kind\":\"choice\",\"choose\":[\"missing\"]}}"},4,"unused");
     assert(clarified && strstr(clarified,"unknownName") && !choices.pending); free(clarified);
     mcp_agent_clear(&choices);
     mj_val go = mcp_agent_method("go"), answer = mcp_agent_method("decision_answer");
@@ -99,16 +98,17 @@ int main(int argc, char **argv)
     assert(!mcp_agent_valid(go,(mj_val){"{\"sessionId\":\"abcdefghijklmnop\",\"to\":{\"x\":1,\"y\":0},\"expectedRevision\":0}"}));
     assert(!mcp_agent_valid(go,(mj_val){"{\"sessionId\":\"abcdefghijklmnop\",\"to\":{\"x\":1,\"y\":0},\"force\":\"yes\"}"}));
     assert(!mcp_agent_valid(go,(mj_val){"{\"sessionId\":\"abcdefghijklmnop\",\"to\":{\"x\":80,\"y\":0}}"}));
-    const char *args = "{\"sessionId\":\"abcdefghijklmnop\",\"answer\":{\"kind\":\"confirmation\",\"confirm\":false}}";
+    const char *args = "{\"sessionId\":\"abcdefghijklmnop\",\"decisionId\":\"standing-context\",\"answer\":{\"kind\":\"confirmation\",\"confirm\":false}}";
     assert(mcp_agent_valid(answer,(mj_val){args}));
-    char *request = mcp_agent_request("decision.answer",(mj_val){args},7,"unique-operation","standing-context");
+    assert(!mcp_agent_valid(answer,(mj_val){"{\"sessionId\":\"abcdefghijklmnop\",\"answer\":{\"kind\":\"confirmation\",\"confirm\":false}}"}));
+    char *request = mcp_agent_request("decision.answer",(mj_val){args},7,"unique-operation");
     assert(request && mj_valid(request));
     mj_val params = mcp_field(request,"params"); long long revision;
     assert(mj_int(mcp_field(params.p,"expectedRevision"),&revision) && revision == 7);
     char *id = mcp_string(mcp_field(params.p,"decisionId")); assert(id && !strcmp(id,"standing-context")); free(id);
     int confirm = 1; assert(mj_bool(mcp_field(mcp_field(params.p,"answer").p,"confirm"),&confirm) && !confirm);
     free(request);
-    assert(!mcp_agent_request("game.wait",(mj_val){"{\"requestId\":\"caller\"}"},1,"adapter",NULL));
+    assert(!mcp_agent_request("game.wait",(mj_val){"{\"requestId\":\"caller\"}"},1,"adapter"));
     assert(mcp_agent_uncertain("{\"outcome\":{\"status\":\"unknown\"}}"));
     assert(mcp_agent_uncertain("{\"error\":{\"code\":\"incompleteRequest\"}}"));
     assert(!mcp_agent_uncertain("{\"error\":{\"code\":\"staleRevision\"}}"));

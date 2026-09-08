@@ -103,12 +103,13 @@ Answer a standing question explicitly. For a confirmation you choose to decline:
 
 ```sh
 agent-browser webmcp invoke decision_answer \
-  --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid,answer:{kind:"confirmation",confirm:false}}')"
+  --params "$(jq -nc --arg sid "$GAME_ID" --arg decision "$(jq -r .decision.id "$PLAY_DIR/frame.json")" '{sessionId:$sid,decisionId:$decision,answer:{kind:"confirmation",confirm:false}}')"
 ```
 
-`decision_cancel` takes only `sessionId` and works only for cancellable questions.
-The adapter binds answers to its observed question; do not send a decision ID or
-revision. Item references remain opaque. Choice answers accept returned readable
+`decision_cancel` takes `sessionId` and the exact returned `decisionId` and works
+only for cancellable questions. Both answer and cancel reject old decision IDs;
+read the new question before making another choice. Do not send a revision.
+Item references remain opaque. Choice answers accept returned readable
 names or IDs; an ambiguous name returns candidates. Use `help` with a tool’s
 `name` for its schema. An answer can produce another question.
 
