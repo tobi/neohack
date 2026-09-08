@@ -33,6 +33,7 @@ jobs:
         run: node hosting/vercel/scripts/runtime-package.mjs restore https://neohack.dev/
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
         with:
+          version: '2026.9.2'
           install: false
       - name: Native prerequisites
         if: steps.wasm-cache.outputs.hit != 'true'
