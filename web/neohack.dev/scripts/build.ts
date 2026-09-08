@@ -65,7 +65,7 @@ if (diagnostics.length) {
 const embeddedArt: Record<string,string> = {};
 for (const file of new Bun.Glob('*.png').scanSync(root+'/public/art')) embeddedArt[file.replace(/\.png$/, '')] = 'data:image/png;base64,' + Buffer.from(await Bun.file(root+'/public/art/'+file).arrayBuffer()).toString('base64');
 const botTypes: Record<string, string> = {};
-for (const name of ['low', 'high', 'client', 'types', 'requests', 'hero', 'script', 'vocabulary', 'hero-events', 'lifecycle']) botTypes['/types/' + name + '.d.ts'] = await Bun.file(library + '/dist/typescript/' + name + '.d.ts').text();
+for (const name of new Bun.Glob('*.d.ts').scanSync(library + '/dist/typescript')) botTypes['/types/' + name] = await Bun.file(library + '/dist/typescript/' + name).text();
 for (const name of new Bun.Glob('lib.*.d.ts').scanSync(root + '/node_modules/typescript/lib')) botTypes['/lib/' + name] = await Bun.file(root + '/node_modules/typescript/lib/' + name).text();
 const defines = { __NEOHACK_ART__: JSON.stringify(embeddedArt), __BOT_TYPES__: JSON.stringify(botTypes), __BOT_EXAMPLES__: JSON.stringify(Object.fromEntries(await Promise.all(catalog.map(async (example) => [example.id, await exampleProject(example)])))) };
 const result = await Bun.build({

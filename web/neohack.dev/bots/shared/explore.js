@@ -109,7 +109,7 @@ export function createExplorer() {
                 const cause = error instanceof NavigationError ? error.cause : error;
                 if (!(cause instanceof WorldError) || !("error" in cause.response) || cause.response.error?.code !== "unsupportedMovement")
                     throw error;
-                log("The navigator cannot plan this movement:", error.message);
+                log("The navigator cannot plan this movement:", cause.message);
                 hero.stop();
             }
         },
