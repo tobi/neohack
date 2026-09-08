@@ -2295,7 +2295,13 @@ test("contextual stairs use the current engine offer at 70 percent on desktop an
   assert.equal(await stairs.textContent(), "Leave");
   for (const size of [{ width: 1440, height: 1050 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(size);
-    const bounds = await stairs.boundingBox();
+    // Resizing asks for a fresh contextual offer; its previous button can be
+    // detached between layout and the asynchronous offer response.
+    const bounds = await (await page.waitForFunction(({width,height}) => {
+      const rect = document.querySelector('#contextual-stairs button')?.getBoundingClientRect();
+      return rect && rect.height >= 56 && Math.abs(rect.x+rect.width/2-width/2)<2 && Math.abs(rect.y+rect.height/2-height*.7)<2
+        ? {x:rect.x,y:rect.y,width:rect.width,height:rect.height} : null;
+    }, size)).jsonValue();
     assert.ok(Math.abs(bounds.x + bounds.width / 2 - size.width / 2) < 2);
     assert.ok(Math.abs(bounds.y + bounds.height / 2 - size.height * .7) < 2);
     assert.ok(bounds.height >= 56);
