@@ -68,9 +68,11 @@ choices appear in the game UI and await an explicit `decision.answer` or
 
 Idle title screens release their WASM transport after discovery, rejected starts
 and `session.close`. Closing an adventure preserves its unfinished status and
-standing decisions so another tab can resume it. If another tab is actively
-playing, close that tab or use **Save & return to doorway** there before resuming
-here. Do not clear site data to resolve ownership.
+standing decisions so another tab can resume it. Different adventures use separate
+stores. Opening the same adventure requests a cooperative handoff: the old tab
+finishes accepted input and releases its engine, then the new tab resumes the
+same journal and question. A non-cooperating owner times out without changing
+the save. Do not clear site data to resolve ownership.
 
 Agent-created games appear immediately in the HUD and browser adventure list.
 Operations use the same origin-owned IndexedDB journal as human input. Exact

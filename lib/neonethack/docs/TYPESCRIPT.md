@@ -33,7 +33,7 @@ and `moveWithoutAttack`. Their arguments and subsequent decisions match the
 fields without parsing inventory labels. Use only returned choices; a target
 decision's `allowedDirections` describes the offered directions. A counted
 item decision accepts `{id, quantity}`; initial counts are supported by `drop`.
-MCP/WebMCP generate all these named tools from the same catalog.
+MCP/WebMCP map these operations to the navigation vocabulary described below.
 
 There is no hidden per-move observation request. Inspect the snapshot directly
 or call `game.observe()` for a no-input read. `game.close()` retires that handle;
@@ -74,19 +74,23 @@ The default transport is stdio: newline-delimited JSON-RPC initialization,
 `ping`, `tools/list` and `tools/call`. Stdout is protocol-only. There is no Node
 server adapter, JavaScript server launcher or bundled JavaScript runtime.
 
-The generated tool names, input schemas, annotations and response schema remain
-the same for native MCP and WebMCP. Tools include `session_create`,
-`session_observe`, named `game_*` actions, `decision_answer`, `decision_cancel`
-and `protocol_describe`. There is no generic `act` tool. Arguments are forwarded
-intact to public `nnh_dispatch`; the C driver validates them and owns gameplay.
+Native MCP and WebMCP share the navigation vocabulary generated from
+`protocol/agent.ts`: `session_create`, `session_observe`, `go`, `explore`,
+`descend`, `attack`, named actions and explicit decisions. `help` lists tools
+or gives one tool's schema. The adapter owns request IDs, action revisions and
+response reconstruction; the C driver still validates every semantic operation.
+Callers pass the short run token and the exact returned `decision.id` as
+`decisionId` for answers and cancellations. An old answer cannot resolve a newer
+question, even when the choices have the same names. See [WebMCP](WEBMCP.md)
+for shared decision, uncertainty and presentation semantics.
 
-Results are in `structuredContent` with an empty `content` array. Structured
+Results are in `structuredContent` and a text `content` block for older clients. Structured
 rejections set `isError`; a blocked in-game attempt is not automatically a
 protocol error. Process failures return a textual `isError` explaining that
 execution may be uncertain. Tool listings omit the optional repeated output
-schema; `compactResponseSchema` is available from `neonethack/mcp/tools` and in
-`protocol/mcp-response.schema.json`. `CompactObservationReader` remains available
-from `neonethack/mcp` for consumers of stdio observation deltas.
+schema. MCP responses reconstruct perceived state and label compact omissions;
+`session_observe` returns the full observation. Low-level delta consumers can use
+`CompactObservationReader` from `neonethack/mcp`; agents do not merge deltas.
 
 ### Concurrent games and state directories
 
@@ -104,14 +108,16 @@ still protect each game's mutable state.
 
 `session_close` releases the worker and engine before replying; its directory
 remains for explicit `session_resume`. Queued calls retain their original
-arguments, request ID and revision. Closing and resuming a game does not affect
-other games. There is no implicit resume, retry, confirmation, revision adjustment
-or decision answer. Workers are retained until close or server shutdown; close
+arguments and the shared adapter revision captured at admission. Native MCP does
+not track each HTTP client's last view. Closing and resuming a game does not affect
+other games, and no confirmation or decision answer is automatic. Workers are retained until close or server shutdown; close
 games that no longer need to stay loaded.
 
 A failed or timed-out worker and its engine are retired together. Other games
-remain available. Explicitly resume after a failure; retry only the same recorded
-request ID and payload. Creation has no retry ID, so never blindly resubmit it.
+remain available. Explicitly resume after a failure; use `retry` for the retained
+exact operation or `receipt` for a known operation ID. Neither repeats a navigation
+leg. A shared most-recent receipt may belong to another participant; inspect its
+identity. Creation has no retry ID, so never blindly resubmit it.
 A worker response is bounded to 8 MiB and an in-flight request has a 150-second
 transport timeout. SIGINT/SIGTERM stops accepting new requests, drains accepted
 work and closes the workers. Stdio EOF does the same.
@@ -129,10 +135,10 @@ lib/neonethack/build/native/neonethack-mcp --http 8080 \
 The endpoint is `http://127.0.0.1:8080/mcp`, implementing
 [MCP 2026-07-28 Streamable HTTP](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http):
 one POST per request, JSON replies, per-request metadata and `server/discover`.
-There is no HTTP initialization handshake, `Mcp-Session-Id`, GET stream or DELETE
-session. MCP 2025-11-25 clients can use stdio. HTTP replies use the existing
-`update.kind: "snapshot"` format so each response is independent of other clients'
-observation history. The MCP envelope includes `resultType: "complete"` and
+This mode uses no HTTP initialization handshake, `Mcp-Session-Id`, GET stream or
+DELETE session. The server also accepts 2025-03-26, 2025-06-18 and 2025-11-25
+Streamable HTTP handshakes. Both HTTP forms return independent perceived
+snapshots. The 2026-07-28 envelope includes `resultType: "complete"` and
 server identity metadata. Game `sessionId` is still an explicit tool argument.
 
 ```sh
@@ -144,7 +150,7 @@ curl http://127.0.0.1:8080/mcp \
   --data '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
 
-`tools/call` also requires `Mcp-Name` matching `params.name`. Every HTTP request
+In the 2026-07-28 mode, `tools/call` requires `Mcp-Name` matching `params.name`. Every request
 needs the protocol version and client capabilities in `params._meta`; these are
 MCP metadata, not extra fields in tool arguments. Headers are checked against the
 body before dispatch. Unsupported versions return error `-32022` listing supported
@@ -167,7 +173,7 @@ its convenient native entry point. `neonethack/low` exposes exact protocol calls
 import { LowLevel } from 'neonethack/low';
 
 const low = new LowLevel(transport);
-console.log(low.tools); // the same named tools and input schemas as MCP/WebMCP
+console.log(low.tools); // the complete precise semantic catalog
 await low.call('session_observe', { sessionId });
 ```
 
@@ -196,9 +202,10 @@ npm run --prefix lib/neonethack check:tools -- --web https://neohack.dev
 node lib/neonethack/scripts/check-tools.mjs --json
 ```
 
-The command exits nonzero on missing, extra or duplicate tools, differing
-schemas/descriptions/read-only annotations, dispatch mismatches or failed
-probes. It compares against the source catalog, not a hardcoded count. It
+The command verifies exact agreement within each vocabulary and explicit
+coverage of low operations by agent tools. It exits nonzero on missing, extra
+or duplicate tools, schema/annotation drift, dispatch mismatches or failed
+probes. It compares against the source catalogs, not a hardcoded count. It
 checks package low/high exports, WebMCP registration and dispatch, real native
 stdio/HTTP discovery and the bundled workshop module loader. CI runs the same
 command. `--http URL` substitutes an existing MCP endpoint; `--web URL` additionally

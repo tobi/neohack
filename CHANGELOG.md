@@ -8,6 +8,11 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Agent answers stay bound to the question they were given, so an older answer
+  cannot confirm a different action after another player changes the prompt.
+- Phone equipment slots and instructions fit above Automatic pickup, including
+  on tall phones with a height-limited character sheet.
+
 - Different tabs can play independent adventures. Opening the same run transfers it safely, with a Play here button in the previous tab and no lost or repeated moves.
 - Search the game's encyclopedia from the menu, with readable lore on desktop and phone. Reading costs no turns and works offline.
 - Agent exploration can cover several frontiers within an explicit action budget, stopping for decisions and changes in health, hunger or conditions.

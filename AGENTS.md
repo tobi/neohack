@@ -97,6 +97,9 @@ interaction and visual decisions, and update DESIGN.md when those decisions chan
 - MCP may own request IDs, revision tracking and response reconstruction; the
   engine still enforces exact receipts and stale-input checks. Require explicit
   run tokens, and never treat an uncertain response as permission to act again.
+- Decision answers and cancellations carry the exact returned decision ID across
+  every interface. Adapters must not substitute a newer standing question, even
+  when its kind, labels or available answers match the earlier question.
 - Use opaque item references. Never infer item identity from display labels,
   inventory slots or menu order.
 - Preserve input journals, request reservations, exact receipts, engine/static

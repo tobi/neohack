@@ -16,7 +16,9 @@ action as a substitute for a lost response. A historical receipt is not current
 state; observe when necessary.
 
 Read every outcome, elapsed turn count and standing decision. Answer with
- decision_answer({sessionId, answer}) or cancel explicitly. Inspect the actual
+decision_answer({sessionId, decisionId, answer}) or
+decision_cancel({sessionId, decisionId}), using the exact returned decision.id.
+Never reuse an old answer for a replacement question. Inspect the actual
 question, offered names and opaque item references. Never apply a blanket rule
 that confirms warnings. Actions can be eligible and still harmful.
 
