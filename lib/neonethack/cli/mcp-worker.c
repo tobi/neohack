@@ -196,7 +196,7 @@ static void worker_read(struct bufferevent *io, void *arg)
     }
     if (strcmp(j->method,"agent.receipt") && !mcp_field(line,"historical").p && mcp_field(line,"observation").p)
         mj_int(mcp_field(line,"revision"),&w->revision);
-    char *projected = mcp_agent_present(line,!strcmp(j->method,"agent.receipt"));
+    char *projected = mcp_agent_present_mode(line,!strcmp(j->method,"agent.receipt"),strcmp(j->method,"session.observe") && strcmp(j->method,"agent.receipt") && strcmp(j->method,"agent.retry") && !mcp_field(line,"historical").p);
     free(line);
     mj_Buf b; mj_init(&b); mj_obj(&b);
     mj_key(&b,"isError"); mj_boolv(&b,failed);

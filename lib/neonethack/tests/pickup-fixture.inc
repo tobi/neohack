@@ -29,6 +29,11 @@ void pickup_fixture(void)
     if (!isok(x + 1, y)) panic("pickup test start too close to map edge");
     levl[x][y].typ = levl[x + 1][y].typ = ROOM;
     levl[x][y].lit = levl[x + 1][y].lit = 1;
+    if (!strcmp(svp.plname, "NavigationHunger")) {
+        u.uhunger = 151; u.uhs = NOT_HUNGRY;
+        newsym(u.ux,u.uy); newsym(x,y); newsym(x+1,y); vision_recalc(0);
+        return;
+    }
     for (i = 0; i < SIZE(cases); i++) {
         o = mksobj(cases[i].type, FALSE, FALSE);
         o->quan = 1; o->spe = 0; o->cursed = cases[i].cursed;

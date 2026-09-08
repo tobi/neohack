@@ -92,6 +92,10 @@ int mcp_agent_uncertain(const char *response)
  * revision-bound creature references. No hidden identity or strategy tables. */
 char *mcp_agent_present(const char *response, int historical)
 {
+    return mcp_agent_present_mode(response,historical,0);
+}
+char *mcp_agent_present_mode(const char *response, int historical, int compact)
+{
     mj_Buf b; mj_init(&b); mj_obj(&b);
     mj_val error = mcp_field(response,"error"), outcome = mcp_field(response,"outcome");
     mj_val observation = mcp_field(response,"observation"), decision = mcp_field(response,"decision");
@@ -120,12 +124,44 @@ char *mcp_agent_present(const char *response, int historical)
     mj_key(&b,"summary"); mj_strv(&b,summary ? summary : "Perceived information."); free(summary);
     /* Preserve all response members exactly, except the agent-facing ID name. */
     const char *cursor = response; char *key; mj_val value; int next;
+    long long omitted_clear = 0;
     while ((next = nnh_object_next(&cursor,&key,&value)) > 0) {
         if (!strcmp(key,"summary")) { free(key); continue; }
         if (!strcmp(key,"requestId") && mj_is_null(value)) { free(key); continue; }
+        if (compact && observation.p && !strcmp(key,"observation")) {
+            const char *fields=value.p; char *field; mj_val member; int more;
+            mj_key(&b,key); mj_obj(&b);
+            while ((more=nnh_object_next(&fields,&field,&member))>0) {
+                if (strcmp(field,"neighborhood")) {mj_key(&b,field);mcp_raw(&b,member);}
+                free(field);
+            }
+            if(more<0)b.ok=0;
+            mj_endobj(&b);free(key);continue;
+        }
+        if (compact && observation.p && !strcmp(key,"events")) {
+            mj_arr_it events={NULL,1};mj_val event;
+            mj_key(&b,key);mj_arr(&b);
+            while(mj_arr_next(value.p,&events,&event)) {
+                char *mark=mcp_string(mcp_field(event.p,"mark"));
+                int clear=text_is(mcp_field(event.p,"type"),"saw") && text_is(mcp_field(event.p,"kind"),"terrain") && mark && (!mark[0] || !strcmp(mark,"\\u0000"));
+                free(mark);
+                if(clear)omitted_clear++;else mcp_raw(&b,event);
+            }
+            mj_endarr(&b);free(key);continue;
+        }
         mj_key(&b,!strcmp(key,"requestId") ? "operationId" : key); mcp_raw(&b,value); free(key);
     }
     if (next < 0) b.ok = 0;
+    if(compact && observation.p) {
+        mj_key(&b,"presentation");mj_obj(&b);
+        mj_key(&b,"kind");mj_strv(&b,"compact");
+        mj_key(&b,"omitted");mj_arr(&b);mj_strv(&b,"observation.neighborhood");mj_endarr(&b);
+        mj_key(&b,"omittedClearTerrainEvents");mj_intv(&b,omitted_clear);
+        mj_key(&b,"fullObservation");mj_strv(&b,"session_observe");
+        mj_key(&b,"attempts");mj_strv(&b,"session_actions");
+        if(mcp_field(response,"requestId").p && !mj_is_null(mcp_field(response,"requestId"))) {mj_key(&b,"fullInputReceipt");mj_strv(&b,"receipt");}
+        mj_endobj(&b);
+    }
     if (historical) { mj_key(&b,"historical"); mj_boolv(&b,1); }
     if (observation.p) {
         char *sid = mcp_string(mcp_field(response,"sessionId"));

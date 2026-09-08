@@ -129,20 +129,51 @@ static char *level(mcp_agent_state *s)
 {
     return mcp_string(mcp_field(mcp_field(mcp_field(s->snapshot,"observation").p,"location").p,"id"));
 }
-static char *navigation_result(mcp_agent_state *s, const char *reason, int actions, long long turns)
+static char *navigation_result(mcp_agent_state *s, const char *reason, int actions, long long turns, const char *failure)
 {
     mj_Buf b; mj_init(&b); mj_obj(&b);
     const char *cursor = s->snapshot; char *key; mj_val value;
     extern int nnh_object_next(const char **, char **, mj_val *);
     int next;
     while ((next = nnh_object_next(&cursor,&key,&value)) > 0) {
+        /* A free planning stop is not a replay of the previous input receipt. */
+        if ((!actions && (!strcmp(key,"outcome") || !strcmp(key,"events"))) ||
+            ((!actions || failure) && !strcmp(key,"requestId")) ||
+            !strcmp(key,"error") || !strcmp(key,"summary")) { free(key); continue; }
         mj_key(&b,key); mcp_raw(&b,value); free(key);
     }
     if (next < 0) b.ok = 0;
+    if (!actions) {
+        mj_key(&b,"events"); mj_arr(&b); mj_endarr(&b);
+        mj_key(&b,"outcome"); mj_obj(&b);
+        mj_key(&b,"action"); mj_strv(&b,"navigation");
+        mj_key(&b,"status"); mj_strv(&b,"completed");
+        mj_key(&b,"turnsElapsed"); mj_intv(&b,0);
+        mj_key(&b,"positionChanged"); mj_boolv(&b,0);
+        mj_key(&b,"effects"); mj_arr(&b); mj_endarr(&b); mj_endobj(&b);
+    }
+    if (failure) {
+        mj_val error = mcp_field(failure,"error");
+        char *message = mcp_string(mcp_field(error.p,"message")), *scoped = NULL;
+        if (asprintf(&scoped,"Navigation stopped after %d actions and %lld turns. Substep error: %s",actions,turns,message ? message : "Unknown failure.") < 0) scoped = NULL;
+        mj_key(&b,"error"); mj_obj(&b);
+        mj_key(&b,"code"); mcp_raw(&b,mcp_field(error.p,"code"));
+        mj_key(&b,"message"); mj_strv(&b,scoped ? scoped : "Navigation stopped; inspect confirmed progress and the retained input.");
+        mj_endobj(&b); free(message); free(scoped);
+        if (s->pending) {
+            mj_key(&b,"requestId"); mcp_raw(&b,mcp_field(mcp_field(s->pending,"params").p,"requestId"));
+        }
+    }
     mj_key(&b,"navigation"); mj_obj(&b);
     mj_key(&b,"reason"); mj_strv(&b,reason);
     mj_key(&b,"actionsTaken"); mj_intv(&b,actions);
     mj_key(&b,"turnsElapsed"); mj_intv(&b,turns);
+    if (failure) {
+        mj_key(&b,"observation"); mj_strv(&b,s->pending || mcp_agent_uncertain(failure) ? "lastConfirmed" : "current");
+        if (s->last) {
+            mj_key(&b,"lastOperationId"); mcp_raw(&b,mcp_field(mcp_field(s->last,"params").p,"requestId"));
+        }
+    }
     mj_endobj(&b); mj_endobj(&b); return mcp_take(&b);
 }
 static mj_val nearest(mj_val list, int doors)
@@ -166,7 +197,7 @@ static int health_lost(const char *before, const char *after)
     return mj_int(mcp_field(a.p,"health"),&previous) &&
            mj_int(mcp_field(b.p,"health"),&current) && current<previous;
 }
-static int new_creature(const char *before, const char *after)
+int mcp_agent_new_creature(const char *before, const char *after)
 {
     mj_val old = mcp_field(mcp_field(before,"observation").p,"world"), world = mcp_field(mcp_field(after,"observation").p,"world"), c;
     mj_arr_it it = {NULL,1};
@@ -177,9 +208,26 @@ static int new_creature(const char *before, const char *after)
         char *appearance = mcp_string(mcp_field(occupant.p,"appearance"));
         while (mj_arr_next(old.p,&previous,&p)) if (number(p.p,"x",-1)==number(c.p,"x",-2) && number(p.p,"y",-1)==number(c.p,"y",-2)) {
             mj_val other = mcp_field(p.p,"occupant");
-            if (same(mcp_field(other.p,"kind"),"creature") && appearance && same(mcp_field(other.p,"appearance"),appearance)) found = 1;
+            mj_val previous_appearance = mcp_field(other.p,"appearance");
+            if (same(mcp_field(other.p,"kind"),"creature") &&
+                (appearance ? same(previous_appearance,appearance) : !previous_appearance.p || mj_is_null(previous_appearance))) found = 1;
         }
         free(appearance); if (!found) return 1;
+    }
+    return 0;
+}
+int mcp_agent_vitals_changed(const char *before, const char *after)
+{
+    mj_val a=mcp_field(mcp_field(before,"observation").p,"vitals");
+    mj_val b=mcp_field(mcp_field(after,"observation").p,"vitals");
+    const char *keys[]={"condition","hunger"};
+    for (size_t i=0;i<sizeof keys/sizeof *keys;i++) {
+        mj_val previous=mcp_field(a.p,keys[i]),current=mcp_field(b.p,keys[i]);
+        if (!previous.p && !current.p) continue;
+        if (!previous.p || !current.p) return 1;
+        char *old=mj_canonical(previous),*now=mj_canonical(current);
+        int changed=!old || !now || strcmp(old,now);
+        free(old);free(now);if(changed)return 1;
     }
     return 0;
 }
@@ -188,11 +236,13 @@ static char *navigate(nnh_context *ctx, mcp_agent_state *s, const char *method, 
     char *sid = mcp_string(mcp_field(args.p,"sessionId")), *to = NULL, *door = NULL, *initial_level = level(s), *response = NULL;
     const char *reason = gate(s); int actions = 0, force = 0;
     long long turns = 0, limit = number(args.p,"maxActions",1659);
+    long long frontiers = 0, frontier_limit = number(args.p,"maxFrontiers",1);
     int descend = !strcmp(method,"agent.descend"), explore = !strcmp(method,"agent.explore");
     mj_val force_value = mcp_field(args.p,"force");
     if (force_value.p) mj_bool(force_value,&force);
     if (reason) goto finish;
-    if (limit < 1 || limit > 1659 || !operation) { response = mcp_agent_error("invalidParams","A bounded leg requires maxActions from 1 to 1659 and an adapter operation ID."); goto done; }
+    if (limit < 1 || limit > 1659 || frontier_limit < 1 || frontier_limit > 1659 || !operation) { response = mcp_agent_error("invalidParams","A bounded leg requires maxActions and maxFrontiers from 1 to 1659 and an adapter operation ID."); goto done; }
+select_destination:
     if (!descend && !explore) to = mj_canonical(mcp_field(args.p,"to"));
     else {
         char *p = params(sid,NULL,(mj_val){NULL});
@@ -223,7 +273,7 @@ static char *navigate(nnh_context *ctx, mcp_agent_state *s, const char *method, 
             if (failed(response)) goto done;
             distance = number(response,"distance",-1);
             if (distance < 0) { reason = "noRoute"; goto finish; }
-            if (!distance && !door && !descend) { reason = "arrived"; goto finish; }
+            if (!distance && !door && !descend) { reason = "arrived"; goto arrived; }
             if (actions >= limit) { reason = "stepLimit"; goto finish; }
             if (distance) {
                 mj_val item; mj_arr_it it = {NULL,1};
@@ -232,16 +282,30 @@ static char *navigate(nnh_context *ctx, mcp_agent_state *s, const char *method, 
             free(response); response = NULL;
             if (!dir) { response = mcp_agent_error("agentError","Known route has no next action."); goto done; }
         }
-        char *p = string_params(sid,"direction",dir); free(dir);
+        char *p;
+        if (!distance && door) {
+            mj_Buf target; mj_init(&target); mj_obj(&target);
+            mj_key(&target,"direction"); mj_strv(&target,dir); mj_endobj(&target);
+            char *json = mcp_take(&target); p = params(sid,"target",(mj_val){json}); free(json);
+        } else p = string_params(sid,"direction",dir);
+        free(dir);
         char operation_id[160]; snprintf(operation_id,sizeof operation_id,"%s-%d",operation,actions+1);
         char *before = s->snapshot ? strdup(s->snapshot) : NULL;
         if (!before) { free(p); response = mcp_agent_error("agentError","Cannot retain perceived navigation state; no input submitted."); goto done; }
         response = step(ctx,s,distance ? "game.move" : door ? "game.open" : "game.climb",(mj_val){p},revision,operation_id); free(p);
-        if (failed(response)) { free(before); goto done; }
+        if (failed(response)) {
+            /* A durability error may follow real engine input. Include any
+             * elapsed time the returned frame confirms, even on failure. */
+            long long previous = number(mcp_field(before,"observation").p,"turn",-1);
+            long long current = number(mcp_field(response,"observation").p,"turn",-1);
+            if (previous >= 0 && current > previous) { actions++; turns += current - previous; }
+            free(before); goto done;
+        }
         actions++; turns += number(mcp_field(response,"outcome").p,"turnsElapsed",0);
         reason = gate(s);
         if (!reason && !same(mcp_field(mcp_field(response,"outcome").p,"status"),"completed")) reason = "interrupted";
         if (!reason && !force && health_lost(before,response)) reason = "changed";
+        if (!reason && !force && mcp_agent_vitals_changed(before,response)) reason = "changed";
         char *now_level = level(s); int changed_level = !now_level || strcmp(initial_level,now_level); free(now_level);
         if (!reason && force) {
             mj_val you = mcp_field(mcp_field(response,"observation").p,"you");
@@ -253,6 +317,7 @@ static char *navigate(nnh_context *ctx, mcp_agent_state *s, const char *method, 
                 mj_Buf b; mj_init(&b); mj_obj(&b); mj_key(&b,"direction"); mj_strv(&b,door); mj_endobj(&b);
                 char *target = mcp_take(&b); char *a = params(sid,"target",(mj_val){target}); free(target);
                 char *view = step(ctx,s,"session.actions",(mj_val){a},number(s->snapshot,"revision",-1),NULL); free(a);
+                if (failed(view)) { free(response); response = view; free(before); goto done; }
                 reason = same(mcp_field(mcp_field(mcp_field(view,"cell").p,"terrain").p,"type"),"openDoor") ? "arrived" : "interrupted";
                 free(view);
             }
@@ -260,18 +325,33 @@ static char *navigate(nnh_context *ctx, mcp_agent_state *s, const char *method, 
         int moved = 0; mj_bool(mcp_field(mcp_field(response,"outcome").p,"positionChanged"),&moved);
         if (!reason && changed_level) reason = "changed";
         if (!reason && !moved) reason = "interrupted";
-        if (!reason && new_creature(before,response)) reason = "changed";
+        if (!reason && mcp_agent_new_creature(before,response)) reason = "changed";
         if (!reason && actions >= limit) {
             mj_val you = mcp_field(mcp_field(response,"observation").p,"you");
             reason = !door && !descend && number(you.p,"x",-1)==number(to,"x",-2) && number(you.p,"y",-1)==number(to,"y",-2) ? "arrived" : "stepLimit";
         }
         free(before);
-        if (reason) goto finish;
+        if (reason) {
+            if (!strcmp(reason,"arrived")) goto arrived;
+            goto finish;
+        }
         free(response); response = NULL;
     }
+arrived:
+    /* Only ordinary frontier arrivals may select another target. A door is
+     * always one explicit attempt, even when more frontier work was requested. */
+    if (explore && !door && ++frontiers < frontier_limit) {
+        if (actions >= limit) { reason = "stepLimit"; goto finish; }
+        free(response); response = NULL; free(to); to = NULL;
+        goto select_destination;
+    }
 finish:
-    free(response); response = navigation_result(s,reason,actions,turns);
+    free(response); response = navigation_result(s,reason,actions,turns,NULL);
 done:
+    if (failed(response) && s->snapshot) {
+        char *failure = response;
+        response = navigation_result(s,"error",actions,turns,failure); free(failure);
+    }
     free(sid); free(to); free(door); free(initial_level); return response;
 }
 /* Resolve aliases only against the current, already perceived question. */

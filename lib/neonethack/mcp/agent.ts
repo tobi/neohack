@@ -1,4 +1,4 @@
-import {Game, Neonethack, Navigator, WorldError, type Transport} from '../typescript/client.js';
+import {Game, Neonethack, Navigator, NavigationError, WorldError, type Transport} from '../typescript/client.js';
 import type {Method, Request, Response, Snapshot} from '../typescript/types.js';
 import {methods, tools, instructions} from './agent-data.js';
 export {tools,instructions};
@@ -21,7 +21,7 @@ function valid(value:unknown,s:Schema):boolean {
 const uncertain=(r:Response)=>('outcome' in r && r.outcome.status==='unknown') || ('error' in r && !!r.error && ['incompleteRequest','recoveryRequired','metadataUnavailable','inputHistoryError'].includes(r.error.code));
 const isSnapshot=(r:Response):r is Snapshot=>'observation' in r && 'outcome' in r;
 const creatureId=(s:Snapshot,x:number,y:number)=>`c-${s.sessionId}-${s.revision}-${x}-${y}`;
-export function present(response:Response, extra:Record<string,unknown>={}):Record<string,unknown> {
+export function present(response:Response, extra:Record<string,unknown>={}, compact=false):Record<string,unknown> {
   const r=response as unknown as Record<string,unknown>;
   let summary='Perceived information.';
   if('error' in response && response.error) summary=response.error.message;
@@ -31,7 +31,21 @@ export function present(response:Response, extra:Record<string,unknown>={}):Reco
   const creatures=isSnapshot(response) ? response.observation.world.filter(c=>c.occupant && c.occupant.kind!=='self').map(c=>({id:creatureId(response,c.x,c.y),position:{x:c.x,y:c.y},...c.occupant})) : undefined;
   // Put the witnessed outcome and actual question first; keep the complete snapshot.
   const {requestId,...rest}=r;
-  return {summary,...('outcome' in r?{outcome:r.outcome,events:r.events,decision:r.decision}:{}),...(creatures?{creatures}:{}),...rest,...(requestId?{operationId:requestId}:{}),...extra};
+  const result:Record<string,unknown>={summary,...('outcome' in r?{outcome:r.outcome,events:r.events,decision:r.decision}:{}),...(creatures?{creatures}:{}),...rest,...(requestId?{operationId:requestId}:{}),...extra};
+  if(extra.navigation && !extra.error)delete result.error;
+  if((extra.navigation as {actionsTaken?:number}|undefined)?.actionsTaken===0){
+    delete result.operationId;
+    result.events=[];
+    result.outcome={action:'navigation',status:'completed',turnsElapsed:0,positionChanged:false,effects:[]};
+  }
+  if(compact && isSnapshot(response)){
+    const {neighborhood,...observation}=response.observation;
+    const events=result.events as Array<{type:string;kind?:string;mark?:string}>;
+    const retained=events.filter(e=>!(e.type==='saw'&&e.kind==='terrain'&&(e.mark==='\\u0000'||e.mark==='\u0000')));
+    result.observation=observation;result.events=retained;
+    result.presentation={kind:'compact',omitted:['observation.neighborhood'],omittedClearTerrainEvents:events.length-retained.length,fullObservation:'session_observe',attempts:'session_actions',...(result.operationId?{fullInputReceipt:'receipt'}:{})};
+  }
+  return result;
 }
 /** Per-agent observation/revision and uncertainty state, separate from the live
  * human Game. Never refresh silently before an input based on an older view. */
@@ -62,7 +76,10 @@ export class AgentClient {
   }
   async call(name:string,args:Record<string,unknown>={},options:{signal?:AbortSignal}={}):Promise<Record<string,unknown>> {
     const entry=methods.find(m=>m.name===name);
-    if(!entry || !valid(args,entry.schema as unknown as Schema))return {version:1,error:{code:'invalidParams',message:'Unknown tool or invalid arguments.'},summary:'Unknown tool or invalid arguments.'};
+    if(!entry || !valid(args,entry.schema as unknown as Schema)){
+      const message=entry?`Invalid arguments for ${name}; no operation was sent. Call help with {name:"${name}"} for the schema. Item IDs use {item:{id:"returned-id"}}; bare item strings are readable names.`:'Unknown tool; no operation was sent. Call help with {} to list tool names.';
+      return {version:1,error:{code:'invalidParams',message},summary:message};
+    }
     const input=structuredClone(args), sid=typeof input.sessionId==='string'?input.sessionId:undefined;
     const revision=sid?this.games.get(sid)?.state.revision:undefined;
     const key=sid??'creation';
@@ -102,8 +119,8 @@ export class AgentClient {
         if(entry.method==='agent.go' || entry.method==='agent.explore' || entry.method==='agent.descend') {
           const navigator=new Navigator(game!);
           const legOptions={maxActions:input.maxActions as number|undefined,signal:options.signal};
-          const leg=entry.method==='agent.go' ? await navigator.go({...legOptions,to:input.to as {x:number;y:number},force:input.force as boolean|undefined}) : entry.method==='agent.explore' ? await navigator.explore(legOptions) : await navigator.descend(legOptions);
-          this.adopt(leg.snapshot);return present(leg.snapshot,{navigation:{reason:leg.reason,actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed}});
+          const leg=entry.method==='agent.go' ? await navigator.go({...legOptions,to:input.to as {x:number;y:number},force:input.force as boolean|undefined}) : entry.method==='agent.explore' ? await navigator.explore({...legOptions,maxFrontiers:input.maxFrontiers as number|undefined}) : await navigator.descend(legOptions);
+          this.adopt(leg.snapshot);return present(leg.snapshot,{navigation:{reason:leg.reason,actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed}},true);
         }
         let method=entry.method, params:Record<string,unknown>={...input};
         if(method==='agent.attack') {
@@ -146,13 +163,27 @@ export class AgentClient {
         const response=await this.api.transport.send({version:1,method,params} as Request);
         this.adopt(response);
         if(method==='session.close' && !('error' in response))this.games.delete(sid!);
-        return present(response);
+        return present(response,{},method!=='session.observe');
       } catch(error) {
+        if(error instanceof NavigationError){
+          const leg=error.result,cause=error.cause;
+          const pending=sid?this.pending.get(sid):undefined;
+          const lastOperationId=sid?this.last.get(sid):undefined;
+          const original=cause instanceof WorldError && 'error' in cause.response?cause.response.error:undefined;
+          const message=`Navigation stopped after ${leg.actionsTaken} actions and ${leg.turnsElapsed} turns. Substep error: ${cause instanceof Error?cause.message:String(cause)}`;
+          this.adopt(leg.snapshot);
+          const result=present(leg.snapshot,{navigation:{reason:'error',actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,observation:pending?'lastConfirmed':'current',...(lastOperationId?{lastOperationId}:{})},error:{code:original?.code??(pending?'uncertainExecution':'agentError'),message}},true);
+          delete result.operationId;
+          if(pending && 'requestId' in pending.params)result.operationId=pending.params.requestId;
+          const presentation=result.presentation as Record<string,unknown>;
+          if(result.operationId)presentation.fullInputReceipt='receipt';else delete presentation.fullInputReceipt;
+          return result;
+        }
         if(entry.method==='session.create' && !(error instanceof WorldError)) {
           this.creationUncertain=true;
           throw Error(`Creation reply unavailable; a run may already exist. Do not resubmit session.create. Recover the run token from the owning page or retained invocation, then observe or resume it. ${error instanceof Error?error.message:String(error)}`);
         }
-        if(error instanceof WorldError){this.adopt(error.response);return present(error.response);}
+        if(error instanceof WorldError){this.adopt(error.response);return present(error.response,{},true);}
         throw error;
       }
     });

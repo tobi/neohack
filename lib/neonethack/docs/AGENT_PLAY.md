@@ -51,7 +51,7 @@ revision or decision IDs. Use `go({sessionId,to:{x,y}})` for a bounded navigatio
 leg, `attack({sessionId,target})` for a deliberate adjacent attack, and `help` for
 brief discovery or one tool's schema. `force:true` on `go` attempts an adjacent
 ordinary move; it does not force an attack or bypass an engine question. Results
-include a witnessed summary and full observation. `retry` recovers the adapter's retained uncertain input or its most recent
+include a witnessed summary and a self-contained perceived observation. Compact results label the omitted neighborhood attempts and clear-grid events; use free `session_observe` for the full current frame and `receipt` for the full input events. `retry` recovers the adapter's retained uncertain input or its most recent
 completed input receipt; it never restarts a navigation leg. `receipt` reads a specified historical
 `operationId` without rewinding current state. Never submit a new action to
 replace a lost response. Native stdio/HTTP expose this vocabulary without a
@@ -72,6 +72,12 @@ decisions, interruptions and changed circumstances. `game.go({to,force:true})`
 is restricted to one adjacent ordinary movement attempt.
 
 Other named operations cover inventory, doors, spells, searching and more.
+For longer exploration, explicitly request `explore({sessionId,maxActions:80,
+maxFrontiers:20})`. The default still targets one frontier. The total action
+budget, genuine decisions, interruptions, damage, condition or hunger changes, and newly perceived creatures
+bound the whole call; a door attempt always stops it. Read `navigation` for
+aggregate progress. On a later-substep error, confirmed progress remains in the
+response; an uncertain input requires exact recovery, not repeating the leg.
 Use generated discovery instead of copying a fixed tool list. Read
 [command coverage](COMMAND_COVERAGE.md) for demonstrated limits and
 [the protocol contract](PROTOCOL.md) for exact shapes, costs and decisions.

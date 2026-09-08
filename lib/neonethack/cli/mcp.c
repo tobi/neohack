@@ -84,8 +84,15 @@ static void tool_request(mcp_job *j, const char *params)
     char *tool = mcp_string(mcp_field(params,"name"));
     mj_val definition = mcp_agent_method(tool);
     if (mcp_agent_valid(definition,args)) j->method = mcp_string(mcp_field(definition.p,"method"));
+    if (!j->method) {
+        char *message=NULL;
+        if(definition.p && tool) {
+            if(asprintf(&message,"Invalid arguments for %s; no operation was sent. Call help with {name:\"%s\"} for the schema. Item IDs use {item:{id:\"returned-id\"}}; bare item strings are readable names.",tool,tool)<0)message=NULL;
+        }
+        mcp_reject(j,400,-32602,message?message:"Unknown tool; no operation was sent. Call help with {} to list tool names.");
+        free(message);free(tool);return;
+    }
     free(tool);
-    if (!j->method) { mcp_reject(j,400,-32602,"Unknown tool or invalid arguments"); return; }
     mj_Buf b; mj_init(&b); mj_obj(&b);
     mj_key(&b,"version"); mj_intv(&b,1);
     mj_key(&b,"method"); mj_strv(&b,j->method);

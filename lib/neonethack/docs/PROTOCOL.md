@@ -358,7 +358,13 @@ input/randomness.
 
 The optional high-level [Navigator](HERO.md#optional-navigation) executes bounded
 travel/explore/descend legs. Route steps include C-resolved named directions.
-The higher-level MCP profile remains planned separately.
+Native MCP and WebMCP expose the same navigation vocabulary. Exploration defaults
+to one frontier; `maxFrontiers` explicitly permits successive perceived frontiers
+within one total `maxActions` budget. Real decisions, interruptions, damage,
+newly perceived creatures and a door attempt stop the call. A failed later
+substep preserves confirmed progress; condition and hunger changes also stop
+continued navigation. Zero-action navigation reports zero turns
+without repeating the last input's events or receipt ID.
 
 Door locks come only from player-facing disclosures at the actual engine target.
 They are `unknown`, `locked` or `unlocked`, with independent `unknown`, `witnessed`
@@ -506,58 +512,35 @@ They are exposed identically through native, WASM, TypeScript, MCP and WebMCP.
 
 ## MCP observation presentation
 
-The C/TS/WASM API and durable receipts retain full observations. WebMCP and both
-stdio MCP servers project those responses into the compact envelope defined in
-`protocol/mcp-response.schema.json`. Successful calls return `structuredContent`
-and an empty `content` array: consumers must read structured results. There is no
-second JSON text copy. Errors, decisions, events, outcomes, request IDs, revisions,
-and storage/recovery information remain present and are never inferred.
+The C/TS/WASM API and durable receipts retain full observations. Native stdio/HTTP
+MCP and WebMCP return self-contained perceived snapshots in `structuredContent`.
+No delta baseline is required. The low-level `CompactResponses` utility remains
+separate from this agent interface.
 
-`session.observe` returns the entire current perceived state, including
-`observation.neighborhood`, as a standalone snapshot. It requires no baseline,
-request ID, or revision guard and spends no turn:
+Ordinary agent results label their `presentation.kind` as `compact`. They omit
+only `observation.neighborhood` and terrain `saw` events whose mark is the
+clear-grid NUL marker. The envelope names the omitted field and counts those
+clear events. Known world cells, visibility, uncertainty, apparent creatures,
+objects, hazards, inventory, vitals, real decisions and other events remain
+present. Outcomes, revisions and terminal facts retain their meaning.
+
+Use the free `session_actions` query for detailed attempts at a target.
+`session_observe` returns the full current perceived observation, including the
+neighborhood matrix, without consuming a turn or requiring an input guard:
 
 ```json
 {"name":"session_observe","arguments":{"sessionId":"YOUR_SESSION_ID"}}
 ```
 
-Read the complete result from `structuredContent`. This includes the full known
-map, inventory, vitals, neighborhood/action offers, standing decision, and current
-revision; it does not reveal hidden game state. In TypeScript use
-`await game.observe()`; in C use `nnh_session_observe(context, session_id, &result)`.
+`receipt` returns the full historical input receipt, including all original
+events and neighborhood offers; it does not update current state. A completed
+`retry` also returns the full historical receipt. Do not treat historical offers
+as current or use presentation equality to infer whether an input ran.
+Uncertain input must be recovered through `retry`, never submitted as a new action.
 
-Other MCP observations omit `observation.neighborhood`; use `session.actions` for
-the C driver's detailed offers at a target. The next ordinary delta explicitly
-removes any neighborhood from a preceding full snapshot, preventing stale offers.
-`protocol.describe` retains backend guarantees but
-omits the redundant catalog, which MCP tool discovery already supplies.
-
-Each observation response carries `update`:
-
-- `{"kind":"snapshot","id":1}`: replace the whole observation.
-- `{"kind":"delta","id":2,"base":1}`: apply only to observation update 1 on
-  this connection and session. Replace each supplied observation field in full,
-  except `world`, whose cells replace/upsert by `(x,y)`. An omitted field/cell is
-  unchanged. `update.remove` deletes named observation fields;
-  `update.worldRemoved` deletes `[x,y]` coordinates. Replacement cells can remove
-  occupants, objects, or visibility; do not merge their individual properties.
-
-An empty list is a real replacement, not omission. Inventory item IDs remain
-opaque. Observation update IDs are connection-local counters, independent of
-game revisions and turns. Errors and responses without observations do not
-advance them. Top-level fields always describe this response, not a patch.
-
-Create/first observation, session switches, level changes, explicit observe/resume,
-and historical receipts with a lower revision produce snapshots. Exact request
-retries still use the original full engine receipt, but their presentation may
-be a different delta or snapshot. Never use presentation equality to decide
-whether an input ran. Historical receipts must not rewind an independent UI.
-
-After lost/out-of-order results or reconnecting, call `session.observe` for a
-fresh snapshot. Do not manufacture a new action ID to recover. The exported
-`CompactObservationReader` from `neonethack/webmcp` or `neonethack/mcp` materializes
-observations and rejects a delta without its baseline. It does not authorize
-input, auto-answer warnings, or reconstruct neighborhood offers.
+Item selector strings are perceived readable names. Pass opaque references in
+an object, for example `{"item":{"id":"ground-20"}}`, using the exact returned
+ID rather than a guessed inventory letter or parsed label.
 
 ### Perceived attitude and normalized hunger
 

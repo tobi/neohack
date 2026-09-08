@@ -26,6 +26,49 @@
     "observation": {
       "type": "object"
     },
+    "operationId": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "historical": {
+      "type": "boolean"
+    },
+    "presentation": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "compact"
+        },
+        "omitted": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "omittedClearTerrainEvents": {
+          "type": "integer"
+        },
+        "fullObservation": {
+          "const": "session_observe"
+        },
+        "attempts": {
+          "const": "session_actions"
+        },
+        "fullInputReceipt": {
+          "const": "receipt"
+        }
+      },
+      "required": [
+        "kind",
+        "omitted",
+        "omittedClearTerrainEvents",
+        "fullObservation",
+        "attempts"
+      ],
+      "additionalProperties": false
+    },
     "update": {
       "type": "object",
       "properties": {

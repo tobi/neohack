@@ -670,6 +670,11 @@ void
 headless_pickup_menu(winid window)
 {
     JBuf jb;
+    /* Movement has updated the engine's glyph buffer, but automatic pickup
+     * can pause before that buffer reaches the window port. Publish those
+     * rendered perceptions before exposing the review: otherwise the old
+     * hero glyph looks like a creature beside the new hero position. */
+    flush_screen(1);
     jb_init(&jb); jb_begin_obj(&jb);
     jb_key(&jb, "window"); jb_int(&jb, window);
     jb_end_obj(&jb);

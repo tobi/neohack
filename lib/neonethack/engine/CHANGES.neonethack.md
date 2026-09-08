@@ -6,6 +6,13 @@ Original copyright, no-warranty and `dat/license` notices remain intact.
 These notes identify changes; they do not grant a new license for independently
 owned project code. The repository's publication/license review remains open.
 
+## 2026-09-08 — pickup review perception
+
+- win/headless/winheadless.c: flush the engine's already-rendered display
+  buffer before an automatic pickup review. A decision paused during movement
+  now presents the current hero glyph and clears the previous hero square.
+  Pickup choices, turns, object identities and game rules are unchanged.
+
 ## 2026-09-07 — private RNG integrity instrumentation
 
 - src/rnd.c: count core/display ISAAC64 output words and seed operations,

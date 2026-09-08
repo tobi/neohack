@@ -1548,13 +1548,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -1564,7 +1566,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -1575,7 +1578,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -1649,13 +1653,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -1665,7 +1671,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -1676,7 +1683,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -2391,13 +2399,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -2407,7 +2417,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -2418,7 +2429,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -2492,13 +2504,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -2508,7 +2522,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -2519,7 +2534,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -2987,13 +3003,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -3003,7 +3021,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -3014,7 +3033,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -3088,13 +3108,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -3104,7 +3126,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -3115,7 +3138,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -3308,13 +3332,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -3324,7 +3350,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -3335,7 +3362,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -3409,13 +3437,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -3425,7 +3455,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -3436,7 +3467,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -3629,13 +3661,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -3645,7 +3679,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -3656,7 +3691,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       },
@@ -3753,13 +3789,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -3769,7 +3807,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -3780,7 +3819,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       },
@@ -3996,13 +4036,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -4012,7 +4054,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -4023,7 +4066,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       },
@@ -4120,13 +4164,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -4136,7 +4182,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -4147,7 +4194,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       },
@@ -4363,13 +4411,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -4379,7 +4429,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -4390,7 +4441,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -4464,13 +4516,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -4480,7 +4534,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -4491,7 +4546,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -4684,13 +4740,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -4700,7 +4758,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -4711,7 +4770,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -4785,13 +4845,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -4801,7 +4863,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -4812,7 +4875,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -5005,13 +5069,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -5021,7 +5087,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -5032,7 +5099,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -5106,13 +5174,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -5122,7 +5192,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -5133,7 +5204,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       }
@@ -5326,13 +5398,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -5342,7 +5416,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -5353,7 +5428,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       },
@@ -5461,13 +5537,15 @@
                     "type": "object",
                     "properties": {
                       "item": {
+                        "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                         "oneOf": [
                           {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 127,
                             "x-maxBytes": 127,
-                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                            "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                            "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                           },
                           {
                             "type": "object",
@@ -5477,7 +5555,8 @@
                                 "minLength": 1,
                                 "maxLength": 64,
                                 "x-maxBytes": 64,
-                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                               },
                               "quantity": {
                                 "type": "integer",
@@ -5488,7 +5567,8 @@
                             "required": [
                               "id"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "description": "Exact returned item reference; optional quantity selects a count from its stack."
                           }
                         ]
                       },
@@ -7964,13 +8044,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -7980,7 +8062,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -7991,7 +8074,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -8065,13 +8149,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -8081,7 +8167,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -8092,7 +8179,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -8807,13 +8895,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -8823,7 +8913,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -8834,7 +8925,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -8908,13 +9000,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -8924,7 +9018,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -8935,7 +9030,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -9403,13 +9499,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -9419,7 +9517,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -9430,7 +9529,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -9504,13 +9604,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -9520,7 +9622,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -9531,7 +9634,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -9724,13 +9828,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -9740,7 +9846,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -9751,7 +9858,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -9825,13 +9933,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -9841,7 +9951,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -9852,7 +9963,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -10045,13 +10157,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -10061,7 +10175,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -10072,7 +10187,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     },
@@ -10169,13 +10285,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -10185,7 +10303,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -10196,7 +10315,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     },
@@ -10412,13 +10532,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -10428,7 +10550,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -10439,7 +10562,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     },
@@ -10536,13 +10660,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -10552,7 +10678,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -10563,7 +10690,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     },
@@ -10779,13 +10907,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -10795,7 +10925,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -10806,7 +10937,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -10880,13 +11012,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -10896,7 +11030,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -10907,7 +11042,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -11100,13 +11236,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -11116,7 +11254,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -11127,7 +11266,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -11201,13 +11341,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -11217,7 +11359,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -11228,7 +11371,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -11421,13 +11565,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -11437,7 +11583,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -11448,7 +11595,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -11522,13 +11670,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -11538,7 +11688,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -11549,7 +11700,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     }
@@ -11742,13 +11894,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -11758,7 +11912,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -11769,7 +11924,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     },
@@ -11877,13 +12033,15 @@
                                   "type": "object",
                                   "properties": {
                                     "item": {
+                                      "description": "Select by a perceived readable name, or pass an opaque returned reference as {id:\"item-…\"} or {id:\"ground-…\"}. A bare string is a name, never an ID.",
                                       "oneOf": [
                                         {
                                           "type": "string",
                                           "minLength": 1,
                                           "maxLength": 127,
                                           "x-maxBytes": 127,
-                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                          "description": "Perceived readable item name, for example \"food ration\". Do not put an opaque item ID in this string."
                                         },
                                         {
                                           "type": "object",
@@ -11893,7 +12051,8 @@
                                               "minLength": 1,
                                               "maxLength": 64,
                                               "x-maxBytes": 64,
-                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+                                              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+                                              "description": "Exact opaque id returned by inventory, here.items or the standing decision."
                                             },
                                             "quantity": {
                                               "type": "integer",
@@ -11904,7 +12063,8 @@
                                           "required": [
                                             "id"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": false,
+                                          "description": "Exact returned item reference; optional quantity selects a count from its stack."
                                         }
                                       ]
                                     },

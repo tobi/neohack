@@ -1,4 +1,4 @@
-import { Navigator, WorldError } from "neonethack";
+import { Navigator, NavigationError, WorldError } from "neonethack";
 const key = ({ x, y }) => `${x},${y}`;
 // Route geometry and frontier selection belong to the shared C navigator.
 // This example only chooses exploration, descent, retreat or a bounded search.
@@ -106,7 +106,8 @@ export function createExplorer() {
                 hero.stop();
             }
             catch (error) {
-                if (!(error instanceof WorldError) || !("error" in error.response) || error.response.error?.code !== "unsupportedMovement")
+                const cause = error instanceof NavigationError ? error.cause : error;
+                if (!(cause instanceof WorldError) || !("error" in cause.response) || cause.response.error?.code !== "unsupportedMovement")
                     throw error;
                 log("The navigator cannot plan this movement:", error.message);
                 hero.stop();

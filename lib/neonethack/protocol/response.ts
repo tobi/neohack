@@ -132,6 +132,10 @@ export const compactResponseSchema: Schema = {
   properties: {
     version: { const: 1 }, sessionId: string, revision: integer,
     requestId: nullable(string), observation: { type: "object" },
+    operationId: string, summary: string, historical: boolean,
+    presentation: closed({kind:{const:'compact'},omitted:array(string),omittedClearTerrainEvents:integer,
+      fullObservation:{const:'session_observe'},attempts:{const:'session_actions'},fullInputReceipt:{const:'receipt'}},
+      ['kind','omitted','omittedClearTerrainEvents','fullObservation','attempts']),
     update: closed({ kind: enumeration("snapshot", "delta"), id: integer, base: integer,
       remove: array(string), worldRemoved: array({ type: "array", items: integer, minItems: 2, maxItems: 2 }) }, ["kind", "id"]),
     decision: nullable({ type: "object" }), events: array({ type: "object" }),

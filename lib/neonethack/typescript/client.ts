@@ -1,5 +1,5 @@
 import { LowLevel } from './low.js';
-import { Navigator, type GoOptions, type NavigationOptions } from './navigator.js';
+import { Navigator, type GoOptions, type NavigationOptions, type ExploreOptions } from './navigator.js';
 import { beforeInput, accepted, scheduled } from './lifecycle.js';
 import type { LoreResponse, NavigationResponse, RouteResponse, AutomaticPickup, ActionTarget, ActionsResponse, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
 export type { LoreResponse, NavigationResponse, RouteResponse, EquipmentSlot, ItemRef, AutomaticPickup, ActionTarget, ActionsResponse, ActionOffer, ActionBasis, CellActions, Neighborhood, InputGate, Answer, Compass, Description, Identity, Item, Method, MethodParams, Request, Response, Snapshot, Target } from "./types.js";
@@ -141,7 +141,7 @@ export class Game {
     });
   }
   go(options: GoOptions) { return new Navigator(this).go(options); }
-  explore(options: NavigationOptions = {}) { return new Navigator(this).explore(options); }
+  explore(options: ExploreOptions = {}) { return new Navigator(this).explore(options); }
   descend(options: NavigationOptions = {}) { return new Navigator(this).descend(options); }
   lookup(name:string):Promise<LoreResponse> {
     return this.enqueue(async()=>{
@@ -231,4 +231,4 @@ export type { BotContext, BotDefinition, BotBuilder, BotHandler, Step } from './
 export type { HeroEvent, HeroEventName, HeroEventDetails, HeroListener, BotResult, StopReason, CellChange, ItemSighting } from './hero-events.js';
 
 export type { ScriptState, ScriptValue, ScriptResult, ScriptHost, ScriptControl, ScriptJournalEntry } from './script.js';
-export { Navigator, type NavigationOptions, type NavigationResult, type GoOptions } from './navigator.js';
+export { Navigator, NavigationError, type NavigationOptions, type ExploreOptions, type NavigationResult, type GoOptions } from './navigator.js';

@@ -16,7 +16,7 @@ Start with the [first-five-minutes guide](docs/QUICKSTART.md) for runnable
 source, browser and installed-preview paths.
 For the playing loop, read [How an agent plays](docs/AGENT_PLAY.md).
 
-WebMCP and stdio MCP return [compact observation deltas](docs/PROTOCOL.md#mcp-observation-presentation).
+WebMCP and stdio MCP return [self-contained compact perceived frames](docs/PROTOCOL.md#mcp-observation-presentation).
 The [native C MCP CLI](docs/TYPESCRIPT.md#streamable-http) also supports concurrent
 game processes and `--http PORT` for MCP 2026-07-28 and 2025 Streamable HTTP, using the same
 tool schemas and independent observation snapshots.
@@ -114,7 +114,8 @@ builds do not require JavaScript.
   Browser-facing modules have no Node or Bun imports.
 - **MCP/WebMCP:** one generated tool per method through native C stdio/HTTP
   or the browser adapter, preserving schemas, receipts and standing decisions.
-  MCP observation deltas are presentation only; session.observe returns a full frame.
+  Compact MCP replies label omitted local action detail and clear-terrain events;
+  session_observe returns the full observation and receipt returns the full input result.
 
 - **WASM:** [`typescript/wasm.ts`](typescript/wasm.ts) runs the same C core with
   isolated engine workers. Choose volatile memory or explicitly locked,

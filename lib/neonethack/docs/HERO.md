@@ -272,11 +272,20 @@ console.log(leg.reason, leg.actionsTaken, leg.snapshot.outcome);
 is reachable, it approaches a remembered closed door not known locked and makes
 one explicit open attempt, then stops. It does not pick locks, kick or repeat
 a resisted opening.
+Pass `maxFrontiers` to explicitly continue across several successive perceived
+frontiers, for example `explore({maxFrontiers:20,maxActions:80})`. It defaults to
+one; the action budget applies to the whole call, and a door attempt still ends
+it. Frontier continuation uses freshly queried perceived routes and retains all
+decision, interruption and changed-condition stops.
 `descend()` selects the nearest reachable remembered downward stair, travels to
 it and attempts the engine's climb command. `maxActions` defaults to the full level bound of 1,659 and can be reduced; it counts submitted move/open/climb attempts, not elapsed game turns.
 Pass an `AbortSignal` to stop between inputs. A pending decision, interruption,
-level change during travel or a newly perceived creature ends the leg. No warning
+level change during travel, condition or hunger change, or a newly perceived creature ends the leg. No warning
 is answered, blocked action repeated, or uncertain operation retried.
+If a later substep fails, `NavigationError.result` retains the confirmed actions,
+turns and last confirmed snapshot; its `cause` retains the underlying error.
+An uncertain failed input may have executed beyond that snapshot. Recover the
+retained exact input with `retry`; never restart the navigation call as recovery.
 
 Route and frontier semantics live in C. This executor only submits the named
 operations with their observed revision and returns the actual final snapshot.

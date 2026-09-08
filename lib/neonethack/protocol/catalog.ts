@@ -9,7 +9,10 @@ const integer = (minimum = 0, maximum = Number.MAX_SAFE_INTEGER): Schema => ({ t
 export const compass = enumeration("north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest");
 const direction = enumeration(...compass.enum, "up", "down");
 export const target = { oneOf: [enumeration("self"), object({ direction })] };
-export const item = { oneOf: [text(127), object({ id: text(64), quantity: integer(1, 2147483647) }, ["id"])] };
+export const item = { description: 'Select by a perceived readable name, or pass an opaque returned reference as {id:"item-…"} or {id:"ground-…"}. A bare string is a name, never an ID.', oneOf: [
+  {...text(127), description:'Perceived readable item name, for example "food ration". Do not put an opaque item ID in this string.'},
+  {...object({ id: {...text(64), description:'Exact opaque id returned by inventory, here.items or the standing decision.'}, quantity: integer(1, 2147483647) }, ["id"]), description:'Exact returned item reference; optional quantity selects a count from its stack.'},
+] };
 export const automaticPickup = object({
   enabled: { type: "boolean" },
   itemTypes: { type: "array", maxItems: 15, uniqueItems: true, items: enumeration("gold", "food", "potions", "scrolls", "weapons", "armor", "rings", "amulets", "tools", "spellbooks", "wands", "gems", "rocks", "balls", "chains") },

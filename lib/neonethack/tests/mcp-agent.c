@@ -7,6 +7,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Exercise real committed engine input followed by failed supervisor retention.
+ * The production callback already owns this boundary; no game state is faked. */
+static int reserve_countdown(const char *request, void *context)
+{
+    (void)request;
+    long long *remaining = context;
+    return --*remaining != 0;
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 5 && !strcmp(argv[1],"execute")) {
@@ -21,6 +30,10 @@ int main(int argc, char **argv)
             char *method = mcp_string(mcp_field(definition.p,"method"));
             char *operation = mcp_string(mcp_field(line,"operationId"));
             long long seen = -1; mj_int(mcp_field(line,"seen"),&seen);
+            long long fail_after = 0; mj_val fault = mcp_field(line,"failReservationAfter");
+            if (fault.p) mj_int(fault,&fail_after);
+            state.reserve = fail_after > 0 ? reserve_countdown : NULL;
+            state.reserve_context = &fail_after;
             char *result = mcp_agent_execute(ctx,&state,method,args,seen,operation);
             assert(result); puts(result); fflush(stdout);
             free(result); free(name); free(method); free(operation);
@@ -42,15 +55,32 @@ int main(int argc, char **argv)
         free(out); free(line); free(name); free(method); free(request_id); free(decision_id);
         return 0;
     }
-    if (argc == 2 && !strcmp(argv[1],"present")) {
+    if (argc == 2 && (!strcmp(argv[1],"present") || !strcmp(argv[1],"present-compact"))) {
         char *line = NULL; size_t cap = 0;
         while (getline(&line,&cap,stdin) >= 0) {
-            assert(mj_valid(line)); char *out = mcp_agent_present(line,0);
+            assert(mj_valid(line)); char *out = mcp_agent_present_mode(line,0,!strcmp(argv[1],"present-compact"));
             assert(out); puts(out); free(out);
         }
         free(line); return 0;
     }
     char alias[128];
+    /* Seed-44 play exposed an unidentified remembered marker. Unchanged
+     * unknown appearance is not a new creature on every walking step. */
+    const char *marker = "{\"observation\":{\"world\":[{\"x\":43,\"y\":9,\"occupant\":{\"kind\":\"creature\",\"mark\":\"I\"}}]}}";
+    const char *empty = "{\"observation\":{\"world\":[]}}";
+    const char *identified = "{\"observation\":{\"world\":[{\"x\":43,\"y\":9,\"occupant\":{\"kind\":\"creature\",\"appearance\":\"goblin\"}}]}}";
+    const char *moved_marker = "{\"observation\":{\"world\":[{\"x\":44,\"y\":9,\"occupant\":{\"kind\":\"creature\",\"mark\":\"I\"}}]}}";
+    assert(!mcp_agent_new_creature(marker,marker));
+    assert(mcp_agent_new_creature(empty,marker));
+    assert(mcp_agent_new_creature(marker,identified));
+    assert(mcp_agent_new_creature(marker,moved_marker));
+    const char *healthy="{\"observation\":{\"vitals\":{\"condition\":[],\"hunger\":\"not_hungry\"}}}";
+    const char *blind="{\"observation\":{\"vitals\":{\"condition\":[\"blind\"],\"hunger\":\"not_hungry\"}}}";
+    const char *hungry="{\"observation\":{\"vitals\":{\"condition\":[],\"hunger\":\"hungry\"}}}";
+    assert(!mcp_agent_vitals_changed(healthy,healthy));
+    assert(mcp_agent_vitals_changed(healthy,blind));
+    assert(mcp_agent_vitals_changed(blind,healthy));
+    assert(mcp_agent_vitals_changed(healthy,hungry));
     nnh_choice_name(" Force Bolt! ",alias,sizeof alias); assert(!strcmp(alias,"force-bolt"));
     nnh_choice_name("force---bolt",alias,sizeof alias); assert(!strcmp(alias,"force-bolt"));
     nnh_choice_name("Éclair 魔法",alias,sizeof alias); assert(!strcmp(alias,"Éclair-魔法"));

@@ -1545,7 +1545,11 @@ test(
     );
     const { methods } = await import("../../../lib/neonethack/dist/mcp/agent-data.js");
     const tools=methods.map(m=>({name:m.name,description:m.description,inputSchema:m.schema}));
-    const snapshotPart=({summary,operationId,historical,navigation,creatures,requestId,...frame})=>frame;
+    const snapshotPart=({summary,operationId,historical,navigation,creatures,requestId,presentation,...frame})=>{
+      const {neighborhood,...observation}=frame.observation;
+      return {...frame,observation,events:frame.events.filter(e=>!(e.type==='saw'&&e.kind==='terrain'&&(e.mark==='\\u0000'||e.mark==='\u0000')))};
+    };
+    const sharedSnapshot=async()=>{const frame=await agentSnapshot(page);return frame?snapshotPart(frame):null;};
     const native = await nativeWebMcp(page, t);
     const registered = await native.list();
     assert.deepEqual(
@@ -1570,7 +1574,11 @@ test(
     });
     assert.equal(created.isError, false);
     let state = created.structuredContent;
-    assert.deepEqual(await agentSnapshot(page), snapshotPart(state));
+    assert.deepEqual(await sharedSnapshot(), snapshotPart(state));
+    assert.equal(state.presentation.kind,'compact');
+    const full=(await call('session.observe',{sessionId:state.sessionId})).structuredContent;
+    const {summary,operationId,historical,navigation,creatures,requestId,...fullFrame}=full;
+    assert.deepEqual(await agentSnapshot(page),fullFrame,'explicit observation retains the entire shared HUD scene');
     assert.equal(await page.locator("#hero-name").textContent(), "Mira");
     assert.equal(
       await page.locator(".map-viewport").evaluate((el) => el.clientHeight),
@@ -1590,7 +1598,7 @@ test(
     await page.locator("#decision[open]").waitFor();
     await page.waitForTimeout(200);
     assert.deepEqual(
-      await agentSnapshot(page),
+      await sharedSnapshot(),
       snapshotPart(state),
       "warnings await an explicit answer",
     );
@@ -1611,7 +1619,7 @@ test(
       "exact receipt retry",
     );
     assert.deepEqual(
-      await agentSnapshot(page),
+      await sharedSnapshot(),
       snapshotPart(next),
       "old receipts never rewind the HUD",
     );
@@ -1653,7 +1661,8 @@ test(
       state.observation.turn + 1,
     );
     state = recovered.structuredContent;
-    assert.deepEqual(await agentSnapshot(page), snapshotPart(state));
+    assert.deepEqual(await sharedSnapshot(), snapshotPart(state));
+    assert.deepEqual((await agentSnapshot(page)).observation,state.observation,'recovered receipt includes the complete neighborhood');
     await page.locator("#recovery").waitFor({ state: "hidden" });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({
@@ -2588,6 +2597,8 @@ test("idle WebMCP discovery and closed adventures release storage for another ta
   const warning = await call("game.pray", { sessionId: sid });
   assert.equal(warning.isError, false);
   assert.equal(warning.structuredContent.decision.kind, "confirmation");
+  const fullWarning=await call('receipt',{sessionId:sid,operationId:warning.structuredContent.operationId});
+  assert.equal(fullWarning.isError,false);
   assert.equal((await call("session.close", { sessionId: sid })).isError, false);
   assert.equal(await snapshot(page), null);
   assert.equal(await owned(), false, "closing an agent adventure must release its worker's store lock");
@@ -2598,7 +2609,7 @@ test("idle WebMCP discovery and closed adventures release storage for another ta
   await ready(peer);
   assert.equal((await agentSnapshot(peer)).sessionId, sid);
   assert.deepEqual((await agentSnapshot(peer)).decision, warning.structuredContent.decision);
-  assert.deepEqual((await agentSnapshot(peer)).observation, warning.structuredContent.observation);
+  assert.deepEqual((await agentSnapshot(peer)).observation, fullWarning.structuredContent.observation);
   assert.deepEqual(errors, []);
 });
 
