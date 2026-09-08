@@ -4,6 +4,8 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <signal.h>
+#include <poll.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -290,8 +292,16 @@ void mcp_route(mcp_job *j)
     w->tail = j;
     if (w->head == j) start_next(w);
 }
+static long long shutdown_clock_ms(void)
+{
+    struct timespec now; clock_gettime(CLOCK_MONOTONIC,&now);
+    return (long long)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+}
 void mcp_workers_close(mcp_server *s)
 {
+    /* All workers receive EOF together; one shared grace period covers their
+     * normal (bounded) engine close. A stopped idle worker has no I/O timer. */
+    long long deadline = shutdown_clock_ms() + 3000;
     while (s->workers) {
         mcp_worker *w = s->workers; s->workers = w->next;
         /* All accepted jobs have completed. EOF closes idle contexts and leases. */
@@ -301,7 +311,18 @@ void mcp_workers_close(mcp_server *s)
     }
     while (s->retired) {
         mcp_worker *w = s->retired; s->retired = w->next;
-        while (waitpid(w->pid,NULL,0) < 0 && errno == EINTR) {}
+        for (;;) {
+            pid_t reaped = waitpid(w->pid,NULL,WNOHANG);
+            if (reaped == w->pid || (reaped < 0 && errno != EINTR)) break;
+            if (shutdown_clock_ms() >= deadline) {
+                /* This unreaped child still reserves its process-group ID.
+                 * Retire its engine as well so no run lease is orphaned. */
+                kill(-w->pid,SIGKILL);
+                while (waitpid(w->pid,NULL,0) < 0 && errno == EINTR) {}
+                break;
+            }
+            poll(NULL,0,10);
+        }
         free(w);
     }
     while (s->recoveries) forget_recovery(s,s->recoveries->session);
