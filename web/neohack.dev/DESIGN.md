@@ -1258,6 +1258,28 @@ from the walking policy. Arrows, WASD and the direction pad still issue direct
 single-step movement. Inspecting and previewing consume no game turn or randomness.
 
 Cloud upload failures stay in the compact save status, with detail available on its tooltip. They never open the central gameplay error overlay.
+### Encyclopedia
+
+The game menu opens the pinned engine’s encyclopedia in a compact searchable book.
+Look up a creature, item or place by name; show the engine’s wording with prose
+lines reflowed into paragraphs for narrow screens. This is explicitly lore, not
+identification of the perceived scene. Lookup costs no turns, changes no standing
+decision, and needs no server. Missing entries invite another name. Search and
+results work with keyboard and touch; late results from a closed book are ignored.
+
+### Local play and background archives
+
+Local IndexedDB is authoritative for play after the pinned engine is downloaded.
+Cloud availability must not delay a locally available new game or resume. Background
+sync batches changes since an acknowledged cursor every 30 seconds during activity
+or 5 seconds after inactivity; outages stay quiet and queued work resumes online.
+New runs append protocol inputs and completion records, with actual engine
+checkpoints for faster restore. Compressed chunks and immutable manifests serve
+replays directly from the CDN; playback makes no gameplay API requests. The PWA
+caches the downloaded runtime for offline creation and local resumption. Older
+published recordings retain their original format and use bounded frame batches.
+Concluded/stale ledger admission and large-scale storage tuning remain tracked
+in NEO-34; they are separate from the implemented local recording path.
 
 ### Bounded decision dialogs
 

@@ -1,4 +1,4 @@
-import { replayOutbox, appendReplayFrame } from "./replay-outbox";
+import { appendReplay, replayQueue, reconcileReplay, nextReplayBatch, acknowledgeReplay } from "./replay-outbox";
 import type { Snapshot } from "neonethack/types";
 export function replayLink(id: string) {
   return new URL("/dashboard?run=" + encodeURIComponent(id), location.origin)
@@ -49,7 +49,7 @@ export class PublicReplayRecorder {
     delete copy.observation.neighborhood;
     this.tail = this.tail
       .then(async () => {
-        await appendReplayFrame(this.key, copy);
+        await appendReplay(this.key, copy);
         this.status("Replay local · publishes when this run settles");
       })
       .catch((error) => {
@@ -63,8 +63,8 @@ export class PublicReplayRecorder {
     this.flight = navigator.locks
       .request("neohack-recording:" + this.key, async () => {
         await this.tail;
-        let queue = await replayOutbox(this.key);
-        if (!queue.frames.length) return;
+        let queue = await replayQueue(this.key);
+        if (!queue.count) return;
         await this.prepare();
         if (queue.index === null) {
           const response = await fetch("/api/runs/" + this.id + "/replay?publication=1", {
@@ -85,21 +85,19 @@ export class PublicReplayRecorder {
               throw Error("Invalid recording metadata");
           } else if (response.status !== 404)
             throw Error("Recording service unavailable");
-          queue = await replayOutbox(this.key, (q) => {
-            q.index = count;
-            q.frames = q.frames.filter((f) => f.revision > revision);
-            q.bytes = new TextEncoder().encode(JSON.stringify(q.frames)).length;
-          });
+          await reconcileReplay(this.key,count,revision);
+          queue = await replayQueue(this.key);
         }
-        while (queue.frames.length && !this.closed) {
-          const frame = queue.frames[0]!;
+        while (queue.count && !this.closed) {
+          const batch = await nextReplayBatch(this.key);
+          if (!batch) throw Error('Recording queue is incomplete');
           const response = await fetch("/api/runs/" + this.id + "/replay", {
             method: "PUT",
             headers: {
               "content-type": "application/json",
               authorization: "Bearer " + this.vault,
             },
-            body: JSON.stringify({ index: queue.index, frame }),
+            body: JSON.stringify(batch),
             signal: AbortSignal.timeout(10000),
           });
           if (!response.ok) {
@@ -115,19 +113,15 @@ export class PublicReplayRecorder {
             }
             throw Error("Recording upload pending");
           }
-          queue = await replayOutbox(this.key, (q) => {
-            if (q.frames[0]?.revision !== frame.revision)
-              throw Error("Recording queue changed");
-            q.frames.shift();
-            q.index = (q.index ?? 0) + 1;
-            q.bytes = new TextEncoder().encode(JSON.stringify(q.frames)).length;
-          });
+          const receipt = await response.json();
+          await acknowledgeReplay(this.key,batch,receipt.acknowledged);
+          queue = await replayQueue(this.key);
         }
         this.failures = 0;
         this.status(
           this.stopped
             ? "Replay partial · recording paused"
-            : queue.frames.length
+            : queue.count
               ? "Replay pending · recorded here"
               : "Replay uploaded · recording from this visit",
         );
@@ -151,7 +145,7 @@ export class PublicReplayRecorder {
   async flush() {
     await this.tail;
     await this.pump();
-    return (await replayOutbox(this.key)).index! > 0;
+    return (await replayQueue(this.key)).index! > 0;
   }
   close() {
     this.closed = true;

@@ -1,148 +1,67 @@
-import type { Snapshot } from "neonethack/types";
-export type RecordingQueue = {
-  frames: Snapshot[];
-  index: number | null;
-  bytes: number;
-};
-const empty = (): RecordingQueue => ({ frames: [], index: null, bytes: 0 });
-async function open() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const r = indexedDB.open("neohack-public-recordings-v1", 2);
-    r.onupgradeneeded = () => {
-      for (const name of ["queues", "frames", "heads"])
-        if (!r.result.objectStoreNames.contains(name))
-          r.result.createObjectStore(name);
-    };
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
+import type {Snapshot} from 'neonethack/types';
+export type ReplayBatch = {index:number; frames:Snapshot[]};
+type Queue = {version:3; index:number|null; bytes:number; count:number; lastRevision:number};
+const size=(frame:Snapshot)=>new TextEncoder().encode(JSON.stringify(frame)).length;
+const request=<T>(r:IDBRequest<T>)=>new Promise<T>((resolve,reject)=>{r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+const range=(key:string)=>IDBKeyRange.bound([key,0],[key,Number.MAX_SAFE_INTEGER]);
+
+/** Keep the published database version and stores. Upload batches live separately
+ * from the small head read during a turn; no pending frame payload enters it. */
+async function transaction<T>(key:string,change:(q:Queue,frames:IDBObjectStore,uploads:IDBObjectStore)=>Promise<T>|T):Promise<T>{
+  const opening=indexedDB.open('neohack-public-recordings-v1',2);
+  opening.onupgradeneeded=()=>{for(const name of ['queues','frames','heads'])if(!opening.result.objectStoreNames.contains(name))opening.result.createObjectStore(name);};
+  const db=await request(opening);
+  try{return await new Promise<T>((resolve,reject)=>{
+    const tx=db.transaction(['queues','frames','heads'],'readwrite',{durability:'strict'});
+    const queues=tx.objectStore('queues'),frames=tx.objectStore('frames'),heads=tx.objectStore('heads');let result:T;
+    tx.oncomplete=()=>resolve(result);tx.onerror=tx.onabort=()=>reject(tx.error??Error('Recording storage interrupted'));
+    void(async()=>{
+      let q=await request(heads.get(key));
+      if(q?.version!==3){
+        // One-time recovery of already-published layouts, never a per-turn scan.
+        const old=await request(queues.get(key));
+        for(const frame of old?.frames??[])if(await request(frames.getKey([key,frame.revision]))===undefined)frames.add(frame,[key,frame.revision]);
+        q={version:3,index:q?.index??old?.index??null,bytes:0,count:0,lastRevision:-1};
+        await new Promise<void>((done,fail)=>{
+          const cursor=frames.openCursor(range(key));cursor.onerror=()=>fail(cursor.error);
+          cursor.onsuccess=()=>{const c=cursor.result;if(!c){done();return;}q.bytes+=size(c.value);q.count++;q.lastRevision=Math.max(q.lastRevision,c.value.revision);c.continue();};
+        });
+        queues.delete(key);
+      }
+      result=await change(q,frames,queues);heads.put(q,key);
+    })().catch(error=>{tx.abort();reject(error);});
+  });}finally{db.close();}
+}
+export function appendReplay(key:string,frame:Snapshot){return transaction(key,async(q,frames)=>{
+  if(frame.revision<=q.lastRevision||await request(frames.getKey([key,frame.revision]))!==undefined)return;
+  frames.add(frame,[key,frame.revision]);q.lastRevision=frame.revision;q.bytes+=size(frame);q.count++;
+});}
+export function replayQueue(key:string){return transaction(key,q=>({index:q.index,count:q.count,bytes:q.bytes}));}
+export function reconcileReplay(key:string,index:number,revision:number){return transaction(key,async(q,frames)=>{
+  if(q.index!==null)return;
+  await new Promise<void>((resolve,reject)=>{
+    const cursor=frames.openCursor(IDBKeyRange.bound([key,0],[key,Math.max(0,revision)]));cursor.onerror=()=>reject(cursor.error);
+    cursor.onsuccess=()=>{const c=cursor.result;if(!c){resolve();return;}if(c.value.revision<=revision){q.count--;q.bytes-=size(c.value);c.delete();}c.continue();};
   });
-}
-/** The turn path writes one frame and a small counter, never clones prior frames. */
-export async function appendReplayFrame(key: string, frame: Snapshot) {
-  const bytes = new TextEncoder().encode(JSON.stringify(frame)).length;
-  const db = await open();
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(["frames", "heads"], "readwrite"),
-        frames = tx.objectStore("frames"),
-        heads = tx.objectStore("heads");
-      const r = heads.get(key),
-        exists = frames.getKey([key, frame.revision]);
-      let headReady = false,
-        existsReady = false;
-      const write = () => {
-        if (!headReady || !existsReady) return;
-        try {
-          if (exists.result !== undefined) return;
-          const head = r.result ?? { index: null, bytes: 0, count: 0 };
-          if (head.count >= 500 || head.bytes + bytes > 32 * 1024 * 1024)
-            throw Error(
-              "Recording paused: local queue is full. Saved frames remain available.",
-            );
-          frames.put(frame, [key, frame.revision]);
-          heads.put(
-            { ...head, bytes: head.bytes + bytes, count: head.count + 1 },
-            key,
-          );
-        } catch (error) {
-          tx.abort();
-          reject(error);
-        }
-      };
-      r.onsuccess = () => {
-        headReady = true;
-        write();
-      };
-      exists.onsuccess = () => {
-        existsReady = true;
-        write();
-      };
-      tx.oncomplete = () => resolve();
-      tx.onerror = tx.onabort = () =>
-        reject(tx.error ?? Error("Recording storage interrupted"));
-    });
-  } finally {
-    db.close();
-  }
-}
-/** Publication reads the queue. Existing recordings are retained until acknowledged. */
-export async function replayOutbox(
-  key: string,
-  change?: (queue: RecordingQueue) => void,
-): Promise<RecordingQueue> {
-  const db = await open();
-  try {
-    return await new Promise((resolve, reject) => {
-      const tx = db.transaction(
-        ["queues", "frames", "heads"],
-        change ? "readwrite" : "readonly",
-      );
-      const legacy = tx.objectStore("queues"),
-        frames = tx.objectStore("frames"),
-        heads = tx.objectStore("heads");
-      const old = legacy.get(key),
-        fresh = frames.getAll(
-          IDBKeyRange.bound([key, 0], [key, Number.MAX_SAFE_INTEGER]),
-        ),
-        head = heads.get(key);
-      let ready = 0,
-        value: RecordingQueue;
-      const read = () => {
-        if (++ready !== 3) return;
-        try {
-          const prior = old.result ?? empty();
-          const all = [
-            ...new Map(
-              ([...prior.frames, ...fresh.result] as Snapshot[]).map(
-                (frame) => [frame.revision, frame],
-              ),
-            ).values(),
-          ].sort((a, b) => a.revision - b.revision);
-          value = {
-            frames: all,
-            index: head.result?.index ?? prior.index,
-            bytes: prior.bytes + (head.result?.bytes ?? 0),
-          };
-          if (change) {
-            change(value);
-            const retained = new Set(value.frames.map((f) => f.revision));
-            for (const f of fresh.result)
-              if (!retained.has(f.revision)) frames.delete([key, f.revision]);
-            const remaining = prior.frames.filter((f: Snapshot) =>
-              retained.has(f.revision),
-            );
-            const oldBytes = new TextEncoder().encode(
-              JSON.stringify(remaining),
-            ).length;
-            if (remaining.length)
-              legacy.put(
-                { frames: remaining, index: value.index, bytes: oldBytes },
-                key,
-              );
-            else legacy.delete(key);
-            heads.put(
-              {
-                index: value.index,
-                count: value.frames.length - remaining.length,
-                bytes: Math.max(
-                  0,
-                  value.bytes - (remaining.length ? oldBytes : 0),
-                ),
-              },
-              key,
-            );
-          }
-        } catch (error) {
-          tx.abort();
-          reject(error);
-        }
-      };
-      old.onsuccess = fresh.onsuccess = head.onsuccess = read;
-      tx.oncomplete = () => resolve(value);
-      tx.onerror = tx.onabort = () =>
-        reject(tx.error ?? Error("Recording storage interrupted"));
-    });
-  } finally {
-    db.close();
-  }
-}
+  q.index=index;q.lastRevision=Math.max(q.lastRevision,revision);
+});}
+export function nextReplayBatch(key:string){return transaction(key,async(q,frames,uploads)=>{
+  const pending=await request(uploads.get('pending:'+key));if(pending)return pending as ReplayBatch;
+  if(q.index===null||!q.count)return null;
+  const selected:Snapshot[]=[];let bytes=0;
+  await new Promise<void>((resolve,reject)=>{
+    const cursor=frames.openCursor(range(key));cursor.onerror=()=>reject(cursor.error);
+    cursor.onsuccess=()=>{const c=cursor.result;if(!c){resolve();return;}const n=size(c.value);
+      if(selected.length&&(selected.length>=128||bytes+n>1500000)){resolve();return;}
+      if(n>1900000){reject(Error('Recorded frame exceeds upload limit'));return;}
+      selected.push(c.value);bytes+=n;c.continue();};
+  });
+  if(!selected.length)throw Error('Recording queue is incomplete');
+  const batch={index:q.index,frames:selected};uploads.put(batch,'pending:'+key);return batch;
+});}
+export function acknowledgeReplay(key:string,batch:ReplayBatch,acknowledged:number){return transaction(key,async(q,frames,uploads)=>{
+  const pending=await request(uploads.get('pending:'+key));
+  if(!pending||pending.index!==batch.index||JSON.stringify(pending.frames)!==JSON.stringify(batch.frames)||acknowledged!==batch.index+batch.frames.length)throw Error('Recording acknowledgement differs');
+  for(const frame of batch.frames){frames.delete([key,frame.revision]);q.count--;q.bytes-=size(frame);}
+  q.index=acknowledged;uploads.delete('pending:'+key);
+});}

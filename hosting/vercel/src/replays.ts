@@ -1,3 +1,5 @@
+import {replayFrames} from './replay-frames.ts';
+import type {Snapshot} from '../../../lib/neonethack/dist/typescript/types.js';
 import {publishReplay} from './publish-replay.ts';
 import {publicReplayConfigured} from './public-replay-store.ts';
 import {markRecorded} from './ledger-store.ts';
@@ -45,22 +47,46 @@ export async function replay(request: Request, id: string) {
   if(!run)return json({error:'Run does not belong to this vault'},403);
   if(typeof run.buildId!=='string' || !/^[a-f0-9]{64}$/.test(run.buildId))return json({error:'Run package is not recorded'},400);
   if(!publicReplayConfigured())return json({error:'Public replay publication unavailable'},503);
-  const raw=await request.text();if(raw.length>1000000)return json({error:'Frame too large'},413);
+  const raw=await request.text();if(Buffer.byteLength(raw)>2000000)return json({error:'Recording batch too large'},413);
   let body:any;try{body=JSON.parse(raw);}catch{return json({error:'Invalid JSON'},400);}
-  const f=body?.frame;
-  if(!f || f.version!==1 || f.sessionId!==id || !Number.isSafeInteger(f.revision) || f.revision<0 || !f.outcome || !Array.isArray(f.events) || typeof f.ended!=='boolean' || !Array.isArray(f.observation?.inventory) || !Number.isFinite(f.observation?.turn) || !Array.isArray(f.observation?.world) || f.observation.world.length>10000 || !Array.isArray(f.observation.heard) || !f.observation.vitals || typeof f.observation.location?.depthLabel!=='string' || !Number.isInteger(body.index)||body.index<0||body.index>=100000)return json({error:'Invalid frame'},400);
-  // Explicit allowlist: no storage descriptors, save capabilities, receipts or journals.
-  const observation={...f.observation};delete observation.neighborhood;
-  const frame={version:1,sessionId:id,requestId:f.requestId,revision:f.revision,ended:f.ended,observation,outcome:f.outcome,events:f.events,decision:f.decision,end:f.end};
+  // Already-published clients send one frame; current clients send exact batches.
+  if(body?.frame && body.frames===undefined)body.frames=[body.frame];
+  if(!Array.isArray(body?.frames)||!body.frames.length||body.frames.length>128||!Number.isInteger(body.index)||body.index<0||body.index+body.frames.length>100000)return json({error:'Invalid recording batch'},400);
+  const frames:Snapshot[]=[],publishedRefs:string[]=[];
+  for(const f of body.frames){
+    if(!f || f.version!==1 || f.sessionId!==id || !Number.isSafeInteger(f.revision) || f.revision<0 || !f.outcome || !Array.isArray(f.events) || typeof f.ended!=='boolean' || !Array.isArray(f.observation?.inventory) || !Number.isFinite(f.observation?.turn) || !Array.isArray(f.observation?.world) || f.observation.world.length>10000 || !Array.isArray(f.observation.heard) || !f.observation.vitals || typeof f.observation.location?.depthLabel!=='string')return json({error:'Invalid frame'},400);
+    // Explicit allowlist: private journals/capabilities never enter public frames.
+    const frame={version:1 as const,sessionId:id,requestId:f.requestId,revision:f.revision,ended:f.ended,observation:f.observation,outcome:f.outcome,events:f.events,decision:f.decision,end:f.end};
+    // A lost acknowledgement from a published writer may refer to the original
+    // full observation. Accept those exact committed bytes without rewriting it.
+    publishedRefs.push('objects/'+createHash('sha256').update(JSON.stringify(frame)).digest('hex')+'.json');
+    const observation={...f.observation};delete observation.neighborhood;
+    frames.push({...frame,observation});
+  }
+  if(frames.some((f,i)=>i>0&&f.revision<=frames[i-1].revision))return json({error:'Recording revisions must increase'},400);
   const owner=createHash('sha256').update(vault).digest('hex');
-  const frameRef='objects/'+createHash('sha256').update(JSON.stringify(frame)).digest('hex')+'.json';
-  const result=await update<any,Response>(key,()=>({owner,frames:[],revision:-1,role:run.role,seed:run.seed,buildId:run.buildId,partial:f.observation.turn>1}),async doc=>{
+  const refs=frames.map(frame=>'objects/'+createHash('sha256').update(JSON.stringify(frame)).digest('hex')+'.json');
+  const result=await update<any,Response>(key,()=>({owner,frames:[],batches:[],revision:-1,role:run.role,seed:run.seed,buildId:run.buildId,partial:frames[0].observation.turn>1}),async doc=>{
     if(doc.owner!==owner)return json({error:'Recording owner differs'},403);
     if(doc.buildId!==run.buildId)return json({error:'Recording package differs'},409);
-    if(body.index<doc.frames.length && doc.frames[body.index]===frameRef){if(!(await read(frameRef)))return json({error:'Recorded frame missing'},409);return json({count:doc.frames.length});}
-    if(body.index!==doc.frames.length || f.revision<=doc.revision)return json({error:'Recording sequence differs'},409);
-    doc.frames.push(await immutable(frame));doc.revision=f.revision;doc.complete=f.ended;
-    return json({count:doc.frames.length});
+    if(body.index<doc.frames.length){
+      if(!refs.every((ref,i)=>doc.frames[body.index+i]===ref || doc.frames[body.index+i]===publishedRefs[i]))return json({error:'Recording sequence differs'},409);
+      await replayFrames(doc,body.index,refs.length);
+      return json({count:doc.frames.length,acknowledged:body.index+refs.length});
+    }
+    if(body.index!==doc.frames.length||frames[0].revision<=doc.revision)return json({error:'Recording sequence differs'},409);
+    doc.batches??=[];
+    const tail=doc.batches.at(-1);let combined=frames,start=body.index;
+    if(tail&&tail.count+frames.length<=128){
+      const previous=await read(tail.ref);
+      if(!previous?.frames)throw Error('Public recording incomplete');
+      const candidate=[...previous.frames,...frames];
+      if(Buffer.byteLength(JSON.stringify(candidate))<=256*1024){combined=candidate;start=tail.start;doc.batches.pop();}
+    }
+    const ref=await immutable({frames:combined});
+    doc.batches.push({start,count:combined.length,ref});
+    doc.frames.push(...refs);doc.revision=frames.at(-1)!.revision;doc.complete=frames.at(-1)!.ended;
+    return json({count:doc.frames.length,acknowledged:doc.frames.length});
   });
   if(result.ok)await publishReplay(id);
   if(result.ok && body.index===0){availability.delete(storage());await markRecorded(id);}

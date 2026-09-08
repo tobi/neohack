@@ -8,6 +8,10 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Search the game's encyclopedia from the menu, with readable lore on desktop and phone. Reading costs no turns and works offline.
+- Agent exploration can cover several frontiers within an explicit action budget, stopping for decisions and changes in health, hunger or conditions.
+- Older recordings upload in bounded batches and recover an interrupted upload without duplicating replay steps.
+
 - New runs record compact action logs instead of copying the map after every move. Backup happens quietly in the background and retries after reconnecting.
 - Replays start from static CDN files and play locally, including in embeds. Real level checkpoints speed up resume and seeking.
 - Install the game for offline play, new adventures and local resumption. Workshop scripts save their source locally before starting; account outages do not stop a test.
