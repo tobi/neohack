@@ -1197,7 +1197,7 @@ unsynced progress reached the server. Keep ordinary API errors structured JSON.
 
 ## Embeddable public replays
 
-`neohack-world` accepts a public ledger `src` (`/dashboard?run=…`) or paginated
+`neohack-world` accepts a public replay `src` (`/replays/{run-id}`), a static manifest, or paginated
 observation JSON, `autoplay`, `speed`, `sound`, `controls` and `loop`. Default speed
 is 4× (16 recorded frames per second); controls overlay the bottom with Play/Pause,
 frame seeking, speed and gesture-enabled optional sound. HTML controls retain
@@ -1448,3 +1448,20 @@ do not refresh it. Clear on run/level changes; render only on currently visible
 squares. Missing appearance uses a neutral shape. Do not infer deaths from
 disappearance, combat prose, damage, or kill counts. These temporary effects are
 not persisted or recreated from old receipts on resume.
+
+### Dedicated replay pages
+
+Every public replay has a stable `/replays/{run-id}` page with its visible ID,
+player, public ledger details (last-recorded date, class, hero level, peak level,
+dungeon location/depth, turns and outcome), share URL and selectable embed code.
+Missing metadata is labelled rather than inferred; optional ledger failures do
+not gate static CDN playback. This page is unlisted and requires no sign-in.
+The component shows a visible ID and link to this page for public replay sources,
+including existing manifest and ledger URLs. Account input runs expose their
+page directly. Older private frame recordings still require explicit publication;
+private source, notes, saves and account metadata are never part of the link.
+Use the component's shared controls in account playback too. Speeds range from
+0.5× to 20×, default 4×; 10× and 20× are requested rates, bounded by reconstruction
+and device speed. Only one input reconstruction runs at a time. No recorded
+inputs are skipped or reordered to meet a rate, and Pause remains available
+while reconstruction is in flight.

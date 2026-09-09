@@ -64,13 +64,16 @@ test('real cloud run reconstructs public scenes, embeds after death and shares a
   await page.getByRole('button',{name:'Yes, continue',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#death-replay neohack-world')?.snapshot);
   await page.locator('#death-copy-link').click();
-  const link=await page.evaluate(()=>navigator.clipboard.readText());assert.equal(new URL(link).searchParams.get('run'),state.sessionId);assert.ok(!link.includes('#'));
+  const link=await page.evaluate(()=>navigator.clipboard.readText());assert.equal(new URL(link).pathname,'/replays/'+state.sessionId);assert.ok(!link.includes('#'));
   await page.screenshot({path:'/tmp/neohack-replay-death.png',fullPage:true});
   let releasePage;const heldPage=new Promise(resolve=>{releasePage=resolve;});
   t.after(()=>releasePage());
   let chunkRequests=0;
-  await page.route('**/replay-files/replays/*/chunks/*.gz',async route=>{if(++chunkRequests===2)await heldPage;await route.continue();});
   await page.goto(link);
+  await page.waitForFunction(()=>document.querySelector('#replay')?.snapshot);
+  assert.equal(await page.locator('#share-url').inputValue(),link);
+  await page.route('**/replay-files/replays/*/chunks/*.gz',async route=>{if(++chunkRequests===2)await heldPage;await route.continue();});
+  await page.goto(new URL('/dashboard?run='+state.sessionId,url).href);
   await page.waitForFunction(()=>document.querySelector('neohack-world')?.snapshot?.revision>=2);
   await page.evaluate(()=>document.querySelector('neohack-world').setAttribute('role','wizard'));
   assert.match(await page.locator('neohack-world').locator('#status').textContent(),/Turn/);

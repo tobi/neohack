@@ -9,6 +9,10 @@
       "destination": "/api/index?__path=:path"
     },
     {
+      "source": "/replays/:id",
+      "destination": "/replays/index.html"
+    },
+    {
       "source": "/dashboard",
       "destination": "/dashboard.html"
     },

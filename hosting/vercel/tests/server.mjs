@@ -52,7 +52,7 @@ export function createTestHarness({ store = new MemoryStorage() } = {}) {
         return;
       }
       let path = url.pathname;
-      const rewrite = config.rewrites.find((r) => r.source === path);
+      const rewrite = config.rewrites.find((r) => r.source === path || (r.source === "/replays/:id" && /^\/replays\/[\w-]{1,64}$/.test(path)));
       if (rewrite) path = rewrite.destination;
       if (path === "/") path = "/index.html";
       let file = resolve(root, "." + path);

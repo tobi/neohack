@@ -255,3 +255,9 @@ Uploads run after five idle seconds or thirty seconds of continuous requests,
 with bounded retries. Ledger/private adventure batches are additive and limited
 to fifty entries; older or terminal progress cannot be downgraded. A failed
 health probe never disables the uploader for the rest of the visit.
+
+Public replays have shareable pages at `/replays/{run-id}`. The rewrite serves
+`replays/index.html`; the player resolves static manifests through
+`/replay-config.json`. An optional public ledger lookup supplies run totals and
+the last-recorded date, and never gates playback. Account input recordings link
+to the same page; older private frame recordings still require publication.

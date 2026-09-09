@@ -54,10 +54,19 @@ test('component is read-only, bot imports execute real engine, private recording
  await waitForRuns(page,r=>r.some(v=>v.count>1&&v.sourceHash));
  const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));assert.equal(runs.length,1);assert.ok(runs[0].count>=2);
  await page.goto(url+'/login');await page.getByRole('button',{name:/Replay \d+ actions/}).click();await page.waitForFunction(()=>!document.querySelector('#playback').hidden,{},{timeout:10000}).catch(async e=>{throw Error(await page.locator('#status[role=status]').textContent(),{cause:e});});
- await page.waitForFunction(count=>Number(document.querySelector('#scrub').max)===count-1,runs[0].count);
- const first=await page.evaluate(()=>document.querySelector('#replay').snapshot);await page.locator('#scrub').fill(String(runs[0].count-1));await page.waitForFunction(first=>document.querySelector('#replay').snapshot.revision>first,first.revision);const last=await page.evaluate(()=>document.querySelector('#replay').snapshot);assert.ok(last.revision>first.revision);
- const publicLink=runs[0].replayUrl;
- const visitor=await page.context().browser().newPage();await visitor.goto(url+'/dashboard?run='+runs[0].id);
+ await page.waitForFunction(count=>Number(document.querySelector('#replay').shadowRoot.querySelector('#seek').max)===count-1,runs[0].count);
+ await page.waitForFunction(()=>document.querySelector('#replay').snapshot&&!document.querySelector('#replay').inputStepping);
+ await page.evaluate(async()=>{const viewer=document.querySelector('#replay');viewer.pause();await viewer.seek(0);});
+ assert.equal(await page.getByRole('link',{name:'Open replay page · share & embed'}).getAttribute('href'),url+'/replays/'+runs[0].id);
+ const first=await page.evaluate(()=>document.querySelector('#replay').snapshot);await page.locator('#replay').getByLabel('Replay frame',{exact:true}).fill(String(runs[0].count-1));await page.waitForFunction(first=>document.querySelector('#replay').snapshot.revision>first,first.revision).catch(async error=>{throw Error(JSON.stringify(await page.evaluate(first=>{const w=document.querySelector('#replay');return {first,index:w.index,total:w.sourceTotal,snapshot:w.snapshot?.revision,error:w.sourceMessage,busy:w.inputStepping,seek:w.shadowRoot.querySelector('#seek').value}},first.revision)),{cause:error})});const last=await page.evaluate(()=>document.querySelector('#replay').snapshot);assert.ok(last.revision>first.revision);
+await page.evaluate(async()=>{const w=document.querySelector('#replay');w.pause();await w.seek(0);window.replayPositions=[];w.addEventListener('replayframe',e=>window.replayPositions.push(e.detail.index));});
+await page.locator('#replay').getByLabel('Playback speed',{exact:true}).selectOption('20');
+await page.locator('#replay').getByRole('button',{name:'Play replay',exact:true}).click();
+await page.waitForFunction(count=>document.querySelector('#replay').index===count-1,runs[0].count);
+assert.deepEqual(await page.evaluate(()=>window.replayPositions),Array.from({length:runs[0].count-1},(_,i)=>i+1),'20x reconstructs every recorded input in order');
+const publicLink=runs[0].replayUrl;
+
+ const visitor=await page.context().browser().newPage();await visitor.goto(url+'/replays/'+runs[0].id);
  await visitor.waitForFunction(()=>document.querySelector('neohack-world')?.snapshot);
  assert.equal((await visitor.request.get(url+'/api/account/runs/'+runs[0].id+'/source')).status(),401);
  await visitor.close();

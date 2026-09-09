@@ -4,6 +4,8 @@ const root = resolve(import.meta.dirname, "../public");
 for (const file of [
   "index.html",
   "dashboard.html",
+  "replays/index.html",
+  "build/replay-page.js",
   "400.html",
   "404.html",
   "500.html",

@@ -904,7 +904,7 @@ class PixelNethack extends HTMLElement {
       const id=this.game?.state.sessionId;
       if(!id){this.openMenu('<h2>Start a run first</h2><p>An embed needs a recorded adventure.</p>');return;}
       const saved=await this.publicRecorder?.flush();
-      const code=embedCode(id,this.publicRecorder instanceof InputReplayRecorder?this.publicRecorder.manifest:undefined);
+      const code=embedCode(id);
       try {if(!saved)throw Error();await navigator.clipboard.writeText(code);this.$('#copy-embed').textContent='Embed copied';}
       catch {this.openMenu('<h2>Run embed</h2><p>'+ (saved?'Copy this code into your page.':'This replay is still saved locally. Its embed becomes available after online backup finishes.') +'</p><textarea id="embed-code" readonly aria-label="Embed code" style="width:100%;min-height:140px"></textarea>');const field=this.querySelector<HTMLTextAreaElement>('#embed-code')!;field.value=code;field.select();}
     })());

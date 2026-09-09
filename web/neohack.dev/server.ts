@@ -35,7 +35,7 @@ export async function startServer(port = Number(process.env.PORT ?? 3333)) {
           ? path.slice(9)
           : path === "/"
             ? "index.html"
-            : path === "/dashboard" ? "dashboard.html" : ["/component", "/component/", "/login", "/login/", "/bots", "/bots/"].includes(path) ? path.replace(/^\//, "").replace(/\/$/, "") + "/index.html" : path.slice(1);
+            : /^\/replays\/[\w-]{1,64}\/?$/.test(path) ? "replays/index.html" : path === "/dashboard" ? "dashboard.html" : ["/component", "/component/", "/login", "/login/", "/bots", "/bots/"].includes(path) ? path.replace(/^\//, "").replace(/\/$/, "") + "/index.html" : path.slice(1);
         if (runtime && relative === 'wasm/current.json') {
           const manifest = await Bun.file(resolve(runtimeRoot,'wasm/manifest.json')).json();
           return Response.json({version:1,buildId:manifest.buildId},{headers});

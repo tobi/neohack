@@ -1,3 +1,4 @@
+import { replayLink } from './public-replay';
 import './component';
 import { accountApi } from './account-client';
 import { NeohackWorld } from './component';
@@ -22,20 +23,18 @@ async function refresh() {
       viewer.setAttribute('role',run.role); viewer.setAttribute('seed',String(run.seed ?? 0));
       $('playback').hidden=false;
       viewer.setAttribute('autoplay','');
-      viewer.setAttribute('src',run.replayUrl??'/api/account/runs/'+encodeURIComponent(run.id)+'/frames');
-      const scrub = $<HTMLInputElement>('scrub');scrub.max='0';scrub.value='0';scrub.disabled=true;
-      scrub.oninput=()=>{viewer.pause();void Promise.resolve(viewer.seek(Number(scrub.value))).catch(()=>{});};
-      $('play').onclick=()=>viewer.play(Number($<HTMLSelectElement>('speed').value));
-      $('pause').onclick=()=>viewer.pause();
+      viewer.setAttribute('controls','');
+      viewer.setAttribute('src',run.inputRun?replayLink(run.id):run.publicId&&run.publishedCount>0?replayLink(run.publicId):'/api/account/runs/'+encodeURIComponent(run.id)+'/frames');
       $('playback').scrollIntoView({behavior:'smooth'});
       status.textContent='Loading your recording…';
     });
-    card.append(title,detail,depths,button);
+    const identity=document.createElement('p');identity.className='muted';identity.textContent='Replay ID: '+(run.inputRun?run.id:run.publicId??run.id);
+    card.append(title,detail,depths,identity,button);
     const sharing=document.createElement('p');
     sharing.textContent=run.inputRun?'Anyone with this replay link can watch.':run.publishedCount>0?'Public replay · '+run.publishedCount+' frames published.':run.publicId?'Publication pending · your private recording is retained.':'Private recording · only you can view it.';
     card.append(sharing);
-    if(run.publicId && run.publishedCount>0) {
-      const link=document.createElement('a');link.href='/dashboard?run='+encodeURIComponent(run.publicId);link.textContent='Open public replay';card.append(link);
+    if(run.inputRun || (run.publicId && run.publishedCount>0)) {
+      const link=document.createElement('a');link.href=replayLink(run.inputRun?run.id:run.publicId);link.textContent='Open replay page · share & embed';card.append(link);
     }
     if(!run.inputRun&&(!run.publicId || (run.publishedCount??0)<run.count)) {
       const publish=document.createElement('button');publish.textContent=run.publicId?'Update public replay':'Make public';
@@ -85,8 +84,6 @@ async function busy(action:()=>Promise<void>) {
   const buttons = [...document.querySelectorAll('button')]; buttons.forEach(b=>b.disabled=true); status.textContent='Working…';
   try { await action(); } catch(error) { status.textContent=String(error); } finally { buttons.forEach(b=>b.disabled=false); }
 }
-$('replay').addEventListener('replayprogress',event=>{const detail=(event as CustomEvent).detail;const scrub=$<HTMLInputElement>('scrub');scrub.max=String(Math.max(0,detail.length-1));scrub.disabled=!detail.length;status.textContent=detail.length+(detail.format==='neonethack.inputs'?' recorded actions. Playback is ready.':' frames buffered. Playback can begin.');});
-$('replay').addEventListener('replayframe',event=>{$<HTMLInputElement>('scrub').value=String((event as CustomEvent).detail.index);});
 $('replay').addEventListener('replayload',()=>{status.textContent='Recording loaded. These are browser-reported observations.';});
 $('replay').addEventListener('error',event=>{if(event instanceof CustomEvent)status.textContent=String(event.detail);});
 window.addEventListener('accountchange',()=>void refresh().catch(error=>{status.textContent=String(error);}));

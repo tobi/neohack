@@ -1,15 +1,15 @@
+import { replayPage } from './replay-links';
 import { appendReplay, replayQueue, reconcileReplay, nextReplayBatch, acknowledgeReplay } from "./replay-outbox";
 import type { Snapshot } from "neonethack/types";
 export function replayLink(id: string) {
-  return new URL("/dashboard?run=" + encodeURIComponent(id), location.origin)
-    .href;
+  return replayPage(id, location.origin);
 }
-export function embedCode(id: string,manifest?:string) {
+export function embedCode(id: string) {
   return (
     '<script type="module" src="' +
     location.origin +
     '/component/neohack.js"></script>\n<neohack-world src="' +
-    (manifest??replayLink(id)) +
+    replayLink(id) +
     '" autoplay speed="4" controls style="height:480px"></neohack-world>'
   );
 }

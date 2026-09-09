@@ -10,7 +10,7 @@ function openReplay(run) {
   $('#replay-title').textContent=run.name;
   $('#copy-status').textContent='';$('#embed-code').hidden=true;
   const world=document.createElement('neohack-world');
-  world.setAttribute('src',new URL('/dashboard?run='+encodeURIComponent(run.id),location.origin).href);
+  world.setAttribute('src',new URL('/replays/'+encodeURIComponent(run.id),location.origin).href);
   world.setAttribute('autoplay','');world.setAttribute('controls','');world.setAttribute('speed','4');
   $('#replay-world').replaceChildren(world);
   if(!dialog.open)dialog.showModal();
@@ -20,7 +20,7 @@ $('#close-replay').onclick=()=>dialog.close();
 dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();}});
 dialog.addEventListener('close',()=>$('#replay-world').replaceChildren());
 $('#copy-replay').onclick=async()=>{
-  const src=new URL('/dashboard?run='+encodeURIComponent(activeRun.id),location.origin).href;
+  const src=new URL('/replays/'+encodeURIComponent(activeRun.id),location.origin).href;
   const code='<script type="module" src="'+location.origin+'/component/neohack.js"></script>\n<neohack-world src="'+src+'" autoplay speed="4" controls style="height:480px"></neohack-world>';
   try{await navigator.clipboard.writeText(code);$('#copy-status').textContent='Embed copied.';}
   catch{$('#embed-code').hidden=false;$('#embed-code').value=code;$('#embed-code').select();$('#copy-status').textContent='Copy the selected embed code.';}

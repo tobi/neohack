@@ -2,6 +2,8 @@ const base = new URL(process.argv[2] ?? "https://neohack.dev");
 for (const [path, type, marker] of [
   ["/", "text/html", "neohack"],
   ["/dashboard", "text/html", "dashboard"],
+  ["/replays/smoke-check", "text/html", "replay-id"],
+  ["/build/replay-page.js", "javascript", "replay"],
   ["/dashboard-chart.js", "javascript", "runChart"],
   ["/component", "text/html", "neohack-world"],
   ["/bots", "text/html", ""],

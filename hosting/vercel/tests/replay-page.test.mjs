@@ -1,0 +1,56 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {fixture} from '../../../lib/neonethack/tests/native-fixture.mjs';
+import {createTestHarness,MemoryStorage,publicStoreFor} from './server.mjs';
+import {storageContext,immutable} from '../src/storage.ts';
+import {publicReplayContext} from '../src/public-replay-store.ts';
+import {publishReplay} from '../src/publish-replay.ts';
+import {saveLedgerRun} from '../src/ledger-store.ts';
+import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
+
+test('dedicated replay page shares public identity, metadata and embeds without sign-in; 20x preserves every frame', {timeout:30000},async t=>{
+ const {api}=await fixture(t),game=await api.create({name:'Replay Page',role:'valkyrie',seed:7});
+ const frames=[structuredClone(game.state)];for(let i=0;i<5;i++){await game.wait();frames.push(structuredClone(game.state));}
+ const id=game.state.sessionId,store=new MemoryStorage(),publicStore=publicStoreFor(store);
+ await storageContext.run(store,async()=>{
+  const refs=await Promise.all(frames.map(f=>immutable(f)));
+  await store.write('replays/'+id+'.json',{frames:refs,role:'valkyrie',seed:7});
+  await publicReplayContext.run(publicStore,()=>publishReplay(id));
+  await saveLedgerRun({id,name:'Replay Page',role:'valkyrie',turn:game.state.observation.turn,ended:false,heroLevel:2,maxLevel:3,maxDepth:4,depthLabel:'Dungeon, level 4',updatedAt:Date.UTC(2026,8,9)});
+ });
+ const server=createTestHarness({store}),{url:base}=await server.listen(),url=base.origin;t.after(()=>server.close());
+ const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());
+ const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(String(e)));
+ await page.goto(url+'/replays/'+id);
+ await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Replay ready'));
+ assert.equal(await page.locator('#replay-title').textContent(),'Replay Page');
+ assert.equal(await page.locator('#replay-id').textContent(),id);
+ assert.match(await page.locator('#run-details').textContent(),/Dungeon, level 4/);
+ assert.match(await page.locator('#run-details').textContent(),/2026/);
+ const canonical=url+'/replays/'+id;
+ assert.equal(await page.locator('#share-url').inputValue(),canonical);
+ assert.match(await page.locator('#embed-code').inputValue(),new RegExp('/replays/'+id));
+ const world=page.locator('#replay');
+ assert.equal(await world.locator('#replay-page').getAttribute('href'),canonical);
+ assert.match(await world.locator('#replay-page').textContent(),new RegExp(id));
+ await world.getByLabel('Playback speed',{exact:true}).selectOption('20');
+ await page.evaluate(()=>{window.positions=[];document.querySelector('#replay').addEventListener('replayframe',e=>window.positions.push(e.detail.index));});
+ await world.getByRole('button',{name:'Play replay',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('#replay').index===5);
+ assert.deepEqual(await page.evaluate(()=>window.positions),[1,2,3,4,5]);
+ await world.getByLabel('Replay frame',{exact:true}).fill('0');
+ assert.equal(await page.evaluate(()=>document.querySelector('#replay').index),0,'seeking retains the selected index when pausing');
+ for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
+  await page.setViewportSize(viewport);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.screenshot({path:`/tmp/neohack-replay-page-${viewport.width}.png`,fullPage:true});
+ }
+ // A denied clipboard still exposes selectable text; metadata is optional.
+ await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{value:{writeText:async()=>{throw Error('denied')}}}));
+ await page.locator('#copy-link').click();assert.match(await page.locator('#copy-status').textContent(),/selected text/);
+ await page.route('**/api/runs/*',r=>r.fulfill({status:503,json:{error:'unavailable'}}));
+ await page.reload();await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Replay ready'));
+ assert.match(await page.locator('#metadata-status').textContent(),/unavailable/);
+ await page.goto(url+'/replays/missing-recording');await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Replay unavailable'));
+ assert.deepEqual(errors,[]);
+});
