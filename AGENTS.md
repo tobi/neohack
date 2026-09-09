@@ -58,6 +58,11 @@ Keep current guidance consistent across these documents:
   and native stdio/HTTP MCP expose the navigation vocabulary generated from
   `protocol/agent.ts`. There is no MCP profile switch. Precise operations remain
   available through the low library, C API and NDJSON.
+  Agent tools use plain names (`create`, `observe`, `inspect`, `eat`, `answer`),
+  explicit `itemId` selectors and context-bound `value` answers. Generate syntax
+  in both adapters; never rename low operations as a side effect or teach sample
+  clients a different question contract. Inspect offers and question replies
+  include executable adapter syntax without choosing an action for the player.
 - Prefer replacing an awkward method and updating its consumers over adding a
   compatibility layer. Keep introductions short and link to the exact contract.
 

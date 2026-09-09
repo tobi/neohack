@@ -14,6 +14,7 @@ char *mcp_agent_execute(nnh_context *, mcp_agent_state *, const char *method,
 extern const char *mcp_agent_tools, *mcp_agent_instructions;
 mj_val mcp_agent_method(const char *name);
 int mcp_agent_valid(mj_val method, mj_val args);
+char *mcp_agent_arguments(mj_val args, mj_val decision_kind);
 char *mcp_agent_help(mj_val args);
 char *mcp_agent_present(const char *response, int historical);
 char *mcp_agent_present_mode(const char *response, int historical, int compact);

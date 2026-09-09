@@ -88,7 +88,7 @@ function unpack(pair) {
 // Explicit public operation mappings, not substrings or the reply's claim alone.
 const movements = new Map([
   ['game.move', 'move'], ['game.moveWithoutAttack', 'moveWithoutAttack'],
-  ['game_moveWithoutAttack', 'moveWithoutAttack'], ['go', 'move'],
+  ["moveWithoutAttack", 'moveWithoutAttack'], ['go', 'move'],
 ]);
 
 /**

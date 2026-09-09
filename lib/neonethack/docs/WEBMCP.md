@@ -29,8 +29,13 @@ summary and a complete observation; agents do not merge deltas.
 
 Pass the short `sessionId` back on calls. The adapter owns request IDs, its
 last observed revision; callers supply the exact returned `decision.id` as
-`decisionId` on every `decision_answer` and `decision_cancel`, along with their
-chosen answer or confirmation. An old ID is rejected before resolving named
+`decisionId` on every `answer` and `cancel`, along with their
+chosen `value`. A question is accompanied by `reply.arguments` (bound session and
+decision IDs), `reply.valueSchema`, and a `cancel` call when cancellable.
+Booleans answer confirmations, arrays select choice names/IDs, strings answer
+text/targets, and `{itemId,quantity?}` selects an item. The low decision stays
+unchanged; its kind supplies the tag sent to C. Item actions use top-level
+`itemId` and optional `quantity`; omit them to request a selection. An old ID is rejected before resolving named
 choices or submitting input, even if the new prompt has the same kind or labels.
 Closing/resuming the same pending question preserves its ID; a later question
 gets a different ID. Invalid or extra arguments
@@ -41,13 +46,13 @@ HTTP client metadata does not establish ownership or decision authority.
 Decision identity remains explicit across connections and participants.
 
 Choice options include a readable `name` alongside their numeric `id` and
-displayed `label`. MCP accepts either names or IDs in `answer.choose`. Names
+displayed `label`. MCP accepts either names or IDs in `value`. Names
 are aliases scoped to the supplied `decisionId`, not durable identities. An ambiguous
 name returns the matching candidates under the same standing decision; select
 one by ID. An unknown name returns the available choices. Neither clarification
 submits engine input. Item selections continue to use opaque item references.
 
-`retry` resolves a retained uncertain input or reads the most recent completed
+`recover` resolves a retained uncertain input or reads the most recent completed
 input receipt if the reply was lost outside the adapter. The latter is marked
 `historical: true` and cannot rewind current state. It never resumes a navigation
 leg. `receipt({sessionId, operationId})` retrieves a specified historical receipt.

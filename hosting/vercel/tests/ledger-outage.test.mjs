@@ -6,10 +6,16 @@ test('ledger shows storage failure prominently and keeps the last loaded records
   const server=createTestHarness();const {url}=await server.listen();
   const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});
   t.after(async()=>{await browser.close();await server.close();});const page=await browser.newPage();let failing=true;
-  await page.route('**/api/stats',route=>route.fulfill({status:failing?503:200,contentType:'application/json',body:JSON.stringify(failing?{error:'Storage unavailable'}:{generatedAt:Date.now(),totals:{runs:1,living:1,ascended:0,longest:500},best:[{id:'saved',name:'Retained Hero',role:'ranger',turn:500,maxLevel:4}],roles:[],errors:[]})}));
+  const run={id:'saved',name:'Retained Hero',role:'ranger',turn:500,maxLevel:4,maxDepth:6};
+  const period={runs:1,level:[run],depth:[run]};
+  await page.route('**/api/stats',route=>route.fulfill({status:failing?503:200,contentType:'application/json',body:JSON.stringify(failing?{error:'Storage unavailable'}:{generatedAt:Date.now(),totals:{runs:1,living:1,ascended:0,longest:500},best:[run],recent:[run],records:{today:period,week:period},roles:[],errors:[]})}));
   await page.goto(new URL('/dashboard',url).href);await page.locator('#ledger-error').waitFor({state:'visible'});
   assert.match(await page.locator('#ledger-error').textContent(),/not a report of zero/);assert.equal(await page.locator('#empty').isVisible(),false);
-  failing=false;await page.locator('#refresh').click();await page.getByText('Retained Hero',{exact:false}).waitFor();
+  failing=false;await page.locator('#refresh').click();await page.locator('#runs').getByText('Retained Hero',{exact:false}).waitFor();
+  await page.locator('#run-chart [data-run=saved]').focus();
+  const records=await page.locator('#period-records').textContent(),selection=await page.locator('#selected-run').textContent();
   failing=true;await page.locator('#refresh').click();await page.locator('#ledger-error').waitFor({state:'visible'});
   assert.match(await page.locator('#runs').textContent(),/Retained Hero/);assert.match(await page.locator('#freshness').textContent(),/last successfully loaded/);
+  assert.equal(await page.locator('#run-chart [data-run]').count(),1);
+  assert.equal(await page.locator('#period-records').textContent(),records);assert.equal(await page.locator('#selected-run').textContent(),selection);
 });

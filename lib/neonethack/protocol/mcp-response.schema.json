@@ -51,10 +51,10 @@
           "type": "integer"
         },
         "fullObservation": {
-          "const": "session_observe"
+          "const": "observe"
         },
         "attempts": {
-          "const": "session_actions"
+          "const": "inspect"
         },
         "fullInputReceipt": {
           "const": "receipt"
@@ -68,6 +68,104 @@
         "attempts"
       ],
       "additionalProperties": false
+    },
+    "reply": {
+      "type": "object",
+      "properties": {
+        "tool": {
+          "const": "answer"
+        },
+        "arguments": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "decisionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "decisionId"
+          ],
+          "additionalProperties": false
+        },
+        "valueSchema": {
+          "type": "object"
+        },
+        "instruction": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "arguments",
+        "valueSchema",
+        "instruction"
+      ],
+      "additionalProperties": false
+    },
+    "cancel": {
+      "type": "object",
+      "properties": {
+        "tool": {
+          "const": "cancel"
+        },
+        "arguments": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "decisionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "decisionId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "tool",
+        "arguments"
+      ],
+      "additionalProperties": false
+    },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "arguments": {
+            "type": "object"
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "attemptable",
+              "uncertain",
+              "needsSelection"
+            ]
+          },
+          "cost": {
+            "const": "variable"
+          }
+        },
+        "required": [
+          "tool",
+          "arguments",
+          "availability",
+          "cost"
+        ],
+        "additionalProperties": false
+      }
     },
     "update": {
       "type": "object",

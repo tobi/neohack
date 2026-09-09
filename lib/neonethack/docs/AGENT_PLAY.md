@@ -1,93 +1,61 @@
 # How an agent plays
 
-Create or resume a run, look at what the hero perceives, attempt one named action,
-and handle any question it returns. The engine reports what actually happened.
+Create a run, read the perceived scene, attempt a named action, and answer any
+question explicitly. Native stdio MCP, HTTP MCP and browser WebMCP use the same
+vocabulary. Keep the short `sessionId`; the adapter owns request IDs and revisions.
 
-Use the [source setup](QUICKSTART.md) for Node, or the
-[live WebMCP walkthrough](AGENT_BROWSER.md) to play at neohack.dev.
-The library is a source-build alpha, not an assumed public npm release.
+| Intent | MCP / WebMCP call |
+| --- | --- |
+| Begin once | `create({role:"valkyrie"})` |
+| Return to a saved run | `resume({sessionId})` |
+| Read the full scene, free | `observe({sessionId})` |
+| Inspect nearby attempts, free | `inspect({sessionId,target:"here"})` |
+| Walk toward a destination | `go({sessionId,to:{x:40,y:10},maxActions:8})` |
+| Answer the standing question | `answer({sessionId,decisionId,value})` |
+| Cancel its current action | `cancel({sessionId,decisionId})` |
+| Release the saved run | `suspend({sessionId})` |
 
-```ts
-import Nethack from 'neonethack';
+`help({})` lists every tool; `help({name:"eat"})` gives one schema. Specialist
+commands remain available: spells, equipment, offerings, engraving, native
+running and more. No profile switch or raw-key escape hatch is needed.
 
-const nethack = new Nethack();
-try {
-  const game = await nethack.create({ role: 'valkyrie', seed: 42 });
-  console.log('Keep this run token:', game.id);
-  console.log(game.observation);
+Use an exact returned item reference: `eat({sessionId,itemId:"item-42"})`.
+The example ID is a placeholder; copy yours from inventory or the floor view.
+`drop` also accepts `quantity`. Omit `itemId` to ask the engine for a selection.
+Readable names are not item IDs. `inspect` returns `attempts` with tool/argument
+syntax; eligibility does not guarantee safety or success.
 
-  const offers = await game.actions({ direction: 'south' });
-  console.log(offers.cell); // perceived attempt, not a promise of safety
-  const { x, y } = game.observation.you;
-  const result = await game.go({ to: { x, y: y + 1 } });
-  console.log(result.reason, result.turnsElapsed);
-  if (game.decision) console.log('Answer this question:', game.decision);
+A question arrives as `decision`, accompanied by `reply.arguments` and
+`reply.valueSchema`. Copy those bound arguments and supply your chosen `value`:
 
-  await game.close(); // retain the run, including an unanswered question
-} finally {
-  await nethack.close();
-}
-```
+| Question | Example value |
+| --- | --- |
+| Confirmation | `false` to decline, `true` to accept |
+| Text | `"My potion nickname"` |
+| Item | `{itemId:"item-42"}` |
+| Choice | An array of returned option names or numeric IDs |
+| Target | `"north"` or `"self"` |
+| Position | `{x:40,y:10}`, a compass direction, `"help"` or `"finish"` |
 
-These eight operations cover the basic interaction:
+Never reuse an old `decisionId`. Answering may produce another question.
+Cancellation can spend turns or resources: the actual outcome, `turnsElapsed`
+and terminal facts outrank your intention.
 
-| Intent | Typed client | MCP / WebMCP tool |
-| --- | --- | --- |
-| Begin | `nethack.create(options)` | `session_create` |
-| Return to a saved run | `nethack.resume(token)` | `session_resume` |
-| Look again, for free | `game.observe()` | `session_observe` |
-| Inspect nearby attempts | `game.actions(target)` | `session_actions` |
-| Navigate one bounded leg | `game.go({to: {x, y}})` | `go` |
-| Answer a question | `game.answer(id, answer)` | `decision_answer` |
-| Cancel a cancellable question | `game.cancel(id)` | `decision_cancel` |
-| Release the engine and retain the run | `game.close()` | `session_close` |
+`explore({sessionId,maxActions:8})` explores a bounded leg; `descend` approaches
+known downward stairs. Both stop on changed circumstances or questions. `go`
+uses perceived routes. Its `force:true` option attempts only adjacent ordinary
+movement; deliberate force attack is the separate `attack` tool.
 
-Keep the short `sessionId` returned by creation. The low protocol also requires a
-unique `requestId` and the last observed revision for input; the typed client
-manages these. A stale revision means look again and reconsider.
+After an uncertain response, use `recover({sessionId})` for the retained exact
+input or `receipt({sessionId,operationId})` for a known historical result. Never
+repeat a new action blindly. Recovery is shared per run: a completely lost reply
+followed by another participant's input may leave the earlier operation ID
+unavailable. Historical receipts are not current observations.
 
-MCP and WebMCP expose navigation: pass the session token without request
-or revision IDs. Answer and cancel also require the exact returned `decisionId`.
-Use `go({sessionId,to:{x,y}})` for a bounded navigation leg, `attack({sessionId,target})` for a deliberate adjacent attack, and `help` for
-brief discovery or one tool's schema. `force:true` on `go` attempts an adjacent
-ordinary move; it does not force an attack or bypass an engine question. Results
-include a witnessed summary and a self-contained perceived observation. Compact results label the omitted neighborhood attempts and clear-grid events; use free `session_observe` for the full current frame and `receipt` for the full input events. `retry` recovers the adapter's retained uncertain input or its most recent
-completed input receipt; it never restarts a navigation leg. `receipt` reads a specified historical
-`operationId` without rewinding current state. Never submit a new action to
-replace a lost response. Native stdio/HTTP expose this vocabulary without a
-profile flag. The low library, C API and NDJSON retain precise operations.
-
-A decision is part of the action: select one of its actual item references,
-answer its confirmation, or supply its requested text/target. MCP accepts returned readable choice names or numeric IDs; ambiguous names
-return candidates without answering. The low API retains numeric choice IDs. Opening a selection
-menu need not spend a turn; finishing an action can spend several. Trust
-`turnsElapsed` and terminal outcomes rather than counting calls.
-
-For navigation, `game.route({x,y})` computes a shortest known walking path from
-perceived memory. A null distance means this policy knows no path. The query
-avoids closed doors, creatures, boulders, known hazards and uncertain squeezes;
-it does not walk or declare a route safe. `game.go({to:{x,y}})` executes a bounded
-leg using that planner and re-evaluates after each actual action. It stops for
-decisions, interruptions and changed circumstances. `game.go({to,force:true})`
-is restricted to one adjacent ordinary movement attempt.
-
-Other named operations cover inventory, doors, spells, searching and more.
-For longer exploration, explicitly request `explore({sessionId,maxActions:80,
-maxFrontiers:20})`. The default still targets one frontier. The total action
-budget, genuine decisions, interruptions, damage, condition or hunger changes, and newly perceived creatures
-bound the whole call; a door attempt always stops it. Read `navigation` for
-aggregate progress. On a later-substep error, confirmed progress remains in the
-response; an uncertain input requires exact recovery, not repeating the leg.
-Use generated discovery instead of copying a fixed tool list. Read
-[command coverage](COMMAND_COVERAGE.md) for demonstrated limits and
-[the protocol contract](PROTOCOL.md) for exact shapes, costs and decisions.
-[Hero and scripts](HERO.md) explain the event-driven higher-level library.
-
-Use `game.lookup(name)` or MCP `session_lookup({sessionId,name})` for the pinned
-game encyclopedia. Results are labelled lore, not observations or guarantees
-about a nearby creature. The query spends no turns and leaves questions open.
-
-For a fixed-seed public-API reference, see the
-[exploration benchmark](../../../examples/benchmark/README.md). It records exact
-runtime/policy identities and distinguishes a policy stop from an engine death.
-The CLI model's adaptive retrospective loop is a separate experiment.
+Start with the [live browser walkthrough](AGENT_BROWSER.md) or
+[native/typed-library setup](QUICKSTART.md). The typed library retains precise
+methods and tagged answers; see [Hero](HERO.md) and [TypeScript](TYPESCRIPT.md).
+The [contract](PROTOCOL.md), [navigation and recovery](WEBMCP.md),
+[command coverage](COMMAND_COVERAGE.md) and
+[fixed-seed benchmark](../../../examples/benchmark/README.md) describe guarantees
+and demonstrated limits. No ascension ability is implied by tool coverage.

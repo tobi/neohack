@@ -2,7 +2,7 @@ import {claimTabStore} from './tab-lease';
 import {readAdventures,writeAdventure,changedAdventure,type Adventure} from './adventure-index';
 import { appendReceipt, journalScroll, renderJournalEntry, type JournalEntry } from './journal';
 import { renderHeroHud } from './hero-hud';
-import { encyclopedia } from './encyclopedia';
+import { encyclopedia, loreButton } from './encyclopedia';
 import './component';
 import { PublicReplayRecorder,InputReplayRecorder, embedCode, replayLink } from './public-replay';
 import { adventurerName } from './adventurer-names';
@@ -35,6 +35,7 @@ import {
 import { creatureArtUrl, inventoryArt } from "./symbol-art";
 import { knownCreatureArt } from "./creature-families";
 import { MovementInput } from "./movement-input";
+import { describeCommand, arrowLetters, type CommandIntent } from "./command-input";
 import type { WebMcpRegistration } from "/runtime/typescript/webmcp.js";
 import { loadRuntime, warmPackage, runtimePackage } from "./runtime-loader";
 import {
@@ -100,9 +101,11 @@ class PixelNethack extends HTMLElement {
   private game: Game | null = null;
   private busy = false;
   private inspectionVersion=0;
-  private keyCount = "";
-  private keyRunPrefix: "" | "g" | "G" | "F" = "";
-  private keyNoPickup = false;
+  private keyDraft = "";
+  private commandOpen = false;
+  private commandPointerDown = (e: PointerEvent) => {
+    if (this.commandOpen && !this.querySelector("#keyboard-prefix")?.contains(e.target as Node)) this.clearKeyPrefix();
+  };
   private navigationNotice="";
   private navigationAbort: AbortController | null = null;
   private cloudStatusGeneration = 0;
@@ -120,6 +123,7 @@ class PixelNethack extends HTMLElement {
   private lastFrame = "";
   private decisionIdentity = "";
   private menuReturn: HTMLElement | null = null;
+  private menuBack: (() => void) | null = null;
   private keyHandler = (e: KeyboardEvent) => this.key(e);
   private keyUpHandler = (e: KeyboardEvent) => {
     this.movement.release(`key:${e.code || e.key}`);
@@ -212,6 +216,7 @@ class PixelNethack extends HTMLElement {
     }
   };
   private focusChanged = (e: FocusEvent) => {
+    if ((e.target as HTMLElement).closest("#keyboard-prefix")) { this.movement.stop(); return; }
     if (
       (e.target as HTMLElement).closest(
         'input,textarea,select,[contenteditable="true"],dialog',
@@ -278,8 +283,17 @@ class PixelNethack extends HTMLElement {
   connectedCallback() {
     this.innerHTML = `
 
+      <neohack-rail game welcome>
+        <div slot="game-info" class="rail-game-info"><span class="eyebrow">ONE DUNGEON. MANY POSSIBILITIES.</span><p id="package-status" role="status">Preparing the game in the background…</p></div>
+        <a slot="game-link" class="rail-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+        <details class="hud-menu" slot="game-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
+            <button id="adventures-button">Your adventures</button><button id="pickup-settings" data-game>Automatic pickup</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button><button id="encyclopedia-button" data-game>Encyclopedia</button>
+            <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
+            <button id="copy-embed">Copy run embed</button><p id="public-recording" role="status">Public replays record observed scenes from this visit.</p><button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p><p id="account-recording" role="status"></p><a class="menu-github" href="/component" target="_blank" rel="noopener">Embed the world ↗</a><a class="menu-github" href="/bots" target="_blank" rel="noopener">Ascender workshop ↗</a><a class="menu-github" href="/login" target="_blank" rel="noopener">Your account & replays ↗</a>
+          </div></details>
+      </neohack-rail>
       <main id="main" tabindex="-1">
-        <div class="map-viewport"><canvas id="dungeon" tabindex="0" aria-label="Dungeon entrance. Use arrow keys to walk into the hall."></canvas><button id="enter-gate" aria-label="Walk into the glowing gate and create an adventurer" title="Enter the dungeon"></button></div>
+        <div class="map-viewport"><canvas id="dungeon" tabindex="0" aria-label="Dungeon entrance. Use arrow keys to walk into the hall."></canvas><section id="keyboard-prefix" class="command-composer" aria-label="Command builder" hidden><div class="command-entry"><label for="command-input" aria-label="Command">›</label><input id="command-input" aria-label="Command" aria-describedby="command-about command-help" placeholder="20s · mh" autocomplete="off" autocapitalize="off" spellcheck="false" autocorrect="off"><button id="command-cancel" aria-label="Cancel command" title="Cancel command (Escape)">×</button></div><p id="command-about" role="status"></p><div id="command-completions" aria-label="Next keys"></div><p id="command-help">Esc cancels · Tab to choose a hint</p></section><button id="enter-gate" aria-label="Walk into the glowing gate and create an adventurer" title="Enter the dungeon"></button></div>
         <section id="welcome-copy" class="intro-title"><p class="eyebrow">A LITTLE COURAGE. A DEEP DUNGEON.</p><h1>neo<span>hack</span></h1><p>The old world has an open door.</p><a class="paths-jump" href="#welcome-paths">Play, bring an agent, or build something new ↓</a></section>
         <section id="welcome-actions" class="intro-controls" aria-label="Learn to walk">
           <p id="intro-instruction">Walk into the light</p>
@@ -293,8 +307,7 @@ class PixelNethack extends HTMLElement {
           <div class="intro-links"><button id="new-adventure" class="text-button">Begin your adventure</button><button id="continue-adventure" class="primary" hidden>Continue previous run</button></div>
         </section>
         <aside id="welcome-paths" class="welcome-paths" aria-label="Three ways into NetHack">
-          <header><span class="eyebrow">ONE DUNGEON. MANY POSSIBILITIES.</span><a href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a></header>
-          <div class="welcome-content"><p id="package-status" role="status">Preparing the game in the background…</p>
+          <div class="welcome-content">
           <article><span class="path-number">01 · ADVENTURE</span><h2>Play the classic</h2><p>A deep dungeon. A loyal companion. A thousand ways to learn the hard way. Walk through the doorway and discover NetHack, one turn at a time.</p><a href="#welcome-actions">Enter the dungeon ↓</a></article>
           <article><span class="path-number">02 · BRING YOUR AGENT</span><h2>Have your Agent play</h2><p>Let your agent play with <a href="https://webmachinelearning.github.io/webmcp/" target="_blank" rel="noopener noreferrer">WebMCP</a>.</p><a href="https://github.com/tobi/neohack/blob/main/lib/neonethack/docs/AGENT_BROWSER.md" target="_blank" rel="noopener noreferrer">Agent-browser walkthrough ↗</a></article>
           <article><span class="path-number">03 · MAKE SOMETHING NEW</span><h2>It’s time for NetHack itself to ascend.</h2><p>The brain of NetHack, separated from its interface and exposed as a JSON protocol. Build a completely new UX, a reinforcement learning environment for small models, an evaluation for frontier models—or whatever comes next.</p><a href="https://github.com/tobi/neohack/tree/main/lib/neonethack" target="_blank" rel="noopener noreferrer">Explore the library ↗</a></article>
@@ -319,6 +332,7 @@ class PixelNethack extends HTMLElement {
           <footer><p>A living dungeon since 1987. Decades of the NetHack DevTeam’s imagination, surprising interactions, and player discoveries live underneath this new doorway. <a href="https://www.nethack.org/common/info.html" target="_blank" rel="noopener noreferrer">Meet NetHack ↗</a></p><p>Character sprites: <a href="https://limezu.itch.io/" target="_blank" rel="noopener noreferrer">LimeZu</a>.</p></footer>
           </div>
         </aside>
+        <a id="games-played" href="/dashboard" target="_blank" rel="noopener noreferrer" title="Recorded adventures · open the ledger" hidden></a>
         <a id="creator-link" class="creator-link" href="https://x.com/tobi" target="_blank" rel="noopener noreferrer" aria-label="@tobi on X (opens in a new tab)">@tobi</a>
         <section class="hero-hud" aria-label="Adventurer" hidden>
           <img id="portrait" src="/art/${heroArt("ranger")}.png" alt="">
@@ -327,11 +341,7 @@ class PixelNethack extends HTMLElement {
         </section>
         <div class="world-hud">
           <div class="location-hud"><span id="location-heading"></span><span id="turn-pill"></span><span id="cloud-status" role="status"></span></div>
-          <details class="hud-menu"><summary aria-label="Game menu">☰</summary><div class="hud-menu-body">
-            <button id="adventures-button">Your adventures</button><button id="pickup-settings" data-game>Automatic pickup</button><button id="abandon-run" data-game hidden>Abandon run</button><button data-guide>Field guide <kbd>?</kbd></button><button id="encyclopedia-button" data-game>Encyclopedia</button>
-            <div class="map-tools"><button id="map-symbols" aria-label="Show NetHack symbols" aria-pressed="false" title="Switch to NetHack symbols">Art</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="center-map" aria-label="Center on you">⌖</button></div>
-            <button id="copy-embed">Copy run embed</button><p id="public-recording" role="status">Public replays record observed scenes from this visit.</p><button id="sound-button" aria-pressed="false">Sound: off</button><button id="fullscreen-button">Fullscreen</button><button id="text-map-button">Read the map as text</button><button id="credits-button">About & credits</button><a class="menu-github" href="/dashboard" target="_blank" rel="noopener noreferrer">Adventure ledger ↗</a><a class="menu-github" href="https://github.com/tobi/neohack" target="_blank" rel="noopener noreferrer">GitHub ↗</a><p id="bookmark-hint" hidden>Bookmark this run’s URL to resume. Keep it private: it opens your saved vault.</p><p id="save-status" role="status">Saves stay in this browser.</p><p id="webmcp-status"></p><p id="account-recording" role="status"></p><a class="menu-github" href="/component" target="_blank" rel="noopener">Embed the world ↗</a><a class="menu-github" href="/bots" target="_blank" rel="noopener">Ascender workshop ↗</a><a class="menu-github" href="/login" target="_blank" rel="noopener">Your account & replays ↗</a>
-          </div></details>
+
         </div>
         <div class="notices"><div class="notice error" id="error" role="alert" hidden></div>
           <div class="notice" id="recovery" hidden><strong>Your last action needs checking.</strong><p>It may already have happened. Check its saved result before doing anything else. If the connection has stopped, reload and resume this adventure first.</p><button class="secondary" id="retry">Check last action</button></div>
@@ -353,7 +363,7 @@ class PixelNethack extends HTMLElement {
                 `<button data-move="${d}" data-game aria-label="Move ${d}">${g}</button>`,
             )
             .join("")}</div></div>
-          <div class="action-dock"><div id="keyboard-prefix" role="status" hidden></div><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><button data-action="pickup" data-game>Pick up<kbd>,</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="pray" data-game>Pray</button><button id="more-actions" data-game>More actions</button></div>
+          <div class="action-dock"><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><button data-action="pickup" data-game>Pick up<kbd>,</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="pray" data-game>Pray</button><button id="more-actions" data-game>More actions</button></div>
           <nav class="side-nav" aria-label="Adventure views"><button data-view="inventory">Backpack <span id="inventory-count"></span><kbd>i</kbd></button><button data-view="surroundings">Surroundings</button><button data-view="journal">Journal</button></nav></div>
         </section>
         <aside class="ground-loot" id="ground-loot" aria-label="On the ground" hidden><h2>On the ground</h2><p>At your feet · choose what to take</p><div id="ground-items"></div></aside>
@@ -374,6 +384,8 @@ class PixelNethack extends HTMLElement {
       } else this.inspectTile(x, y, false, walk);
     });
     this.bind();
+    this.bindCommandInput();
+    void this.loadPlayedCount();
     this.hudLayout = new ResizeObserver(() => {
       const top = this.getBoundingClientRect().top;
       const bottom = Math.max(...[".hero-hud", ".location-hud"].map(selector => this.$(selector).getBoundingClientRect().bottom));
@@ -411,6 +423,19 @@ class PixelNethack extends HTMLElement {
     this.preparation = this.prepareRuntime();
     void this.preparation.then(() => this.openLinkedRun()).catch((error) => { reportError(error,this.runtimeBuildId,{kind:"boot",local:!!requestedRun()?.local}); this.error(error); this.entryRecovery(requestedRun()?.id,error); });
     this.controls();
+  }
+  private async loadPlayedCount() {
+    try {
+      const response = await fetch('/api/stats?view=count', {
+        credentials: 'omit',
+        signal: AbortSignal.any([this.preloadAbort.signal, AbortSignal.timeout(5000)]),
+      });
+      if (!response.ok) return;
+      const { runs } = await response.json();
+      if (!this.isConnected || !Number.isSafeInteger(runs) || runs < 0) return;
+      this.text('#games-played', `${runs.toLocaleString()} ${runs === 1 ? 'game' : 'games'} played ↗`);
+      this.show('#games-played', true);
+    } catch { /* Optional public count never blocks offline play or shows a game error. */ }
   }
   private async openLinkedRun() {
     const linked = requestedRun();
@@ -816,6 +841,7 @@ class PixelNethack extends HTMLElement {
     } finally { this.yielding = false; }
   }
   disconnectedCallback() {
+    this.removeEventListener("pointerdown", this.commandPointerDown, true);
     this.navigationAbort?.abort();
     this.publicRecorder?.close();
     this.publicSession="";
@@ -1011,13 +1037,8 @@ class PixelNethack extends HTMLElement {
     this.$("#more-actions").onclick = () => this.more();
     this.$("#more-actions").setAttribute("aria-label", "More actions");
     this.$("#credits-button").onclick = () => this.credits();
-    this.$("#encyclopedia-button").onclick = () => {
-      if (!this.game) return;
-      const book = encyclopedia(this.game);
-      this.openMenu('');
-      this.$('#menu-content').append(book);
-      book.querySelector<HTMLInputElement>('input')!.focus();
-    };
+    this.$("#encyclopedia-button").innerHTML = actionIcon('read') + '<span>Encyclopedia</span>';
+    this.$("#encyclopedia-button").onclick = () => this.openEncyclopedia();
     this.$("#zoom-in").onclick = () => {
       this.map.zoomTo(this.map.zoom + 1);
     };
@@ -1074,7 +1095,10 @@ class PixelNethack extends HTMLElement {
       () => {
         if (!this.game) this.map.resetIntro();
         this.controls();
-        this.menuReturn?.focus();
+        if (!this.commandOpen) this.menuReturn?.focus();
+        const back = this.menuBack;
+        this.menuBack = null;
+        back?.();
       },
     );
     this.querySelector<HTMLDialogElement>("#decision")!.addEventListener(
@@ -1303,6 +1327,7 @@ class PixelNethack extends HTMLElement {
     const previousRun = this.saves.find(save => !save.ended);
     this.$("#continue-adventure").innerHTML = "Continue previous run" + (previousRun ? `<small>${escape(previousRun.name)} · Turn ${previousRun.turn}</small>` : "");
     this.classList.toggle("in-game", !!state);
+    this.$("neohack-rail").toggleAttribute("welcome", !state);
     if (state) {
       this.introMovement.stop();
       clearInterval(this.introAuto);
@@ -1688,6 +1713,7 @@ class PixelNethack extends HTMLElement {
   }
   private async inspectTile(x: number, y: number, obstruction = false, walkImmediately = false) {
     this.closeTile();
+    this.closePanel();
     this.movement.stop();
     const game = this.game,
       n = game?.observation.neighborhood;
@@ -1722,7 +1748,7 @@ class PixelNethack extends HTMLElement {
       : cell.door?.lock === 'locked' ? (cell.door.freshness === 'remembered' ? 'Last known: locked' : 'A locked door')
       : (cell.terrain?.type.replace(/([A-Z])/g, ' $1') ?? 'Beyond the map'));
     panel.innerHTML =
-      '<header class="tile-heading"><strong></strong></header><p class="subtle"></p><div class="tile-buttons"></div>';
+      '<header class="tile-heading"><div class="tile-identity"><strong></strong></div><div class="tile-heading-tools"></div></header><div class="tile-body"><p class="subtle tile-description"></p><div class="tile-buttons"></div></div><footer class="tile-hotkeys"><span><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> Inspect</span><span><kbd>1–9</kbd> Act</span><span><kbd>/</kbd> Lore</span><span><kbd>Esc</kbd> Close</span></footer>';
     panel.querySelector("strong")!.textContent = title;
     if (occupant && occupant.kind !== "self") {
       const image = document.createElement("img");
@@ -1732,13 +1758,24 @@ class PixelNethack extends HTMLElement {
       const tag = document.createElement("span");
       tag.className = "tile-relation";
       tag.textContent = occupant.kind === "ally" ? "Ally" : "Creature";
-      panel.querySelector("header")!.append(tag);
+      panel.querySelector(".tile-identity")!.append(tag);
     }
     if (object && (!occupant || occupant.kind === 'self')) {
       const image=document.createElement('img');image.alt='';
       image.src=inventoryArt({...object,category:object.category ?? 'object'});
       panel.querySelector('header')!.prepend(image);
     }
+    const loreName = occupant && occupant.kind !== "self" ? occupant.appearance ?? "" : object ? object.known?.appearance ?? "" : occupant ? "" : (cell.terrain?.type.replace(/([A-Z])/g, " $1").toLowerCase() ?? "");
+    const openLore = () => this.openEncyclopedia(loreName, () => { void this.inspectTile(x, y, obstruction); });
+    if (loreName && occupant?.kind !== "self") panel.querySelector("strong")!.replaceChildren(loreButton(title, openLore));
+    const book = loreButton(loreName, openLore, true);
+    book.dataset.inspectionKey = "/";
+    book.setAttribute("aria-keyshortcuts", "/");
+    panel.querySelector(".tile-heading-tools")!.append(book);
+    const position = document.createElement("span");
+    position.className = "tile-position";
+    position.textContent = `${x}, ${y} · ${cell.terrain?.freshness === "remembered" ? "Remembered" : "Inspecting"}`;
+    panel.querySelector(".tile-identity")!.append(position);
     panel.setAttribute(
       "aria-description",
 
@@ -1812,11 +1849,12 @@ class PixelNethack extends HTMLElement {
       const routeText=document.createElement("p");routeText.className="subtle";
       routeText.setAttribute("role","status");
       panel.querySelector(".tile-buttons")!.prepend(walk);
-      panel.append(routeText);
+      routeText.classList.add("tile-route");
+      panel.querySelector(".tile-body")!.append(routeText);
       void game.route({x,y},{expectedRevision:revision}).then(route=>{
         if(this.tilePanel!==panel || this.game!==game || game.state.revision!==revision)return;
-        walk.textContent="Walk here";
-        if(route.distance!==null && !occupant)panel.querySelector("p")!.hidden=true;
+        (walk.querySelector("span") ?? walk).textContent="Walk here";
+
         walk.disabled=route.distance===null || !this.playable();
         routeText.textContent=route.distance===null?"No known walking route. Adjacent attempts remain available.":
           route.distance+" known steps · avoids known hazards. Pauses on changes or choices.";
@@ -1842,12 +1880,24 @@ class PixelNethack extends HTMLElement {
         };
         if(walkImmediately && !walk.disabled)walk.click();
       }).catch(error=>{
-        if(this.tilePanel===panel){walk.textContent="Route unavailable";routeText.textContent=String(error);}
+        if(this.tilePanel===panel){(walk.querySelector("span") ?? walk).textContent="Route unavailable";routeText.textContent=String(error);}
       });
     }
     const back = this.button("×", () => this.closeTile(), "tile-dismiss");
     back.setAttribute("aria-label", "Close tile actions");
-    panel.append(back);
+    back.title = "Close inspection (Esc)";
+    back.setAttribute("aria-keyshortcuts", "Escape");
+    panel.querySelector(".tile-heading-tools")!.append(back);
+    // Number the available controls once; a late route reply cannot change bindings.
+    panel.querySelectorAll<HTMLButtonElement>(".tile-buttons button").forEach((button, index) => {
+      if (index >= 9) return;
+      const key = String(index + 1);
+      button.dataset.inspectionKey = key;
+      button.setAttribute("aria-keyshortcuts", key);
+      const badge = document.createElement("kbd"); badge.textContent = key; badge.setAttribute("aria-hidden", "true");
+      const label = document.createElement("span"); label.textContent = button.textContent;
+      button.replaceChildren(badge, label);
+    });
     this.tilePanel = panel;
     this.querySelector("#dungeon")!.parentElement!.append(panel);
     this.map.draw();
@@ -1928,7 +1978,22 @@ class PixelNethack extends HTMLElement {
       });
     };
   }
+  private openEncyclopedia(name = "", returnTo?: () => void, returnLabel = "Back to inspection") {
+    const game = this.game;
+    if (!game || this.busy || this.uncertain()) return;
+    const revision = game.state.revision;
+    const book = encyclopedia(game, name);
+    this.openMenu("", true);
+    if (returnTo) {
+      this.menuBack = () => { if (this.isConnected && this.game === game && game.state.revision === revision && !this.busy && !this.uncertain()) returnTo(); };
+      const back = this.button("← " + returnLabel, () => this.closeMenu(), "lore-back text-button");
+      book.prepend(back);
+    }
+    this.$("#menu-content").append(book);
+    book.querySelector<HTMLInputElement>("input")!.focus();
+  }
   private openMenu(html: string, preservePanel = false) {
+    this.menuBack = null;
     this.closeTile();
     this.stopMovement();
     if (!preservePanel) this.closePanel();
@@ -2187,6 +2252,7 @@ class PixelNethack extends HTMLElement {
     this.openMenu(
       '<h2 id="menu-title">A few more possibilities.</h2><p class="subtle">Choose an action. If it needs an item, direction, or permission, you’ll be asked.</p><div class="more-grid" id="more-grid"></div>',
     );
+    this.$("#more-grid").append(this.button("Type a command", () => { this.closeMenu(); this.showKeyDraft("", true); }));
     for (const [action, label] of Object.entries({
       drink: "Drink",
       read: "Read",
@@ -2217,6 +2283,11 @@ class PixelNethack extends HTMLElement {
       `<div class="large-item-icon" aria-hidden="true"><img src="${inventoryArt(item)}" alt=""></div><h2 id="menu-title">${escape(item.label)}</h2><p class="subtle">${escape(item.location === "here" ? "At your feet" : equipmentDescription(item))}${item.usage?.length ? ` · ${escape(item.usage.join(", "))}` : ""}</p><p>Choose what you’d like to try. The dungeon decides what is possible.</p><div class="more-grid" id="item-actions"></div>`,
       !this.$(".rightbar").hidden,
     );
+    const openLore = () => this.openEncyclopedia(item.label, () => this.itemDetails(item), "Back to item");
+    this.$("#menu-title").replaceChildren(loreButton(item.label, openLore));
+    const book = loreButton(item.label, openLore, true);
+    book.classList.add("item-lore");
+    this.$("#menu-title").append(book);
     this.appendItemActions(this.$("#item-actions"), item);
   }
   private appendItemActions(host: HTMLElement, item: ItemRef, compact = false) {
@@ -2556,52 +2627,163 @@ class PixelNethack extends HTMLElement {
     if (!dialog.open) dialog.showModal();
     body.querySelector<HTMLElement>("button,input")?.focus();
   }
-  private clearKeyPrefix(message = "") {
-    this.keyCount = ""; this.keyRunPrefix = ""; this.keyNoPickup = false;
-    const hint = this.querySelector<HTMLElement>("#keyboard-prefix");
-    if (hint) { hint.textContent = message; hint.hidden = !message; }
-  }
-  private prefixKey(e: KeyboardEvent, move: Record<string, Compass>) {
-    if (e.key === "Shift" || e.key === "CapsLock") return false;
-    if (!this.playable() || this.querySelector(".hud-menu[open], .rightbar:not([hidden])")) { this.clearKeyPrefix(); return false; }
-    const pending = () => !!(this.keyCount || this.keyRunPrefix || this.keyNoPickup);
-    const invalid = (message: string) => { e.preventDefault(); this.clearKeyPrefix(message); return true; };
-    if (e.key === "Backspace" && pending()) {
-      e.preventDefault(); this.clearKeyPrefix(); return true;
-    }
-    if (/^[0-9]$/.test(e.key)) {
-      if (this.keyRunPrefix || this.keyNoPickup) return invalid("Put counts before commands. This count was cancelled.");
-      this.keyCount = (this.keyCount + e.key).slice(0,5);
-    } else if (["m", "g", "G", "F"].includes(e.key)) {
-      if (this.keyCount) return invalid("Counts currently apply to s (search) and . (rest). Command cancelled.");
-      if (e.key === "m") {
-        if (this.keyNoPickup || this.keyRunPrefix === "F") return invalid("Invalid movement prefix. Command cancelled.");
-        this.keyNoPickup = true;
-      } else {
-        if (this.keyRunPrefix || (e.key === "F" && this.keyNoPickup)) return invalid("Invalid movement prefix. Command cancelled.");
-        this.keyRunPrefix = e.key as "g" | "G" | "F";
+  private bindCommandInput() {
+    const box = this.$("#keyboard-prefix"),
+      input = this.querySelector<HTMLInputElement>("#command-input")!;
+    box.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        this.clearKeyPrefix();
+        this.$("#dungeon").focus({ preventScroll: true });
+        return;
       }
-    } else if (pending()) {
-      e.preventDefault();
-      const count = this.keyCount, prefix = this.keyRunPrefix, noPickup = this.keyNoPickup;
-      const uppercase = e.key.length === 1 && "HJKLYUBN".includes(e.key);
-      const direction = move[e.key] ?? (uppercase && noPickup && !prefix ? move[e.key.toLowerCase()] : undefined);
-      this.clearKeyPrefix(); this.movement.stop();
-      if (count) {
-        if (Number(count) < 1 || Number(count) > 1000) this.clearKeyPrefix("Search and rest counts must be 1–1000. Command cancelled.");
-        else if (e.key === "s") void this.run(() => this.game!.search({turns:Number(count)}));
-        else if (e.key === ".") void this.run(() => this.game!.rest({turns:Number(count)}));
-        else this.clearKeyPrefix("Counts currently apply to s (search) and . (rest). Command cancelled.");
-      } else if (!direction) this.clearKeyPrefix("Choose a direction after a movement prefix. Command cancelled.");
-      else if (prefix === "F") void this.run(() => this.game!.attack(direction));
-      else if (prefix === "g" || prefix === "G" || uppercase) void this.run(() => this.game!.run(direction,{mode:prefix === "g" ? "untilInteresting" : prefix === "G" ? "pastBranches" : "normal",noPickup}));
-      else void this.run(() => this.game!.moveWithoutAttack(direction));
-      return true;
-    } else return false;
-    e.preventDefault(); this.movement.stop();
-    const hint = this.$("#keyboard-prefix");
-    hint.textContent = this.keyCount ? this.keyCount + (Number(this.keyCount) < 1 || Number(this.keyCount) > 1000 ? " — invalid count (1–1000); Escape cancels" : " — s to search, . to rest; Escape cancels") : (this.keyNoPickup ? "m" : "") + this.keyRunPrefix + " — choose a direction; Escape cancels";
-    hint.hidden = false;
+      if (
+        e.target !== input ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey ||
+        e.isComposing
+      )
+        return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        return;
+      } // Never choose a hint implicitly.
+      const letter = arrowLetters[e.key];
+      if (letter && describeCommand(this.keyDraft).directional && !e.shiftKey) {
+        e.preventDefault();
+        this.showKeyDraft(this.keyDraft + letter);
+        return;
+      }
+    });
+    input.addEventListener("input", (e) => {
+      if (this.commandOpen && !(e as InputEvent).isComposing)
+        this.showKeyDraft(input.value);
+    });
+    input.addEventListener("compositionend", () => {
+      if (this.commandOpen) this.showKeyDraft(input.value);
+    });
+    this.$("#command-cancel").onclick = () => {
+      this.clearKeyPrefix();
+      this.$("#dungeon").focus({ preventScroll: true });
+    };
+    this.addEventListener("pointerdown", this.commandPointerDown, { capture: true });
+    box.addEventListener("focusout", (e) => {
+      if (e.relatedTarget && !box.contains(e.relatedTarget as Node))
+        this.clearKeyPrefix();
+    });
+  }
+  private clearKeyPrefix() {
+    if (
+      this.querySelector("#keyboard-prefix")?.contains(document.activeElement)
+    )
+      this.$("#dungeon").focus({ preventScroll: true });
+    this.keyDraft = "";
+    this.commandOpen = false;
+    const input = this.querySelector<HTMLInputElement>("#command-input");
+    if (input) input.value = "";
+    this.querySelector<HTMLElement>("#keyboard-prefix")?.setAttribute(
+      "hidden",
+      "",
+    );
+  }
+  private showKeyDraft(value: string, focus = false) {
+    if (
+      !this.playable() ||
+      this.querySelector(
+        "dialog[open], .hud-menu[open], .rightbar:not([hidden])",
+      )
+    ) {
+      this.clearKeyPrefix();
+      return;
+    }
+    const draft = describeCommand(value);
+    if (draft.intent) {
+      this.executeKeyCommand(draft.intent);
+      return;
+    }
+    this.movement.stop();
+    this.keyDraft = value;
+    this.commandOpen = true;
+    const box = this.$("#keyboard-prefix"),
+      input = this.querySelector<HTMLInputElement>("#command-input")!;
+    box.hidden = false;
+    box.dataset.invalid = String(!!draft.error);
+    if (input.value !== value) input.value = value;
+    input.setAttribute("aria-invalid", String(!!draft.error));
+    this.text("#command-about", draft.description);
+    const list = this.$("#command-completions");
+    list.replaceChildren();
+    list.classList.toggle("has-directions", !!draft.directional);
+    const directions = document.createElement("div");
+    directions.className = "command-directions";
+    const alternatives = document.createElement("div");
+    alternatives.className = "command-alternatives";
+    const revision = this.game!.state.revision,
+      game = this.game!;
+    for (const hint of draft.hints) {
+      const button = this.button("", () => {
+        if (
+          this.commandOpen &&
+          this.keyDraft === value &&
+          this.game === game &&
+          game.state.revision === revision
+        )
+          this.showKeyDraft(hint.value, true);
+      });
+      button.type = "button";
+      button.title = hint.label;
+      button.setAttribute("aria-label", hint.key + " — " + hint.label);
+      const key = document.createElement("kbd");
+      key.textContent = hint.key;
+      button.append(key);
+      const label = document.createElement("span");
+      label.textContent = hint.direction
+        ? hint.label.split(" ")[0]!
+        : hint.label;
+      button.append(label);
+      button.dataset.completion = hint.value;
+      if (hint.direction) {
+        button.dataset.direction = hint.key;
+        directions.append(button);
+      } else alternatives.append(button);
+    }
+    if (draft.directional) list.append(directions);
+    if (alternatives.childElementCount) list.append(alternatives);
+    if (draft.directional && !alternatives.childElementCount) {
+      const note = document.createElement("p");
+      note.className = "command-direction-note";
+      note.textContent = "Choose a direction. Arrow keys work too.";
+      list.append(note);
+    }
+    this.map.positionCommandInput();
+    if (focus) {
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(value.length, value.length);
+    }
+  }
+  private executeKeyCommand(intent: CommandIntent) {
+    this.clearKeyPrefix();
+    this.movement.stop();
+    this.$("#dungeon").focus({ preventScroll: true });
+    if (!this.playable()) return;
+    const g = this.game!;
+    if (intent.kind === "search" || intent.kind === "rest")
+      void this.run(() => g[intent.kind]({ turns: intent.turns }));
+    else if (intent.kind === "run")
+      void this.run(() =>
+        g.run(intent.direction, {
+          mode: intent.mode,
+          noPickup: intent.noPickup,
+        }),
+      );
+    else void this.run(() => g[intent.kind](intent.direction));
+  }
+  private prefixKey(e: KeyboardEvent) {
+    if (!/^[0-9mgGF]$/.test(e.key) || !this.playable()) return false;
+    e.preventDefault();
+    this.showKeyDraft(e.key, true);
     return true;
   }
   private key(e: KeyboardEvent) {
@@ -2665,15 +2847,19 @@ class PixelNethack extends HTMLElement {
       }
     }
     if (this.tilePanel) {
+      if (this.querySelector("dialog[open], .hud-menu[open], .rightbar:not([hidden])")) return;
       if (e.ctrlKey || e.metaKey || e.altKey || (e.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
       if (e.key === "Escape") {
         e.preventDefault();
         this.closeTile();
+        return;
       }
       if (e.repeat) {
         e.preventDefault();
         return;
       }
+      const shortcut = Array.from(this.tilePanel.querySelectorAll<HTMLButtonElement>("button[data-inspection-key]")).find(button => button.dataset.inspectionKey === e.key);
+      if (shortcut) { e.preventDefault(); shortcut.click(); return; }
       const delta: Record<string, [number, number]> = {
         k: [0, -1], h: [-1, 0], j: [0, 1], l: [1, 0],
         y: [-1, -1], u: [1, -1], b: [-1, 1], n: [1, 1],
@@ -2763,7 +2949,7 @@ class PixelNethack extends HTMLElement {
       );
       return;
     }
-    if (this.prefixKey(e, move)) return;
+    if (this.prefixKey(e)) return;
     if ("HJKLYUBN".includes(e.key) && e.key.length === 1) {
       e.preventDefault();
       this.movement.stop();
@@ -2794,7 +2980,7 @@ class PixelNethack extends HTMLElement {
   }
   private guide() {
     this.openMenu(
-      `<h2 id="menu-title">A small guide to a very big world.</h2><p>Find the Amulet of Yendor in the depths, and bring it back. Getting there is a story of curiosity, decisions, and learning from a short life or two.</p><div class="guide-section"><h3>01 / Take your time</h3><p>This is turn-based. Reading, inspecting the map, and opening your backpack cost nothing. An action can take time; the journal tells you what happened.</p></div><div class="guide-section"><h3>02 / Try one thing</h3><p>Tap h j k l, an arrow, or a direction button for one step; hold to walk. Release to stop repeating. Rapid taps keep at most one extra step buffered. Walking pauses at walls, nearby creatures, damage, and decisions. Press again deliberately to interact. Search around you, open a door, or pick up something interesting.</p></div><div class="guide-section"><h3>03 / Listen to the dungeon</h3><p>Hunger, danger, and strange objects are part of the adventure. Read warnings before answering. If eating or reading is interrupted, choose the action again only when you want to continue.</p></div><div class="guide-section"><h3>04 / Know what you know</h3><p>The map shows remembered terrain and currently perceived occupants. Creature and object art represents the visible NetHack category, not an exact identity. A green underline marks an ally. Use @ in the corner menu to show the original symbols. Raised stone edges frame corridors; recessed gaps lead toward unexplored space, where the layout is still unknown. Click a tile or open Surroundings for a text description.</p></div><dl class="key-list"><dt>h j k l / Arrows</dt><dd>Tap to step · hold to walk</dd><dt>y u b n</dt><dd>Move diagonally</dd><dt>Shift + h j k l y u b n</dt><dd>Native NetHack run until an obstacle or something interesting; stops before fighting</dd><dt>. / s / , / e / o</dt><dd>Wait / search / pick up / eat / open</dd><dt>&lt; / &gt;</dt><dd>Go upstairs / downstairs</dd><dt>Enter / arrow keys / Escape</dt><dd>Inspect here / nearby tiles / return</dd><dt>a / w / d / c / q / r / z / t</dt><dd>Apply / wield / drop / close / drink / read / zap / throw</dd><dt>f / Z / x / p / E / Q</dt><dd>Fire / cast / swap weapons / pay / engrave / ready quiver</dd><dt>i / ?</dt><dd>Backpack / this guide</dd><dt>Mouse wheel / middle drag</dt><dd>Zoom / look around without taking a turn</dd><dt>Shift + arrows</dt><dd>Pan the map without moving</dd></dl><p class="save-explanation">Use g + direction to stop at interesting things, G + direction to continue past corridor forks, m + direction to avoid pickup and fighting, and F + direction to force one attack. m combines with g, G or an uppercase direction. Type a count before s or . (for example 10s or 20.) for native search/rest, up to 1,000 turns. Escape or Backspace cancels a pending prefix. Other command counts are unsupported. Item selection and warnings use explicit dialogs.</p><p class="save-explanation">Your game saves after each completed action, on this browser and address. Clearing site data removes saves. Keep the same game version to return to an older adventure.</p>`,
+      `<h2 id="menu-title">A small guide to a very big world.</h2><p>Find the Amulet of Yendor in the depths, and bring it back. Getting there is a story of curiosity, decisions, and learning from a short life or two.</p><div class="guide-section"><h3>01 / Take your time</h3><p>This is turn-based. Reading, inspecting the map, and opening your backpack cost nothing. An action can take time; the journal tells you what happened.</p></div><div class="guide-section"><h3>02 / Try one thing</h3><p>Tap h j k l, an arrow, or a direction button for one step; hold to walk. Release to stop repeating. Rapid taps keep at most one extra step buffered. Walking pauses at walls, nearby creatures, damage, and decisions. Press again deliberately to interact. Search around you, open a door, or pick up something interesting.</p></div><div class="guide-section"><h3>03 / Listen to the dungeon</h3><p>Hunger, danger, and strange objects are part of the adventure. Read warnings before answering. If eating or reading is interrupted, choose the action again only when you want to continue.</p></div><div class="guide-section"><h3>04 / Know what you know</h3><p>The map shows remembered terrain and currently perceived occupants. Creature and object art follows the descriptions you perceive. An uncertain creature appears as a cloud with a question mark. A green underline marks an ally. Use Art in the game menu to show the original symbols. Raised stone edges frame corridors; recessed gaps lead toward unexplored space, where the layout is still unknown. Click a tile or open Surroundings for a text description.</p></div><dl class="key-list"><dt>h j k l / Arrows</dt><dd>Tap to step · hold to walk</dd><dt>y u b n</dt><dd>Move diagonally</dd><dt>Shift + h j k l y u b n</dt><dd>Native NetHack run until an obstacle or something interesting; stops before fighting</dd><dt>. / s / , / e / o</dt><dd>Wait / search / pick up / eat / open</dd><dt>&lt; / &gt;</dt><dd>Go upstairs / downstairs</dd><dt>Enter / arrow keys / Escape</dt><dd>Inspect here / nearby tiles / return</dd><dt>While inspecting: arrows / 1–9 / slash / Escape</dt><dd>Inspect nearby / shown action / encyclopedia / return</dd><dt>a / w / d / c / q / r / z / t</dt><dd>Apply / wield / drop / close / drink / read / zap / throw</dd><dt>f / Z / x / p / E / Q</dt><dd>Fire / cast / swap weapons / pay / engrave / ready quiver</dd><dt>i / ?</dt><dd>Backpack / this guide</dd><dt>Mouse wheel / middle drag</dt><dd>Zoom / look around without taking a turn</dd><dt>Shift + arrows</dt><dd>Pan the map without moving</dd></dl><p class="save-explanation">Use g + direction to stop at interesting things, G + direction to continue past corridor forks, m + direction to avoid pickup and fighting, and F + direction to force one attack. m combines with g, G or an uppercase direction. Type a count before s or . (for example 10s or 20.) for native search/rest, up to 1,000 turns. The command box below your hero shows clickable next-key hints. Backspace edits; Escape cancels. Other command counts are unsupported. Item selection and warnings use explicit dialogs.</p><p class="save-explanation">Your game saves after each completed action, on this browser and address. Clearing site data removes saves. Keep the same game version to return to an older adventure.</p>`,
     );
   }
   private credits() {

@@ -405,6 +405,12 @@ results; the journal preserves the original engine narration.
 
 ## Fullscreen world and walk-in welcome
 
+The site top bar contains the welcome tagline, runtime download status, GitHub,
+account controls and game menu. Keep them out of the welcome card column. At
+narrower widths, metadata and GitHub share a compact second header row; during
+play, hide welcome metadata and keep navigation and the menu in one row. The
+world fills the remaining height. Menu contents remain anchored to their button.
+
 Keep a discreet, small-font `@tobi` link to `https://x.com/tobi` at the welcome
 screen's bottom-right corner. Use readable muted text, a keyboard focus indicator
 and a generous invisible touch target. Respect safe areas and keep it clear of
@@ -478,7 +484,11 @@ explain the question mark in inspection rather than inventing an identify action
 Inspection leads with the clicked occupant, a sprite portrait and an Ally/Creature
 label. Terrain titles apply to empty tiles. Moving toward an ally may swap places;
 moving toward another creature may attack. Make this clear on the action buttons.
-Keep risky actions secondary and provide a compact close control. No auto-action on
+Dock the inspection card at a stable viewport position; arrow/vi inspection changes
+its contents without moving the panel. Keep title, book/close controls and shortcut
+footer visible while the action body scrolls. Actions have numbered key badges,
+arrow keys inspect, / opens lore, and Escape closes. Disabled actions never become
+keyboard inputs. Keep risky actions secondary. No auto-action on
 inspection or focus. All attempts use the API's action offer and observed revision.
 
 Within the sprite pass, draw ground loot and fixtures first, then all mobile actors
@@ -652,6 +662,12 @@ existing background package download status without constructing a game worker o
 claiming offline/service-worker support. On narrow screens, stack the cards below
 the courtyard with a visible jump link. Hide this content during gameplay.
 
+A small “N games played” link at the bottom of the courtyard opens the Adventure ledger.
+It uses the ledger's total recorded runs, not players or only completed lives.
+Fetch the compact public count once in the background; its CDN cache may lag by
+a few minutes. Missing, invalid or offline responses leave the link hidden, never
+show an invented zero or a gameplay error, and never gate character creation.
+
 The welcome page includes a syntax-highlighted, selectable TypeScript example
 using `import Nethack from 'neonethack'` and `new Nethack()`. The hamburger menu
 always includes GitHub, including during play. Active runs replace the page URL
@@ -722,10 +738,23 @@ New runs select current runtime metadata and record the immutable package hash.
 Resuming a bookmark loads its recorded package, independent of the current release.
 Title warmup preloads content-addressed URLs without owning a store.
 
-The Adventure ledger opens from the game menu in a separate tab. It ranks public
-run summaries by ascension, peak observed experience level, then turns; dungeon
-location is descriptive, not a cross-branch depth score. Clearly label browser
-reports and missing older data. Error telemetry sends only a bounded category and
+The Adventure ledger opens from the game menu in a separate tab. At the top,
+plot the latest 200 updated public runs: turns on the horizontal axis and deepest
+reported dungeon level on the vertical axis, with an option to show best hero
+level instead. Color by actual character class (falling back to starting class),
+with labelled class filters and an unknown-class color. Selecting a dot shows
+the name, class, progress and an explicit Show replay button when available.
+Coincident points offer a run chooser; keyboard arrows and a complete accessible
+table provide alternatives to pointer selection. Plotting never downloads replays.
+
+Show the top three hero-level and dungeon-depth records separately for Today
+(since midnight UTC) and Last 7 days (today plus six prior UTC dates). These rank
+each run's best reported progress among runs updated in the window, across the
+whole ledger, not just the plotted 200 or all-time leaders. They are not claims
+about when the high score was achieved. Unknown scores are omitted, not zero;
+never parse a dungeon label to manufacture a numeric depth. The all-time list
+continues to rank by ascension, peak experience level, then turns. Clearly label
+browser reports and missing older data. Error telemetry sends only a bounded category and
 engine package, asynchronously and once per category/package/page visit. Never
 send bookmarks, vault IDs, raw messages, stacks or journals in diagnostic reports.
 Reports go to structured Vercel logs; the public ledger API excludes diagnostics.
@@ -1309,7 +1338,14 @@ single-step movement. Inspecting and previewing consume no game turn or randomne
 Cloud upload failures stay in the compact save status, with detail available on its tooltip. They never open the central gameplay error overlay.
 ### Encyclopedia
 
-The game menu opens the pinned engine’s encyclopedia in a compact searchable book.
+The game menu and a consistent open-book icon open the pinned engine’s encyclopedia
+in a compact searchable book. Dotted creature/terrain names in inspection and item
+detail titles are lookup buttons. Use only perceived appearance names, terrain
+descriptions or the exact displayed item label; never infer an unidentified item
+or creature identity. Category-only creatures offer the book’s search form.
+Contextual lookup pre-fills and opens the entry with a return to inspection/item
+details, provided the same game revision still applies. This first integration
+does not turn arbitrary journal prose into inferred identities.
 Look up a creature, item or place by name; show the engine’s wording with prose
 lines reflowed into paragraphs for narrow screens. This is explicitly lore, not
 identification of the perceived scene. Lookup costs no turns, changes no standing
@@ -1360,7 +1396,7 @@ coalesce the latest run state, and ledger availability does not gate input backu
 
 ### Classic keyboard commands
 
-Use the pinned Guidebook chapter 4 bindings, keeping arrow movement and dropping WASD. h/j/k/l and y/u/b/n step; uppercase directions execute one native game.run command, with engine stopping and no automatic fight. s searches, comma picks up, period waits, and < / > climb. a/w/d/c/q/r/z/t apply, wield, drop, close, drink, read, zap and throw. f/Z/x/p/E/Q fire, cast, swap, pay, engrave and ready quiver. i opens inventory; ? opens help. Direction decisions and tile inspection use the same lowercase direction layout. Shift-arrows still pan. Native runs settle as one operation; held lowercase movement retains the existing serial cadence. g/G map to game.run modes untilInteresting/pastBranches; m maps to moveWithoutAttack and combines with running via noPickup. F maps to attack. Counts 1–1000 before s or . request native search/rest once; other counted commands are rejected without input. A visible live status shows pending prefixes. Escape/Backspace, menus, another action, blur and hidden tabs clear them. Prefixes never answer a standing decision; never simulate them with ordinary attacks or auto-answer dialogs.
+Use the pinned Guidebook chapter 4 bindings, keeping arrow movement and dropping WASD. h/j/k/l and y/u/b/n step; uppercase directions execute one native game.run command, with engine stopping and no automatic fight. s searches, comma picks up, period waits, and < / > climb. a/w/d/c/q/r/z/t apply, wield, drop, close, drink, read, zap and throw. f/Z/x/p/E/Q fire, cast, swap, pay, engrave and ready quiver. i opens inventory; ? opens help. Direction decisions and tile inspection use the same lowercase direction layout. Shift-arrows still pan. Native runs settle as one operation; held lowercase movement retains the existing serial cadence. g/G map to game.run modes untilInteresting/pastBranches; m maps to moveWithoutAttack and combines with running via noPickup. F maps to attack. Counts 1–1000 before s or . request native search/rest once; other counted commands are rejected without input. An editable command box anchors beneath the hero, falling above when space is limited. It explains counts and prefixes and offers explicit clickable next-key completions, with a direction grid. Backspace edits, Escape cancels; menus, another action, blur and hidden tabs clear the draft. More actions → Type a command provides touch access. Completing a valid command executes once; invalid drafts remain editable and consume no input. Prefixes never answer a standing decision; never simulate them with ordinary attacks or auto-answer dialogs.
 
 ## Source-backed creature families
 

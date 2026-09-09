@@ -8,6 +8,20 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- The ledger opens with a chart of the latest 200 updated adventures, colored by
+  class. Filter classes, compare turns with depth or hero level, and select a run
+  for its replay. Today's and the last seven days' level and depth leaders appear
+  below, using UTC dates.
+- The front page shows the total games played, with a link to the ledger.
+  Loading this count never delays entering the dungeon or playing offline.
+- The top bar brings game controls together. Inspection stays in one place,
+  offers numbered shortcuts and opens contextual encyclopedia entries with a
+  return to the same tile or item.
+- Thirty equipment and statue sprites appear consistently on the map, in the
+  backpack and in the HUD, using only perceived shapes and statue subjects.
+- Agents use shorter, consistent commands across browser and native MCP. Item
+  actions use explicit item IDs, and each question shows how to answer it;
+  inspecting a square provides ready-to-use action arguments.
 - Agent observation queries keep your backpack, selected equipment and keyboard
   focus in place. Agent actions still clear outdated equipment selections.
 - Restoring an online backup uses its latest valid level checkpoint before

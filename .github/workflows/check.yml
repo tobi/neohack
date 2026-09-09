@@ -40,6 +40,8 @@ jobs:
       - run: make -C lib/neonethack test
       - run: npm test --prefix lib/neonethack
       - run: npm test --prefix examples/workshop
+      - name: Pi tool binding and browser discovery (no model calls)
+        run: node --test examples/agent-harness/pi-extension.test.mjs examples/pi-webmcp/run.test.mjs
       - run: npm run --prefix lib/neonethack test:install
       - name: pkg-config Lua headers and multiarch static-library selection
         run: npm run --prefix lib/neonethack test:lua-layout -- "$LUA_HOME/include" "$LUA_HOME/lib/liblua.a"

@@ -2,11 +2,11 @@
 // a strict argument validator from the integrating harness (no fallback tool).
 export const SUPPORTED_OPERATIONS = Object.freeze([
   'attack', 'go', 'explore', 'descend',
-  'game_wait', 'game_search', 'game_rest', 'game_open', 'game_close',
-  'game_kick', 'game_climb', 'game_moveWithoutAttack', 'game_throw',
-  'game_eat', 'game_pickup', 'game_wield',
-  'game_equip', 'game_remove', 'game_drink', 'game_read', 'game_zap',
-  'game_drop', 'decision_answer', 'decision_cancel',
+  "wait", "search", "rest", "open", "close",
+  "kick", "climb", "moveWithoutAttack", "throw",
+  "eat", "pickup", "wield",
+  "equip", "remove", "drink", "read", "zap",
+  "drop", "answer", "cancel",
 ]);
 
 export class DispatchError extends Error {
@@ -130,7 +130,7 @@ export function createDispatcher({ runId, client, guard, operations } = {}) {
       || !(snapshot.decision === null || (record(snapshot.decision) && text(snapshot.decision.id)))) {
       fail('STATE', 'A nonterminal public snapshot with an explicit decision field is required.');
     }
-    const decisionOperation = ['decision_answer', 'decision_cancel'].includes(intent.operation);
+    const decisionOperation = ["answer", "cancel"].includes(intent.operation);
     if (decisionOperation) {
       if (!snapshot.decision || intent.args.decisionId !== snapshot.decision.id) {
         fail('DECISION', 'Answer or cancellation requires the exact current decision ID.');

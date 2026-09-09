@@ -124,7 +124,7 @@ function assessExplorationProgress(observation, tool, decision) {
   const depth = String(observation?.vitals?.depth ?? '').trim();
   const pos = observation?.you;
   const world = Array.isArray(observation?.world) ? observation.world : [];
-  if (!Number.isFinite(turn) || !depth || !pos || !['go', 'explore', 'descend', 'game_search'].includes(tool)) return null;
+  if (!Number.isFinite(turn) || !depth || !pos || !['go', 'explore', 'descend', "search"].includes(tool)) return null;
 
   const known = world.reduce((n, cell) => n + (cell.terrain?.type && cell.terrain.type !== 'dark' ? 1 : 0), 0);
   const hasDownstairs = world.some(cell => cell.terrain?.type === 'stairsDown');
@@ -214,7 +214,7 @@ log(`connected MCP HTTP ${mcpClient.initializeResult.protocolVersion} at ${MCP_H
 // A new MCP server has no in-memory active session. Load the saved recording
 // before asking the model to act. Stale IDs are cleared; contention is fatal.
 if (lastSessionId) {
-  const resumed = await callBridge('session_resume', { sessionId: lastSessionId });
+  const resumed = await callBridge("resume", { sessionId: lastSessionId });
   if (resumed.isError) {
     const code = resumed.error?.code ?? 'unknownError';
     const message = resumed.error?.message ?? resumed.text.slice(0, 300);
@@ -304,9 +304,9 @@ for (const t of mcpTools) {
           log(`op#${opCount} ${t.name} ok revision=${structuredContent?.revision ?? '?'}`);
         }
         // Skill guard 1: only observation-bearing game interactions can prove
-        // turn progress. Metadata tools such as session_actions are successful
+        // turn progress. Metadata tools such as inspect are successful
         // without an observation and must not count as stalls.
-        if ((t.name.startsWith('game_') || t.name.startsWith('session_')) && turn !== undefined) {
+        if ((structuredContent?.outcome !== undefined) && turn !== undefined) {
           const turnNum = Number(turn);
           if (turnNum === lastTurnSeen) stalledOps++;
           else { stalledOps = 0; lastTurnSeen = turnNum; }
@@ -332,13 +332,13 @@ const model = openai.chat(MODEL);
 let doctrine = '';
 try { doctrine = readFileSync(DOCTRINE_F, 'utf8'); } catch { doctrine = readFileSync(BUNDLED_DOCTRINE, 'utf8'); }
 const sessionInstruction = lastSessionId
-  ? `SESSION: resumed session "${lastSessionId}". Begin with session_observe {"sessionId":"${lastSessionId}"}.`
-  : 'SESSION: start a NEW adventure. Your first action must be session_create {"role":"valkyrie"}.';
+  ? `SESSION: resumed session "${lastSessionId}". Begin with observe {"sessionId":"${lastSessionId}"}.`
+  : 'SESSION: start a NEW adventure. Your first action must be create {"role":"valkyrie"}.';
 const system = `${doctrine}\n\n${sessionInstruction}`;
 
 const initialPrompt = lastSessionId
   ? `Continue the resumed adventure (sessionId ${lastSessionId}). Observe, then play turn after turn. Descend as deep as you can.`
-  : 'Start a fresh adventure: session_create {"role":"valkyrie"}, then play. Descend as deep as you can.';
+  : 'Start a fresh adventure: create {"role":"valkyrie"}, then play. Descend as deep as you can.';
 
 // Persistent conversation is resumed only with -c. A default invocation starts
 // both a new game and a fresh model conversation.
@@ -429,7 +429,7 @@ try {
       log(`<<SKILL-DEATH>> ${toollessSteps} model steps without a tool call`);
       deathSeen = true;
     }
-    messages.push({ role: 'user', content: deathSeen ? 'A death occurred — if the adventure is over, start a NEW game (session_create {"role":"valkyrie"}) and keep playing.' : 'Continue.' });
+    messages.push({ role: 'user', content: deathSeen ? 'A death occurred — if the adventure is over, start a NEW game (create {"role":"valkyrie"}) and keep playing.' : 'Continue.' });
     if (messages.length > 60) {
       messages = [messages[0], ...messages.slice(-58)];
     }

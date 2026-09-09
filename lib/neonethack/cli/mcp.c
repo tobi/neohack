@@ -87,7 +87,7 @@ static void tool_request(mcp_job *j, const char *params)
     if (!j->method) {
         char *message=NULL;
         if(definition.p && tool) {
-            if(asprintf(&message,"Invalid arguments for %s; no operation was sent. Call help with {name:\"%s\"} for the schema. Item IDs use {item:{id:\"returned-id\"}}; bare item strings are readable names.",tool,tool)<0)message=NULL;
+            if(asprintf(&message,"Invalid arguments for %s; no operation was sent. Call help with {name:\"%s\"} for the schema. Item actions take itemId; answer takes decisionId and value.",tool,tool)<0)message=NULL;
         }
         mcp_reject(j,400,-32602,message?message:"Unknown tool; no operation was sent. Call help with {} to list tool names.");
         free(message);free(tool);return;

@@ -285,7 +285,7 @@ is answered, blocked action repeated, or uncertain operation retried.
 If a later substep fails, `NavigationError.result` retains the confirmed actions,
 turns and last confirmed snapshot; its `cause` retains the underlying error.
 An uncertain failed input may have executed beyond that snapshot. Recover the
-retained exact input with `retry`; never restart the navigation call as recovery.
+retained exact input through the transport receipt/request recovery path (`recover` in MCP); never restart the navigation call as recovery.
 
 Route and frontier semantics live in C. This executor only submits the named
 operations with their observed revision and returns the actual final snapshot.

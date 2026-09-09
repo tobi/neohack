@@ -1,3 +1,4 @@
+import { runChart, renderRecords } from './dashboard-chart.js';
 const $ = selector => document.querySelector(selector);
 const format = value => Number(value ?? 0).toLocaleString();
 function element(tag, text) {const node=document.createElement(tag);node.textContent=text;return node;}
@@ -14,6 +15,7 @@ function openReplay(run) {
   $('#replay-world').replaceChildren(world);
   if(!dialog.open)dialog.showModal();
 }
+const chart = runChart(openReplay);
 $('#close-replay').onclick=()=>dialog.close();
 dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();}});
 dialog.addEventListener('close',()=>$('#replay-world').replaceChildren());
@@ -47,6 +49,8 @@ async function refresh() {
     if(!response.ok) throw Error("The ledger is unavailable. Try refreshing.");
     data=await response.json();
     $("#ledger-error").hidden=true;
+    chart.update(data.recent ?? []);
+    renderRecords(data.records, openReplay);
     $("#metrics").replaceChildren(...[["Recorded runs",data.totals.runs],["Still adventuring",data.totals.living],["Ascensions",data.totals.ascended],["Longest run · turns",data.totals.longest]].map(([label,value])=>{
       const node=element("div","");node.className="metric";node.append(element("strong",format(value)),element("span",label));return node;
     }));

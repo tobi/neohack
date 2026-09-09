@@ -21,7 +21,7 @@ if(process.env.NEONETHACK_MCP_TEST_ROOT){
     let sequence=0;
     await bridge.rpc({jsonrpc:'2.0',id:++sequence,method:'initialize',params:{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'composed-fixture',version:'1'}}});
     await bridge.notify({jsonrpc:'2.0',method:'notifications/initialized'});
-    const created=await bridge.rpc({jsonrpc:'2.0',id:++sequence,method:'tools/call',params:{name:'session_create',arguments:{name:'ComposedFixture',seed:42,role:'valkyrie',race:'dwarf',gender:'female',align:'lawful'}}});
+    const created=await bridge.rpc({jsonrpc:'2.0',id:++sequence,method:'tools/call',params:{name:"create",arguments:{name:'ComposedFixture',seed:42,role:'valkyrie',race:'dwarf',gender:'female',align:'lawful'}}});
     const sessionId=created.result.structuredContent.sessionId,runId='disposable';
     const {CompactObservationReader}=await import(pathToFileURL(join(root,'dist/mcp/compact.js')).href);
     const reader=new CompactObservationReader();let sent=0,loseReply=false;const records=[],reservations=new Map();
@@ -40,18 +40,18 @@ if(process.env.NEONETHACK_MCP_TEST_ROOT){
     assert.equal((await harness.view()).lifecycle.state,'unknown');
     await harness.observe({deliberate:true});
     const before=await harness.view(),count=sent;
-    await assert.rejects(harness.dispatch({runId:'wrong',sessionId,expectedRevision:before.state.revision,operation:'game_wait',args:{},approved:true}));
+    await assert.rejects(harness.dispatch({runId:'wrong',sessionId,expectedRevision:before.state.revision,operation:"wait",args:{},approved:true}));
     assert.equal(sent,count);
-    const waited=await harness.dispatch({runId,sessionId,expectedRevision:before.state.revision,operation:'game_wait',args:{},approved:true});
+    const waited=await harness.dispatch({runId,sessionId,expectedRevision:before.state.revision,operation:"wait",args:{},approved:true});
     assert.equal(sent,count+1);assert.equal(waited.state.revision,before.state.revision+1);
     assert.equal(waited.response.observation.turn,before.state.snapshot.observation.turn+waited.response.outcome.turnsElapsed);
     loseReply=true;
-    await assert.rejects(harness.dispatch({runId,sessionId,expectedRevision:waited.state.revision,operation:'game_wait',args:{},approved:true}));
+    await assert.rejects(harness.dispatch({runId,sessionId,expectedRevision:waited.state.revision,operation:"wait",args:{},approved:true}));
     await assert.rejects(harness.observe({deliberate:true}));
     const recovered=await harness.recover({deliberate:true});
     assert.equal(recovered.state.status,'current');assert.equal(harness.lifecycle.status().state,'alive');
     assert.equal(recovered.state.snapshot.observation.turn,waited.state.snapshot.observation.turn+1);
-    assert.equal(records.filter(r=>r.request.params.name==='game_wait').length,2); // first wait and lost-reply wait; no replay
+    assert.equal(records.filter(r=>r.request.params.name==="wait").length,2); // first wait and lost-reply wait; no replay
     assert.equal(bridge.pendingCount,0);
     const closed=await bridge.close();assert.equal(closed.childClosed,true);assert.equal(closed.ownedProcessesRemaining,false);
   });

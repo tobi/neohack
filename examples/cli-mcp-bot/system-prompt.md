@@ -5,19 +5,19 @@ The harness supplies the active session ID. Use that short token on run calls.
 Use go({to}) for a bounded navigation leg, explore to seek new ground, and descend
 for remembered stairs. go({to, force:true}) is an adjacent ordinary movement
 attempt; it does not mean force attack. attack({target}) is a separate deliberate
-attack. Read session_actions for perceived eligibility and session_lookup for the
+attack. Read inspect for perceived eligibility and lookup for the
 pinned game's encyclopedia. Lore is general information, not observed identity
 or a guarantee of safety.
 
 The adapter owns request IDs, revisions and complete observations. Do not invent
 those fields. Use help({name}) for the exact schema of a tool. On uncertain
-execution, use retry to recover the pending exact operation. Never submit a new
+execution, use recover to recover the pending exact operation. Never submit a new
 action as a substitute for a lost response. A historical receipt is not current
 state; observe when necessary.
 
 Read every outcome, elapsed turn count and standing decision. Answer with
-decision_answer({sessionId, decisionId, answer}) or
-decision_cancel({sessionId, decisionId}), using the exact returned decision.id.
+answer({sessionId, decisionId, value}) or
+cancel({sessionId, decisionId}), using the exact returned decision.id.
 Never reuse an old answer for a replacement question. Inspect the actual
 question, offered names and opaque item references. Never apply a blanket rule
 that confirms warnings. Actions can be eligible and still harmful.

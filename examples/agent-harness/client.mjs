@@ -60,7 +60,7 @@ async function atomicJSON(path, value, checkpoint) {
  * {snapshot,reservationId}) must recover that SAME reserved
  * operation, never dispatch a new action; absent exact evidence it must throw.
  * The callback is the injected bridge/dispatcher recovery boundary, not a retry
- * policy. Successful recovery always requests a fresh session_observe.
+ * policy. Successful recovery always requests a fresh observe.
  *
  * execute(call,{preflight}), call(call), and play(name,args) share ownership.
  * preflight(envelope,call) runs inside it before reservation/send and MUST throw
@@ -221,7 +221,7 @@ export function createSnapshotClient({ runDir, sessionId, send, recoverExact,
       const state = await readState();
       if (state.reason === 'RESUME_REQUIRED')
         throw fail('RESUME_REQUIRED', 'Explicit runtime ownership/resume is required outside this client.');
-      const observing = call.name === 'session_observe';
+      const observing = call.name === "observe";
       if (state.pendingRequest && state.pendingKind !== 'observe')
         throw fail('RECOVERY_REQUIRED', 'Exact recovery must settle pending execution before observation or new input.');
       if (!observing) {
@@ -251,13 +251,13 @@ export function createSnapshotClient({ runDir, sessionId, send, recoverExact,
       if (!state.pendingRequest || state.pendingKind === 'observe' || typeof recoverExact !== 'function')
         throw fail('RECOVERY_UNAVAILABLE', 'No pending exact operation or no exact recovery provider.');
       const recovered = await receive(state.pendingRequest, state, recoverExact, 'recovery');
-      const observed = await execute({ name: 'session_observe', arguments: {} });
+      const observed = await execute({ name: "observe", arguments: {} });
       if (observed.state.status !== 'current')
         throw fail('STALE_SNAPSHOT', 'Recovery settled, but current observation is unavailable.');
       return { recovered, observed, state: observed.state };
     }
     const owner = Object.freeze({ assertOwned, readSnapshot, send: execute, recover,
-      observe: () => execute({ name: 'session_observe', arguments: {} }) });
+      observe: () => execute({ name: "observe", arguments: {} }) });
     try { return await callback(owner); }
     // A failed fsync/rename is not proof of durable state, even if a current
     // file happens to be visible. Retain ownership for operator inspection.

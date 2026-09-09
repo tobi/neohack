@@ -45,6 +45,7 @@ function num(value: unknown) {
 function flag(value: unknown) {
   return typeof value === "boolean" ? value : undefined;
 }
+const positiveInteger = (value: unknown) => Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : undefined;
 
 export function sanitizeRun(
   raw: Record<string, unknown>,
@@ -70,9 +71,9 @@ export function sanitizeRun(
     seedSpecified: flag(raw.seedSpecified),
     turn: num(raw.turn) ?? 0,
     ended: Boolean(raw.ended),
-    heroLevel: num(raw.heroLevel),
-    maxLevel: num(raw.maxLevel),
-    maxDepth: num(raw.maxDepth),
+    heroLevel: positiveInteger(raw.heroLevel),
+    maxLevel: positiveInteger(raw.maxLevel),
+    maxDepth: positiveInteger(raw.maxDepth),
     depthLabel: str(raw.depthLabel, 64),
     gold: num(raw.gold),
     kills: num(raw.kills),
@@ -106,11 +107,18 @@ export async function board(request: Request) {
   const url = new URL(request.url),
     path = url.pathname;
   if (request.method === "GET") {
-    if (path === "/api/stats")
+    if (path === "/api/stats") {
+      const now = Date.now();
+      const stats = await ledgerStats(now);
+      if (url.searchParams.get('view') === 'count')
+        return Response.json({ runs: stats.totals.runs }, { headers: {
+          'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
+        } });
       return json({
-        generatedAt: Date.now(),
-        ...(await ledgerStats()),
+        generatedAt: now,
+        ...stats,
       });
+    }
     if (path.startsWith("/api/runs/")) {
       const run = await ledgerRun(path.slice("/api/runs/".length));
       return run ? json(run) : json({ error: "not found" }, 404);

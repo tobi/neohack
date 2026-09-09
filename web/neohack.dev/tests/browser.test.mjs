@@ -143,7 +143,7 @@ async function rawNativeWebMcp(page, t, session) {
       return [...registered.values()];
     },
     call: async (method, args = {}) => {
-      const name = method.replaceAll(".", "_");
+      const name = method;
       const tool = [...registered.values()].find(tool => tool.name === name);
       if (!tool) throw Error("Tool not found: " + name);
       let invocationId, timer, listener;
@@ -218,6 +218,36 @@ test("welcome creator link stays small, accessible and clear of controls", { tim
   await create(page);
   assert.equal(await link.isVisible(), false, "gameplay controls stay unobstructed");
   assert.deepEqual(errors, []);
+});
+
+test('frontpage games played count links to the ledger and stays clear on desktop and phone', async t => {
+  const {page,errors}=await fixture(t,{setup:async page=>{
+    await page.route('**/api/stats?view=count',route=>route.fulfill({json:{runs:12345}}));
+  }});
+  const link=page.locator('#games-played');await link.waitFor({state:'visible'});
+  assert.equal(await link.textContent(),'12,345 games played ↗');
+  assert.equal(await link.getAttribute('href'),'/dashboard');
+  for(const [name,width,height] of [['desktop',1440,1050],['mobile',390,844],['landscape',844,390]]) {
+    await page.setViewportSize({width,height});
+    const box=await link.boundingBox(),controls=await page.locator('#welcome-actions').boundingBox();
+    await page.screenshot({path:`${root}/test-results/games-played-${name}.png`});
+    assert.ok(box.width>=44&&box.height>=44);
+    assert.ok(box.x>=0&&box.x+box.width<=width&&box.y>=0&&box.y+box.height<=height);
+    assert.ok(box.x>=controls.x+controls.width||box.x+box.width<=controls.x||box.y>=controls.y+controls.height||box.y+box.height<=controls.y,`${name}: count clears controls ${JSON.stringify({box,controls})}`);
+    assert.equal(await link.evaluate(el=>{const r=el.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===el}),true);
+  }
+  await create(page);assert.equal(await link.isVisible(),false);assert.deepEqual(errors,[]);
+});
+
+test('a held or failed public count never gates entry or becomes a game error or invented zero', async t => {
+  let release;const gate=new Promise(resolve=>release=resolve);t.after(()=>release());
+  const {page,errors}=await fixture(t,{setup:async page=>{
+    await page.route('**/api/stats?view=count',async route=>{await gate;await route.fulfill({status:503,json:{error:'unavailable'}}).catch(()=>{})});
+  }});
+  assert.equal(await page.locator('#games-played').isVisible(),false);
+  await create(page);assert.equal((await snapshot(page)).observation.turn,1);
+  release();await page.waitForFunction(()=>document.querySelector('#games-played').hidden);
+  assert.equal(await page.locator('#error').isVisible(),false);assert.deepEqual(errors,[]);
 });
 
 test("plain HTTP remote origins explain secure access before starting WASM", async (t) => {
@@ -1556,7 +1586,7 @@ test(
     );
     const { methods } = await import("../../../lib/neonethack/dist/mcp/agent-data.js");
     const tools=methods.map(m=>({name:m.name,description:m.description,inputSchema:m.schema}));
-    const snapshotPart=({summary,operationId,historical,navigation,creatures,requestId,presentation,...frame})=>{
+    const snapshotPart=({summary,operationId,historical,navigation,creatures,requestId,presentation,reply,cancel,...frame})=>{
       const {neighborhood,...observation}=frame.observation;
       return {...frame,observation,events:frame.events.filter(e=>!(e.type==='saw'&&e.kind==='terrain'&&(e.mark==='\\u0000'||e.mark==='\u0000')))};
     };
@@ -1575,7 +1605,7 @@ test(
     const call = native.call;
     assert.equal((await call("help")).isError, false);
     assert.equal(await agentSnapshot(page), null);
-    const created = await call("session.create", {
+    const created = await call("create", {
       name: "Mira",
       role: "valkyrie",
       race: "human",
@@ -1588,7 +1618,7 @@ test(
     assert.deepEqual(await sharedSnapshot(), snapshotPart(state));
     assert.equal(state.presentation.kind,'compact');
     const humanBeforeQuery = await agentSnapshot(page);
-    const full=(await call('session.observe',{sessionId:state.sessionId})).structuredContent;
+    const full=(await call('observe',{sessionId:state.sessionId})).structuredContent;
     assert.deepEqual(await agentSnapshot(page), humanBeforeQuery, 'observation preserves the human action outcome and events');
     assert.deepEqual(full.observation, humanBeforeQuery.observation, 'explicit observation returns the entire shared HUD scene');
     assert.deepEqual(full.decision, humanBeforeQuery.decision);
@@ -1606,7 +1636,7 @@ test(
       ...extra,
     });
     const prayerArgs = args("web-pray");
-    const prayer = await call("game.pray", prayerArgs);
+    const prayer = await call("pray", prayerArgs);
     state = prayer.structuredContent;
     assert.equal(state.decision.kind, "confirmation");
     await page.locator("#decision[open]").waitFor();
@@ -1617,17 +1647,17 @@ test(
       "warnings await an explicit answer",
     );
     const decline = await call(
-      "decision.answer",
+      "answer",
       args("web-decline", {
         decisionId: state.decision.id,
-        answer: { kind: "confirmation", confirm: false },
+        value: false,
       }),
     );
     state = decline.structuredContent;
     assert.equal(state.decision, null);
     const waitArgs = args("web-wait");
-    state = (await call("game.wait", waitArgs)).structuredContent;
-    const next = (await call("game.wait", args("web-next"))).structuredContent;
+    state = (await call("wait", waitArgs)).structuredContent;
+    const next = (await call("wait", args("web-next"))).structuredContent;
     assert.deepEqual(
       snapshotPart((await call("receipt",{sessionId:state.sessionId,operationId:state.operationId})).structuredContent),
       snapshotPart(state),
@@ -1641,11 +1671,11 @@ test(
     state = next;
     await page.evaluate(async()=>{const app=document.querySelector('pixel-nethack');await app.run(()=>app.game.wait());});
     const human=await agentSnapshot(page);
-    const stale=await call('game.wait',{sessionId:state.sessionId});
+    const stale=await call('wait',{sessionId:state.sessionId});
     assert.equal(stale.isError,true);
     assert.equal((await agentSnapshot(page)).revision,human.revision);
-    state=(await call('session.observe',{sessionId:state.sessionId})).structuredContent;
-    const actions = await call("session.actions", {
+    state=(await call('observe',{sessionId:state.sessionId})).structuredContent;
+    const actions = await call("inspect", {
       sessionId: state.sessionId,
       target: "here",
     });
@@ -1664,12 +1694,12 @@ test(
       };
     });
     const uncertain = args("web-lost");
-    assert.equal((await call("game.wait", uncertain)).isError, true);
+    assert.equal((await call("wait", uncertain)).isError, true);
     await page.locator("#recovery").waitFor({ state: "visible" });
-    const wrong = await call("game.wait", args("web-wrong-retry"));
+    const wrong = await call("wait", args("web-wrong-retry"));
     assert.equal(wrong.isError, true);
     assert.equal(wrong.structuredContent.error.code,"uncertainExecution");
-    const recovered = await call("retry",{sessionId:state.sessionId});
+    const recovered = await call("recover",{sessionId:state.sessionId});
     assert.equal(recovered.isError, false);
     assert.equal(
       recovered.structuredContent.observation.turn,
@@ -1689,9 +1719,9 @@ test(
       ),
       true,
     );
-    await call("session.close", { sessionId: state.sessionId });
+    await call("suspend", { sessionId: state.sessionId });
     assert.equal(await agentSnapshot(page), null);
-    const resumed = await call("session.resume", {
+    const resumed = await call("resume", {
       sessionId: state.sessionId,
     });
     assert.equal(resumed.isError, false);
@@ -1745,7 +1775,7 @@ test('native WebMCP waits for registration while the title is already interactiv
     assert.equal(workers.length, 0, 'waiting for discovery cannot start a game');
     release();
     const native = await opening;
-    const created = await native.call('session_create', { name: 'Registry audit', role: 'valkyrie', seed: 9 });
+    const created = await native.call("create", { name: 'Registry audit', role: 'valkyrie', seed: 9 });
     assert.equal(created.isError, false);
     assert.equal((await snapshot(page)).sessionId, created.structuredContent.sessionId);
     assert.equal((await snapshot(page)).observation.turn, 1);
@@ -1798,7 +1828,7 @@ test('native WebMCP waits for actual registry events after CDP enable completes'
     assert.equal(await snapshot(page), null);
     release();
     const native = await opening;
-    const created = await native.call('session_create', { name: 'Event audit', role: 'valkyrie', seed: 9 });
+    const created = await native.call("create", { name: 'Event audit', role: 'valkyrie', seed: 9 });
     assert.equal(invokes, 1, 'one invocation after the real native events arrive');
     assert.equal(created.isError, false);
     assert.equal((await snapshot(page)).sessionId, created.structuredContent.sessionId);
@@ -1813,18 +1843,18 @@ test('native WebMCP waits for actual registry events after CDP enable completes'
 test('native WebMCP rejects an old confirmation after a human opens a different question', async t => {
   const { page, errors } = await fixture(t, { webmcp: true });
   const { call } = await nativeWebMcp(page, t);
-  const created = await call('session_create', { name: 'Decision audit', role: 'valkyrie', race: 'human', gender: 'female', align: 'lawful', seed: 9 });
+  const created = await call("create", { name: 'Decision audit', role: 'valkyrie', race: 'human', gender: 'female', align: 'lawful', seed: 9 });
   const sessionId = created.structuredContent.sessionId;
-  const prayer = (await call('game_pray', { sessionId })).structuredContent;
+  const prayer = (await call("pray", { sessionId })).structuredContent;
   assert.equal(prayer.decision.kind, 'confirmation');
   await page.getByRole('button', { name: 'No, not now', exact: true }).click();
   await ready(page);
   await page.getByLabel('Game menu', { exact: true }).click();
   await page.getByRole('button', { name: 'Abandon run', exact: true }).click();
   await ready(page);
-  const quit = (await call('session_observe', { sessionId })).structuredContent;
+  const quit = (await call("observe", { sessionId })).structuredContent;
   assert.notEqual(quit.decision.id, prayer.decision.id);
-  const stale = await call('decision_answer', { sessionId, decisionId: prayer.decision.id, answer: { kind: 'confirmation', confirm: true } });
+  const stale = await call("answer", { sessionId, decisionId: prayer.decision.id, value: true });
   assert.equal(stale.isError, true);
   assert.equal(stale.structuredContent.error.code, 'staleDecision');
   assert.equal(stale.structuredContent.operationId, undefined);
@@ -1833,7 +1863,7 @@ test('native WebMCP rejects an old confirmation after a human opens a different 
   assert.equal(unchanged.revision, quit.revision);
   assert.equal(unchanged.observation.turn, quit.observation.turn);
   assert.deepEqual(unchanged.decision, quit.decision);
-  assert.equal((await call('decision_cancel', { sessionId, decisionId: quit.decision.id })).isError, false);
+  assert.equal((await call("cancel", { sessionId, decisionId: quit.decision.id })).isError, false);
   assert.equal((await snapshot(page)).decision, null);
   assert.deepEqual(errors, []);
 });
@@ -2478,7 +2508,7 @@ test('hero names stay clear of the level label at phone and desktop widths', asy
   const { page } = await fixture(t, { webmcp: true });
   const { call } = await nativeWebMcp(page, t);
   for (const name of ['Browser Container', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcde']) {
-    const created = await call('session_create', { name, role: 'valkyrie', seed: 4 });
+    const created = await call("create", { name, role: 'valkyrie', seed: 4 });
     assert.equal(created.isError, false);
     for (const width of [320, 390, 800, 1440]) {
       await page.setViewportSize({ width, height: 844 });
@@ -2490,16 +2520,16 @@ test('hero names stay clear of the level label at phone and desktop widths', asy
         await page.screenshot({ path: `${root}/test-results/hero-name-${width}.png` });
       }
     }
-    await call('session_close', { sessionId: created.structuredContent.sessionId });
+    await call("suspend", { sessionId: created.structuredContent.sessionId });
   }
 });
 
 test('counted-action journal batches stay compact on phones and preserve full journal text', async t => {
   const { page } = await fixture(t, { webmcp: true });
   const { call } = await nativeWebMcp(page, t);
-  const created = await call('session_create', { name: 'Journal audit', role: 'valkyrie', seed: 4 });
+  const created = await call("create", { name: 'Journal audit', role: 'valkyrie', seed: 4 });
   const sessionId = created.structuredContent.sessionId;
-  const rested = await call('game_rest', { sessionId, turns: 800 });
+  const rested = await call("rest", { sessionId, turns: 800 });
   assert.equal(rested.isError, false);
   const entry = page.locator('#recent-messages .journal-inline').filter({ hasText: 'Count:' }).last();
   const text = await entry.textContent();
@@ -2790,15 +2820,15 @@ test("idle WebMCP discovery and closed adventures release storage for another ta
   }));
   assert.ok(rejected.error);
   assert.equal(await owned(), false, "a rejected start must not keep an idle owner either");
-  const created = await call("session.create", { name: "Agent", role: "valkyrie", seed: 42 });
+  const created = await call("create", { name: "Agent", role: "valkyrie", seed: 42 });
   assert.equal(created.isError, false);
   const sid = created.structuredContent.sessionId;
-  const warning = await call("game.pray", { sessionId: sid });
+  const warning = await call("pray", { sessionId: sid });
   assert.equal(warning.isError, false);
   assert.equal(warning.structuredContent.decision.kind, "confirmation");
   const fullWarning=await call('receipt',{sessionId:sid,operationId:warning.structuredContent.operationId});
   assert.equal(fullWarning.isError,false);
-  assert.equal((await call("session.close", { sessionId: sid })).isError, false);
+  assert.equal((await call("suspend", { sessionId: sid })).isError, false);
   assert.equal(await snapshot(page), null);
   assert.equal(await owned(), false, "closing an agent adventure must release its worker's store lock");
   const peer = await context.newPage();
@@ -2856,7 +2886,7 @@ test("welcome explains all three paths on desktop and mobile", { timeout: 60000 
   const paths = page.locator('#welcome-paths');
   assert.equal(await paths.locator('article').count(), 3);
   assert.match(await paths.innerText(), /JSON protocol/);
-  assert.equal(await paths.getByRole('link', {name:'GitHub ↗', exact:true}).getAttribute('href'), 'https://github.com/tobi/neohack');
+  assert.equal(await page.locator('.rail-github').getAttribute('href'), 'https://github.com/tobi/neohack');
   await page.waitForFunction(() => document.querySelector('#package-status').textContent.includes('Game downloaded'));
   const world = await page.locator('.map-viewport').boundingBox();
   const rail = await paths.boundingBox();
@@ -2951,6 +2981,7 @@ test("Classic directions move and s searches", async (t) => {
   const before = (await snapshot(page)).revision;
   await page.keyboard.press('g');
   await page.keyboard.press('Control+h');
+  await page.keyboard.press('Escape');
   assert.equal((await snapshot(page)).revision, before);
   await page.keyboard.press('w');
   await page.locator('#decision[open]').waitFor();
@@ -3720,9 +3751,9 @@ test('free WebMCP observation preserves live touch equipment intent; input inval
   const selected = await choose.elementHandle();
   assert.equal(await choose.getAttribute('aria-pressed'), 'true');
   const dispatchStart = await page.evaluate(() => globalThis.equipmentRequests.length);
-  const observed = await call('session_observe', { sessionId: frame.sessionId });
+  const observed = await call("observe", { sessionId: frame.sessionId });
   assert.equal(observed.isError, false);
-  const actions = await call('session_actions', { sessionId: frame.sessionId, target: 'here' });
+  const actions = await call("inspect", { sessionId: frame.sessionId, target: 'here' });
   assert.equal(actions.isError, false);
   const dispatched = await page.evaluate(start => globalThis.equipmentRequests.slice(start), dispatchStart);
   assert.deepEqual(dispatched, ['session.observe', 'session.actions']);
@@ -3737,11 +3768,11 @@ test('free WebMCP observation preserves live touch equipment intent; input inval
   frame = await snapshot(page);
   assert.deepEqual(frame.observation.inventory.find(item => item.id === shieldId).equipmentSlots, ['shield'],
     'preserved callbacks still act on the live Game');
-  await call('session_observe', { sessionId: frame.sessionId }); // Refresh agent revision after human equipment input.
+  await call("observe", { sessionId: frame.sessionId }); // Refresh agent revision after human equipment input.
   const dagger = frame.observation.inventory.find(item => item.equipmentSlots?.includes('alternateWeapon'));
   await page.getByRole('button', { name: 'Choose equipment slot for ' + dagger.label, exact: true }).tap();
   const oldSlot = await page.locator('[data-slot=weapon]').boundingBox();
-  const quit = await call('game_quit', { sessionId: frame.sessionId });
+  const quit = await call("quit", { sessionId: frame.sessionId });
   assert.equal(quit.isError, false);
   assert.ok(quit.structuredContent.decision);
   await page.touchscreen.tap(oldSlot.x + oldSlot.width / 2, oldSlot.y + oldSlot.height / 2);
@@ -3750,10 +3781,10 @@ test('free WebMCP observation preserves live touch equipment intent; input inval
     'an old equipment touch cannot answer the standing question');
   await page.getByRole('button', { name: 'Cancel action', exact: true }).tap();
   await ready(page);
-  await call('session_observe', { sessionId: frame.sessionId });
+  await call("observe", { sessionId: frame.sessionId });
   await page.getByRole('button', { name: /^Backpack/ }).tap();
   await page.getByRole('button', { name: 'Choose equipment slot for ' + dagger.label, exact: true }).tap();
-  const dropped = await call('game_drop', { sessionId: frame.sessionId, item: { id: dagger.id } });
+  const dropped = await call("drop", { sessionId: frame.sessionId, itemId: dagger.id });
   assert.equal(dropped.isError, false);
   assert.ok(dropped.structuredContent.revision > frame.revision);
   await page.getByRole('button', { name: /^Backpack/ }).tap();
@@ -3987,18 +4018,18 @@ test('tab handoff waits for an accepted input receipt and never repeats the acti
 
 test('WebMCP in a transferred tab requires explicit resume before acting again',{timeout:60000},async t=>{
   const {page,context,errors}=await fixture(t,{webmcp:true});const {call}=await nativeWebMcp(page,t);
-  const created=await call('session.create',{name:'Tab agent',role:'valkyrie',seed:9});
+  const created=await call("create",{name:'Tab agent',role:'valkyrie',seed:9});
   assert.equal(created.isError,false);const sid=created.structuredContent.sessionId;
   const peer=await context.newPage();await peer.goto(page.url());
   await peer.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId);
   await page.getByRole('button',{name:'Play here',exact:true}).waitFor();
   const before=await snapshot(peer);
-  const refused=await call('game.wait',{sessionId:sid});
+  const refused=await call("wait",{sessionId:sid});
   assert.equal(refused.isError,true);assert.match(JSON.stringify(refused),/moved to another tab/);
   assert.deepEqual(await snapshot(peer),before);
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();
-  const resumed=await call('session.resume',{sessionId:sid});assert.equal(resumed.isError,false);
-  const waited=await call('game.wait',{sessionId:sid});assert.equal(waited.isError,false);
+  const resumed=await call("resume",{sessionId:sid});assert.equal(resumed.isError,false);
+  const waited=await call("wait",{sessionId:sid});assert.equal(waited.isError,false);
   assert.equal((await snapshot(page)).revision,before.revision+1,"the resumed agent submits exactly one new attempt");
   assert.equal(await snapshot(peer),null);assert.deepEqual(errors,[]);
 });
@@ -4073,7 +4104,8 @@ test('classic prefixes dispatch explicit protocol parameters and counts stay nat
   await page.keyboard.press('1'); await page.keyboard.press('0'); await page.keyboard.press('h');
   assert.equal((await snapshot(page)).revision,before);
   assert.deepEqual(await inputs(),[]);
-  assert.match(await page.locator('#keyboard-prefix').textContent(),/cancelled/);
+  assert.match(await page.locator('#keyboard-prefix').textContent(),/No action taken/);
+  await page.keyboard.press('Escape');
   await page.keyboard.press('m'); await page.keyboard.press('Escape'); await page.keyboard.press('s'); await ready(page);
   assert.equal((await inputs())[0].method,'game.search');
   await page.keyboard.press('g');
@@ -4166,4 +4198,163 @@ test('floor containers and raised creatures select their perceived names and dea
  });
  assert.equal(remaining,0,'same seed and level in another run cannot inherit impressions');
 
+});
+
+test('hero command box edits drafts and offers explicit accessible completions', async t => {
+  const {page,errors}=await fixture(t); await create(page);
+  const before=await snapshot(page);
+  await page.keyboard.type('20');
+  const input=page.getByRole('textbox',{name:'Command',exact:true});
+  assert.equal(await input.inputValue(),'20');
+  await page.keyboard.press('Enter');
+  assert.equal((await snapshot(page)).revision,before.revision);
+  await page.keyboard.press('Backspace');
+  assert.equal(await input.inputValue(),'2');
+  await page.keyboard.type('0');
+  assert.match(await page.locator('#command-about').innerText(),/20 turns/);
+  const geometry=await page.evaluate(()=>{
+    const app=document.querySelector('pixel-nethack'),map=app.map,you=app.snapshot.observation.you;
+    const canvas=document.querySelector('#dungeon').getBoundingClientRect(),box=document.querySelector('#keyboard-prefix').getBoundingClientRect();
+    return {left:box.left,right:box.right,top:box.top,bottom:box.bottom,
+      foot:canvas.top+(you.y-map.origin.y+1)*16*map.zoom,
+      center:canvas.left+(you.x-map.origin.x+.5)*16*map.zoom};
+  });
+  assert.ok(geometry.top>=geometry.foot);
+  assert.ok(Math.abs((geometry.left+geometry.right)/2-geometry.center)<2);
+  await page.screenshot({path:resolve(root,'test-results/command-count-desktop.png')});
+  await input.fill('20sh');
+  assert.equal(await input.getAttribute('aria-invalid'),'true');
+  assert.equal((await snapshot(page)).revision,before.revision,'a pasted multi-command string never partially executes');
+  await input.fill('20');
+  await page.locator('[data-completion="20s"]').click(); await ready(page);
+  assert.equal(await page.locator('#keyboard-prefix').isVisible(),false);
+  assert.equal((await snapshot(page)).outcome.action,'search');
+  const after=await snapshot(page);
+  await page.keyboard.press('m');
+  await page.locator('[data-completion="mg"]').click();
+  assert.equal(await input.inputValue(),'mg');
+  assert.match(await page.locator('#command-about').innerText(),/No pickup or fighting/);
+  await page.keyboard.press('Tab');
+  assert.equal((await snapshot(page)).revision,after.revision);
+  await input.focus();
+  await page.setViewportSize({width:390,height:844});
+  await page.waitForTimeout(100);
+  const box=await page.locator('#keyboard-prefix').boundingBox();
+  assert.ok(box.x>=0 && box.x+box.width<=390 && box.y>=0 && box.y+box.height<=844);
+  for(const button of await page.locator('#keyboard-prefix button').all()) {
+    const rect=await button.boundingBox(); assert.ok(rect.height>=44);
+  }
+  await page.screenshot({path:resolve(root,'test-results/command-movement-mobile.png')});
+  await page.keyboard.press('Escape');
+  assert.equal((await snapshot(page)).revision,after.revision);
+  await page.getByRole('button',{name:'More actions',exact:true}).click();
+  await page.getByRole('button',{name:'Type a command',exact:true}).click();
+  assert.equal(await input.inputValue(),'');
+  await page.locator('[data-completion="F"]').click();
+  assert.match(await page.locator('#command-about').innerText(),/Force one attack/);
+  await page.keyboard.press('ArrowLeft'); await ready(page);
+  assert.equal((await snapshot(page)).outcome.action,'attack');
+  assert.equal(await page.locator('#keyboard-prefix').isVisible(),false);
+  assert.deepEqual(errors,[]);
+});
+
+test('inspection stays docked, exposes lore, and keeps numbered actions explicit', async t => {
+  const {page, errors} = await fixture(t);
+  await create(page);
+  const before = await snapshot(page);
+  const pet = before.observation.world.find(cell => cell.occupant?.kind === 'ally');
+  assert.ok(pet?.occupant.appearance);
+  const inspect = point => page.evaluate(({x,y}) => document.querySelector('pixel-nethack').inspectTile(x,y), point);
+  for (const width of [1440,390]) {
+    await page.setViewportSize({width,height:844});
+    await inspect(pet);
+    const card=page.getByRole('dialog',{name:'Tile actions'});
+    const origin=await card.boundingBox();
+    const neighbor=await page.evaluate(({x,y}) => {
+      const cells=document.querySelector('pixel-nethack').game.observation.neighborhood.cells;
+      return [{key:'ArrowLeft',dx:-1},{key:'ArrowRight',dx:1}].find(d=>cells.some(c=>c.x===x+d.dx&&c.y===y));
+    },pet);
+    assert.ok(neighbor);
+    await page.keyboard.press(neighbor.key);
+    assert.equal(Number(await card.getAttribute('data-x')),pet.x+neighbor.dx);
+    const moved=await card.boundingBox();
+    assert.equal(moved.x,origin.x,'arrows do not move the card horizontally');
+    assert.equal(moved.y,origin.y,'arrows do not move the card vertically');
+    await page.keyboard.press(neighbor.dx===-1?'ArrowRight':'ArrowLeft');
+    await page.keyboard.press('/');
+    await page.locator('.lore-entry:not([hidden])').waitFor();
+    assert.equal(await page.locator('#lore-query').inputValue(),pet.occupant.appearance);
+    assert.deepEqual(await snapshot(page),before,'inspection and contextual lore spend no turns or decisions');
+    await page.getByRole('button',{name:'Back to inspection'}).click();
+    await card.waitFor();
+    assert.equal(Number(await card.getAttribute('data-x')),pet.x);
+    assert.equal(Number(await card.getAttribute('data-y')),pet.y);
+    await page.waitForFunction(()=>document.querySelector('.tile-buttons button span')?.textContent==='Walk here');
+    const unavailable=card.locator('.tile-buttons button:disabled').first();
+    if(await unavailable.count()) {
+      await page.keyboard.press(await unavailable.getAttribute('aria-keyshortcuts'));
+      assert.deepEqual(await snapshot(page),before,'disabled shortcuts never send input');
+    }
+    await card.locator('.lore-link').click();
+    await page.locator('.lore-entry:not([hidden])').waitFor();
+    await page.keyboard.press('Escape');
+    await card.waitFor();
+    assert.ok((await card.locator('.lore-icon').boundingBox()).height>=44);
+    const close=await card.getByRole('button',{name:'Close tile actions',exact:true}).boundingBox();
+    assert.ok(close.x>=0&&close.x+close.width<=width&&close.height>=44);
+    await page.screenshot({path:`${root}/test-results/inspection-lore-${width}.png`});
+    await page.keyboard.press('Escape');
+    assert.equal(await card.count(),0);
+  }
+  await inspect(before.observation.you);
+  const search=page.getByRole('dialog',{name:'Tile actions'}).getByRole('button',{name:'Search here',exact:true});
+  const key=await search.getAttribute('aria-keyshortcuts');
+  assert.match(key,/^[1-9]$/);
+  assert.equal(await search.locator('kbd').textContent(),key);
+  await page.keyboard.press(key);
+  await ready(page);
+  assert.equal((await snapshot(page)).observation.turn,before.observation.turn+1,'one numbered shortcut performs one real action');
+  assert.deepEqual(errors,[]);
+});
+
+test('item lore uses the displayed label and returns to the item without changing it', async t => {
+  const {page,errors}=await fixture(t);await create(page);
+  const before=await snapshot(page), item=before.observation.inventory[0];
+  await page.evaluate(item=>document.querySelector('pixel-nethack').itemDetails(item),item);
+  await page.locator('#menu-title .lore-link').click();
+  await page.locator('.lore-entry:not([hidden])').waitFor();
+  assert.equal(await page.locator('#lore-query').inputValue(),item.label);
+  assert.deepEqual(await snapshot(page),before);
+  await page.getByRole('button',{name:'Back to item'}).click();
+  await page.locator('#item-actions').waitFor();
+  assert.equal(await page.locator('#menu-title .lore-link').textContent(),item.label);
+  assert.deepEqual(await snapshot(page),before);
+  assert.deepEqual(errors,[]);
+});
+
+test('closing contextual lore ignores its late result and menu focus blocks inspection shortcuts', async t => {
+  const {page,errors}=await fixture(t);await create(page);
+  const before=await snapshot(page);
+  const pet=before.observation.world.find(cell=>cell.occupant?.kind==='ally');
+  await page.evaluate(async pet=>{
+    const app=document.querySelector('pixel-nethack');
+    const lookup=app.game.lookup.bind(app.game);
+    app.game.lookup=async name=>{
+      const result=await lookup(name);
+      return new Promise(resolve=>{window.finishLore=()=>resolve(result);});
+    };
+    await app.inspectTile(pet.x,pet.y);
+  },pet);
+  await page.keyboard.press('/');
+  await page.waitForFunction(()=>typeof window.finishLore==='function');
+  await page.getByRole('button',{name:'Back to inspection'}).click();
+  const card=page.getByRole('dialog',{name:'Tile actions'});await card.waitFor();
+  await page.evaluate(()=>window.finishLore());
+  assert.equal(await page.locator('.lore-entry').isVisible(),false);
+  assert.equal(await card.getByRole('button',{name:'Close tile actions',exact:true}).evaluate(el=>el===document.activeElement),true,'late lore does not steal focus');
+  await page.getByLabel('Game menu',{exact:true}).click();
+  const action=card.getByRole('button',{name:'Move toward ally'});
+  await page.keyboard.press(await action.getAttribute('aria-keyshortcuts'));
+  assert.deepEqual(await snapshot(page),before,'menu focus cannot issue an inspection action');
+  assert.deepEqual(errors,[]);
 });
