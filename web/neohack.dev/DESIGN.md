@@ -695,14 +695,29 @@ public game.quit, preserving the engine's explicit confirmation and terminal jou
 
 Disable item actions only when the current revision's C action offer says
 knownBlocked. More actions includes a short reason below unavailable choices.
-More actions opens with `#` or its visible button. Its Lit search component keeps
+More actions opens with `Ctrl+K` (`Cmd+K` on Mac), `#` or its visible button. Its Lit search component keeps
 the input across the top, focused on opening; the matching list alone scrolls.
-Match action labels and names by substring alongside exact classic shortcuts and
+Match action labels and names by ordered fuzzy letters alongside exact classic shortcuts and
 the shared command grammar (`20s`, `20.`, `mh`). Typing filters without executing;
 arrows select and Enter/click explicitly tries a result. A bare count offers both
 search and rest. Keep unavailable matches visible with reasons, and bind each
-callback to the opening game/revision. The native dialog retains Escape and focus
-restoration. Direct in-game classic prefixes retain their existing composer.
+callback to the opening game/revision. Exact shortcuts and names rank first;
+contiguous matches, word starts and shorter labels rank above scattered matches.
+Underline matching letters; use no recency or gameplay-policy weighting.
+Single item and single-choice engine questions drill down inside the same dialog,
+with perceived item icons and a fresh focused search field. Scrolls/books come
+first for Read, tools for Use and weapons for Wield; this is presentation order,
+not a claim that other attempts are impossible or these are safe. Show every engine
+option, including special choices; do not reconstruct eligibility from inventory
+categories. Escape/Back explicitly cancels the exact question and returns to the
+parent search/selection at the resulting revision; closing cancels and exits.
+Cancellation is not a rewind and never promises zero elapsed turns. Noncancellable
+questions cannot be backed out of. Targets, warnings, text and multi-selection
+transfers keep their dedicated controls. Further input waits for settlement;
+uncertain results retain the normal recovery UI. Old callbacks cannot answer a
+different question or act on a newer revision. Root Escape closes and restores
+focus. Ctrl/Cmd+K refocuses an open picker and does not hijack other forms or
+standing decisions. Direct in-game classic prefixes retain their existing composer.
 Chat is available by searching `chat` (or `#chat`) in More actions. It opens the
 engine's “Talk to whom?” direction question; choose an adjacent character's
 direction. Consultations, donations and other dialogue choices remain explicit
@@ -1432,7 +1447,7 @@ coalesce the latest run state, and ledger availability does not gate input backu
 
 ### Classic keyboard commands
 
-Use the pinned Guidebook chapter 4 bindings, keeping arrow movement and dropping WASD. h/j/k/l and y/u/b/n step; uppercase directions execute one native game.run command, with engine stopping and no automatic fight. s searches, comma picks up, period waits, and < / > climb. a/w/d/c/q/r/z/t apply, wield, drop, close, drink, read, zap and throw. f/Z/x/p/E/Q fire, cast, swap, pay, engrave and ready quiver. i opens inventory; ? opens help. Direction decisions and tile inspection use the same lowercase direction layout. Shift-arrows still pan. Native runs settle as one operation; held lowercase movement retains the existing serial cadence. g/G map to game.run modes untilInteresting/pastBranches; m maps to moveWithoutAttack and combines with running via noPickup. F maps to attack. Counts 1–1000 before s or . request native search/rest once; other counted commands are rejected without input. An editable command box anchors beneath the hero, falling above when space is limited. It explains counts and prefixes and offers explicit clickable next-key completions, with a direction grid. Backspace edits, Escape cancels; menus, another action, blur and hidden tabs clear the draft. More actions → Type a command provides touch access. Completing a valid command executes once; invalid drafts remain editable and consume no input. Prefixes never answer a standing decision; never simulate them with ordinary attacks or auto-answer dialogs.
+Use the pinned Guidebook chapter 4 bindings, keeping arrow movement and dropping WASD. h/j/k/l and y/u/b/n step; uppercase directions execute one native game.run command, with engine stopping and no automatic fight. s searches, comma picks up, period waits, and < / > climb. a/w/d/c/q/r/z/t apply, wield, drop, close, drink, read, zap and throw. f/Z/x/p/E/Q fire, cast, swap, pay, engrave and ready quiver. i opens inventory; ? opens help. Direction decisions and tile inspection use the same lowercase direction layout. Shift-arrows still pan. Native runs settle as one operation; held lowercase movement retains the existing serial cadence. g/G map to game.run modes untilInteresting/pastBranches; m maps to moveWithoutAttack and combines with running via noPickup. F maps to attack. Counts 1–1000 before s or . request native search/rest once; other counted commands are rejected without input. An editable command box anchors beneath the hero, falling above when space is limited. It explains counts and prefixes and offers explicit clickable next-key completions, with a direction grid. Backspace edits, Escape cancels; menus, another action, blur and hidden tabs clear the draft. More actions provides the same command grammar through its focused search field. Completing a valid command executes once; invalid drafts remain editable and consume no input. Prefixes never answer a standing decision; never simulate them with ordinary attacks or auto-answer dialogs.
 
 ## Source-backed creature families
 

@@ -35,8 +35,10 @@ Good candidates for reuse:
 - Action buttons: native button semantics, icon/label, visible shortcut badge,
   disabled explanation and busy state. One action definition must drive its
   label, shortcut display and keyboard handler.
-- Searchable action/item menus: focused search, substring and command matches,
-  arrow navigation, explicit Enter/click, and a scrolling result region.
+- Searchable action/item menus: focused fuzzy search alongside exact commands,
+  visible match highlights, arrow navigation, explicit Enter/click, and a scrolling
+  result region. Drill into actual engine options in the same shell; Back cancels
+  the exact pending question and restores the parent search, never earlier turns.
 - Dialog shells: native `<dialog>`, compact fixed header/footer, scrolling body,
   Escape policy and focus restoration. Engine decisions supply cancellation rules.
 - Shortcut hints, item rows and stat pairs: consistent spacing, accessible names

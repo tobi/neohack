@@ -37,7 +37,7 @@ import { creatureArtUrl, inventoryArt } from "./symbol-art";
 import { knownCreatureArt } from "./creature-families";
 import { MovementInput } from "./movement-input";
 import { describeCommand, arrowLetters, type CommandIntent } from "./command-input";
-import { actionMenu, gameActions } from "./action-menu";
+import { actionMenu, gameActions, type ActionMenu } from "./action-menu";
 import type { WebMcpRegistration } from "/runtime/typescript/webmcp.js";
 import { loadRuntime, warmPackage, runtimePackage } from "./runtime-loader";
 import {
@@ -126,6 +126,7 @@ class PixelNethack extends HTMLElement {
   private decisionIdentity = "";
   private menuReturn: HTMLElement | null = null;
   private menuBack: (() => void) | null = null;
+  private actionPicker: {element: ActionMenu; game: Game; revision: number; action?: string; decisionId?: string; returning?: boolean} | null = null;
   private keyHandler = (e: KeyboardEvent) => this.key(e);
   private keyUpHandler = (e: KeyboardEvent) => {
     this.movement.release(`key:${e.code || e.key}`);
@@ -365,7 +366,7 @@ class PixelNethack extends HTMLElement {
                 `<button data-move="${d}" data-game aria-label="Move ${d}">${g}</button>`,
             )
             .join("")}</div></div>
-          <div class="action-dock"><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><button data-action="pickup" data-game>Pick up<kbd>,</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="pray" data-game>Pray</button><button id="more-actions" data-game aria-keyshortcuts="#">More actions<kbd>#</kbd></button></div>
+          <div class="action-dock"><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><button data-action="pickup" data-game>Pick up<kbd>,</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="pray" data-game>Pray</button><button id="more-actions" data-game aria-keyshortcuts="Control+k Meta+k #">More actions<kbd>Ctrl K / #</kbd></button></div>
           <nav class="side-nav" aria-label="Adventure views"><button data-view="inventory">Backpack <span id="inventory-count"></span><kbd>i</kbd></button><button data-view="surroundings">Surroundings</button><button data-view="journal">Journal</button></nav></div>
         </section>
         <aside class="ground-loot" id="ground-loot" aria-label="On the ground" hidden><h2>On the ground</h2><p>At your feet · choose what to take</p><div id="ground-items"></div></aside>
@@ -1091,13 +1092,22 @@ class PixelNethack extends HTMLElement {
     const scroll = this.querySelector<HTMLDialogElement>("#journal-scroll")!;
     this.$("#close-scroll").onclick = this.$("#finish-scroll").onclick = () => scroll.close();
     scroll.addEventListener("close", () => this.controls());
-    this.$(".close-dialog").onclick = () => this.closeMenu();
+    this.$(".close-dialog").onclick = () => {
+      if (this.actionPicker?.action) void this.leaveActionChoices(false);
+      else this.closeMenu();
+    };
+    this.querySelector<HTMLDialogElement>("#menu")!.addEventListener("cancel", e => {
+      if (!this.actionPicker?.action) return;
+      e.preventDefault();
+      void this.leaveActionChoices(true);
+    });
     this.querySelector<HTMLDialogElement>("#menu")!.addEventListener(
       "close",
       () => {
+        if (!this.querySelector<HTMLDialogElement>("#menu")!.open) this.actionPicker = null;
         if (!this.game) this.map.resetIntro();
         this.controls();
-        if (!this.commandOpen) this.menuReturn?.focus();
+        if (!this.commandOpen && !this.game?.decision && !this.querySelector('dialog[open]')) this.menuReturn?.focus();
         const back = this.menuBack;
         this.menuBack = null;
         back?.();
@@ -1266,6 +1276,9 @@ class PixelNethack extends HTMLElement {
 
   }
   private controls() {
+    if (this.actionPicker) this.actionPicker.element.disabled = this.busy || this.yielding || this.uncertain();
+    (this.$('.close-dialog') as HTMLButtonElement).disabled = !!this.actionPicker?.action &&
+      (this.busy || this.yielding || this.uncertain() || !this.game?.decision?.cancellable);
     this.show("#navigation-status",!!this.navigationAbort || !!this.navigationNotice);
     this.text("#navigation-status-text",this.navigationNotice || "Walking…");
     this.show("#navigation-stop",!!this.navigationAbort);
@@ -2031,6 +2044,7 @@ class PixelNethack extends HTMLElement {
     this.$('#menu-content').append(view);
   }
   private openMenu(html: string, preservePanel = false) {
+    this.actionPicker = null;
     this.menuBack = null;
     this.closeTile();
     this.stopMovement();
@@ -2042,6 +2056,7 @@ class PixelNethack extends HTMLElement {
     if (!dialog.open) dialog.showModal();
   }
   private closeMenu() {
+    this.actionPicker = null;
     this.querySelector<HTMLDialogElement>("#menu")!.close();
   }
   private newAdventure() {
@@ -2245,7 +2260,7 @@ class PixelNethack extends HTMLElement {
       this.action("pray");
     }), this.button("Not now", () => this.closeMenu()));
   }
-  private action(name: string, item?: ItemRef, slot?: import("neonethack/types").EquipmentSlot) {
+  private action(name: string, item?: ItemRef, slot?: import("neonethack/types").EquipmentSlot, inPicker = false) {
     this.movement.stop();
     if (!this.playable() || this.actionUnavailable(name)) return;
     if (name === "pray" && !this.prayerExplained) { this.explainPrayer(); return; }
@@ -2283,25 +2298,87 @@ class PixelNethack extends HTMLElement {
       quiver: () => g.quiver(ref, options),
     };
     if (actions[name]) {
-      this.closeMenu();
+      if (inPicker && this.actionPicker) this.actionPicker.action = name;
+      else this.closeMenu();
       void this.run(actions[name]!);
     }
   }
   private more() {
     if (!this.playable()) return;
-    const game = this.game!, revision = game.state.revision;
-    const current = () => this.game === game && game.state.revision === revision && this.playable();
+    const game = this.game!;
     this.openMenu("");
+    const current = () => this.actionPicker === picker && this.game === game && game.state.revision === picker.revision && this.playable();
     const menu = actionMenu({
       unavailable: action => this.actionUnavailable(action),
-      action: action => { if (current()) this.action(action); },
+      action: action => { if (current()) this.action(action, undefined, undefined, true); },
       command: intent => {
         if (!current()) return;
         this.closeMenu(); this.executeKeyCommand(intent);
       },
     });
+    const picker = {element:menu.element, game, revision:game.state.revision};
+    this.actionPicker = picker;
     this.$("#menu-content").append(menu.element);
     menu.focus();
+  }
+  private async leaveActionChoices(back: boolean) {
+    const picker = this.actionPicker, d = this.game?.decision;
+    if (!picker || picker.game !== this.game || !d || d.id !== picker.decisionId ||
+        !d.cancellable || this.busy || this.yielding || this.uncertain()) return;
+    // Escape cancels THIS engine question. It never rewinds previously spent
+    // turns or answers a newer question which happens to have the same labels.
+    picker.returning = true;
+    await this.run(() => picker.game.cancel(d.id));
+    picker.returning = false;
+    if (this.actionPicker !== picker) return;
+    if (!this.playable()) { this.renderDecision(); return; }
+    if (!back) { this.closeMenu(); return; }
+    picker.action = undefined; picker.decisionId = undefined;
+    picker.revision = picker.game.state.revision;
+    picker.element.showActions();
+  }
+
+  private renderActionChoices(d: Decision | null | undefined): boolean {
+    const picker = this.actionPicker;
+    if (!picker?.action) return false;
+    if (picker.game !== this.game || this.uncertain()) { this.closeMenu(); return false; }
+    if (!d && picker.returning) return true;
+    // Only single-selection item/choice questions fit the palette. Transfers,
+    // warnings, text and directional targeting retain their dedicated controls.
+    const simpleChoice = d?.kind === "choice" && !d.containerPhase && !d.pickupReview && (!d.selection || d.selection.max === 1);
+    if (!d || (d.kind !== "item" && !simpleChoice) || (d.kind === "item" && d.selection.max !== 1)) {
+      this.closeMenu(); return false;
+    }
+    if (picker.decisionId === d.id) return true;
+    picker.decisionId = d.id;
+    const game = picker.game, revision = game.state.revision;
+    const current = () => this.actionPicker === picker && this.game === game && game.state.revision === revision &&
+      game.decision?.id === d.id && !this.busy && !this.yielding && !this.uncertain();
+    const options = d.kind === "item" || d.kind === "choice" ? d.options : [];
+    // Presentation order, never an eligibility filter: unusual engine-offered
+    // attempts (including reading objects other than books/scrolls) stay available.
+    const preferred: Record<string, string[]> = {read:["scroll","spellbook"], apply:["tool"], wield:["weapon"]};
+    const rows = options.map(option => {
+      const item = d.kind === "item" ? game.observation.inventory.find(item => item.id === option.id) : undefined;
+      return {id:String(option.id), label:option.label, icon:item ? inventoryArt(item) : undefined,
+        priority:item && preferred[picker.action!]?.includes(item.category) ? 1 : 0};
+    }).sort((a,b) => b.priority - a.priority);
+    picker.element.showChoices({
+      title: gameActions.find(action => action.id === picker.action)?.label ?? d.action,
+      about: d.about,
+      rows,
+      choose: id => {
+        if (!current()) return;
+        const option = options.find(option => String(option.id) === id);
+        if (!option) return;
+        void this.run(() => game.answer(d.id, d.kind === "item" ? {kind:"item",item:{id:String(option.id)}} : {kind:"choice",choose:[Number(option.id)]}));
+      },
+      back: d.cancellable ? () => { if(current())void this.leaveActionChoices(true); } : undefined,
+    });
+    this.querySelector<HTMLDialogElement>("#decision")!.close();
+    this.querySelector("#direction-target")?.remove();
+    this.decisionIdentity = "";
+    return true;
   }
   private itemDetails(item: ItemRef) {
     this.openMenu(
@@ -2339,6 +2416,7 @@ class PixelNethack extends HTMLElement {
   private renderDecision() {
     const d = this.game?.decision,
       dialog = this.querySelector<HTMLDialogElement>("#decision")!;
+    if (this.renderActionChoices(d)) return;
     if (!d || this.uncertain()) {
       this.querySelector("#direction-target")?.remove();
       if (dialog.open) dialog.close();
@@ -2813,6 +2891,17 @@ class PixelNethack extends HTMLElement {
   }
   private key(e: KeyboardEvent) {
     if (e.defaultPrevented) return;
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+      if (this.actionPicker) {
+        e.preventDefault();
+        if (!e.repeat) void this.actionPicker.element.focusSearch();
+      } else if (this.playable() && !this.querySelector("dialog[open]") &&
+          !(e.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) {
+        e.preventDefault();
+        if (!e.repeat) this.more();
+      }
+      return;
+    }
     if(this.navigationAbort && e.key==="Escape") { e.preventDefault();this.navigationAbort.abort();return; }
     const target = this.querySelector<HTMLElement>("#direction-target");
     if (target && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -3000,7 +3089,7 @@ class PixelNethack extends HTMLElement {
 
   private guide() {
     this.openMenu(
-      `<h2 id="menu-title">A small guide to a very big world.</h2><p>Find the Amulet of Yendor in the depths, and bring it back. Getting there is a story of curiosity, decisions, and learning from a short life or two.</p><div class="guide-section"><h3>01 / Take your time</h3><p>This is turn-based. Reading, inspecting the map, and opening your backpack cost nothing. An action can take time; the journal tells you what happened.</p></div><div class="guide-section"><h3>02 / Try one thing</h3><p>Tap h j k l, an arrow, or a direction button for one step; hold to walk. Release to stop repeating. Rapid taps keep at most one extra step buffered. Walking pauses at walls, nearby creatures, damage, and decisions. Press again deliberately to interact. Search around you, open a door, or pick up something interesting.</p></div><div class="guide-section"><h3>03 / Listen to the dungeon</h3><p>Hunger, danger, and strange objects are part of the adventure. Read warnings before answering. If eating or reading is interrupted, choose the action again only when you want to continue.</p></div><div class="guide-section"><h3>04 / Know what you know</h3><p>The map shows remembered terrain and currently perceived occupants. Creature and object art follows the descriptions you perceive. An uncertain creature appears as a cloud with a question mark. A green underline marks an ally. Use Art in the game menu to show the original symbols. Raised stone edges frame corridors; recessed gaps lead toward unexplored space, where the layout is still unknown. Click a tile or open Surroundings for a text description.</p></div><dl class="key-list"><dt>h j k l / Arrows</dt><dd>Tap to step · hold to walk</dd><dt>y u b n</dt><dd>Move diagonally</dd><dt>Shift + h j k l y u b n</dt><dd>Native NetHack run until an obstacle or something interesting; stops before fighting</dd><dt>. / s / , / e / o</dt><dd>Wait / search / pick up / eat / open</dd><dt>&lt; / &gt;</dt><dd>Go upstairs / downstairs</dd><dt>Enter / arrow keys / Escape</dt><dd>Inspect here / nearby tiles / return</dd><dt>While inspecting: arrows / 1–9 / slash / Escape</dt><dd>Inspect nearby / shown action / encyclopedia / return</dd><dt>a / w / d / c / q / r / z / t</dt><dd>Apply / wield / drop / close / drink / read / zap / throw</dd><dt>f / Z / x / p / E / Q</dt><dd>Fire / cast / swap weapons / pay / engrave / ready quiver</dd><dt>i / ?</dt><dd>Backpack / this guide</dd><dt>Mouse wheel / middle drag</dt><dd>Zoom / look around without taking a turn</dd><dt>Shift + arrows</dt><dd>Pan the map without moving</dd></dl><p class="save-explanation">Use g + direction to stop at interesting things, G + direction to continue past corridor forks, m + direction to avoid pickup and fighting, and F + direction to force one attack. m combines with g, G or an uppercase direction. Type a count before s or . (for example 10s or 20.) for native search/rest, up to 1,000 turns. The command box below your hero shows clickable next-key hints. Backspace edits; Escape cancels. Press # for More actions: search names and commands, then Enter to try the selected result. Search chat to speak to someone beside you, including the Oracle, then choose their direction. Conversations and payments ask for your choices. Other command counts are unsupported. Item selection and warnings use explicit dialogs.</p><p class="save-explanation">Your game saves after each completed action, on this browser and address. Clearing site data removes saves. Keep the same game version to return to an older adventure.</p>`,
+      `<h2 id="menu-title">A small guide to a very big world.</h2><p>Find the Amulet of Yendor in the depths, and bring it back. Getting there is a story of curiosity, decisions, and learning from a short life or two.</p><div class="guide-section"><h3>01 / Take your time</h3><p>This is turn-based. Reading, inspecting the map, and opening your backpack cost nothing. An action can take time; the journal tells you what happened.</p></div><div class="guide-section"><h3>02 / Try one thing</h3><p>Tap h j k l, an arrow, or a direction button for one step; hold to walk. Release to stop repeating. Rapid taps keep at most one extra step buffered. Walking pauses at walls, nearby creatures, damage, and decisions. Press again deliberately to interact. Search around you, open a door, or pick up something interesting.</p></div><div class="guide-section"><h3>03 / Listen to the dungeon</h3><p>Hunger, danger, and strange objects are part of the adventure. Read warnings before answering. If eating or reading is interrupted, choose the action again only when you want to continue.</p></div><div class="guide-section"><h3>04 / Know what you know</h3><p>The map shows remembered terrain and currently perceived occupants. Creature and object art follows the descriptions you perceive. An uncertain creature appears as a cloud with a question mark. A green underline marks an ally. Use Art in the game menu to show the original symbols. Raised stone edges frame corridors; recessed gaps lead toward unexplored space, where the layout is still unknown. Click a tile or open Surroundings for a text description.</p></div><dl class="key-list"><dt>h j k l / Arrows</dt><dd>Tap to step · hold to walk</dd><dt>y u b n</dt><dd>Move diagonally</dd><dt>Shift + h j k l y u b n</dt><dd>Native NetHack run until an obstacle or something interesting; stops before fighting</dd><dt>. / s / , / e / o</dt><dd>Wait / search / pick up / eat / open</dd><dt>&lt; / &gt;</dt><dd>Go upstairs / downstairs</dd><dt>Enter / arrow keys / Escape</dt><dd>Inspect here / nearby tiles / return</dd><dt>While inspecting: arrows / 1–9 / slash / Escape</dt><dd>Inspect nearby / shown action / encyclopedia / return</dd><dt>a / w / d / c / q / r / z / t</dt><dd>Apply / wield / drop / close / drink / read / zap / throw</dd><dt>f / Z / x / p / E / Q</dt><dd>Fire / cast / swap weapons / pay / engrave / ready quiver</dd><dt>i / ?</dt><dd>Backpack / this guide</dd><dt>Mouse wheel / middle drag</dt><dd>Zoom / look around without taking a turn</dd><dt>Shift + arrows</dt><dd>Pan the map without moving</dd></dl><p class="save-explanation">Use g + direction to stop at interesting things, G + direction to continue past corridor forks, m + direction to avoid pickup and fighting, and F + direction to force one attack. m combines with g, G or an uppercase direction. Type a count before s or . (for example 10s or 20.) for native search/rest, up to 1,000 turns. The command box below your hero shows clickable next-key hints. Backspace edits; Escape cancels. Press Ctrl+K (Cmd+K on Mac) or # for More actions: fuzzy-search names and commands, then Enter to try the selected result. Item and spell choices open in the same menu; Escape returns to actions. Search chat to speak to someone beside you, including the Oracle, then choose their direction. Conversations and payments ask for your choices. Other command counts are unsupported. Item selection and warnings use explicit dialogs.</p><p class="save-explanation">Your game saves after each completed action, on this browser and address. Clearing site data removes saves. Keep the same game version to return to an older adventure.</p>`,
     );
   }
   private credits() {

@@ -1823,6 +1823,11 @@ pixel-nethack.in-game .rail-game-info { visibility: hidden; }
 .action-picker #more-grid button small { display: block; font-size: 11px; margin-top: 2px; color: #b8bea9; }
 .action-picker footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding-top: 10px; flex: none; font-size: 11px; color: #bdc6ac; }
 .action-picker #action-empty { padding: 14px 0; }
+.action-picker .action-back { min-width: 44px; min-height: 44px; padding: 4px; border: 0; background: transparent; }
+.action-picker .action-about { color: #bcc6b0; font-size: 12px; margin: 0 0 8px; max-height: 3lh; overflow: auto; }
+.action-picker .action-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.action-picker mark { color: #ffe09a; background: transparent; text-decoration: underline; text-underline-offset: 3px; }
+.action-picker .action-item-icon { width: 24px; height: 24px; flex: none; object-fit: contain; image-rendering: pixelated; }
 
 /* Editable classic commands stay attached to the hero, above map controls. */
 .command-composer { position:absolute; z-index:8; width:310px; max-width:calc(100% - 16px); padding:10px; box-sizing:border-box; overflow:auto; background:#202923; color:#eee8cf; border:1px solid #88947a; box-shadow:4px 4px 0 #101810cc; text-align:left; }

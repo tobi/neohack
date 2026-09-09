@@ -1,5 +1,6 @@
 import { LitElement, html, nothing } from "lit";
 import { describeCommand, type CommandIntent } from "./command-input";
+import { fuzzyMatch } from "./fuzzy-match";
 
 // Presentation and keyboard bindings share one vocabulary. The engine still
 // supplies eligibility, elapsed turns and any subsequent item/target decision.
@@ -51,19 +52,47 @@ type MenuOptions = {
   action: (action: string) => void;
   command: (intent: CommandIntent) => void;
 };
-type Match = { label: string; key: string; run: () => void; reason?: string; action?: string };
+export type ActionChoices = {
+  title: string;
+  about?: string;
+  rows: {id: string; label: string; icon?: string}[];
+  choose: (id: string) => void;
+  back?: () => void;
+};
+type Match = { label: string; key: string; run: () => void; reason?: string; action?: string; item?: string; icon?: string; positions?: number[] };
+
+function highlighted(label: string, positions: number[] = []) {
+  if (!positions.length) return label;
+  const letters = Array.from(label), selected = new Set(positions), parts = [];
+  for (let start = 0; start < letters.length;) {
+    const marked = selected.has(start);
+    let end = start + 1;
+    while (end < letters.length && selected.has(end) === marked) end++;
+    const text = letters.slice(start, end).join("");
+    parts.push(marked ? html`<mark>${text}</mark>` : text);
+    start = end;
+  }
+  return parts;
+}
 
 /** Light DOM keeps native dialog labeling, focus and shared control styles intact. */
 export class ActionMenu extends LitElement {
-  static properties = { options: {attribute:false}, query: {state:true}, active: {state:true} };
+  static properties = { options: {attribute:false}, query: {state:true}, active: {state:true}, choices: {state:true}, disabled: {type:Boolean} };
   declare options: MenuOptions;
+  declare choices: ActionChoices | undefined;
+  declare disabled: boolean;
   declare private query: string;
   declare private active: number;
-  constructor() { super(); this.query = ""; this.active = 0; }
+  private rootSelection = {query: "", active: 0};
+  constructor() { super(); this.query = ""; this.active = 0; this.disabled = false; }
   protected createRenderRoot() { return this; }
   private get matchingActions(): Match[] {
     if (!this.options) return [];
     const query = this.query.trim().replace(/^#/, ""), lower = query.toLowerCase(), matches: Match[] = [];
+    const choices = this.choices;
+    if (choices) return choices.rows.map(row => ({row, match:fuzzyMatch(this.query, row.label)}))
+      .filter(entry => entry.match !== null).sort((a,b) => b.match!.score - a.match!.score)
+      .map(({row,match}) => ({label:row.label, key:"", item:row.id, icon:row.icon, positions:match!.positions, run:()=>choices.choose(row.id)}));
     if (query) {
       const draft = describeCommand(query);
       // Preserve ordinary shortcut semantics: '.' waits; a count explicitly rests.
@@ -75,18 +104,29 @@ export class ActionMenu extends LitElement {
           run:()=> { if(command.intent) this.options.command(command.intent); else this.search(hint.value); }});
       }
     }
-    const actions = gameActions.filter(action => !query || action.key === query || `${action.label} ${action.id}`.toLowerCase().includes(lower));
-    if (query) actions.sort((a,b) => Number(b.key === query || b.id === lower) - Number(a.key === query || a.id === lower));
-    for(const action of actions) matches.push({label:action.label,key:action.key || "#"+action.id,
+    const actions = gameActions.map(action => {
+      const label = fuzzyMatch(query, action.label), alias = fuzzyMatch(query, action.id);
+      return {action, positions:label?.positions, score:!query ? 0 : action.key === query ? 1000000 : action.id === lower ? 100000 : Math.max(label?.score ?? -Infinity,alias?.score ?? -Infinity)};
+    }).filter(entry => entry.score !== -Infinity).sort((a,b) => b.score - a.score);
+    for(const {action,positions} of actions) matches.push({label:action.label,key:action.key || "#"+action.id,positions,
       action:action.id,reason:this.options.unavailable(action.id),run:()=>this.options.action(action.id)});
     return matches;
+  }
+  showChoices(choices: ActionChoices) {
+    if (!this.choices) this.rootSelection = {query:this.query, active:this.active};
+    this.choices = choices; this.search(""); void this.focusSearch();
+  }
+  showActions() {
+    this.choices = undefined; this.query = this.rootSelection.query; this.active = this.rootSelection.active;
+    void this.focusSearch();
+    void this.updateComplete.then(() => this.querySelector('[aria-selected="true"]')?.scrollIntoView({block:"nearest"}));
   }
   private search(query: string) {
     this.query = query; this.active = 0;
     void this.updateComplete.then(() => {this.querySelector("#more-grid")?.scrollTo(0,0);});
   }
   private key(event: KeyboardEvent) {
-    if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (this.disabled || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault(); event.stopPropagation();
       const count = this.matchingActions.length;
@@ -107,21 +147,24 @@ export class ActionMenu extends LitElement {
   }
   protected render() {
     const matches = this.matchingActions;
-    return html`<header><h2 id="menu-title">More actions <kbd>#</kbd></h2>
-      <label class="sr-only" for="action-query">Search actions or type a command</label>
+    const choices = this.choices;
+    return html`<header><h2 id="menu-title">${choices ? html`<button type="button" class="action-back" aria-label="Back to actions" aria-keyshortcuts="Escape" ?disabled=${this.disabled || !choices.back} @click=${()=>choices.back?.()}>←</button>${choices.title}` : html`More actions <kbd>Ctrl K / #</kbd>`}</h2>
+      ${choices?.about ? html`<p class="action-about">${choices.about}</p>` : nothing}
+      <label class="sr-only" for="action-query">${choices ? "Search choices" : "Search actions or type a command"}</label>
       <input id="action-query" type="text" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="more-grid" aria-describedby="action-help"
         aria-activedescendant=${matches.length ? `action-match-${this.active}` : nothing}
         .value=${this.query} @input=${(event:InputEvent)=>{if(!event.isComposing)this.search((event.target as HTMLInputElement).value);}}
         @compositionend=${(event:CompositionEvent)=>this.search((event.target as HTMLInputElement).value)} @keydown=${this.key}
-        placeholder="Search actions or type 20s, 20., mh…" autocomplete="off" autocapitalize="off" spellcheck="false">
-      </header><div id="more-grid" role="listbox" aria-label="Matching actions">${matches.map((match,index)=>html`
+        placeholder=${choices ? "Search by name…" : "Search actions or type 20s, 20., mh…"} autocomplete="off" autocapitalize="off" spellcheck="false">
+      </header><div id="more-grid" role="listbox" aria-label=${choices ? "Matching choices" : "Matching actions"}>${matches.map((match,index)=>html`
         <button type="button" role="option" tabindex="-1" id=${`action-match-${index}`} aria-selected=${index === this.active}
-          aria-label=${match.label + (match.reason ? ": " + match.reason : "")} ?disabled=${!!match.reason} data-operation data-unavailable=${match.reason ?? ""}
-          data-action=${match.action ?? nothing} @pointermove=${()=>{this.active=index;}} @click=${match.run}>
-          <span>${match.label}${match.reason ? html`<small>${match.reason}</small>` : nothing}</span><kbd aria-hidden="true">${match.key}</kbd>
+          aria-label=${match.label + (match.reason ? ": " + match.reason : "")} ?disabled=${this.disabled || !!match.reason} data-operation data-unavailable=${match.reason ?? ""}
+          data-action=${match.action ?? nothing} data-item=${match.item ?? nothing} @pointermove=${()=>{this.active=index;}} @click=${()=>{if(!this.disabled)match.run();}}>
+          ${match.icon ? html`<img class="action-item-icon" src=${match.icon} alt="">` : nothing}
+          <span class="action-label">${highlighted(match.label,match.positions)}${match.reason ? html`<small>${match.reason}</small>` : nothing}</span>${match.key ? html`<kbd aria-hidden="true">${match.key}</kbd>` : nothing}
         </button>`)}</div>
-      <p id="action-empty" ?hidden=${!!matches.length}>No matching actions.</p>
-      <footer><span id="action-count" role="status">${matches.length} match${matches.length===1 ? "" : "es"}</span><span id="action-help">↑ ↓ choose · Enter try · Esc close</span></footer>`;
+      <p id="action-empty" ?hidden=${!!matches.length}>${choices ? "No matching choices." : "No matching actions."}</p>
+      <footer><span id="action-count" role="status">${matches.length} match${matches.length===1 ? "" : "es"}</span><span id="action-help">↑ ↓ choose · Enter try · ${choices ? choices.back ? "Esc back" : "Answer required" : "Esc close"}</span></footer>`;
   }
 }
 customElements.define("neohack-action-menu", ActionMenu);

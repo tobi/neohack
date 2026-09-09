@@ -3172,8 +3172,8 @@ test('detection scroll map browsing supports keyboard Help, cursor, Done and dur
   await create(page,'wizard',7);
   await page.getByRole('button', {name:'More actions',exact:true}).click();
   await page.locator('#more-grid button[data-action=read]').click();
-  await page.locator('#decision[open]').waitFor();
-  await page.locator('#decision-body button').filter({hasText:'scroll of food detection'}).click();
+  await page.getByRole('combobox',{name:'Search choices'}).waitFor();
+  await page.getByRole('option').filter({hasText:'scroll of food detection'}).click();
   await ready(page);
   const viewed = await snapshot(page);
   assert.equal(viewed.decision.kind,'position');
@@ -4369,9 +4369,9 @@ test('More actions searches labels and commands without typing gameplay input', 
   await query.waitFor();
   assert.equal(await query.evaluate(el=>el===document.activeElement),true);
   assert.equal(await page.getByRole('option').first().getAttribute('data-action'),'search','empty search preserves common-action order');
-  assert.equal(await page.locator('#more-actions kbd').textContent(),'#');
+  assert.equal(await page.locator('#more-actions kbd').textContent(),'Ctrl K / #');
   assert.equal(await page.locator('#more-grid button:not(:has(kbd))').count(),0);
-  for(const [width,height] of [[1440,844],[390,667],[390,390]]) {
+  for(const [width,height] of [[1440,844],[390,667],[320,568],[390,390]]) {
     await page.setViewportSize({width,height});
     await query.fill('');
     const geometry=await page.evaluate(()=>{
@@ -4440,6 +4440,107 @@ test('More actions searches labels and commands without typing gameplay input', 
   assert.deepEqual(await snapshot(page),changed,'old menu cannot submit against a newer run revision');
   await query.press('Escape');
   assert.equal(await page.locator('#menu').evaluate(el=>el.open),false);
+  assert.deepEqual(errors,[]);
+});
+
+test('action picker drills into exact engine choices with Ctrl K, fuzzy search and Escape back', async t => {
+  const {page, errors} = await fixture(t);
+  await create(page,'wizard',42);
+  await page.locator('#dungeon').focus();
+  const start=await snapshot(page);
+  await page.keyboard.press('Control+k');
+  const query=page.locator('#action-query');
+  assert.equal(await query.evaluate(el=>el===document.activeElement),true);
+  await query.fill('zpw');
+  assert.equal(await page.getByRole('option').first().getAttribute('data-action'),'zap');
+  assert.equal(await page.getByRole('option').first().locator('mark').allTextContents().then(a=>a.join('')),'Zpw');
+  await query.fill('read');
+  await page.evaluate(()=>{window.paletteNode=document.querySelector('neohack-action-menu');window.dialogNode=document.querySelector('#menu');});
+  assert.deepEqual(await snapshot(page),start,'fuzzy search is local');
+  await query.press('Enter');await ready(page);
+  const reading=await snapshot(page);
+  assert.equal(reading.decision.kind,'item');
+  assert.equal(reading.outcome.turnsElapsed,0);
+  assert.equal(await page.locator('#decision').evaluate(el=>el.open),false);
+  assert.equal(await page.evaluate(()=>window.paletteNode===document.querySelector('neohack-action-menu') && window.dialogNode.open),true);
+  const displayed=await page.getByRole('option').evaluateAll(rows=>rows.map(row=>({id:row.dataset.item,label:row.getAttribute('aria-label')})));
+  assert.deepEqual(displayed.toSorted((a,b)=>a.id.localeCompare(b.id)),reading.decision.options.map(item=>({id:item.id,label:item.label})).sort((a,b)=>a.id.localeCompare(b.id)));
+  assert.ok(['scroll','spellbook'].includes(reading.observation.inventory.find(item=>item.id===displayed[0].id).category),'readable pages appear before unusual attempts without removing any engine options');
+  for(const [width,height] of [[1440,844],[390,667],[320,568],[390,390]]) {
+    await page.setViewportSize({width,height});
+    const bounds=await page.evaluate(()=>{
+      const d=document.querySelector('#menu'), footer=document.querySelector('.action-picker footer');
+      return {scroll:d.scrollHeight-d.clientHeight,footer:footer.getBoundingClientRect().bottom,top:d.getBoundingClientRect().top};
+    });
+    assert.ok(bounds.scroll<=1 && bounds.footer<=height && bounds.top>=0,JSON.stringify(bounds));
+    await page.screenshot({path:`${root}/test-results/action-choices-${width}-${height}.png`});
+  }
+  await query.fill('no such item');await query.press('Enter');
+  assert.deepEqual(await snapshot(page),reading);
+  await query.press('Escape');await ready(page);
+  assert.equal((await snapshot(page)).decision,null);
+  assert.equal((await snapshot(page)).observation.turn,start.observation.turn);
+  assert.equal(await query.inputValue(),'read','Escape restores the parent query and selection');
+  assert.equal(await query.evaluate(el=>el===document.activeElement),true);
+  await query.press('Control+k');
+  assert.equal(await query.inputValue(),'read','Ctrl K refocuses without resetting the current level');
+  await query.fill('wield');await query.press('Enter');await ready(page);
+  const wielding=await snapshot(page);
+  assert.equal(wielding.decision.kind,'item');
+  const weapon=wielding.decision.options.find(item=>wielding.observation.inventory.find(i=>i.id===item.id)?.category==='wand');
+  assert.ok(weapon);
+  await page.locator(`[data-item="${weapon.id}"]`).click();await ready(page);
+  const equipped=await snapshot(page);
+  assert.equal(equipped.error,undefined);
+  assert.equal(equipped.decision,null);
+  assert.ok(equipped.observation.inventory.find(item=>item.id===weapon.id).equipmentSlots.includes('weapon'));
+  assert.equal(await page.locator('#menu').evaluate(el=>el.open),false);
+  await page.locator('#dungeon').focus();await page.keyboard.press('Control+k');
+  await query.fill('throw');await query.press('Enter');await ready(page);
+  const throwing=await snapshot(page);
+  await page.getByRole('option').first().click();await ready(page);
+  assert.equal((await snapshot(page)).decision.kind,'target');
+  assert.equal(await page.locator('#menu').evaluate(el=>el.open),false);
+  await page.locator('#direction-target').waitFor();
+  await page.waitForFunction(()=>document.activeElement?.closest('#direction-target'),'new target controls retain focus after the palette closes');
+  await page.keyboard.press('Escape');await ready(page);
+  assert.equal((await snapshot(page)).decision,null);
+  assert.equal((await snapshot(page)).observation.turn,throwing.observation.turn);
+  await page.locator('#dungeon').focus();await page.keyboard.press('Control+k');
+  await query.fill('read');await query.press('Enter');await ready(page);
+  await page.evaluate(()=>{window.oldPaletteChoice=document.querySelector('#more-grid button');});
+  // A different participant cancels and opens an identical-looking newer question.
+  await page.evaluate(async()=>{const app=document.querySelector('pixel-nethack');await app.run(()=>app.game.cancel(app.game.decision.id));await app.run(()=>app.game.read());});
+  const replaced=await snapshot(page);
+  await page.evaluate(()=>window.oldPaletteChoice.click());
+  assert.deepEqual(await snapshot(page),replaced,'detached old choice cannot answer a newer decision');
+  await page.getByRole('button',{name:'Cancel action',exact:true}).click();await ready(page);
+  await page.locator('#dungeon').focus();await page.keyboard.press('#');
+  await query.fill('read');await query.press('Enter');await ready(page);
+  await page.locator('#menu .close-dialog').click();await ready(page);
+  assert.equal((await snapshot(page)).decision,null,'close cancels the actual item question');
+  assert.equal(await page.locator('#menu').evaluate(el=>el.open),false);
+  await page.locator('#dungeon').focus();await page.keyboard.press('Control+k');
+  await query.fill('');await page.locator('#more-grid [data-action="cast"]').click();await ready(page);
+  const casting=await snapshot(page);
+  assert.equal(casting.decision.kind,'choice');
+  assert.equal(await page.locator('#decision').evaluate(el=>el.open),false,'single spell choices use the same picker');
+  assert.deepEqual(await page.getByRole('option').evaluateAll(rows=>rows.map(row=>row.getAttribute('aria-label'))),casting.decision.options.map(option=>option.label));
+  await query.press('Escape');await ready(page);
+  assert.equal((await snapshot(page)).decision,null);
+  assert.equal((await snapshot(page)).observation.turn,casting.observation.turn);
+  assert.equal(await query.inputValue(),'');
+  const restoredChoice=page.locator('#'+await query.getAttribute('aria-activedescendant'));
+  assert.equal(await restoredChoice.getAttribute('data-action'),'cast');
+  const visible=await restoredChoice.evaluate(el=>{
+    const row=el.getBoundingClientRect(),list=el.parentElement.getBoundingClientRect();
+    return {rowTop:row.top,rowBottom:row.bottom,listTop:list.top,listBottom:list.bottom};
+  });
+  assert.ok(visible.rowTop>=visible.listTop-1 && visible.rowBottom<=visible.listBottom+1,'Back scrolls the restored selection into view: '+JSON.stringify(visible));
+  await query.press('Escape');
+  await page.locator('#dungeon').focus();await page.keyboard.press('Control+k');await query.press('Escape');
+  assert.equal(await page.locator('#menu').evaluate(el=>el.open),false);
+  assert.equal(await page.locator('#dungeon').evaluate(el=>el===document.activeElement),true);
   assert.deepEqual(errors,[]);
 });
 

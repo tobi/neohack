@@ -8,6 +8,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- More actions opens with Ctrl+K (Cmd+K on Mac), with fuzzy search and highlighted
+  matches. Item and spell choices stay in the same compact dialog; Escape returns
+  to actions, preserving the search. Targets and warnings remain explicit.
 - Replay details follow the moment being watched. Final location, turns and
   outcome are kept under Run totals, rather than appearing to describe the
   opening scene.
