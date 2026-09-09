@@ -268,6 +268,9 @@ console.log(leg.reason, leg.actionsTaken, leg.snapshot.outcome);
 ```
 
 `go({to:{x,y}})` plans and attempts a known route on the current level.
+A `noRoute` result includes `why` (`targetOccupied`, `targetUnknown`, `closedDoor`
+or `disconnected`) and a `hint` for the next explicit tool. After a partial leg,
+`recover` and `lastOperationId` mean call recover; do not resubmit the navigation.
 `explore()` selects the nearest reachable unvisited frontier for one leg. If none
 is reachable, it approaches a remembered closed door not known locked and makes
 one explicit open attempt, then stops. It does not pick locks, kick or repeat

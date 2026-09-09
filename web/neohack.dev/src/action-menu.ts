@@ -35,7 +35,7 @@ export const gameActions = [
   { id: "loot", label: "Open container", key: "" },
   { id: "up", label: "Climb up stairs", key: "<" },
   { id: "down", label: "Climb down stairs", key: ">" },
-  { id: "auto:explore", label: "auto:explore", key: "" },
+  { id: "auto:explore", label: "auto:explore", key: "v" },
   { id: "auto:descend", label: "auto:descend", key: "" },
   { id: "pay", label: "Pay the shopkeeper", key: "p" },
   { id: "chat", label: "Chat", key: "" },

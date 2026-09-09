@@ -386,7 +386,8 @@ class PixelNethack extends HTMLElement {
       const decision = this.game?.decision;
       if (decision?.kind === "position") {
         if (!this.busy && x >= 1 && x <= 79 && y >= 0 && y <= 20) void this.run(() => this.game!.answer(decision.id, {kind: "position", position: {x, y}}));
-      } else this.inspectTile(x, y, false, walk);
+      } else if (walk) this.walkTo(x, y);
+      else this.inspectTile(x, y, false, false);
     });
     this.bind();
     this.bindCommandInput();
@@ -1878,14 +1879,7 @@ class PixelNethack extends HTMLElement {
         this.map.route=route.steps;this.map.draw();
         walk.onclick=()=>{
           if(!this.playable() || this.game!==game || game.state.revision!==revision)return;
-          this.beginNavigation("Walking", (signal, onStep) => {
-            this.map.route=route.steps;
-            return game.go({to:{x,y},signal,onStep:frame=>{
-              onStep();
-              const at=route.steps.findIndex(p=>p.x===frame.observation.you?.x&&p.y===frame.observation.you?.y);
-              this.map.route=at<0?[]:route.steps.slice(at+1);this.map.draw();
-            }});
-          });
+          this.walkTo(x, y);
         };
         if(walkImmediately && !walk.disabled)walk.click();
       }).catch(error=>{
@@ -2244,7 +2238,7 @@ class PixelNethack extends HTMLElement {
     });
     return succeeded && this.playable() && this.metadataHealthy;
   }
-  private beginNavigation(verb: string, start: (signal: AbortSignal, onStep: () => void) => Promise<{reason: string}>) {
+  private beginNavigation(verb: string, start: (signal: AbortSignal, onStep: () => void) => Promise<{reason: string; why?: string; hint?: string}>) {
     if (!this.playable()) return;
     this.stopMovement();
     const controller = new AbortController();
@@ -2253,12 +2247,28 @@ class PixelNethack extends HTMLElement {
     void this.run(async () => {
       try {
         const result = await start(controller.signal, () => { this.recordReplays(); this.render(); });
-        this.navigationNotice = result.reason === "arrived" ? "" : verb + " stopped: " + result.reason + ".";
+        if (result.reason === "arrived") this.navigationNotice = "";
+        else this.navigationNotice = verb + " stopped: " + (result.why ?? result.reason) + "." + (result.hint ? " " + result.hint : "");
       } finally {
         if (this.navigationAbort === controller) this.navigationAbort = null;
         this.map.route = [];
         this.map.draw();
       }
+    });
+  }
+  private walkTo(x: number, y: number) {
+    if (!this.playable() || !this.game || x<1 || x>79 || y<0 || y>20) return;
+    const game = this.game;
+    this.closeTile();
+    this.beginNavigation("Walking", async (signal, onStep) => {
+      const route = await game.route({x,y},{expectedRevision:game.state.revision});
+      this.map.route = route.steps ?? [];
+      this.map.draw();
+      return game.go({to:{x,y},signal,stopOnNewCreatures:false,onStep:frame=>{
+        onStep();
+        const at=route.steps.findIndex(p=>p.x===frame.observation.you?.x&&p.y===frame.observation.you?.y);
+        this.map.route=at<0?[]:route.steps.slice(at+1);this.map.draw();
+      }});
     });
   }
   private actionUnavailable(name: string) {
@@ -2284,7 +2294,7 @@ class PixelNethack extends HTMLElement {
       const game = this.game!;
       this.closeMenu();
       this.beginNavigation(name === "auto:descend" ? "Descending" : "Exploring", (signal, onStep) =>
-        name === "auto:descend" ? game.descend({signal, onStep}) : game.explore({signal, onStep}));
+        name === "auto:descend" ? game.descend({signal, onStep, stopOnNewCreatures:false}) : game.explore({signal, onStep, stopOnNewCreatures:false}));
       return;
     }
     const g = this.game!,

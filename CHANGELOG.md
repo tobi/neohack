@@ -8,9 +8,14 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
-- More actions includes auto:explore and auto:descend: walk perceived frontiers or
-  remembered downstairs, then stop for choices, damage or new creatures. These are
-  neohack helpers, not vanilla NetHack commands. Escape ends the current walk.
+- `go`/`explore`/`descend` now say why there is no known path: occupied, unknown,
+  closed door or disconnected, with a next-tool hint. Partial legs point at recover
+  instead of inviting a blind retry.
+- More actions includes auto:explore (`v`) and auto:descend: walk perceived
+  frontiers, remembered downstairs, or into adjacent darkness. They stop for
+  choices, damage and hunger, not every newly seen creature. Right-click a
+  remembered square to walk there. These are neohack helpers, not vanilla NetHack
+  commands. Escape ends the current walk.
 - The ledger can hide missing or broken replay links without removing adventures,
   scores or written tales. Archive audits verify complete recordings and compact
   both input logs and older public frame files while retaining existing links.

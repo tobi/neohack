@@ -276,6 +276,14 @@ int nnh_known_paths(const nnh_knowledge *basis, const nnh_known_cell *map, int *
     return start;
 }
 
+const char *nnh_known_block(const nnh_known_cell *c)
+{
+    if (!c || !c->in_bounds) return "disconnected";
+    if (c->terrain == T_UNKNOWN || c->terrain == T_DARK) return "targetUnknown";
+    if (c->occupant >= 2) return "targetOccupied";
+    if (c->terrain == T_DOOR_CLOSED) return "closedDoor";
+    return "disconnected";
+}
 int nnh_known_route(const nnh_knowledge *basis, const nnh_known_cell *map, int target, int *steps)
 {
     int parent[NNH_MAP_CELLS], i, n = 0;

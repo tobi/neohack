@@ -34,8 +34,11 @@ export function present(response:Response, extra:Record<string,unknown>={}, comp
   let summary='Perceived information.';
   if('error' in response && response.error) summary=response.error.message;
   else if(isSnapshot(response)) summary=`${response.outcome.action}: ${response.outcome.status}; ${response.outcome.turnsElapsed} turns elapsed.${response.decision ? ` Answer the ${response.decision.kind} decision: ${response.decision.about}` : ''}`;
-  else if('kind' in response) summary=response.kind==='lore' ? (response.found?'Encyclopedia lore; reference text, not an observation.':'No encyclopedia entry found.') : response.kind==='route' ? `Known walking route: ${response.distance===null?'none known':`${response.distance} steps`}.` : response.kind==='navigation' ? `${response.frontiers.length} reachable unvisited frontiers; ${response.waysDown.length} remembered downward stairs.` : 'Perceived attempts for this square.';
-  if(extra.navigation) { const leg=extra.navigation as {reason:string;actionsTaken:number;turnsElapsed:number};summary=`Navigation: ${leg.reason}; ${leg.actionsTaken} actions, ${leg.turnsElapsed} turns elapsed.`; }
+  else if('kind' in response) summary=response.kind==='lore' ? (response.found?'Encyclopedia lore; reference text, not an observation.':'No encyclopedia entry found.') : response.kind==='route' ? `Known walking route: ${response.distance===null?`none known${'why' in response && response.why?` (${response.why})`:''}`:`${response.distance} steps`}.` : response.kind==='navigation' ? `${response.frontiers.length} reachable unvisited frontiers; ${response.waysDown.length} remembered downward stairs.` : 'Perceived attempts for this square.';
+  if(extra.navigation) {
+    const leg=extra.navigation as {reason:string;why?:string;hint?:string;recover?:string;actionsTaken:number;turnsElapsed:number};
+    summary=`Navigation: ${leg.reason}${leg.why?` (${leg.why})`:''}; ${leg.actionsTaken} actions, ${leg.turnsElapsed} turns elapsed.${leg.hint?` ${leg.hint}`:''}${leg.recover?` ${leg.recover}`:''}`;
+  }
   // Terminal facts lead even when a navigation leg or error supplies the detail.
   // A disconnected close ends the session connection, but the run can resume.
   if(isSnapshot(response) && response.ended && response.end?.kind!=='disconnected') summary=`Run ended (${response.end?.kind ?? 'unknown'})${response.end?.cause ? `: ${response.end.cause}` : ''}. ${summary}`;
@@ -141,7 +144,7 @@ export class AgentClient {
           const navigator=new Navigator(game!);
           const legOptions={maxActions:input.maxActions as number|undefined,signal:options.signal};
           const leg=entry.method==='agent.go' ? await navigator.go({...legOptions,to:input.to as {x:number;y:number},force:input.force as boolean|undefined}) : entry.method==='agent.explore' ? await navigator.explore({...legOptions,maxFrontiers:input.maxFrontiers as number|undefined}) : await navigator.descend(legOptions);
-          this.adopt(leg.snapshot);return present(leg.snapshot,{navigation:{reason:leg.reason,actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed}},true);
+          this.adopt(leg.snapshot);return present(leg.snapshot,{navigation:{reason:leg.reason,actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,...(leg.why?{why:leg.why,hint:leg.hint}:{}),...(leg.lastOperationId?{lastOperationId:leg.lastOperationId}:{}),...(leg.recover?{recover:leg.recover}:{})}},true);
         }
         let method=entry.method, params:Record<string,unknown>={...input};
         if('itemId' in params){params.item=itemSelector(params);delete params.itemId;delete params.quantity;}
@@ -202,7 +205,7 @@ export class AgentClient {
           const original=cause instanceof WorldError && 'error' in cause.response?cause.response.error:undefined;
           const message=`Navigation stopped after ${leg.actionsTaken} actions and ${leg.turnsElapsed} turns. Substep error: ${cause instanceof Error?cause.message:String(cause)}`;
           this.adopt(leg.snapshot);
-          const result=present(leg.snapshot,{navigation:{reason:'error',actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,observation:pending?'lastConfirmed':'current',...(lastOperationId?{lastOperationId}:{})},error:{code:original?.code??(pending?'uncertainExecution':'agentError'),message}},true);
+          const result=present(leg.snapshot,{navigation:{reason:'error',actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,observation:pending?'lastConfirmed':'current',...(lastOperationId?{lastOperationId}:{}),recover:'Call recover; do not resubmit this navigation leg.'},error:{code:original?.code??(pending?'uncertainExecution':'agentError'),message}},true);
           delete result.operationId;
           if(pending && 'requestId' in pending.params)result.operationId=pending.params.requestId;
           const presentation=result.presentation as Record<string,unknown>;

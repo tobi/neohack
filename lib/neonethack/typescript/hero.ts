@@ -418,9 +418,11 @@ export class Hero {
     if(target instanceof Entity) current(target,this.game);
     return this.game.go({...options,to:target instanceof Entity ? {x:target.position[0],y:target.position[1]} : {...target}});
   }
-  /** Walk toward the nearest perceived unvisited frontier. Optional maxActions
-   * (default 1659) and maxFrontiers (default 1). Stops for decisions, damage,
-   * hunger, new creatures or one door attempt. Not a vanilla NetHack command. */
+  /** Walk toward the nearest perceived unvisited frontier, then a remembered edge
+   * into adjacent darkness if no frontier remains. Optional maxActions (default
+   * 1659) and maxFrontiers (default 1). Stops for decisions, damage, hunger or
+   * one door attempt. Pass stopOnNewCreatures to also halt when a creature enters
+   * view. Not a vanilla NetHack command. */
   explore(options:ExploreOptions = {}): Promise<NavigationResult> {
     this.assertActive(); return this.game.explore(options);
   }

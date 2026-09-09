@@ -3973,6 +3973,45 @@ test('double-clicking a known square starts one bounded walking leg',async t=>{
   assert.deepEqual(errors,[]);
 });
 
+test('right-clicking a remembered square walks there without opening inspection',async t=>{
+  const {page,errors}=await fixture(t);await create(page);
+  const target=await page.evaluate(async()=>{
+    const app=document.querySelector('pixel-nethack'),game=app.game;
+    for(const cell of game.observation.world){
+      const route=await game.route({x:cell.x,y:cell.y});
+      if(route.distance>=2&&route.distance<=4){
+        const bounds=app.map.canvas.getBoundingClientRect(),shift=app.map.travel(performance.now());
+        const original=game.go.bind(game);app.walkCalls=0;
+        game.go=(...args)=>{app.walkCalls++;return original(...args);};
+        return {revision:game.state.revision,x:bounds.left+((cell.x-app.map.origin.x)*16+8+shift.x)*app.map.zoom,y:bounds.top+((cell.y-app.map.origin.y)*16+8+shift.y)*app.map.zoom};
+      }
+    }
+    throw Error('No known walking target');
+  });
+  await page.mouse.click(target.x,target.y,{button:'right'});
+  await page.waitForFunction(()=>document.querySelector('pixel-nethack').walkCalls===1);
+  await ready(page);
+  assert.ok((await snapshot(page)).revision>target.revision);
+  assert.equal(await page.evaluate(()=>document.querySelector('pixel-nethack').walkCalls),1);
+  assert.equal(await page.locator('.tile-actions').count(),0);
+  assert.deepEqual(errors,[]);
+});
+
+test('v starts auto:explore from the map',async t=>{
+  const {page,errors}=await fixture(t);await create(page);
+  await page.evaluate(()=>{
+    const app=document.querySelector('pixel-nethack'), original=app.game.explore.bind(app.game);
+    app.exploreCalls=0;
+    app.game.explore=(...args)=>{app.exploreCalls++;return original(...args);};
+  });
+  await page.locator('#dungeon').focus();
+  await page.keyboard.press('v');
+  await page.waitForFunction(()=>document.querySelector('pixel-nethack').exploreCalls===1);
+  await ready(page);
+  assert.equal(await page.evaluate(()=>document.querySelector('pixel-nethack').exploreCalls),1);
+  assert.deepEqual(errors,[]);
+});
+
 test('different tabs play independent runs offline and retain both metadata records', {timeout:60000}, async t => {
   const {page,context,url,errors} = await fixture(t);
   await create(page,'valkyrie',9);
@@ -4402,6 +4441,7 @@ test('More actions searches labels and commands without typing gameplay input', 
   await query.fill('auto');
   const autoIds=await page.getByRole('option').evaluateAll(rows=>rows.map(row=>row.dataset.action));
   assert.ok(autoIds.includes('auto:explore') && autoIds.includes('auto:descend'));
+  assert.equal(await page.locator('#more-grid button[data-action="auto:explore"] kbd').textContent(),'v');
   await query.fill('Z');
   assert.equal(await page.locator('#'+await query.getAttribute('aria-activedescendant')).getAttribute('data-action'),'cast');
   await query.fill('z');

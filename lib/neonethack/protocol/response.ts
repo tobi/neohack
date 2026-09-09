@@ -85,7 +85,9 @@ export const responseSchema: Schema = {
     kind: enumeration("actions", "route", "navigation", "lore"), name:string, found:boolean, lines:array(string), basis, inputGate, cell: cellActions,
     doors: array(closed({x:integer,y:integer,lock:enumeration("locked","unlocked","unknown"),distance:nullable(integer),approach:closed({x:integer,y:integer}),direction:compass}, ["x","y","lock","distance"])),
     frontiers: array(closed({x:integer,y:integer,distance:integer})), waysDown: array(closed({x:integer,y:integer,distance:nullable(integer)})),
-    policy: { const: "knownWalking" }, to: closed({x: integer, y: integer}), distance: nullable(integer), steps: array(closed({x: integer, y: integer, direction:compass})),
+    policy: { const: "knownWalking" }, to: closed({x: integer, y: integer}), distance: nullable(integer),
+    why: enumeration("targetOccupied", "targetUnknown", "closedDoor", "disconnected"),
+    steps: array(closed({x: integer, y: integer, direction:compass})),
     version: { const: 1 }, sessionId: string, requestId: nullable(string), revision: integer,
     outcome: object({ action: string, status: enumeration("completed", "needsChoice", "blocked", "cancelled", "interrupted", "unknown"), reason: string, turnsElapsed: integer, positionChanged: boolean, effects: array(string) }, ["action", "status", "turnsElapsed", "positionChanged", "effects"]),
     observation,
@@ -145,5 +147,6 @@ export const compactResponseSchema: Schema = {
     decision: nullable({ type: "object" }), events: array({ type: "object" }),
     outcome: { type: "object" }, ended: boolean, end: nullable({ type: "object" }),
     error: object({ code: string, message: string }),
+    navigation: { type: "object" }, creatures: array({ type: "object" }),
   },
 };

@@ -189,11 +189,15 @@ char *mcp_agent_present_mode(const char *response, int historical, int compact)
     }
     mj_val navigation = mcp_field(response,"navigation");
     if (navigation.p) {
-        char *reason = mcp_string(mcp_field(navigation.p,"reason")); long long actions = 0, turns = 0;
+        char *reason = mcp_string(mcp_field(navigation.p,"reason")); char *why = mcp_string(mcp_field(navigation.p,"why"));
+        char *hint = mcp_string(mcp_field(navigation.p,"hint")); char *recover = mcp_string(mcp_field(navigation.p,"recover"));
+        long long actions = 0, turns = 0;
         mj_int(mcp_field(navigation.p,"actionsTaken"),&actions); mj_int(mcp_field(navigation.p,"turnsElapsed"),&turns);
         free(summary); summary = NULL;
-        if (asprintf(&summary,"Navigation: %s; %lld actions, %lld turns elapsed.",reason ? reason : "unknown",actions,turns) < 0) summary = NULL;
-        free(reason);
+        if (asprintf(&summary,"Navigation: %s%s%s%s; %lld actions, %lld turns elapsed.%s%s%s%s",reason ? reason : "unknown",
+                     why ? " (" : "", why ? why : "", why ? ")" : "", actions, turns,
+                     hint ? " " : "", hint ? hint : "", recover ? " " : "", recover ? recover : "") < 0) summary = NULL;
+        free(reason); free(why); free(hint); free(recover);
     }
     /* Terminal facts lead even when navigation or an error supplies the detail.
      * A disconnected close ends the connection, but the run can resume. */

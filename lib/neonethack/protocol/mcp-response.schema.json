@@ -253,6 +253,15 @@
         "code",
         "message"
       ]
+    },
+    "navigation": {
+      "type": "object"
+    },
+    "creatures": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
     }
   }
 }

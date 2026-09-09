@@ -388,6 +388,8 @@ It returns `kind:"route"`, revision/level/origin `basis`, `inputGate`, the targe
 `policy:"knownWalking"`, `distance` and ordered `steps` excluding the origin.
 The origin has distance zero. A null distance and empty steps mean no route is
 known under this policy, not that the destination is physically unreachable.
+When distance is null, `why` is `targetOccupied`, `targetUnknown`, `closedDoor`
+or `disconnected` from perceived knowledge of that square.
 
 The shared C resolver computes the shortest path in steps, with a stable compass
 tie-break order. The policy excludes unknown terrain, closed doors (even known

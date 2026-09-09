@@ -36,6 +36,14 @@ static void routes(void) {
     map[a].terrain = T_DOOR_OPEN;
     assert(nnh_known_route(&k,map,a+NNH_MAP_WIDTH+1,steps) == 2);
     free(map);
+    nnh_known_cell cell = {0};
+    assert(!strcmp(nnh_known_block(&cell), "disconnected"));
+    cell.in_bounds = 1; cell.terrain = T_UNKNOWN; assert(!strcmp(nnh_known_block(&cell), "targetUnknown"));
+    cell.terrain = T_DARK; assert(!strcmp(nnh_known_block(&cell), "targetUnknown"));
+    cell.terrain = T_FLOOR; cell.occupant = 2; assert(!strcmp(nnh_known_block(&cell), "targetOccupied"));
+    cell.occupant = 3; assert(!strcmp(nnh_known_block(&cell), "targetOccupied"));
+    cell.occupant = 0; cell.terrain = T_DOOR_CLOSED; assert(!strcmp(nnh_known_block(&cell), "closedDoor"));
+    cell.terrain = T_WALL; assert(!strcmp(nnh_known_block(&cell), "disconnected"));
 }
 int main(void) {
     nnh_knowledge k = {0}; nnh_cell_actions c; mj_Buf b;

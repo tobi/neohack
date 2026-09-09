@@ -123,7 +123,15 @@ static char *level(mcp_agent_state *s)
 {
     return mcp_string(mcp_field(mcp_field(mcp_field(s->snapshot,"observation").p,"location").p,"id"));
 }
-static char *navigation_result(mcp_agent_state *s, const char *reason, int actions, long long turns, const char *failure)
+static const char *route_hint(const char *why)
+{
+    if (!why) return NULL;
+    if (!strcmp(why,"targetOccupied")) return "Attack the occupant if adjacent; go does not fight.";
+    if (!strcmp(why,"targetUnknown")) return "Inspect or step adjacent; knownWalking does not guess unmapped tiles.";
+    if (!strcmp(why,"closedDoor")) return "Open the door, or explore toward it. go does not open doors.";
+    return "No knownWalking path. Search, open a door, or pick another remembered square.";
+}
+static char *navigation_result(mcp_agent_state *s, const char *reason, int actions, long long turns, const char *failure, const char *why)
 {
     mj_Buf b; mj_init(&b); mj_obj(&b);
     const char *cursor = s->snapshot; char *key; mj_val value;
@@ -162,11 +170,18 @@ static char *navigation_result(mcp_agent_state *s, const char *reason, int actio
     mj_key(&b,"reason"); mj_strv(&b,reason);
     mj_key(&b,"actionsTaken"); mj_intv(&b,actions);
     mj_key(&b,"turnsElapsed"); mj_intv(&b,turns);
+    if (why && !strcmp(reason,"noRoute")) {
+        mj_key(&b,"why"); mj_strv(&b,why);
+        mj_key(&b,"hint"); mj_strv(&b,route_hint(why));
+    }
     if (failure) {
         mj_key(&b,"observation"); mj_strv(&b,s->pending || mcp_agent_uncertain(failure) ? "lastConfirmed" : "current");
+    }
+    if (failure || (actions > 0 && strcmp(reason,"arrived") && strcmp(reason,"ended"))) {
         if (s->last) {
             mj_key(&b,"lastOperationId"); mcp_raw(&b,mcp_field(mcp_field(s->last,"params").p,"requestId"));
         }
+        mj_key(&b,"recover"); mj_strv(&b,"Call recover; do not resubmit this navigation leg.");
     }
     mj_endobj(&b); mj_endobj(&b); return mcp_take(&b);
 }
@@ -210,6 +225,27 @@ int mcp_agent_new_creature(const char *before, const char *after)
     }
     return 0;
 }
+static int cell_at(mj_val world, int x, int y, mj_val *out)
+{
+    mj_val cell; mj_arr_it it = {NULL,1};
+    while (mj_arr_next(world.p,&it,&cell)) if (number(cell.p,"x",-1)==x && number(cell.p,"y",-1)==y) { *out = cell; return 1; }
+    return 0;
+}
+static int unknown_cardinal(mcp_agent_state *s, int x, int y, int *ox, int *oy)
+{
+    static const int dx[] = {0,1,0,-1}, dy[] = {-1,0,1,0};
+    mj_val world = mcp_field(mcp_field(s->snapshot,"observation").p,"world"), cell;
+    for (int i = 0; i < 4; i++) {
+        int nx = x+dx[i], ny = y+dy[i];
+        if (nx < 1 || nx > 79 || ny < 0 || ny > 20) continue;
+        if (!cell_at(world,nx,ny,&cell)) { *ox = nx; *oy = ny; return 1; }
+        char *type = mcp_string(mcp_field(mcp_field(cell.p,"terrain").p,"type"));
+        int unk = type && (!strcmp(type,"unknown") || !strcmp(type,"dark"));
+        free(type);
+        if (unk) { *ox = nx; *oy = ny; return 1; }
+    }
+    return 0;
+}
 int mcp_agent_vitals_changed(const char *before, const char *after)
 {
     mj_val a=mcp_field(mcp_field(before,"observation").p,"vitals");
@@ -227,8 +263,8 @@ int mcp_agent_vitals_changed(const char *before, const char *after)
 }
 static char *navigate(nnh_context *ctx, mcp_agent_state *s, const char *method, mj_val args, const char *operation)
 {
-    char *sid = mcp_string(mcp_field(args.p,"sessionId")), *to = NULL, *door = NULL, *initial_level = level(s), *response = NULL;
-    const char *reason = gate(s); int actions = 0, force = 0;
+    char *sid = mcp_string(mcp_field(args.p,"sessionId")), *to = NULL, *door = NULL, *initial_level = level(s), *response = NULL, *block = NULL;
+    const char *reason = gate(s); int actions = 0, force = 0, edge = 0;
     long long turns = 0, limit = number(args.p,"maxActions",1659);
     long long frontiers = 0, frontier_limit = number(args.p,"maxFrontiers",1);
     int descend = !strcmp(method,"agent.descend"), explore = !strcmp(method,"agent.explore");
@@ -237,6 +273,7 @@ static char *navigate(nnh_context *ctx, mcp_agent_state *s, const char *method, 
     if (reason) goto finish;
     if (limit < 1 || limit > 1659 || frontier_limit < 1 || frontier_limit > 1659 || !operation) { response = mcp_agent_error("invalidParams","A bounded leg requires maxActions and maxFrontiers from 1 to 1659 and an adapter operation ID."); goto done; }
 select_destination:
+    if (explore) { force = 0; edge = 0; }
     if (!descend && !explore) to = mj_canonical(mcp_field(args.p,"to"));
     else {
         char *p = params(sid,NULL,(mj_val){NULL});
@@ -251,7 +288,34 @@ select_destination:
             mj_key(&b,"y"); mcp_raw(&b,mcp_field(chosen.p,"y")); mj_endobj(&b); to = mcp_take(&b);
         }
         free(response); response = NULL;
-        if (!to) { reason = "noRoute"; goto finish; }
+        if (!to && explore) {
+            mj_val you = mcp_field(mcp_field(s->snapshot,"observation").p,"you");
+            int x = (int)number(you.p,"x",-1), y = (int)number(you.p,"y",-1), nx, ny;
+            if (x >= 1 && unknown_cardinal(s,x,y,&nx,&ny)) {
+                mj_Buf b; mj_init(&b); mj_obj(&b); mj_key(&b,"x"); mj_intv(&b,nx); mj_key(&b,"y"); mj_intv(&b,ny); mj_endobj(&b);
+                to = mcp_take(&b); force = 1;
+            } else if (x >= 1) {
+                mj_val world = mcp_field(mcp_field(s->snapshot,"observation").p,"world"), cell; mj_arr_it it = {NULL,1};
+                int best_x = 0, best_y = 0, found = 0; long long best = 9007199254740991LL, revision = number(s->snapshot,"revision",-1);
+                while (mj_arr_next(world.p,&it,&cell)) {
+                    int cx = (int)number(cell.p,"x",-1), cy = (int)number(cell.p,"y",-1);
+                    if (!unknown_cardinal(s,cx,cy,&nx,&ny)) continue;
+                    mj_Buf dest; mj_init(&dest); mj_obj(&dest); mj_key(&dest,"x"); mj_intv(&dest,cx); mj_key(&dest,"y"); mj_intv(&dest,cy); mj_endobj(&dest);
+                    char *json = mcp_take(&dest), *p = params(sid,"to",(mj_val){json}); free(json);
+                    char *plan = step(ctx,s,"session.route",(mj_val){p},revision,NULL); free(p);
+                    if (!failed(plan)) {
+                        long long distance = number(plan,"distance",-1);
+                        if (distance >= 0 && distance < best) { best = distance; best_x = cx; best_y = cy; found = 1; }
+                    }
+                    free(plan);
+                }
+                if (found) {
+                    mj_Buf b; mj_init(&b); mj_obj(&b); mj_key(&b,"x"); mj_intv(&b,best_x); mj_key(&b,"y"); mj_intv(&b,best_y); mj_endobj(&b);
+                    to = mcp_take(&b); edge = 1;
+                }
+            }
+        }
+        if (!to) { reason = "noRoute"; block = strdup("disconnected"); goto finish; }
     }
     if (!to || !initial_level) { response = mcp_agent_error("agentError","Navigation requires a perceived destination and level."); goto done; }
     while (1) {
@@ -266,8 +330,23 @@ select_destination:
             response = step(ctx,s,"session.route",(mj_val){p},revision,NULL); free(p);
             if (failed(response)) goto done;
             distance = number(response,"distance",-1);
-            if (distance < 0) { reason = "noRoute"; goto finish; }
-            if (!distance && !door && !descend) { reason = "arrived"; goto arrived; }
+            if (distance < 0) {
+                reason = "noRoute";
+                block = mcp_string(mcp_field(response,"why"));
+                if (!block) block = strdup("disconnected");
+                goto finish;
+            }
+            if (!distance && !door && !descend) {
+                if (explore && edge) {
+                    mj_val you = mcp_field(mcp_field(s->snapshot,"observation").p,"you");
+                    int x = (int)number(you.p,"x",-1), y = (int)number(you.p,"y",-1), nx, ny;
+                    if (x >= 1 && unknown_cardinal(s,x,y,&nx,&ny)) {
+                        free(to); mj_Buf b; mj_init(&b); mj_obj(&b); mj_key(&b,"x"); mj_intv(&b,nx); mj_key(&b,"y"); mj_intv(&b,ny); mj_endobj(&b);
+                        to = mcp_take(&b); force = 1; edge = 0; free(response); response = NULL; continue;
+                    }
+                }
+                reason = "arrived"; goto arrived;
+            }
             if (actions >= limit) { reason = "stepLimit"; goto finish; }
             if (distance) {
                 mj_val item; mj_arr_it it = {NULL,1};
@@ -340,13 +419,13 @@ arrived:
         goto select_destination;
     }
 finish:
-    free(response); response = navigation_result(s,reason,actions,turns,NULL);
+    free(response); response = navigation_result(s,reason,actions,turns,NULL,block);
 done:
     if (failed(response) && s->snapshot) {
         char *failure = response;
-        response = navigation_result(s,"error",actions,turns,failure); free(failure);
+        response = navigation_result(s,"error",actions,turns,failure,NULL); free(failure);
     }
-    free(sid); free(to); free(door); free(initial_level); return response;
+    free(sid); free(to); free(door); free(initial_level); free(block); return response;
 }
 /* Resolve aliases only against the current, already perceived question. */
 static char *answer_choice(nnh_context *ctx, mcp_agent_state *s, mj_val args, long long seen, const char *operation)

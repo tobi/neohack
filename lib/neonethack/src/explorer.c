@@ -6172,14 +6172,18 @@ run_route(game_t *g, const char *args)
         mj_endobj(&b); free(map); return mj_take(&b);
     }
     n = nnh_known_route(&k, map, (int)ty * MAP_W + (int)tx, steps);
-    free(map);
-    mj_init(&b); mj_obj(&b);
-    mj_key(&b, "kind"); mj_strv(&b, "route");
-    mj_key(&b, "sessionId"); mj_strv(&b, g->id);
-    nnh_emit_basis(&k, &b); nnh_emit_gate(&k, &b);
-    mj_key(&b, "policy"); mj_strv(&b, "knownWalking");
-    mj_key(&b, "to"); mj_obj(&b); mj_key(&b, "x"); mj_intv(&b, tx); mj_key(&b, "y"); mj_intv(&b, ty); mj_endobj(&b);
-    mj_key(&b, "distance"); if (n < 0) mj_nullv(&b); else mj_intv(&b, n);
+    {
+        const char *why = n < 0 ? nnh_known_block(&map[(int)ty * MAP_W + (int)tx]) : NULL;
+        free(map);
+        mj_init(&b); mj_obj(&b);
+        mj_key(&b, "kind"); mj_strv(&b, "route");
+        mj_key(&b, "sessionId"); mj_strv(&b, g->id);
+        nnh_emit_basis(&k, &b); nnh_emit_gate(&k, &b);
+        mj_key(&b, "policy"); mj_strv(&b, "knownWalking");
+        mj_key(&b, "to"); mj_obj(&b); mj_key(&b, "x"); mj_intv(&b, tx); mj_key(&b, "y"); mj_intv(&b, ty); mj_endobj(&b);
+        mj_key(&b, "distance"); if (n < 0) mj_nullv(&b); else mj_intv(&b, n);
+        if (why) { mj_key(&b, "why"); mj_strv(&b, why); }
+    }
     mj_key(&b, "steps"); mj_arr(&b);
     for (i = 0; i < n; i++) {
         mj_obj(&b); mj_key(&b, "x"); mj_intv(&b, steps[i] % MAP_W);

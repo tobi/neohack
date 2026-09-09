@@ -45,6 +45,10 @@ and terminal facts outrank your intention.
 known downward stairs. Both stop on changed circumstances or questions. `go`
 uses perceived routes. Its `force:true` option attempts only adjacent ordinary
 movement; deliberate force attack is the separate `attack` tool.
+If there is no knownWalking path, `navigation.reason` is `noRoute` and `why` is
+`targetOccupied`, `targetUnknown`, `closedDoor` or `disconnected`, with a `hint`
+for the next explicit tool. Zero-action stops did not run input. After a partial
+leg, `recover` and `lastOperationId` mean call recover; do not resubmit the leg.
 
 After an uncertain response, use `recover({sessionId})` for the retained exact
 input or `receipt({sessionId,operationId})` for a known historical result. Never

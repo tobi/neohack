@@ -6181,6 +6181,15 @@
         }
       ]
     },
+    "why": {
+      "type": "string",
+      "enum": [
+        "targetOccupied",
+        "targetUnknown",
+        "closedDoor",
+        "disconnected"
+      ]
+    },
     "steps": {
       "type": "array",
       "items": {

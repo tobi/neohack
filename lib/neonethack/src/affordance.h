@@ -64,4 +64,6 @@ void nnh_emit_neighborhood(const nnh_knowledge *, mj_Buf *);
  * Returns steps (origin excluded), or -1 when no route is known. */
 int nnh_known_paths(const nnh_knowledge *, const nnh_known_cell *, int *);
 int nnh_known_route(const nnh_knowledge *, const nnh_known_cell *, int, int *);
+/* Perceived reason a destination has no knownWalking route. Not a safety claim. */
+const char *nnh_known_block(const nnh_known_cell *);
 #endif

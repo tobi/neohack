@@ -772,11 +772,13 @@ engine decisions. Opening/filtering the menu never initiates a conversation.
 Chat and payment currently have no targeted C action offers describing a useful
 conversation or an outstanding bill. Keep both searchable; do not promote them
 by guessing character identity or usefulness from art or a humanoid appearance.
-`auto:explore` and `auto:descend` are neohack conveniences, not vanilla NetHack
-commands: they walk perceived frontiers or remembered downstairs through ordinary
-moves and one door attempt, then stop for decisions, damage, hunger or new
-creatures. Escape stops the current leg. They do not answer warnings or guess
-unmapped tiles.
+`auto:explore` (`v`) and `auto:descend` are neohack conveniences, not vanilla
+NetHack commands: they walk perceived frontiers, remembered downstairs, or a
+known edge into adjacent darkness. They stop for decisions, damage and hunger,
+not merely because a distant creature entered view. Escape stops the current
+leg. They do not answer warnings. Right-click a remembered square to walk there
+along a knownWalking route; left-click still inspects. Distant remembered tiles
+are valid destinations even when you cannot currently see their contents.
 Share action definitions between the menu's visible key badges and map shortcuts.
 Use compact 36px text buttons on desktop, 44px on phones/coarse pointers, and
 consistent 6px/12px padding; icon targets retain their existing 44px geometry.

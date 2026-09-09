@@ -421,20 +421,22 @@ export class DungeonMap {
     canvas.addEventListener("auxclick", this.auxiliary);
     window.addEventListener("blur", this.endDrag);
     let clickedObservation: Observation | null = null;
-    canvas.addEventListener("click", (e) => {
-      if (!this.observation || e.button !== 0) return;
-      if (e.detail > 1 && clickedObservation !== this.observation) return;
-      clickedObservation = this.observation;
+    const pickCell = (e: MouseEvent) => {
       const point = this.scene.worldPoint(e.clientX, e.clientY);
       let x = Math.floor(point.x / 16),
         y = Math.floor(point.y / 16);
-      // Test the retained sprite's actual transform and opaque pixels, including
-      // while the camera and creature are moving on the compositor.
       const picked = !this.symbols && this.scene.pick(e.clientX, e.clientY);
       if (picked) {
         x = picked.x;
         y = picked.y;
       }
+      return { x, y };
+    };
+    canvas.addEventListener("click", (e) => {
+      if (!this.observation || e.button !== 0) return;
+      if (e.detail > 1 && clickedObservation !== this.observation) return;
+      clickedObservation = this.observation;
+      const { x, y } = pickCell(e);
       const cell = this.observation.world.find(
         (cell) => cell.x === x && cell.y === y,
       );
@@ -449,6 +451,20 @@ export class DungeonMap {
         x,
         y,
         e.detail === 2,
+      );
+    });
+    canvas.addEventListener("contextmenu", (e) => {
+      if (!this.observation) return;
+      e.preventDefault();
+      const { x, y } = pickCell(e);
+      const cell = this.observation.world.find(
+        (cell) => cell.x === x && cell.y === y,
+      );
+      this.inspect(
+        cell ? cellDescription(cell) : `${x}, ${y}: Unexplored`,
+        x,
+        y,
+        true,
       );
     });
   }
