@@ -29,6 +29,7 @@ export const gameActions = [
   { id: "up", label: "Climb up stairs", key: "<" },
   { id: "down", label: "Climb down stairs", key: ">" },
   { id: "pay", label: "Pay the shopkeeper", key: "p" },
+  { id: "chat", label: "Chat", key: "" },
   { id: "engrave", label: "Engrave", key: "E" },
   { id: "pray", label: "Pray", key: "" },
   { id: "offer", label: "Offer a sacrifice", key: "" },

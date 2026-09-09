@@ -8,6 +8,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- More actions now includes Chat: search `chat`, then choose whom to talk to.
+  This reaches the Oracle's consultations and other conversations through the
+  game's own dialogue and explicit choices.
 - More actions is a compact searchable menu. Open it with `#`, type an action or
   command, and press Enter to try the selected match. Shortcuts stay visible and
   buttons use consistent, tighter spacing with larger targets on touch screens.

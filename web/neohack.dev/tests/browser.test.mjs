@@ -4311,6 +4311,54 @@ test('hero command box edits drafts and offers explicit accessible completions',
   assert.deepEqual(errors,[]);
 });
 
+test('Chat is discoverable and uses the real engine direction question without automatic answers', async t => {
+  const {page, errors} = await fixture(t, {touch:true});
+  await page.setViewportSize({width:390,height:667});
+  await create(page);
+  const before = await snapshot(page);
+  const query = page.getByRole('combobox',{name:'Search actions or type a command'});
+  await page.locator('#dungeon').focus();
+  await page.keyboard.press('#');
+  await query.fill('#chat');
+  const chat = page.getByRole('option',{name:'Chat',exact:true});
+  assert.equal(await chat.locator('kbd').textContent(),'#chat');
+  assert.deepEqual(await snapshot(page),before,'finding Chat does not start it');
+  await query.press('Enter');
+  await page.locator('#direction-target').waitFor();
+  const pending = await snapshot(page);
+  assert.equal(pending.decision.action,'chat');
+  assert.equal(pending.decision.kind,'target');
+  assert.match(pending.decision.about,/Talk to whom/i);
+  assert.equal(pending.observation.turn,before.observation.turn);
+  assert.equal(await page.locator('#menu').evaluate(el=>el.open),false);
+  await page.screenshot({path:`${root}/test-results/chat-direction-mobile.png`});
+  await page.locator('#direction-target').getByRole('button',{name:'Cancel',exact:true}).click();
+  await ready(page);
+  assert.equal((await snapshot(page)).decision,null);
+  assert.equal((await snapshot(page)).observation.turn,before.observation.turn);
+
+  await page.getByRole('button',{name:'More actions',exact:true}).click();
+  await query.fill('chat');
+  await chat.click();
+  await page.locator('#direction-target').waitFor();
+  const second = await snapshot(page);
+  assert.notEqual(second.decision.id,pending.decision.id);
+  const pet = second.observation.neighborhood.cells.find(cell => cell.occupant?.kind === 'ally' && Math.max(Math.abs(cell.dx),Math.abs(cell.dy)) === 1);
+  assert.ok(pet,'real starting companion is adjacent');
+  const direction = `${pet.dy<0?'north':pet.dy>0?'south':''}${pet.dx<0?'west':pet.dx>0?'east':''}`;
+  await page.locator(`[data-target-direction="${direction}"]`).click();
+  await ready(page);
+  const result = await snapshot(page);
+  assert.equal(result.error,undefined);
+  assert.equal(result.decision,null);
+  assert.equal(result.outcome.action,'chat');
+  assert.equal(result.outcome.turnsElapsed,1);
+  assert.equal(result.observation.turn,before.observation.turn+1);
+  assert.ok(result.events.some(event => event.type === 'heard' && /meow|purr|bark|whine|yip|whimper/i.test(event.text)),JSON.stringify(result.events));
+  assert.equal(await page.locator('#direction-target').count(),0);
+  assert.deepEqual(errors,[]);
+});
+
 test('More actions searches labels and commands without typing gameplay input', async t => {
   const {page, errors} = await fixture(t);
   await create(page,'valkyrie',3);

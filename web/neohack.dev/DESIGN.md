@@ -703,6 +703,10 @@ arrows select and Enter/click explicitly tries a result. A bare count offers bot
 search and rest. Keep unavailable matches visible with reasons, and bind each
 callback to the opening game/revision. The native dialog retains Escape and focus
 restoration. Direct in-game classic prefixes retain their existing composer.
+Chat is available by searching `chat` (or `#chat`) in More actions. It opens the
+engine's “Talk to whom?” direction question; choose an adjacent character's
+direction. Consultations, donations and other dialogue choices remain explicit
+engine decisions. Opening/filtering the menu never initiates a conversation.
 Share action definitions between the menu's visible key badges and map shortcuts.
 Use compact 36px text buttons on desktop, 44px on phones/coarse pointers, and
 consistent 6px/12px padding; icon targets retain their existing 44px geometry.
