@@ -8,6 +8,11 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- More actions is a compact searchable menu. Open it with `#`, type an action or
+  command, and press Enter to try the selected match. Shortcuts stay visible and
+  buttons use consistent, tighter spacing with larger targets on touch screens.
+- Inspected map tiles have a clear outline beneath creatures and items. It follows
+  keyboard selection and disappears when tile options close.
 - The ledger opens with a chart of the latest 200 updated adventures, colored by
   class. Filter classes, compare turns with depth or hero level, and select a run
   for its replay. Today's and the last seven days' level and depth leaders appear

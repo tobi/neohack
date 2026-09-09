@@ -9,6 +9,9 @@
   --gold: #d9b778;
   --paper: #e5dec8;
   --dark: #25312e;
+  --control-height: 44px;
+  --control-padding: 6px 12px;
+  --control-font: 14px;
   font-family: Arial, "Liberation Sans", sans-serif;
   font-size: 15px;
 }
@@ -34,7 +37,7 @@ button {
   cursor: pointer;
 }
 button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.45;
 }
 button {
@@ -125,8 +128,8 @@ h3 {
 }
 .primary,
 .secondary {
-  min-height: 46px;
-  padding: 12px 18px;
+  min-height: var(--control-height);
+  padding: var(--control-padding);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.5;
@@ -403,8 +406,8 @@ legend,
 .save-row {
   background: #2b372e;
   border: 1px solid #4c5c44;
-  padding: 16px;
-  min-height: 52px;
+  padding: 8px 12px;
+  min-height: var(--control-height);
   width: 100%;
   margin: 6px 0;
   text-align: left;
@@ -416,7 +419,7 @@ legend,
   gap: 10px;
 }
 .more-grid button {
-  min-height: 48px;
+  min-height: var(--control-height);
 }
 .guide-section {
   margin: 22px 0;
@@ -456,9 +459,9 @@ legend,
 #decision-body .choice-row {
   background: #2d3b2e;
   border: 1px solid #55654a;
-  padding: 14px;
+  padding: var(--control-padding);
   text-align: left;
-  min-height: 48px;
+  min-height: var(--control-height);
   flex-basis: 100%;
   font-size: 13px;
 }
@@ -469,11 +472,11 @@ legend,
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px;
+  padding: var(--control-padding);
   background: #2b382b;
-  margin-bottom: 8px;
-  min-height: 48px;
-  line-height: 1.6;
+  margin-bottom: 6px;
+  min-height: var(--control-height);
+  line-height: 1.4;
 }
 .menu-choice input {
   accent-color: var(--sage);
@@ -610,12 +613,17 @@ main {
 }
 button,
 summary {
-  min-height: 44px;
+  min-height: var(--control-height);
+}
+@media (min-width: 701px) and (pointer: fine) {
+  :root { --control-height: 36px; }
 }
 button {
   border: 1px solid #4a594c;
   background: #25322f;
-  padding: 8px 12px;
+  padding: var(--control-padding);
+  font-size: var(--control-font);
+  line-height: 20px;
 }
 .text-button {
   background: transparent;
@@ -1420,7 +1428,7 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
 .journal-repeat { white-space: nowrap; color: #e3c88c; font-size: .85em; }
 #contextual-stairs { position: fixed; top: 70%; left: 50%; transform: translate(-50%, -50%); z-index: 7; display: flex; gap: 12px; }
 #contextual-stairs[hidden], pixel-nethack:has(.rightbar:not([hidden])) #contextual-stairs, pixel-nethack:has(#menu[open]) #contextual-stairs { display: none; }
-#contextual-stairs button { min-height: 56px; min-width: 200px; padding: 14px 24px; font-size: 18px; color: #f0e4bd; background: #283a30; border: 2px solid #96a77c; box-shadow: 3px 3px #101819; }
+#contextual-stairs button { min-height: var(--control-height); min-width: 0; padding: var(--control-padding); font-size: var(--control-font); color: #f0e4bd; background: #283a30; border: 2px solid #96a77c; box-shadow: 3px 3px #101819; }
 
 /* Keep thirteen paths navigable without pushing the submit action off-screen. */
 .class-picker {
@@ -1798,6 +1806,23 @@ pixel-nethack.in-game .rail-game-info { visibility: hidden; }
 #menu[open]:not(:has(#create-form)) { display:flex; flex-direction:column; overflow:hidden; padding:16px; }
 #menu:not(:has(#create-form)) > .dialog-top { flex-shrink:0; margin:0 0 6px; }
 #menu:not(:has(#create-form)) #menu-content { min-height:0; overflow:auto; overscroll-behavior:contain; }
+
+/* The command search and key hints stay visible; only matching actions scroll. */
+#menu[open]:has(.action-picker) { width: min(520px, calc(100% - 24px)); margin: min(8dvh, 64px) auto auto; max-height: min(620px, 84dvh); padding: 14px; }
+#menu:has(.action-picker) > .dialog-top { position: absolute; right: 28px; top: 16px; margin: 0; }
+#menu:has(.action-picker) > .dialog-top .eyebrow { display: none; }
+#menu:has(.action-picker) #menu-content { display: flex; overflow: hidden; }
+.action-picker { display: flex; flex-direction: column; width: 100%; min-height: 0; }
+.action-picker header { flex: none; }
+.action-picker h2 { font-size: 24px; margin: 0 44px 12px 0; display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.action-picker kbd { font: 12px monospace; color: #bccb9c; white-space: nowrap; }
+.action-picker input { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 10px; font-size: 16px; }
+.action-picker #more-grid { display: grid; grid-template-columns: 1fr; gap: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.action-picker #more-grid button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--control-height); flex-shrink: 0; text-align: left; border: 0; border-bottom: 1px solid #39473d; background: transparent; padding: var(--control-padding); font-size: var(--control-font); }
+.action-picker #more-grid button[aria-selected="true"] { background: #354334; box-shadow: inset 3px 0 #b8c995; }
+.action-picker #more-grid button small { display: block; font-size: 11px; margin-top: 2px; color: #b8bea9; }
+.action-picker footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding-top: 10px; flex: none; font-size: 11px; color: #bdc6ac; }
+.action-picker #action-empty { padding: 14px 0; }
 
 /* Editable classic commands stay attached to the hero, above map controls. */
 .command-composer { position:absolute; z-index:8; width:310px; max-width:calc(100% - 16px); padding:10px; box-sizing:border-box; overflow:auto; background:#202923; color:#eee8cf; border:1px solid #88947a; box-shadow:4px 4px 0 #101810cc; text-align:left; }

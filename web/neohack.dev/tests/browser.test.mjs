@@ -869,7 +869,7 @@ test(
     await page
       .getByRole("button", { name: "More actions", exact: true })
       .click();
-    await page.locator("#more-grid button").filter({ hasText: /^Pray$/ }).click();
+    await page.locator("#more-grid button[data-action=pray]").click();
     assert.equal((await snapshot(page)).decision, null);
     await page.getByRole("button", { name: "Continue to prayer", exact: true }).click();
     await ready(page);
@@ -2464,12 +2464,12 @@ test("contextual stairs use the current engine offer at 70 percent on desktop an
     // detached between layout and the asynchronous offer response.
     const bounds = await (await page.waitForFunction(({width,height}) => {
       const rect = document.querySelector('#contextual-stairs button')?.getBoundingClientRect();
-      return rect && rect.height >= 56 && Math.abs(rect.x+rect.width/2-width/2)<2 && Math.abs(rect.y+rect.height/2-height*.7)<2
+      return rect && rect.height >= 44 && Math.abs(rect.x+rect.width/2-width/2)<2 && Math.abs(rect.y+rect.height/2-height*.7)<2
         ? {x:rect.x,y:rect.y,width:rect.width,height:rect.height} : null;
     }, size)).jsonValue();
     assert.ok(Math.abs(bounds.x + bounds.width / 2 - size.width / 2) < 2);
     assert.ok(Math.abs(bounds.y + bounds.height / 2 - size.height * .7) < 2);
-    assert.ok(bounds.height >= 56);
+    assert.ok(bounds.height >= 44);
     await page.screenshot({ path: `${root}/test-results/stairs-${size.width}.png` });
   }
   await page.evaluate(async () => {
@@ -2842,6 +2842,60 @@ test("idle WebMCP discovery and closed adventures release storage for another ta
   assert.deepEqual(errors, []);
 });
 
+test('tile outlines stay below neighboring sprites and track pan and zoom', async t => {
+  const {page, errors} = await fixture(t);
+  await create(page);
+  const before = await snapshot(page);
+  const checks = await page.evaluate(() => {
+    const app = document.querySelector('pixel-nethack'), map = app.map;
+    const c = document.querySelector('#dungeon').getContext('2d');
+    const you = app.snapshot.observation.you;
+    // Renderer-only fixture: the selected floor is behind the hero's upper body.
+    // The real engine observation and durable history stay untouched.
+    const world = Array.from({length:9}, (_,i) => ({x:you.x+i%3-1,y:you.y+Math.floor(i/3)-1,
+      visible:true,terrain:{type:'floor',knowledge:'remembered'}}));
+    map.update({...app.snapshot.observation, world}, 'valkyrie', 'selection-fixture');
+    const checks = [];
+    for (const zoom of [2,4]) {
+      map.zoomTo(zoom); map.pan(1,-1);
+      const now = performance.now()+10000;
+      map.selectedTile = null; map.draw(now);
+      const baseline = c.getImageData(0,0,c.canvas.width,c.canvas.height).data;
+      // Read the real frame's alpha mask as an independent occlusion oracle.
+      const mask = document.createElement('canvas'); mask.width=c.canvas.width; mask.height=c.canvas.height;
+      const mc=mask.getContext('2d'), original=c.drawImage;
+      c.drawImage=function(image,...args) {
+        if(args.length===8 && args[2]===16 && args[3]===32) mc.drawImage(image,...args);
+        return original.call(this,image,...args);
+      };
+      map.selectedTile={x:you.x,y:you.y-1};
+      try {map.draw(now);} finally {c.drawImage=original;}
+      const selected=c.getImageData(0,0,c.canvas.width,c.canvas.height).data;
+      const alpha=mc.getImageData(0,0,mask.width,mask.height).data;
+      const x=Math.round((you.x-map.origin.x)*16), y=Math.round((you.y-1-map.origin.y)*16);
+      let changed=0, covered=0, overwritten=0, outside=0;
+      for(let py=0;py<c.canvas.height;py++) for(let px=0;px<c.canvas.width;px++) {
+        const i=(py*c.canvas.width+px)*4;
+        const border=px>=x&&px<=x+15&&py>=y&&py<=y+15&&(px===x||px===x+15||py===y||py===y+15);
+        const different=[0,1,2,3].some(k=>baseline[i+k]!==selected[i+k]);
+        if(different) {changed++;if(!border)outside++;}
+        if(border&&alpha[i+3]===255) {covered++;if(different)overwritten++;}
+      }
+      checks.push({zoom,changed,covered,overwritten,outside});
+    }
+    map.selectedTile=null;map.update(app.snapshot.observation,'valkyrie',app.snapshot.sessionId);
+    return checks;
+  });
+  for(const check of checks) {
+    assert.ok(check.changed>20,JSON.stringify(check));
+    assert.ok(check.covered>2,'real hero pixels cross the tile border: '+JSON.stringify(check));
+    assert.equal(check.overwritten,0,JSON.stringify(check));
+    assert.equal(check.outside,0,JSON.stringify(check));
+  }
+  assert.deepEqual(await snapshot(page),before);
+  assert.deepEqual(errors,[]);
+});
+
 test("illustrated dogs remain sprites and focus feedback has no map rectangle", { timeout: 30000 }, async t => {
   const { page } = await fixture(t);
   await create(page);
@@ -3038,8 +3092,8 @@ test('empty item actions are disabled for free and a fountain enables Drink unde
   const before = await snapshot(page);
   assert.equal(before.observation.inventory.some(item => item.category === 'potion'), false);
   await page.getByRole('button', { name: 'More actions', exact: true }).click();
-  const drink = page.locator('#more-grid button').filter({ hasText: /^Drink/ });
-  const zap = page.locator('#more-grid button').filter({ hasText: /^Zap a wand/ });
+  const drink = page.locator('#more-grid button[data-action=drink]');
+  const zap = page.locator('#more-grid button[data-action=zap]');
   assert.equal(await drink.isDisabled(), true);
   assert.equal(await zap.isDisabled(), true);
   assert.match(await drink.textContent(), /No eligible items/);
@@ -3117,7 +3171,7 @@ test('detection scroll map browsing supports keyboard Help, cursor, Done and dur
   const {page, errors} = await fixture(t);
   await create(page,'wizard',7);
   await page.getByRole('button', {name:'More actions',exact:true}).click();
-  await page.locator('#more-grid button').filter({hasText:/^Read/}).click();
+  await page.locator('#more-grid button[data-action=read]').click();
   await page.locator('#decision[open]').waitFor();
   await page.locator('#decision-body button').filter({hasText:'scroll of food detection'}).click();
   await ready(page);
@@ -4248,13 +4302,95 @@ test('hero command box edits drafts and offers explicit accessible completions',
   await page.keyboard.press('Escape');
   assert.equal((await snapshot(page)).revision,after.revision);
   await page.getByRole('button',{name:'More actions',exact:true}).click();
-  await page.getByRole('button',{name:'Type a command',exact:true}).click();
-  assert.equal(await input.inputValue(),'');
-  await page.locator('[data-completion="F"]').click();
-  assert.match(await page.locator('#command-about').innerText(),/Force one attack/);
-  await page.keyboard.press('ArrowLeft'); await ready(page);
+  const query=page.getByRole('combobox',{name:'Search actions or type a command'});
+  assert.equal(await query.inputValue(),'');
+  await query.fill('F');
+  await page.getByRole('option',{name:'Force attack west',exact:true}).click(); await ready(page);
   assert.equal((await snapshot(page)).outcome.action,'attack');
   assert.equal(await page.locator('#keyboard-prefix').isVisible(),false);
+  assert.deepEqual(errors,[]);
+});
+
+test('More actions searches labels and commands without typing gameplay input', async t => {
+  const {page, errors} = await fixture(t);
+  await create(page,'valkyrie',3);
+  const before = await snapshot(page);
+  await page.locator('#dungeon').focus();
+  await page.keyboard.press('#');
+  const query = page.getByRole('combobox',{name:'Search actions or type a command'});
+  await query.waitFor();
+  assert.equal(await query.evaluate(el=>el===document.activeElement),true);
+  assert.equal(await page.locator('#more-actions kbd').textContent(),'#');
+  assert.equal(await page.locator('#more-grid button:not(:has(kbd))').count(),0);
+  for(const [width,height] of [[1440,844],[390,667],[390,390]]) {
+    await page.setViewportSize({width,height});
+    await query.fill('');
+    const geometry=await page.evaluate(()=>{
+      const dialog=document.querySelector('#menu'), list=document.querySelector('#more-grid');
+      list.scrollTop=list.scrollHeight;
+      return {outer:dialog.scrollHeight-dialog.clientHeight,scrolled:list.scrollTop,
+        top:document.querySelector('#action-query').getBoundingClientRect().top,
+        footer:document.querySelector('.action-picker footer').getBoundingClientRect().bottom,
+        row:list.querySelector('button').getBoundingClientRect().height};
+    });
+    assert.ok(geometry.outer<=1,JSON.stringify(geometry));
+    assert.ok(geometry.scrolled>0,JSON.stringify(geometry));
+    assert.ok(geometry.top>=0 && geometry.footer<=height,JSON.stringify(geometry));
+    assert.ok(geometry.row >= (width===1440?36:44),JSON.stringify(geometry));
+    if(width===1440) assert.equal(geometry.row,36);
+    await query.fill('door');
+    assert.deepEqual(await page.getByRole('option').evaluateAll(rows=>rows.map(row=>row.dataset.action)),['open','close']);
+    assert.equal((await query.boundingBox()).y,geometry.top,'filtering does not move the search field');
+    await query.press('ArrowDown');
+    assert.equal(await page.locator('#'+await query.getAttribute('aria-activedescendant')).getAttribute('data-action'),'close');
+    await query.press('ArrowUp');
+    assert.equal(await page.locator('#'+await query.getAttribute('aria-activedescendant')).getAttribute('data-action'),'open');
+    await page.screenshot({path:`${root}/test-results/action-search-${width}-${height}.png`});
+  }
+  await query.fill('F');
+  assert.ok(await page.getByRole('option',{name:'Force attack west',exact:true}).count());
+  assert.ok(await page.getByRole('option',{name:'Fire readied ammunition',exact:true}).count(), 'action substrings coexist with prefix completions');
+  await query.fill('rest');
+  assert.equal(await page.getByRole('option',{name:'Rest one turn',exact:true}).count(),1);
+  await query.fill('Z');
+  assert.equal(await page.locator('#'+await query.getAttribute('aria-activedescendant')).getAttribute('data-action'),'cast');
+  await query.fill('z');
+  assert.equal(await page.locator('#'+await query.getAttribute('aria-activedescendant')).getAttribute('data-action'),'zap');
+  await query.fill('q');
+  const active=page.locator('#'+await query.getAttribute('aria-activedescendant'));
+  assert.equal(await active.getAttribute('data-action'),'drink');
+  assert.equal(await active.isDisabled(),true);
+  assert.match(await active.textContent(),/No eligible items/);
+  await page.evaluate(()=>document.querySelector('pixel-nethack').controls());
+  assert.equal(await active.isDisabled(),true,'shared busy-state refresh preserves the unavailable match');
+  await query.press('Enter');
+  await query.fill('no such action');await query.press('Enter');
+  assert.equal(await page.getByRole('option').count(),0);
+  await query.fill('20');
+  assert.equal(await page.getByRole('option').count(),2);
+  await query.fill('20s');
+  assert.equal(await page.getByRole('option').count(),1);
+  assert.deepEqual(await snapshot(page),before,'typing, filtering, unavailable and empty results send no input');
+  await query.press('Enter');await ready(page);
+  const searched=await snapshot(page);
+  assert.equal(searched.outcome.action,'search');
+  assert.ok(searched.outcome.turnsElapsed<=20);
+  assert.equal(await page.locator('#menu').evaluate(el=>el.open),false);
+  await page.locator('#dungeon').focus();await page.keyboard.press('#');
+  await query.fill('20.');
+  assert.equal((await snapshot(page)).revision,searched.revision);
+  await query.press('Enter');await ready(page);
+  assert.equal((await snapshot(page)).outcome.action,'rest');
+  await page.locator('#dungeon').focus();await page.keyboard.press('#');
+  await query.fill('search');
+  const opened=await snapshot(page);
+  // Another participant changes the current run while this menu remains open.
+  await page.evaluate(()=>{const app=document.querySelector('pixel-nethack');return app.run(()=>app.game.search());});
+  const changed=await snapshot(page);assert.ok(changed.revision>opened.revision);
+  await page.getByRole('option',{name:'Search nearby',exact:true}).click();
+  assert.deepEqual(await snapshot(page),changed,'old menu cannot submit against a newer run revision');
+  await query.press('Escape');
+  assert.equal(await page.locator('#menu').evaluate(el=>el.open),false);
   assert.deepEqual(errors,[]);
 });
 
@@ -4265,9 +4401,11 @@ test('inspection stays docked, exposes lore, and keeps numbered actions explicit
   const pet = before.observation.world.find(cell => cell.occupant?.kind === 'ally');
   assert.ok(pet?.occupant.appearance);
   const inspect = point => page.evaluate(({x,y}) => document.querySelector('pixel-nethack').inspectTile(x,y), point);
+  const selection = () => page.evaluate(() => document.querySelector('pixel-nethack').map.selectedTile);
   for (const width of [1440,390]) {
     await page.setViewportSize({width,height:844});
     await inspect(pet);
+    assert.deepEqual(await selection(), {x:pet.x,y:pet.y});
     const card=page.getByRole('dialog',{name:'Tile actions'});
     const origin=await card.boundingBox();
     const neighbor=await page.evaluate(({x,y}) => {
@@ -4277,6 +4415,7 @@ test('inspection stays docked, exposes lore, and keeps numbered actions explicit
     assert.ok(neighbor);
     await page.keyboard.press(neighbor.key);
     assert.equal(Number(await card.getAttribute('data-x')),pet.x+neighbor.dx);
+    assert.deepEqual(await selection(), {x:pet.x+neighbor.dx,y:pet.y});
     const moved=await card.boundingBox();
     assert.equal(moved.x,origin.x,'arrows do not move the card horizontally');
     assert.equal(moved.y,origin.y,'arrows do not move the card vertically');
@@ -4284,6 +4423,7 @@ test('inspection stays docked, exposes lore, and keeps numbered actions explicit
     await page.keyboard.press('/');
     await page.locator('.lore-entry:not([hidden])').waitFor();
     assert.equal(await page.locator('#lore-query').inputValue(),pet.occupant.appearance);
+    assert.equal(await selection(), null);
     assert.deepEqual(await snapshot(page),before,'inspection and contextual lore spend no turns or decisions');
     await page.getByRole('button',{name:'Back to inspection'}).click();
     await card.waitFor();
@@ -4305,6 +4445,7 @@ test('inspection stays docked, exposes lore, and keeps numbered actions explicit
     await page.screenshot({path:`${root}/test-results/inspection-lore-${width}.png`});
     await page.keyboard.press('Escape');
     assert.equal(await card.count(),0);
+    assert.equal(await selection(), null);
   }
   await inspect(before.observation.you);
   const search=page.getByRole('dialog',{name:'Tile actions'}).getByRole('button',{name:'Search here',exact:true});
@@ -4314,6 +4455,7 @@ test('inspection stays docked, exposes lore, and keeps numbered actions explicit
   await page.keyboard.press(key);
   await ready(page);
   assert.equal((await snapshot(page)).observation.turn,before.observation.turn+1,'one numbered shortcut performs one real action');
+  assert.equal(await selection(), null);
   assert.deepEqual(errors,[]);
 });
 

@@ -23,3 +23,36 @@ For visual, UI, scene and sprite work in this folder, read the linked DESIGN.md 
 Keep the selected tileset and approved design choices. Record new user decisions,
 design notes, sprite-generation parameters and recipe/output links in DESIGN.md.
 Do not switch packs or add incompatible assets without resolving the design choice.
+
+## Reusable interface components
+
+Prefer small reusable **Lit web components** for recurring UI, extracting them
+as a screen is improved rather than adding another copy of its markup/handlers.
+The searchable `neohack-action-menu` in `src/action-menu.ts` is the first example:
+it owns presentation and selection; its caller owns the game and guarded actions.
+
+Good candidates for reuse:
+- Action buttons: native button semantics, icon/label, visible shortcut badge,
+  disabled explanation and busy state. One action definition must drive its
+  label, shortcut display and keyboard handler.
+- Searchable action/item menus: focused search, substring and command matches,
+  arrow navigation, explicit Enter/click, and a scrolling result region.
+- Dialog shells: native `<dialog>`, compact fixed header/footer, scrolling body,
+  Escape policy and focus restoration. Engine decisions supply cancellation rules.
+- Shortcut hints, item rows and stat pairs: consistent spacing, accessible names
+  and shared styles across map options, inventory and settings.
+
+These are extraction guidelines, not claims that every component already exists.
+Keep ordinary form controls native; custom elements must retain labels, disabled
+behavior, form submission and keyboard access. Use typed properties/events;
+components never fetch hidden game facts, own global gameplay shortcuts, confirm
+warnings or turn an uncertain result into a retry. Prefer Lit templates over HTML
+string assembly. Use light DOM when native labeling/focus or the shared stylesheet
+needs it; use shadow DOM deliberately, with explicit styling and accessibility.
+
+Use the shared control size/spacing tokens. Compact text buttons are 36px on
+desktop; phones/coarse pointers retain at least 44px targets. Icon buttons and
+direction pads keep their dedicated touch geometry. Always show assigned hotkeys;
+scope them to the active surface, and never let typing in a field move the hero.
+Test focus, typing, disabled/stale actions, touch layout and viewport overflow in
+the real browser when extracting interaction components.

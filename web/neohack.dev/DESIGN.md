@@ -490,6 +490,11 @@ footer visible while the action body scrolls. Actions have numbered key badges,
 arrow keys inspect, / opens lore, and Escape closes. Disabled actions never become
 keyboard inputs. Keep risky actions secondary. No auto-action on
 inspection or focus. All attempts use the API's action offer and observed revision.
+While the card is open, outline its selected tile with one native pixel of sage.
+Draw it above terrain and below every creature, hero and object sprite, including
+neighboring sprites that extend over the tile. The outline follows keyboard
+inspection and the map camera; closing the card or taking an action clears it.
+This marks the inspected ground square, independently of an engine target cursor.
 
 Within the sprite pass, draw ground loot and fixtures first, then all mobile actors
 in foot order. Never suppress a ground object because its cell has an occupant.
@@ -690,6 +695,19 @@ public game.quit, preserving the engine's explicit confirmation and terminal jou
 
 Disable item actions only when the current revision's C action offer says
 knownBlocked. More actions includes a short reason below unavailable choices.
+More actions opens with `#` or its visible button. Its Lit search component keeps
+the input across the top, focused on opening; the matching list alone scrolls.
+Match action labels and names by substring alongside exact classic shortcuts and
+the shared command grammar (`20s`, `20.`, `mh`). Typing filters without executing;
+arrows select and Enter/click explicitly tries a result. A bare count offers both
+search and rest. Keep unavailable matches visible with reasons, and bind each
+callback to the opening game/revision. The native dialog retains Escape and focus
+restoration. Direct in-game classic prefixes retain their existing composer.
+Share action definitions between the menu's visible key badges and map shortcuts.
+Use compact 36px text buttons on desktop, 44px on phones/coarse pointers, and
+consistent 6px/12px padding; icon targets retain their existing 44px geometry.
+Recurring controls should become small Lit components as they are improved,
+following the examples in AGENTS.md; game state and decisions stay with the caller.
 Never duplicate inventory eligibility rules in the client or probe by spending
 input. Drink remains available on a perceived fountain/sink underfoot and asks
 for the engine's confirmation; lack of potions alone does not block that use.
@@ -1119,8 +1137,8 @@ LimeZu actors and perceived objects use their ground/foot positions within one
 foreground layer: a nearer boulder can cover a figure behind it, and a nearer
 figure covers the boulder. Animation hops change drawing position, not depth.
 Actors remain readable above terrain through the existing cutaway policy; these
-flat character sheets do not acquire invented 3D body geometry. Selection and
-status cues remain a distinct interface overlay. Independent ray/box checks cover
+flat character sheets do not acquire invented 3D body geometry. The inspection
+outline is below foreground sprites; status cues remain above them. Independent ray/box checks cover
 both door orientations, all three door states and four neighboring wall heights.
 
 Named bot provenance: `defineBot` requires an executable name and accepts typed

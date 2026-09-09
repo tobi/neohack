@@ -173,6 +173,7 @@ export class DungeonMap {
   readonly deathTraces=new DeathTraces();
   private perceptionSession?: string;
   route: {x:number;y:number}[] = [];
+  selectedTile: { x: number; y: number } | null = null;
   context: { x: number; y: number } | null = null;
   positionCursor: { x: number; y: number } | null = null;
   private intro = {
@@ -911,6 +912,15 @@ export class DungeonMap {
       ambienceTimeMs: this.reducedMotion.matches || document.hidden ? undefined : now,
     });
     c.restore();
+    // Inspection belongs to the ground tile. Actors and objects, including tall
+    // sprites anchored on a neighboring tile, must occlude its outline.
+    if (this.selectedTile) {
+      const x = (this.selectedTile.x - this.origin.x) * 16,
+        y = (this.selectedTile.y - this.origin.y) * 16;
+      c.strokeStyle = "#b8c995";
+      c.lineWidth = 1;
+      c.strokeRect(x + 0.5, y + 0.5, 15, 15);
+    }
     this.deathTraces.age(this.observation.turn);
     if (!this.symbols) for(const trace of this.deathTraces.entries) {
       const cell=this.observation.world.find(cell=>cell.x===trace.x&&cell.y===trace.y);

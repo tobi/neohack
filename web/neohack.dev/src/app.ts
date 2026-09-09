@@ -36,6 +36,7 @@ import { creatureArtUrl, inventoryArt } from "./symbol-art";
 import { knownCreatureArt } from "./creature-families";
 import { MovementInput } from "./movement-input";
 import { describeCommand, arrowLetters, type CommandIntent } from "./command-input";
+import { actionMenu, gameActions } from "./action-menu";
 import type { WebMcpRegistration } from "/runtime/typescript/webmcp.js";
 import { loadRuntime, warmPackage, runtimePackage } from "./runtime-loader";
 import {
@@ -363,7 +364,7 @@ class PixelNethack extends HTMLElement {
                 `<button data-move="${d}" data-game aria-label="Move ${d}">${g}</button>`,
             )
             .join("")}</div></div>
-          <div class="action-dock"><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><button data-action="pickup" data-game>Pick up<kbd>,</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="pray" data-game>Pray</button><button id="more-actions" data-game>More actions</button></div>
+          <div class="action-dock"><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><button data-action="pickup" data-game>Pick up<kbd>,</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="pray" data-game>Pray</button><button id="more-actions" data-game aria-keyshortcuts="#">More actions<kbd>#</kbd></button></div>
           <nav class="side-nav" aria-label="Adventure views"><button data-view="inventory">Backpack <span id="inventory-count"></span><kbd>i</kbd></button><button data-view="surroundings">Surroundings</button><button data-view="journal">Journal</button></nav></div>
         </section>
         <aside class="ground-loot" id="ground-loot" aria-label="On the ground" hidden><h2>On the ground</h2><p>At your feet · choose what to take</p><div id="ground-items"></div></aside>
@@ -1704,6 +1705,7 @@ class PixelNethack extends HTMLElement {
   private closeTile() {
     this.inspectionVersion++;
     this.map.route=[];
+    this.map.selectedTile = null;
     this.map.draw();
     if (!this.tilePanel) return;
     const focused = this.tilePanel.contains(document.activeElement);
@@ -1899,6 +1901,7 @@ class PixelNethack extends HTMLElement {
       button.replaceChildren(badge, label);
     });
     this.tilePanel = panel;
+    this.map.selectedTile = { x, y };
     this.querySelector("#dungeon")!.parentElement!.append(panel);
     this.map.draw();
     // Focus Back, so the input that exposed an obstruction cannot activate an attempt.
@@ -2218,6 +2221,7 @@ class PixelNethack extends HTMLElement {
       fire: () => g.fire(), cast: () => g.cast(), swap: () => g.swap(),
       pay: () => g.pay(), engrave: () => g.engrave(),
       wait: () => g.wait(),
+      rest: () => g.rest({ turns: 1 }),
       search: () => g.search(),
       pickup: () => g.pickup(ref, options),
       eat: () => g.eat(ref, options),
@@ -2249,34 +2253,20 @@ class PixelNethack extends HTMLElement {
     }
   }
   private more() {
-    this.openMenu(
-      '<h2 id="menu-title">A few more possibilities.</h2><p class="subtle">Choose an action. If it needs an item, direction, or permission, you’ll be asked.</p><div class="more-grid" id="more-grid"></div>',
-    );
-    this.$("#more-grid").append(this.button("Type a command", () => { this.closeMenu(); this.showKeyDraft("", true); }));
-    for (const [action, label] of Object.entries({
-      drink: "Drink",
-      read: "Read",
-      apply: "Use a tool",
-      wield: "Wield",
-      equip: "Wear equipment",
-      remove: "Remove equipment",
-      drop: "Drop",
-      zap: "Zap a wand",
-      close: "Close a door",
-      kick: "Kick",
-      open: "Open a door",
-      loot: "Open container",
-      pray: "Pray",
-    })) {
-      const b = this.button(label, () => this.action(action));
-      const reason = this.actionUnavailable(action);
-      b.disabled = !!reason;
-      b.title = reason;
-      if (reason) { const hint = document.createElement("small"); hint.textContent = reason; b.append(hint); }
-      b.dataset.unavailable = reason;
-      b.dataset.operation = "";
-      this.$("#more-grid").append(b);
-    }
+    if (!this.playable()) return;
+    const game = this.game!, revision = game.state.revision;
+    const current = () => this.game === game && game.state.revision === revision && this.playable();
+    this.openMenu("");
+    const menu = actionMenu({
+      unavailable: action => this.actionUnavailable(action),
+      action: action => { if (current()) this.action(action); },
+      command: intent => {
+        if (!current()) return;
+        this.closeMenu(); this.executeKeyCommand(intent);
+      },
+    });
+    this.$("#menu-content").append(menu.element);
+    menu.focus();
   }
   private itemDetails(item: ItemRef) {
     this.openMenu(
@@ -2912,6 +2902,11 @@ class PixelNethack extends HTMLElement {
       this.inspectTile(x, y);
       return;
     }
+    if (e.key === "#") {
+      e.preventDefault();
+      this.more();
+      return;
+    }
     if (e.key === "?") {
       e.preventDefault();
       this.guide();
@@ -2961,31 +2956,21 @@ class PixelNethack extends HTMLElement {
       this.movement.press(move[e.key]!, `key:${e.code || e.key}`);
       return;
     }
-    const action: Record<string, string> = {
-      ".": "wait",
-      s: "search",
-      ",": "pickup",
-      a: "apply", w: "wield", d: "drop",
-      c: "close", q: "drink", r: "read", z: "zap", t: "throw",
-      f: "fire", Z: "cast", x: "swap", p: "pay", E: "engrave", Q: "quiver",
-      e: "eat",
-      o: "open",
-      ">": "down",
-      "<": "up",
-    };
-    if (action[e.key]) {
+    const action = gameActions.find(action => action.key && action.key === e.key);
+    if (action) {
       e.preventDefault();
-      this.action(action[e.key]!);
+      this.action(action.id);
     }
   }
+
   private guide() {
     this.openMenu(
-      `<h2 id="menu-title">A small guide to a very big world.</h2><p>Find the Amulet of Yendor in the depths, and bring it back. Getting there is a story of curiosity, decisions, and learning from a short life or two.</p><div class="guide-section"><h3>01 / Take your time</h3><p>This is turn-based. Reading, inspecting the map, and opening your backpack cost nothing. An action can take time; the journal tells you what happened.</p></div><div class="guide-section"><h3>02 / Try one thing</h3><p>Tap h j k l, an arrow, or a direction button for one step; hold to walk. Release to stop repeating. Rapid taps keep at most one extra step buffered. Walking pauses at walls, nearby creatures, damage, and decisions. Press again deliberately to interact. Search around you, open a door, or pick up something interesting.</p></div><div class="guide-section"><h3>03 / Listen to the dungeon</h3><p>Hunger, danger, and strange objects are part of the adventure. Read warnings before answering. If eating or reading is interrupted, choose the action again only when you want to continue.</p></div><div class="guide-section"><h3>04 / Know what you know</h3><p>The map shows remembered terrain and currently perceived occupants. Creature and object art follows the descriptions you perceive. An uncertain creature appears as a cloud with a question mark. A green underline marks an ally. Use Art in the game menu to show the original symbols. Raised stone edges frame corridors; recessed gaps lead toward unexplored space, where the layout is still unknown. Click a tile or open Surroundings for a text description.</p></div><dl class="key-list"><dt>h j k l / Arrows</dt><dd>Tap to step · hold to walk</dd><dt>y u b n</dt><dd>Move diagonally</dd><dt>Shift + h j k l y u b n</dt><dd>Native NetHack run until an obstacle or something interesting; stops before fighting</dd><dt>. / s / , / e / o</dt><dd>Wait / search / pick up / eat / open</dd><dt>&lt; / &gt;</dt><dd>Go upstairs / downstairs</dd><dt>Enter / arrow keys / Escape</dt><dd>Inspect here / nearby tiles / return</dd><dt>While inspecting: arrows / 1–9 / slash / Escape</dt><dd>Inspect nearby / shown action / encyclopedia / return</dd><dt>a / w / d / c / q / r / z / t</dt><dd>Apply / wield / drop / close / drink / read / zap / throw</dd><dt>f / Z / x / p / E / Q</dt><dd>Fire / cast / swap weapons / pay / engrave / ready quiver</dd><dt>i / ?</dt><dd>Backpack / this guide</dd><dt>Mouse wheel / middle drag</dt><dd>Zoom / look around without taking a turn</dd><dt>Shift + arrows</dt><dd>Pan the map without moving</dd></dl><p class="save-explanation">Use g + direction to stop at interesting things, G + direction to continue past corridor forks, m + direction to avoid pickup and fighting, and F + direction to force one attack. m combines with g, G or an uppercase direction. Type a count before s or . (for example 10s or 20.) for native search/rest, up to 1,000 turns. The command box below your hero shows clickable next-key hints. Backspace edits; Escape cancels. Other command counts are unsupported. Item selection and warnings use explicit dialogs.</p><p class="save-explanation">Your game saves after each completed action, on this browser and address. Clearing site data removes saves. Keep the same game version to return to an older adventure.</p>`,
+      `<h2 id="menu-title">A small guide to a very big world.</h2><p>Find the Amulet of Yendor in the depths, and bring it back. Getting there is a story of curiosity, decisions, and learning from a short life or two.</p><div class="guide-section"><h3>01 / Take your time</h3><p>This is turn-based. Reading, inspecting the map, and opening your backpack cost nothing. An action can take time; the journal tells you what happened.</p></div><div class="guide-section"><h3>02 / Try one thing</h3><p>Tap h j k l, an arrow, or a direction button for one step; hold to walk. Release to stop repeating. Rapid taps keep at most one extra step buffered. Walking pauses at walls, nearby creatures, damage, and decisions. Press again deliberately to interact. Search around you, open a door, or pick up something interesting.</p></div><div class="guide-section"><h3>03 / Listen to the dungeon</h3><p>Hunger, danger, and strange objects are part of the adventure. Read warnings before answering. If eating or reading is interrupted, choose the action again only when you want to continue.</p></div><div class="guide-section"><h3>04 / Know what you know</h3><p>The map shows remembered terrain and currently perceived occupants. Creature and object art follows the descriptions you perceive. An uncertain creature appears as a cloud with a question mark. A green underline marks an ally. Use Art in the game menu to show the original symbols. Raised stone edges frame corridors; recessed gaps lead toward unexplored space, where the layout is still unknown. Click a tile or open Surroundings for a text description.</p></div><dl class="key-list"><dt>h j k l / Arrows</dt><dd>Tap to step · hold to walk</dd><dt>y u b n</dt><dd>Move diagonally</dd><dt>Shift + h j k l y u b n</dt><dd>Native NetHack run until an obstacle or something interesting; stops before fighting</dd><dt>. / s / , / e / o</dt><dd>Wait / search / pick up / eat / open</dd><dt>&lt; / &gt;</dt><dd>Go upstairs / downstairs</dd><dt>Enter / arrow keys / Escape</dt><dd>Inspect here / nearby tiles / return</dd><dt>While inspecting: arrows / 1–9 / slash / Escape</dt><dd>Inspect nearby / shown action / encyclopedia / return</dd><dt>a / w / d / c / q / r / z / t</dt><dd>Apply / wield / drop / close / drink / read / zap / throw</dd><dt>f / Z / x / p / E / Q</dt><dd>Fire / cast / swap weapons / pay / engrave / ready quiver</dd><dt>i / ?</dt><dd>Backpack / this guide</dd><dt>Mouse wheel / middle drag</dt><dd>Zoom / look around without taking a turn</dd><dt>Shift + arrows</dt><dd>Pan the map without moving</dd></dl><p class="save-explanation">Use g + direction to stop at interesting things, G + direction to continue past corridor forks, m + direction to avoid pickup and fighting, and F + direction to force one attack. m combines with g, G or an uppercase direction. Type a count before s or . (for example 10s or 20.) for native search/rest, up to 1,000 turns. The command box below your hero shows clickable next-key hints. Backspace edits; Escape cancels. Press # for More actions: search names and commands, then Enter to try the selected result. Other command counts are unsupported. Item selection and warnings use explicit dialogs.</p><p class="save-explanation">Your game saves after each completed action, on this browser and address. Clearing site data removes saves. Keep the same game version to return to an older adventure.</p>`,
     );
   }
   private credits() {
     this.openMenu(
-      `<h2 id="menu-title">An old world. An open door.</h2><p>neohack is a new, approachable window into NetHack, built on the neohack library and its shared C engine.</p><p>NetHack by the NetHack DevTeam and its contributors, under the NetHack General Public License. Original notices remain with the engine.</p><p>Character art from Modern Interiors by <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noreferrer">LimeZu</a>. Companion and bat illustrations use original templates from the pixel-art-interfaces skill. Dungeon tiles and interface design are original to this example.</p><p>JetBrains Mono by the JetBrains Mono Project Authors, under the <a href="/fonts/OFL.txt" target="_blank" rel="noreferrer">SIL Open Font License</a>.</p><p>Sound effects: <a href="https://kenney.nl/assets/rpg-audio" target="_blank" rel="noreferrer">Kenney RPG Audio</a>, <a href="/audio/Kenney-LICENSE.txt">CC0</a>.</p><p>Gameplay runs in your browser.</p>`,
+      `<h2 id="menu-title">An old world. An open door.</h2><p>neohack is a new, approachable window into NetHack, built on the neohack library and its shared C engine.</p><p>NetHack by the NetHack DevTeam and its contributors, under the NetHack General Public License. Original notices remain with the engine.</p><p>Character art from Modern Interiors by <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noreferrer">LimeZu</a>. Companion and bat illustrations use original templates from the pixel-art-interfaces skill. Dungeon tiles and interface design are original to this example.</p><p>JetBrains Mono by the JetBrains Mono Project Authors, under the <a href="/fonts/OFL.txt" target="_blank" rel="noreferrer">SIL Open Font License</a>.</p><p>Sound effects: <a href="https://kenney.nl/assets/rpg-audio" target="_blank" rel="noreferrer">Kenney RPG Audio</a>, <a href="/audio/Kenney-LICENSE.txt">CC0</a>.</p><p>Reusable interface components use Lit. <a href="/third-party-notices.txt" target="_blank" rel="noreferrer">Component licenses</a>.</p><p>Gameplay runs in your browser.</p>`,
     );
   }
 }
