@@ -49,6 +49,7 @@ test(
     await page.keyboard.press("Escape");
     const result = await page.evaluate(async () => {
       const app = document.querySelector("pixel-nethack");
+      const initial = app.snapshot;
       await app.publicRecorder.flush();
       for (let i = 0; i < 4; i++) await app.run(() => app.game.wait());
       await app.publicRecorder.flush();
@@ -75,6 +76,7 @@ test(
       for (let i = 0; i < 4; i++) await app.run(() => app.game.wait());
       const saved = await app.publicRecorder.flush();
       return {
+        initial,
         saved,
         state: app.snapshot,
         manifest: app.publicRecorder.manifest,
@@ -122,14 +124,12 @@ test(
     await viewer.waitForFunction(
       () => document.querySelector("neohack-world")?.snapshot?.observation,
     );
-    assert.ok(
-      await viewer.evaluate(
-        () =>
-          document.querySelector("neohack-world").snapshot.observation.turn >=
-          1,
-      ),
-      "the first scene is playable while later inputs remain unavailable",
+    assert.deepEqual(
+      await viewer.evaluate(() => document.querySelector("neohack-world").snapshot),
+      result.initial,
+      "the exact opening scene is playable while later inputs remain unavailable",
     );
+    assert.equal(requests.some(path=>path.includes('/checkpoints/')),false,'opening playback cannot restore a later checkpoint');
     release();
     const played = await viewer.evaluate(async (count) => {
       const world = document.querySelector("neohack-world");
@@ -161,6 +161,13 @@ test(
       result.state,
       "a real CDN checkpoint and its suffix reproduce the complete response",
     );
+    const beginning = await viewer.evaluate(async () => {
+      const world = document.querySelector('neohack-world');
+      await world.seek(0);
+      return world.snapshot;
+    });
+    assert.deepEqual(beginning,result.initial,'rewinding after a checkpoint restores the exact first response');
+    assert.equal(checkpointReads,1,'rewind does not reuse a checkpoint beyond the requested moment');
     await replayContext.unroute(checkpointUrl);
     await replayContext.route(checkpointUrl, (route) =>
       route.fulfill({ status: 200, body: Buffer.from("damaged checkpoint") }),

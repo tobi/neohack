@@ -6,12 +6,17 @@ const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T
 const id=location.pathname.split('/')[2]??'';
 const viewer=$<NeohackWorld>('replay');
 let summary:Record<string,unknown>={}, current:Record<string,unknown>={};
-function details(){
-  const values=[['Class',summary.role??current.role],['Hero level',summary.heroLevel??current.level],['Peak hero level',summary.maxLevel],['Dungeon location',summary.depthLabel??current.depth],['Deepest dungeon level',summary.maxDepth],['Turns',summary.turn??current.turn],['Outcome',summary.endKind??(summary.ended===false?'Adventuring':current.outcome)],['Last recorded',typeof summary.updatedAt==='number'?new Date(summary.updatedAt).toLocaleString():undefined]];
-  $('run-details').replaceChildren(...values.map(([label,value])=>{
+function renderDetails(id:string,values:unknown[][]){
+  $(id).replaceChildren(...values.map(([label,value])=>{
     const item=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');
     dt.textContent=String(label);dd.textContent=value===undefined||value===null?'Not recorded':String(value);item.append(dt,dd);return item;
   }));
+}
+function details(){
+  // The selected scene is authoritative for playback. Ledger totals describe a
+  // later moment and must never replace its location, level, turn or outcome.
+  renderDetails('run-details', [['Class',current.role],['Hero level',current.level],['Dungeon location',current.depth],['Turn',current.turn],['State',current.outcome]]);
+  renderDetails('run-totals', [['Peak hero level',summary.maxLevel],['Deepest dungeon level',summary.maxDepth],['Recorded turns',summary.turn],['Last recorded location',summary.depthLabel],['Outcome',summary.endKind??(summary.ended===false?'Adventuring':undefined)],['Last recorded',typeof summary.updatedAt==='number'?new Date(summary.updatedAt).toLocaleString():undefined]]);
 }
 async function copy(id:string,success:string){
   const field=$<HTMLInputElement|HTMLTextAreaElement>(id);
@@ -38,6 +43,6 @@ else {
   void fetch('/api/runs/'+encodeURIComponent(id),{credentials:'omit',signal:AbortSignal.timeout(10000)})
     .then(async response=>{if(!response.ok)throw Error('Details unavailable');summary=await response.json();
       if(typeof summary.name==='string'){$('replay-title').textContent=summary.name;document.title=summary.name+' · Replay · neohack';}
-      $('metadata-status').textContent='Run totals above; the player shows the selected moment.';details();})
-    .catch(()=>{$('metadata-status').textContent='Run totals and date are unavailable. Showing details from the selected replay moment.';});
+      $('metadata-status').textContent='Totals describe the full recording, independently of the selected moment.';details();})
+    .catch(()=>{$('metadata-status').textContent='Run totals and date are unavailable. Playback is still available.';});
 }

@@ -21,12 +21,26 @@ test('dedicated replay page shares public identity, metadata and embeds without 
  const server=createTestHarness({store}),{url:base}=await server.listen(),url=base.origin;t.after(()=>server.close());
  const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());
  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(String(e)));
+ let releaseMetadata;
+ const metadataGate=new Promise(resolve=>{releaseMetadata=resolve;});
+ t.after(()=>releaseMetadata());
+ await page.route('**/api/runs/'+id,async route=>{await metadataGate;await route.continue();});
  await page.goto(url+'/replays/'+id);
  await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Replay ready'));
+ const selected=()=>page.locator('#run-details').evaluate(el=>Object.fromEntries([...el.children].map(item=>[item.querySelector('dt').textContent,item.querySelector('dd').textContent])));
+ const initialDetails=await selected();
+ assert.deepEqual(initialDetails,{Class:'valkyrie','Hero level':String(frames[0].observation.vitals.level),'Dungeon location':frames[0].observation.location.depthLabel,Turn:String(frames[0].observation.turn),State:'Adventuring'});
+ assert.deepEqual(await page.evaluate(()=>document.querySelector('#replay').snapshot),frames[0],'page opens at the first recorded frame before metadata arrives');
+ releaseMetadata();
+ await page.waitForFunction(()=>document.querySelector('#replay-title').textContent==='Replay Page');
  assert.equal(await page.locator('#replay-title').textContent(),'Replay Page');
  assert.equal(await page.locator('#replay-id').textContent(),id);
- assert.match(await page.locator('#run-details').textContent(),/Dungeon, level 4/);
- assert.match(await page.locator('#run-details').textContent(),/2026/);
+ assert.deepEqual(await selected(),initialDetails,'late final metadata cannot overwrite the opening scene');
+ assert.equal(await page.locator('#recorded-run').evaluate(el=>el.open),false,'run totals are initially collapsed');
+ await page.getByText('Run totals and outcome',{exact:true}).click();
+ assert.match(await page.locator('#run-totals').textContent(),/Dungeon, level 4/);
+ assert.match(await page.locator('#run-totals').textContent(),/2026/);
+ await page.getByText('Run totals and outcome',{exact:true}).click();
  const canonical=url+'/replays/'+id;
  assert.equal(await page.locator('#share-url').inputValue(),canonical);
  assert.match(await page.locator('#embed-code').inputValue(),new RegExp('/replays/'+id));
@@ -38,8 +52,10 @@ test('dedicated replay page shares public identity, metadata and embeds without 
  await world.getByRole('button',{name:'Play replay',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('#replay').index===5);
  assert.deepEqual(await page.evaluate(()=>window.positions),[1,2,3,4,5]);
+ assert.equal((await selected()).Turn,String(frames[5].observation.turn),'details follow playback');
  await world.getByLabel('Replay frame',{exact:true}).fill('0');
  assert.equal(await page.evaluate(()=>document.querySelector('#replay').index),0,'seeking retains the selected index when pausing');
+ assert.deepEqual(await selected(),initialDetails,'seeking back restores opening details, not ledger totals');
  for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
   await page.setViewportSize(viewport);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
@@ -51,6 +67,7 @@ test('dedicated replay page shares public identity, metadata and embeds without 
  await page.route('**/api/runs/*',r=>r.fulfill({status:503,json:{error:'unavailable'}}));
  await page.reload();await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Replay ready'));
  assert.match(await page.locator('#metadata-status').textContent(),/unavailable/);
+ assert.deepEqual(await selected(),initialDetails,'metadata failure does not affect the selected moment');
  await page.goto(url+'/replays/missing-recording');await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Replay unavailable'));
  assert.deepEqual(errors,[]);
 });

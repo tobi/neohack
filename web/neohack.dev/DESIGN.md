@@ -1488,8 +1488,12 @@ not persisted or recreated from old receipts on resume.
 ### Dedicated replay pages
 
 Every public replay has a stable `/replays/{run-id}` page with its visible ID,
-player, public ledger details (last-recorded date, class, hero level, peak level,
-dungeon location/depth, turns and outcome), share URL and selectable embed code.
+player, share URL and selectable embed code. Playback opens at the first recorded
+input. Selected-moment details follow the actual displayed scene, including when
+seeking back from a checkpoint; ledger totals never override its location, hero
+level, turn or outcome. Peak progress, final/latest location, recorded turns,
+outcome and date live in a separate, initially collapsed Run totals and outcome
+disclosure so later events are not presented as the start of the adventure.
 Missing metadata is labelled rather than inferred; optional ledger failures do
 not gate static CDN playback. This page is unlisted and requires no sign-in.
 The component shows a visible ID and link to this page for public replay sources,

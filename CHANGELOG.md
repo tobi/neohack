@@ -8,6 +8,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Replay details follow the moment being watched. Final location, turns and
+  outcome are kept under Run totals, rather than appearing to describe the
+  opening scene.
 - More actions now includes Chat: search `chat`, then choose whom to talk to.
   This reaches the Oracle's consultations and other conversations through the
   game's own dialogue and explicit choices.
