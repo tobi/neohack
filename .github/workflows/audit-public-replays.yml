@@ -29,8 +29,13 @@ jobs:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile --ignore-scripts --cwd hosting/vercel
       - run: npm ci --ignore-scripts --prefix lib/neonethack
-      - run: lib/neonethack/node_modules/.bin/tsc -p lib/neonethack/tsconfig.json
+      - name: Build the transport and stage its worker modules
+        run: |
+          lib/neonethack/node_modules/.bin/tsc -p lib/neonethack/tsconfig.json
+          mkdir -p lib/neonethack/dist/wasm
+          cp lib/neonethack/wasm/*.mjs lib/neonethack/dist/wasm/
       - run: node hosting/vercel/scripts/stage-validator.mjs
+      - run: node -e "import('./hosting/vercel/scripts/audit-public-replays.mjs')"
       - name: Audit the complete ledger and original pinned replay streams
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
