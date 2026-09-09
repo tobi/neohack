@@ -4,6 +4,7 @@ import { replayDocument, inputRecords, validateManifest } from '../../../lib/neo
 export const fingerprint = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export class InvalidReplay extends Error {}
 export class MissingReplay extends Error {}
+export const FRAME_CHUNK_BYTES = 2 * 1024 * 1024;
 export async function publicDocument(url) {
   const response = await fetch(url, { signal: AbortSignal.timeout(30000), credentials: 'omit', redirect: 'error' });
   if (response.status === 404) throw new MissingReplay('Missing public object');
@@ -42,9 +43,20 @@ export async function* frames(m, load) {
   if (count !== m.count) throw new InvalidReplay('Frame count differs');
 }
 export async function inspectFrames(m, load) {
-  const hash = createHash('sha256'); let count = 0;
-  for await (const frame of frames(m, load)) { hash.update(JSON.stringify(frame) + '\n'); count++; }
-  return { count, digest: hash.digest('hex') };
+  const hash = createHash('sha256'); let count = 0, packingChunks = 0, bytes = 13, batch = 0, oversized = false;
+  for await (const frame of frames(m, load)) {
+    const text = JSON.stringify(frame), size = Buffer.byteLength(text) + 1;
+    hash.update(text + '\n');
+    if (size > FRAME_CHUNK_BYTES - 13) oversized = true;
+    if (count === 0) packingChunks++;
+    else {
+      if (bytes + size > FRAME_CHUNK_BYTES || batch >= 256) { bytes = 13; batch = 0; }
+      if (!batch) packingChunks++;
+      bytes += size; batch++;
+    }
+    count++;
+  }
+  return { count, digest: hash.digest('hex'), packingChunks: oversized ? null : packingChunks };
 }
 export async function inspectInputs(m, url) {
   try {

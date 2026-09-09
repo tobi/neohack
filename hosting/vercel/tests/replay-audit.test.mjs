@@ -113,6 +113,19 @@ test('frame compaction cannot overwrite a playlist advanced by another publisher
   for (const p of original.chunks) assert.ok(await cdn.read(prefix + p));
 });
 
+test('already economical frame playlists incur no replacement Blob writes', async () => {
+  const store = new MemoryStorage(), cdn = publicStoreFor(store), prefix = 'replays/economical/';
+  const frame = { observation: { world: [], location: {}, vitals: {}, heard: ['x'.repeat(900000)] } };
+  const manifest = { version: 1, count: 6, chunks: ['chunks/a.json', 'chunks/b.json', 'chunks/c.json'] };
+  for (const p of manifest.chunks) await cdn.write(prefix + p, { frames: [frame, frame] });
+  await cdn.write(prefix + 'manifest.json', manifest);
+  const prior = await cdn.read(prefix + 'manifest.json');
+  const checked = await inspectFrames(manifest, async p => (await cdn.read(prefix + p)).value);
+  assert.equal(checked.packingChunks, 4);
+  cdn.write = async () => { assert.fail('No candidate objects or playlists should be written'); };
+  await scope(store, async () => assert.deepEqual(await compactFrames('economical', manifest, prior.etag, checked.packingChunks), manifest));
+});
+
 test('a real public frame recording compacts to bounded files, preserves exact scenes and renders in the current embed', { timeout: 90000 }, async t => {
   const engine = await WasmTransport.create();
   let initial;

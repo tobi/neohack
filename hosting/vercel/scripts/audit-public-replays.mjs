@@ -8,15 +8,24 @@ import { ledgerRuns, ledgerStats, replayState, replaySource, auditReplayAvailabi
 import { publishReplay } from '../src/publish-replay.ts';
 import { compactProtocolReplay, publishManifest } from '../src/protocol-replays.ts';
 import { collectReplay } from '../../../examples/chronicle/replay.mjs';
-import { fingerprint, frames, inspectFrames, inspectInputs, publicDocument, InvalidReplay, MissingReplay } from './replay-inspection.mjs';
+import { fingerprint, frames, inspectFrames, inspectInputs, publicDocument, InvalidReplay, MissingReplay, FRAME_CHUNK_BYTES } from './replay-inspection.mjs';
 import { pathToFileURL } from 'node:url';
 
-export const FRAME_CHUNK_BYTES = 2 * 1024 * 1024;
+export { FRAME_CHUNK_BYTES };
 /** Replace only the playlist using CAS. All original immutable files remain.
  * First scene stays tiny; every subsequent file is bounded by encoded size. */
-export async function compactFrames(id, manifest, revision) {
+export async function compactFrames(id, manifest, revision, planned) {
   if (manifest.chunks.length < 3) return manifest;
   const store = publicReplayStorage(), prefix = 'replays/' + id + '/';
+  const load = async path => {
+    const doc = await store.read(prefix + path);
+    if (!doc) throw new MissingReplay('Missing frame chunk');
+    return doc.value;
+  };
+  // Reuse the audit's streaming size calculation. Never upload candidates that
+  // would leave more files (or fail the target size) than the existing playlist.
+  if (planned === undefined) planned = (await inspectFrames(manifest, load)).packingChunks;
+  if (planned === null || planned >= manifest.chunks.length) return manifest;
   const chunks = []; let batch = [], bytes = 13, count = 0;
   const flush = async () => {
     if (!batch.length) return;
@@ -25,11 +34,7 @@ export async function compactFrames(id, manifest, revision) {
     catch (e) { if (!(e instanceof Conflict)) throw e; if (fingerprint((await store.read(prefix + name))?.value) !== fingerprint(body)) throw new InvalidReplay('Immutable frames differ'); }
     chunks.push(name); batch = []; bytes = 13;
   };
-  for await (const frame of frames(manifest, async path => {
-    const doc = await store.read(prefix + path);
-    if (!doc) throw new MissingReplay('Missing frame chunk');
-    return doc.value;
-  })) {
+  for await (const frame of frames(manifest, load)) {
     const size = Buffer.byteLength(JSON.stringify(frame)) + 1;
     if (size > FRAME_CHUNK_BYTES - 13) throw Error('A frame exceeds the compaction target; retain original playlist');
     if (bytes + size > FRAME_CHUNK_BYTES || batch.length >= 256) await flush();
@@ -37,7 +42,7 @@ export async function compactFrames(id, manifest, revision) {
     if (count === 1) await flush();
   }
   await flush();
-  if (chunks.length >= manifest.chunks.length) return manifest;
+  if (chunks.length !== planned) throw Error('Frame packing plan differs');
   const packed = { ...manifest, chunks };
   await store.write(prefix + 'manifest.json', packed, revision);
   return packed;
@@ -99,7 +104,7 @@ export async function auditOne(id, { apply = false, origin = process.env.PUBLIC_
       checked = await inspectFrames(manifest, p => publicDocument(new URL(p, url)));
       if (apply) {
         if (source !== await replaySource(id)) throw Error('Archive changed during verification');
-        await compactFrames(id, manifest, publication?.etag);
+        await compactFrames(id, manifest, publication?.etag, checked.packingChunks);
       }
     }
     if (apply) {
