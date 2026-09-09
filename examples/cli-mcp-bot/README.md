@@ -16,8 +16,8 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
 
 ## Setup
 
-1. Build the engine and install the native `neohack-mcp` executable at
-   `~/.local/bin/neohack-mcp`. The bot starts it as:
+1. Build and install the C MCP server with `make mcp` from the repository root.
+   That puts `neohack-mcp` on `~/.local/bin`. The bot starts it as:
 
    ```sh
    ~/.local/bin/neohack-mcp --http 18765 ENGINE DATA SESSIONS

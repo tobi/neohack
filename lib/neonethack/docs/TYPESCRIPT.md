@@ -61,8 +61,10 @@ fills omitted parameters or retries.
 
 ## Native MCP
 
-MCP is implemented in C. Build with `make -C lib/neonethack` (requires
-pkg-config and libevent 2.1 development headers/libraries), then run:
+MCP is implemented in C. `make mcp` builds it and installs `neohack-mcp` to
+`~/.local/bin` (requires pkg-config and libevent 2.1 development headers/libraries).
+The installed executable finds engine and data next to itself. From a build tree,
+or for a custom runtime, pass explicit paths:
 
 ```sh
 lib/neonethack/build/native/neonethack-mcp \

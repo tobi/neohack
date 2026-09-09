@@ -97,9 +97,29 @@ See [DISTRIBUTION.md](DISTRIBUTION.md) for the checked preview/archive audit.
 
 ## Native stdio MCP (no Node runtime)
 
-`make -C lib/neonethack native` also compiles `build/native/neonethack-mcp`, linked
-against the public C library. CMake install includes the executable and its runtime
-library path. Configure an MCP client with absolute paths:
+`make mcp` builds the C MCP server and installs it to `~/.local` (override with
+`MCP_PREFIX`). The installed `neohack-mcp` finds engine and data next to itself;
+sessions default to `$XDG_STATE_HOME/neohack/sessions` or
+`~/.local/state/neohack/sessions`.
+
+```sh
+make mcp
+neohack-mcp                 # stdio
+neohack-mcp --http 8080     # HTTP at 127.0.0.1:8080/mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "neohack": {
+      "command": "neohack-mcp"
+    }
+  }
+}
+```
+
+`make -C lib/neonethack native` also compiles `build/native/neonethack-mcp` without
+installing it. From the build tree, or for a custom runtime, pass explicit paths:
 
 ```json
 {

@@ -191,6 +191,41 @@ static void input_ready(evutil_socket_t fd, short events, void *arg)
     }
     if (evbuffer_get_length(s->input) > MCP_FRAME_LIMIT) { evbuffer_drain(s->input,evbuffer_get_length(s->input)); s->oversized = 1; }
 }
+#ifndef NNH_BUNDLE_MCP
+#ifndef NNH_MCP_ENGINE_RELDIR
+#define NNH_MCP_ENGINE_RELDIR "../libexec/neonethack"
+#endif
+#ifndef NNH_MCP_DATA_RELDIR
+#define NNH_MCP_DATA_RELDIR "../share/neonethack/data"
+#endif
+static int mcp_install_paths(const char *argv0, char **engine, char **data, char **sessions)
+{
+    static char exe[PATH_MAX], engine_buf[PATH_MAX], data_buf[PATH_MAX], state[PATH_MAX];
+    ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
+    if (n >= 0 && n < (ssize_t)sizeof exe - 1) exe[n] = 0;
+    else if (!argv0 || !realpath(argv0, exe)) return -1;
+    char *slash = strrchr(exe, '/');
+    if (!slash) { errno = EINVAL; return -1; }
+    *slash = 0;
+    if (snprintf(engine_buf, sizeof engine_buf, "%s/%s/engine", exe, NNH_MCP_ENGINE_RELDIR) >= (int)sizeof engine_buf ||
+        snprintf(data_buf, sizeof data_buf, "%s/%s", exe, NNH_MCP_DATA_RELDIR) >= (int)sizeof data_buf) {
+        errno = ENAMETOOLONG; return -1;
+    }
+    if (access(engine_buf, X_OK) || access(data_buf, R_OK)) return -1;
+    if (!*sessions) {
+        const char *home = getenv("HOME"), *xdg = getenv("XDG_STATE_HOME");
+        if (xdg && *xdg) {
+            if (xdg[0] != '/' || snprintf(state, sizeof state, "%s/neohack/sessions", xdg) >= (int)sizeof state) {
+                errno = xdg[0] != '/' ? EINVAL : ENAMETOOLONG; return -1;
+            }
+        } else if (!home || home[0] != '/' || snprintf(state, sizeof state, "%s/.local/state/neohack/sessions", home) >= (int)sizeof state) {
+            errno = (!home || home[0] != '/') ? EINVAL : ENAMETOOLONG; return -1;
+        }
+        *sessions = state;
+    }
+    *engine = engine_buf; *data = data_buf; return 0;
+}
+#endif
 int main(int argc, char **argv)
 {
     mcp_server s = {0}; char self[PATH_MAX], *paths[3]; int count = 0, worker = 0;
@@ -205,13 +240,17 @@ int main(int argc, char **argv)
         } else if (argv[i][0] == '-' || count == 3) goto usage;
         else paths[count++] = argv[i];
     }
-#ifdef NNH_BUNDLE_MCP
     if (!worker && count <= 1) {
         char *sessions = count ? paths[0] : NULL;
+#ifdef NNH_BUNDLE_MCP
         if (mcp_bundle_paths(&paths[0],&paths[1],&sessions)) return 1;
         paths[2] = sessions; count = 3;
-    }
+#else
+        if (!mcp_install_paths(argv[0],&paths[0],&paths[1],&sessions)) {
+            paths[2] = sessions; count = 3;
+        }
 #endif
+    }
     if (count != 3 || (worker && s.port)) goto usage;
     s.config.engine_path = paths[0]; s.config.data_path = paths[1]; s.config.sessions_path = paths[2];
     signal(SIGPIPE,SIG_IGN); /* Executable only; never installed by the C library. */
@@ -252,7 +291,7 @@ usage:
 #ifdef NNH_BUNDLE_MCP
     fprintf(stderr,"usage: %s [--http PORT] [SESSIONS]\nBundled engine and data; sessions default to $XDG_STATE_HOME/neohack/sessions\n(or ~/.local/state/neohack/sessions). Runtime cache: $XDG_CACHE_HOME/neohack/runtimes\n(or ~/.cache/neohack/runtimes). Custom runtime: ENGINE DATA SESSIONS.\n",argv[0]);
 #else
-    fprintf(stderr,"usage: %s [--http PORT] ENGINE DATA SESSIONS\nNative C MCP: default stdio; HTTP " MCP_HTTP_VERSION " at 127.0.0.1:PORT/mcp.\n",argv[0]);
+    fprintf(stderr,"usage: %s [--http PORT] [SESSIONS]\nNative C MCP uses installed engine/data next to this executable when present.\nSessions default to $XDG_STATE_HOME/neohack/sessions (or ~/.local/state/neohack/sessions).\nCustom runtime: ENGINE DATA SESSIONS. HTTP " MCP_HTTP_VERSION " at 127.0.0.1:PORT/mcp.\n",argv[0]);
 #endif
     return argc == 2 && (!strcmp(argv[1],"--help") || !strcmp(argv[1],"-h")) ? 0 : 2;
 }

@@ -6,8 +6,9 @@ BUILD ?= build/native
 CMAKE ?= $(shell command -v cmake)
 GENERATOR ?= Ninja
 PREFIX ?= /usr/local
+MCP_PREFIX ?= $(HOME)/.local
 WASM_BUILD ?= build/wasm
-.PHONY: all configure native bundle engine wasm test test-wasm install generate check-generated clean
+.PHONY: all configure native bundle engine wasm test test-wasm install mcp generate check-generated clean
 all: native
 configure:
 	$(CMAKE) -S . -B $(BUILD) -G "$(GENERATOR)" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$(PREFIX)
@@ -27,6 +28,10 @@ test: native
 	ctest --test-dir $(BUILD) --output-on-failure
 install: native
 	$(CMAKE) --install $(BUILD)
+mcp: native
+	$(CMAKE) --install $(BUILD) --prefix "$(MCP_PREFIX)"
+	ln -sfn neonethack-mcp "$(MCP_PREFIX)/bin/neohack-mcp"
+	@printf 'Installed C MCP server: %s/bin/neohack-mcp\n' "$(MCP_PREFIX)"
 generate:
 	node scripts/generate.ts
 check-generated:

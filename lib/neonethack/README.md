@@ -72,6 +72,7 @@ The library alone has no Lua or Node dependency; these are engine/tooling needs.
 ```sh
 # From this directory:
 make                         # C library, public CLI, stdio MCP, native engine/data
+make mcp                     # same, then install the C MCP server to ~/.local
 make test                    # actual C/engine integration
 npm ci                       # Node ≥22.18, only for TS/MCP tooling
 npm test                     # typecheck + real-engine protocol/client tests
@@ -92,11 +93,14 @@ cmake --build build/native --target native
 cmake --install build/native --prefix /your/prefix
 ```
 
-Installation includes the C library/header, CLI, CMake/pkg-config metadata,
-schemas, engine at `libexec/neonethack/engine`, static data at
-`share/neonethack/data`, and NetHack/Lua notices. Pass those engine/data paths
-explicitly. Use `-DNNH_INSTALL_ENGINE=OFF -DBUILD_TESTING=OFF` and build the
-default target for a library-only installation without Lua/engine tooling.
+Installation includes the C library/header, CLI, C MCP server, CMake/pkg-config
+metadata, schemas, engine at `libexec/neonethack/engine`, static data at
+`share/neonethack/data`, and NetHack/Lua notices. `make mcp` installs that layout
+to `~/.local` (override `MCP_PREFIX`) and adds a `neohack-mcp` alias. The installed
+MCP executable finds engine and data next to itself; pass explicit
+`ENGINE DATA SESSIONS` for a custom runtime. Use
+`-DNNH_INSTALL_ENGINE=OFF -DBUILD_TESTING=OFF` and build the default target for a
+library-only installation without Lua/engine tooling.
 
 New sessions copy only allowlisted static data, never saves, bones or logs.
 Builds do not replace per-session executable/data pins or reinstall over a
