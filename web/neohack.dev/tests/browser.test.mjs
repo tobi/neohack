@@ -841,7 +841,9 @@ test(
     await page.getByLabel("Game menu", { exact: true }).click();
     await page.getByRole("button", { name: "Center on you" }).click();
     await page.getByLabel("Game menu", { exact: true }).click();
-    await page.getByRole("button", { name: "Eat", exact: true }).click();
+    await page.keyboard.press("Escape");
+    await page.locator("#dungeon").focus();
+    await page.keyboard.press("e");
     await ready(page);
     const food = await snapshot(page);
     assert.equal(food.decision.kind, "item");
@@ -2444,10 +2446,10 @@ test("consecutive journal repeats share counts across preview, drawer and receip
     for (let i = 0; i < 2; i++) await app.run(() => app.game.search());
   });
   assert.equal(await preview.count(), 2, "intervening engine narration splits groups");
-  assert.deepEqual(await preview.locator(".journal-repeat").allTextContents(), ["×4", "×2"]);
+  assert.deepEqual(await preview.locator(".journal-repeat").allTextContents(), ["×2", "×4"]);
 });
 
-test("contextual stairs use the current engine offer at 70 percent on desktop and mobile", async (t) => {
+test("contextual stairs use the current engine offer inside the action dock", async (t) => {
   const { page } = await fixture(t, { touch: true });
   await create(page);
   const stairs = page.locator("#contextual-stairs button");
@@ -2459,11 +2461,12 @@ test("contextual stairs use the current engine offer at 70 percent on desktop an
     // detached between layout and the asynchronous offer response.
     const bounds = await (await page.waitForFunction(({width,height}) => {
       const rect = document.querySelector('#contextual-stairs button')?.getBoundingClientRect();
-      return rect && rect.height >= 44 && Math.abs(rect.x+rect.width/2-width/2)<2 && Math.abs(rect.y+rect.height/2-height*.7)<2
+      const dock = document.querySelector(".action-dock").getBoundingClientRect();
+      return rect && rect.height >= 44 && rect.x>=0 && rect.right<=width && rect.y>=dock.y && rect.bottom<=dock.bottom
         ? {x:rect.x,y:rect.y,width:rect.width,height:rect.height} : null;
     }, size)).jsonValue();
-    assert.ok(Math.abs(bounds.x + bounds.width / 2 - size.width / 2) < 2);
-    assert.ok(Math.abs(bounds.y + bounds.height / 2 - size.height * .7) < 2);
+    assert.ok(bounds.x>=0 && bounds.x+bounds.width<=size.width);
+    assert.ok(bounds.y>=0 && bounds.y+bounds.height<=size.height);
     assert.ok(bounds.height >= 44);
     await page.screenshot({ path: `${root}/test-results/stairs-${size.width}.png` });
   }
@@ -2531,7 +2534,7 @@ test('counted-action journal batches stay compact on phones and preserve full jo
   assert.ok(text.includes('\n'), 'real counted action supplies a multiline event batch');
   for (const viewport of [{ width: 390, height: 844 }, { width: 740, height: 390 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(viewport);
-    const row = entry.locator('..');
+    const row = entry;
     const box = await row.boundingBox();
     const lineHeight = await row.evaluate(el => parseFloat(getComputedStyle(el).lineHeight));
     const lines = viewport.width <= 600 || viewport.height <= 500 ? 1 : 2;
@@ -3240,7 +3243,8 @@ test('status cues explain prayer without spending a turn or promising safety', a
   const { page } = await fixture(t);
   await create(page);
   const before = await snapshot(page);
-  await page.locator('[data-action="pray"]').click();
+  await page.keyboard.press("Control+k");
+  await page.locator('#more-grid [data-action="pray"]').click();
   await page.getByRole('heading', {name: 'Prayer is a plea for help.'}).waitFor();
   assert.match(await page.locator('#menu-content').textContent(), /cannot tell whether prayer is safe/);
   assert.equal((await snapshot(page)).revision, before.revision);
@@ -3256,7 +3260,8 @@ test('status cues explain prayer without spending a turn or promising safety', a
   });
   assert.equal(await page.locator('.hero-hud').getAttribute('data-urgency'), 'danger');
   assert.ok(await page.locator('[data-action="eat"]').evaluate(b => b.classList.contains('action-cue')));
-  assert.ok(await page.locator('[data-action="pray"]').evaluate(b => b.classList.contains('action-cue')));
+  assert.equal(await page.locator('.action-grid [data-action="pray"]').count(),0);
+  assert.equal(await page.locator('.action-grid [data-action="eat"]').isVisible(),true);
   for (const width of [1440, 390]) {
     await page.setViewportSize({width, height: 844});
     await page.screenshot({path: root + '/test-results/approachability-' + width + '.png'});
@@ -3581,10 +3586,10 @@ test("opening story is a complete, free, reopenable journal scroll", async t => 
   assert.equal(await page.locator("#journal-scroll").isVisible(), false);
   await page.evaluate(() => { const app=document.querySelector("pixel-nethack"); app.render(); app.render(); });
   assert.equal(await page.locator("#journal-scroll").isVisible(), false);
+  await page.locator("#recent-messages .journal-preview-entry").filter({hasText:"Amulet"}).first().click();
   await page.getByRole("button", {name:"Read journal scroll · turn 1", exact:true}).click();
   assert.equal(await page.locator("#scroll-text").textContent(), text);
   await page.getByRole("button", {name:"Return to the adventure",exact:true}).click();
-  await page.getByRole("button",{name:"Expand journal",exact:true}).click();
   await page.locator(".journal-entry .journal-scroll-link").click();
   assert.equal(await page.locator("#scroll-text").textContent(), text);
   await page.getByRole("button",{name:"Close scroll",exact:true}).click();
@@ -4363,7 +4368,7 @@ test('More actions searches labels and commands without typing gameplay input', 
   assert.equal(await query.evaluate(el=>el===document.activeElement),true);
   assert.equal(await page.getByRole('option').first().getAttribute('data-action'),'search','empty search preserves common-action order');
   assert.equal(await page.locator('#more-actions kbd').textContent(),'Ctrl K / #');
-  assert.equal(await page.locator('#more-grid button:not(:has(kbd))').count(),0);
+  assert.equal(await page.locator('#more-grid button[data-action=eat] kbd').textContent(),'e');
   for(const [width,height] of [[1440,844],[390,667],[320,568],[390,390]]) {
     await page.setViewportSize({width,height});
     await query.fill('');
@@ -4381,7 +4386,7 @@ test('More actions searches labels and commands without typing gameplay input', 
     assert.ok(geometry.row >= (width===1440?36:44),JSON.stringify(geometry));
     if(width===1440) assert.equal(geometry.row,36);
     await query.fill('door');
-    assert.deepEqual(await page.getByRole('option').evaluateAll(rows=>rows.map(row=>row.dataset.action)),['open','close']);
+    assert.deepEqual((await page.getByRole('option').evaluateAll(rows=>rows.map(row=>row.dataset.action))).slice(0,2),['open','close']);
     assert.equal((await query.boundingBox()).y,geometry.top,'filtering does not move the search field');
     await query.press('ArrowDown');
     assert.equal(await page.locator('#'+await query.getAttribute('aria-activedescendant')).getAttribute('data-action'),'close');
@@ -4645,4 +4650,73 @@ test('closing contextual lore ignores its late result and menu focus blocks insp
   await page.keyboard.press(await action.getAttribute('aria-keyshortcuts'));
   assert.deepEqual(await snapshot(page),before,'menu focus cannot issue an inspection action');
   assert.deepEqual(errors,[]);
+});
+
+test('Ctrl+K reaches app views, settings and guarded abandonment without losing the run', async t => {
+  const {page,errors}=await fixture(t);
+  await page.locator('#dungeon').focus();
+  await page.keyboard.press('Control+k');
+  await page.getByRole('combobox',{name:'Search actions or type a command'}).waitFor();
+  assert.equal(await page.locator('#more-grid [data-action=eat]').isDisabled(),true);
+  await page.keyboard.press('Escape');
+  await create(page);
+  const before=await snapshot(page);
+  await page.locator('#dungeon').focus();
+  await page.keyboard.press('Control+k');
+  const query=page.locator('#action-query');
+  for(const id of ['eat','read','chat','pay','enhance','twoWeapon','attack','move','run','inventory','journal','surroundings','pickup-settings','encyclopedia','adventures','new-adventure','return','quit','guide','copy-embed','zoom-in','zoom-out','fullscreen','credits'])
+    assert.equal(await page.locator(`#more-grid [data-action="${id}"]`).count(),1,id);
+  await query.fill('journal');await page.locator('#more-grid [data-action=journal]').click();
+  assert.equal(await page.locator('#panel-heading').textContent(),'Your journal');
+  assert.equal((await snapshot(page)).revision,before.revision);
+  await page.locator('#close-panel').click();
+  await page.locator('#surroundings-map').click();
+  assert.equal(await page.locator('#map-text').isVisible(),true);
+  const geometry=await page.evaluate(()=>({map:document.querySelector('#map-text').getBoundingClientRect().bottom,body:document.querySelector('#panel-body').getBoundingClientRect().top,lines:document.querySelector('#map-text').textContent.split('\n').length}));
+  assert.ok(geometry.map<geometry.body);assert.equal(geometry.lines,21);
+  await page.locator('#close-panel').click();
+  await page.keyboard.press('Control+k');
+  await query.fill('attack');await page.locator('#more-grid [data-action=attack]').click();
+  assert.equal(await page.getByRole('option').count(),8);
+  await page.keyboard.press('Escape');assert.equal(await page.locator('#action-query').inputValue(),'attack');
+  assert.equal((await snapshot(page)).revision,before.revision);
+  await query.fill('abandon');await page.locator('#more-grid [data-action=quit]').click();
+  await page.locator('#decision[open]').waitFor();
+  assert.equal((await snapshot(page)).decision.kind,'confirmation');assert.equal((await snapshot(page)).ended,false);
+  await page.getByRole('button',{name:'No, not now',exact:true}).click();await ready(page);
+  assert.equal((await snapshot(page)).ended,false);assert.deepEqual(errors,[]);
+});
+
+test('journal preview is newest first, responsive and animates only new entries for 200ms', async t=>{
+  const {page,errors}=await fixture(t);
+  await create(page);
+  // Presentation fixture: ordering/size and animation, not invented engine narration.
+  await page.evaluate(async()=>{
+    const app=document.querySelector('pixel-nethack');
+    app.journal=Array.from({length:10},(_,i)=>({turn:i+1,lastTurn:i+1,text:'Journal layout sample '+i,count:1}));
+    app.render();await document.querySelector('#recent-messages').updateComplete;
+  });
+  const preview=page.locator('#recent-messages');
+  assert.match(await preview.locator('p').first().textContent(),/sample 9/);
+  for(const [width,height,count] of [[1440,1050,8],[1000,800,5],[390,844,3]]){
+    await page.setViewportSize({width,height});
+    assert.equal(await preview.locator('p:visible').count(),count);
+    await page.screenshot({path:`${root}/test-results/recent-journal-${width}.png`});
+  }
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  const animation=await page.evaluate(async()=>{
+    const app=document.querySelector('pixel-nethack'), preview=document.querySelector('#recent-messages');
+    const retained=preview.querySelector('p');
+    app.journal.push({turn:11,lastTurn:11,text:'Newest layout sample',count:1});app.render();await preview.updateComplete;
+    const arrived=preview.querySelector('p'), animation=arrived.getAnimations()[0];
+    app.render();app.render();await preview.updateComplete;
+    return {duration:animation?.effect.getTiming().duration, sameNode:preview.querySelector('p')===arrived,retained:retained.isConnected};
+  });
+  assert.deepEqual(animation,{duration:200,sameNode:true,retained:true});
+  await page.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await preview.locator('p').first().evaluate(p=>getComputedStyle(p).animationName),'none');
+  const before=await snapshot(page);await preview.locator('button').first().click();
+  assert.equal(await page.locator('#panel-heading').textContent(),'Your journal');
+  assert.match(await page.locator('.journal-entry').first().textContent(),/Newest layout sample/);
+  assert.equal((await snapshot(page)).revision,before.revision);assert.deepEqual(errors,[]);
 });

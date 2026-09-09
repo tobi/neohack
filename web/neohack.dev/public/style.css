@@ -1393,9 +1393,7 @@ dialog p {
 
 /* Quiet field notes remain part of the world while the drawer is closed. */
 #journal-preview { display: flex; flex-direction: column; position: absolute; right: 22px; bottom: 155px; width: min(320px, calc(100vw - 32px)); z-index: 6; color: #c5c9b6; text-align: right; pointer-events: none; font-size: 14px; text-shadow: 1px 1px #101819; }
-#recent-messages p { margin: 5px 0; opacity: .65; }
-#recent-messages p:first-child { opacity: .4; }
-#recent-messages p:last-child { opacity: .85; }
+#recent-messages p { margin: 5px 0; }
 #recent-messages p:has(.journal-inline) { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
 #recent-messages .journal-inline { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal; }
 #recent-messages .journal-repeat { flex-shrink: 0; }
@@ -1424,7 +1422,7 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
 }
 
 .journal-repeat { white-space: nowrap; color: #e3c88c; font-size: .85em; }
-#contextual-stairs { position: fixed; top: 70%; left: 50%; transform: translate(-50%, -50%); z-index: 7; display: flex; gap: 12px; }
+#contextual-stairs { display: contents; }
 #contextual-stairs[hidden], pixel-nethack:has(.rightbar:not([hidden])) #contextual-stairs, pixel-nethack:has(#menu[open]) #contextual-stairs { display: none; }
 #contextual-stairs button { min-height: var(--control-height); min-width: 0; padding: var(--control-padding); font-size: var(--control-font); color: #f0e4bd; background: #283a30; border: 2px solid #96a77c; box-shadow: 3px 3px #101819; }
 
@@ -1879,3 +1877,54 @@ pixel-nethack.in-game .rail-game-info { visibility: hidden; }
 .chronicle-footer a { color:#b8cc9e; }
 .chronicle-footer .text-button { margin-top:6px; }
 .subtle { color:#9baa94; }
+
+/* Recent notes: a bounded, newest-first preview; the journal keeps all text. */
+#recent-messages { display:block; pointer-events:auto; }
+#recent-messages p { opacity:.6; }
+#recent-messages p:first-child { opacity:1; }
+#recent-messages p:nth-child(2) { opacity:.85; }
+#recent-messages p:last-child { opacity:.5; }
+#recent-messages p:nth-child(n+6) { display:none; }
+#recent-messages .journal-preview-entry {
+  display:flex; align-items:center; justify-content:flex-end; gap:4px;
+  width:100%; min-height:0; padding:2px 0; margin:0; border:0;
+  background:transparent; color:inherit; font:inherit; text-align:right; text-shadow:inherit;
+}
+#recent-messages .journal-preview-entry:hover { color:#eee4b8; }
+#recent-messages .journal-arrival { animation:journal-arrive 200ms ease-out; }
+@keyframes journal-arrive { from { transform:translateY(-8px); opacity:0; } }
+@media (min-width:1200px) and (min-height:900px) {
+  #recent-messages p:nth-child(n) { display:block; }
+  #journal-preview { width:360px; }
+}
+@media (max-width:600px), (max-height:600px) {
+  #recent-messages p:nth-child(n+4) { display:none; }
+}
+@media (prefers-reduced-motion:reduce) {
+  #recent-messages .journal-arrival { animation:none; }
+}
+/* Text map is the entry to compact surroundings, not another permanent action. */
+#surroundings-map { padding:4px; border:1px solid transparent; background:transparent; }
+#surroundings-map:hover, #surroundings-map:focus-visible { border-color:#aab98a; }
+#accessible-map { margin:0 0 12px; min-width:0; container-type:inline-size; flex-shrink:0; }
+#accessible-map pre { margin:0; padding:8px; overflow:auto; font:clamp(4px,1.78cqw,12px)/1.2 "JetBrains Mono",monospace; white-space:pre; }
+#accessible-map small { display:block; margin:4px 0; color:var(--muted); font-size:11px; }
+.rightbar:has(#accessible-map:not([hidden])) { display:flex; flex-direction:column; overflow:hidden; }
+.rightbar:has(#accessible-map:not([hidden])) #panel-body { min-height:0; overflow:auto; }
+.rightbar:has(#accessible-map:not([hidden])) .section-title { flex-shrink:0; margin-bottom:8px; }
+.nearby-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; padding:0; list-style:none; }
+.nearby-list .text-button { text-align:left; font-size:13px; padding:5px; width:100%; }
+/* One compact place for the current opportunities, with no floating duplicate. */
+.action-grid { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+#contextual-stairs button { font-size:13px; min-height:36px; padding:6px 10px; }
+.action-grid > button { min-height:36px; }
+@media (max-width:600px), (pointer:coarse) {
+  .action-grid > button, #contextual-stairs button { min-height:44px; }
+  .nearby-list { grid-template-columns:1fr; }
+}
+@media (max-width:600px), (pointer:coarse) {
+  #recent-messages .journal-preview-entry { min-height:44px; }
+}
+#recent-messages[hidden] { display:none; }
+#recent-messages p:only-child { opacity:1; }
+.action-grid kbd, .side-nav kbd { display:inline; }

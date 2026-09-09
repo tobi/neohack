@@ -1,6 +1,8 @@
 import {claimTabStore} from './tab-lease';
 import {readAdventures,writeAdventure,changedAdventure,type Adventure} from './adventure-index';
 import { appendReceipt, journalScroll, renderJournalEntry, type JournalEntry } from './journal';
+import "./journal-preview";
+import type { JournalPreview } from "./journal-preview";
 import { renderHeroHud } from './hero-hud';
 import { encyclopedia, loreButton } from './encyclopedia';
 import './component';
@@ -37,7 +39,7 @@ import { creatureArtUrl, inventoryArt } from "./symbol-art";
 import { knownCreatureArt } from "./creature-families";
 import { MovementInput } from "./movement-input";
 import { describeCommand, arrowLetters, type CommandIntent } from "./command-input";
-import { actionMenu, gameActions, type ActionMenu } from "./action-menu";
+import { actionMenu, gameActions, type ActionMenu, type MenuAction } from "./action-menu";
 import type { WebMcpRegistration } from "/runtime/typescript/webmcp.js";
 import { loadRuntime, warmPackage, runtimePackage } from "./runtime-loader";
 import {
@@ -127,7 +129,7 @@ class PixelNethack extends HTMLElement {
   private decisionIdentity = "";
   private menuReturn: HTMLElement | null = null;
   private menuBack: (() => void) | null = null;
-  private actionPicker: {element: ActionMenu; game: Game; revision: number; action?: string; decisionId?: string; returning?: boolean} | null = null;
+  private actionPicker: {element: ActionMenu; game: Game | null; revision: number; action?: string; decisionId?: string; returning?: boolean} | null = null;
   private keyHandler = (e: KeyboardEvent) => this.key(e);
   private keyUpHandler = (e: KeyboardEvent) => {
     this.movement.release(`key:${e.code || e.key}`);
@@ -352,7 +354,7 @@ class PixelNethack extends HTMLElement {
           <div class="notice" id="ended" hidden></div>
         </div>
         <section class="play-controls" id="play-controls" aria-label="Adventure controls" hidden>
-          <div class="navigation-cluster"><pre id="nearby-ascii" aria-hidden="true"></pre><div class="direction-pad">${directions
+          <div class="navigation-cluster"><button id="surroundings-map" data-view="surroundings" aria-label="Surroundings · open the full text map" title="Surroundings · full text map"><pre id="nearby-ascii" aria-hidden="true"></pre></button><div class="direction-pad">${directions
             .slice(0, 4)
             .map(
               ([d, g]) =>
@@ -367,13 +369,12 @@ class PixelNethack extends HTMLElement {
                 `<button data-move="${d}" data-game aria-label="Move ${d}">${g}</button>`,
             )
             .join("")}</div></div>
-          <div class="action-dock"><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><button data-action="pickup" data-game>Pick up<kbd>,</kbd></button><button data-action="eat" data-game>Eat<kbd>e</kbd></button><button data-action="pray" data-game>Pray</button><button id="more-actions" data-game aria-keyshortcuts="Control+k Meta+k #">More actions<kbd>Ctrl K / #</kbd></button></div>
-          <nav class="side-nav" aria-label="Adventure views"><button data-view="inventory">Backpack <span id="inventory-count"></span><kbd>i</kbd></button><button data-view="surroundings">Surroundings</button><button data-view="journal">Journal</button></nav></div>
+          <div class="action-dock"><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><div id="contextual-stairs" aria-label="Available nearby actions" hidden></div><button data-action="eat" data-game hidden>Eat<kbd>e</kbd></button><button id="more-actions" aria-keyshortcuts="Control+k Meta+k #">More actions<kbd>Ctrl K / #</kbd></button></div>
+          <nav class="side-nav" aria-label="Adventure views"><button data-view="inventory">Backpack <span id="inventory-count"></span><kbd>i</kbd></button><button data-view="journal">Journal</button></nav></div>
         </section>
         <aside class="ground-loot" id="ground-loot" aria-label="On the ground" hidden><h2>On the ground</h2><p>At your feet · choose what to take</p><div id="ground-items"></div></aside>
-        <aside id="journal-preview" aria-label="Recent journal messages"><div id="recent-messages"></div><div class="journal-preview-tools"><button id="toggle-journal-preview" aria-label="Collapse recent messages" aria-expanded="true" aria-controls="recent-messages" title="Collapse recent messages"><span aria-hidden="true">⌃</span></button><button data-view="journal" aria-label="Expand journal" title="Open full journal"><span aria-hidden="true">↗</span></button></div></aside>
-        <div id="contextual-stairs" hidden></div>
-        <aside class="rightbar" aria-label="Field notes" hidden><button id="close-panel" aria-label="Close field notes">×</button><div class="section-title"><h2 id="panel-heading" tabindex="-1">Your backpack</h2><span id="panel-count"></span></div><div id="panel-body"></div><details id="accessible-map" hidden><summary>Read the perceived map as text</summary><pre id="map-text"></pre><p>Remembered terrain and currently perceived occupants.</p></details></aside>
+        <aside id="journal-preview" aria-label="Recent journal messages"><neohack-journal-preview id="recent-messages"></neohack-journal-preview><div class="journal-preview-tools"><button id="toggle-journal-preview" aria-label="Collapse recent messages" aria-expanded="true" aria-controls="recent-messages" title="Collapse recent messages"><span aria-hidden="true">⌃</span></button><button data-view="journal" aria-label="Expand journal" title="Open full journal"><span aria-hidden="true">↗</span></button></div></aside>
+        <aside class="rightbar" aria-label="Field notes" hidden><button id="close-panel" aria-label="Close field notes">×</button><div class="section-title"><h2 id="panel-heading" tabindex="-1">Your backpack</h2><span id="panel-count"></span></div><section id="accessible-map" aria-label="Perceived map" hidden><pre id="map-text" tabindex="0" aria-label="Full perceived ASCII map"></pre><small>Remembered terrain · perceived occupants</small></section><div id="panel-body"></div></aside>
         <div class="sr-only"><span id="inspect-text" role="status"></span><span id="latest-message" role="status"></span></div>
       </main>
       <dialog id="dungeon-loading" aria-labelledby="loading-title" aria-describedby="loading-detail"><div class="descent-scene" aria-hidden="true"><div class="descent-arch arch-far"></div><div class="descent-arch arch-mid"></div><div class="descent-arch arch-near"></div><div class="descent-path"></div><i class="descent-torch torch-left"></i><i class="descent-torch torch-right"></i><img id="loading-traveler" src="/art/${heroArt("ranger")}.png" alt=""></div><h2 id="loading-title">Entering the dungeon</h2><p id="loading-detail" role="status"></p><div class="descent-dots" aria-hidden="true"><i></i><i></i><i></i></div></dialog>
@@ -947,8 +948,7 @@ class PixelNethack extends HTMLElement {
       this.renderPanel();
       this.querySelector<HTMLDetailsElement>(".hud-menu")!.open = false;
       this.showPanel();
-      this.querySelector<HTMLDetailsElement>("#accessible-map")!.open = true;
-      this.$("#accessible-map summary").focus();
+      this.$("#map-text").focus();
     };
     this.querySelectorAll<HTMLButtonElement>("[data-intro]").forEach((b) => {
       const direction = b.dataset.intro as Compass;
@@ -976,6 +976,9 @@ class PixelNethack extends HTMLElement {
       (b) => (b.onclick = () => this.guide()),
     );
     this.$("#pickup-settings").onclick = () => this.openPickupSettings();
+    this.$("#recent-messages").addEventListener("open-journal", () => {
+      this.panel = "journal"; this.stopMovement(); this.renderPanel(); this.showPanel();
+    });
     this.$("#toggle-journal-preview").onclick = () => {
       const button = this.$("#toggle-journal-preview");
       const expanded = button.getAttribute("aria-expanded") !== "true";
@@ -1284,6 +1287,7 @@ class PixelNethack extends HTMLElement {
     this.text("#navigation-status-text",this.navigationNotice || this.navigationVerb+"…");
     this.show("#navigation-stop",!!this.navigationAbort);
     this.$("#navigation-stop").textContent="Stop "+this.navigationVerb.toLowerCase();
+    (this.$("#more-actions") as HTMLButtonElement).disabled = this.busy || this.yielding || this.uncertain() || !!this.game?.decision;
     this.$("#pickup-settings").hidden = !this.game;
     (this.$("#text-map-button") as HTMLButtonElement).disabled = !this.game;
     this.querySelectorAll<HTMLButtonElement>("[data-intro]").forEach(
@@ -1405,13 +1409,7 @@ class PixelNethack extends HTMLElement {
           o.heard.at(-1) ??
           "Take a moment. Your next step is yours to choose.",
       );
-      const recent = this.$("#recent-messages");
-      recent.replaceChildren();
-      for (const entry of this.journal.slice(-3)) {
-        const p = document.createElement("p");
-        this.appendJournalContent(p, entry);
-        recent.append(p);
-      }
+      (this.$("#recent-messages") as JournalPreview).show(this.journal, state.sessionId);
       const status = state.outcome.status;
       this.text(
         "#inspect-text",
@@ -2293,6 +2291,7 @@ class PixelNethack extends HTMLElement {
       ref = item ? { id: item.id } : undefined,
       options = { expectedRevision: g.state.revision };
     const actions: Record<string, () => Promise<Snapshot>> = {
+      enhance: () => g.enhance(), twoWeapon: () => g.twoWeapon(),
       fire: () => g.fire(), cast: () => g.cast(), swap: () => g.swap(),
       pay: () => g.pay(), chat: () => g.chat(), engrave: () => g.engrave(),
       wait: () => g.wait(),
@@ -2328,32 +2327,74 @@ class PixelNethack extends HTMLElement {
       void this.run(actions[name]!);
     }
   }
+  private appCommands(): MenuAction[] {
+    const click = (selector: string) => () => { this.closeMenu(); this.querySelector<HTMLElement>(selector)?.click(); };
+    const view = (panel: string) => () => { this.closeMenu(); this.panel = panel; this.renderPanel(); this.showPanel(); };
+    const commands: MenuAction[] = [
+      {id:"inventory", label:"Backpack & character sheet", key:"i", aliases:"inventory equipment stats", run:view("inventory")},
+      {id:"journal", label:"Journal", aliases:"messages history notes", run:view("journal")},
+      {id:"surroundings", label:"Surroundings & full text map", aliases:"ascii nearby inspect", run:view("surroundings")},
+      {id:"pickup-settings", label:"Automatic pickup settings", aliases:"autoloot autopickup", run:click("#pickup-settings")},
+      {id:"encyclopedia", label:"Encyclopedia", aliases:"lore lookup help monster", run:click("#encyclopedia-button")},
+      {id:"adventures", label:"Your adventures", aliases:"saved runs resume", run:click("#adventures-button")},
+      {id:"new-adventure", label:"Start a new adventure", run:()=>{this.closeMenu();this.newAdventure();}},
+      {id:"return", label:"Save & return to entrance", aliases:"doorway leave pause", run:()=>{this.closeMenu();void this.run(()=>this.returnToDoorway());}},
+      {id:"quit", label:"Abandon run", aliases:"quit end game", run:click("#abandon-run")},
+      {id:"guide", label:"Field guide", key:"?", aliases:"help keyboard hotkeys", run:click("[data-guide]")},
+      {id:"map-symbols", label:"Toggle art / NetHack symbols", run:click("#map-symbols")},
+      {id:"zoom-in", label:"Zoom in", run:click("#zoom-in")},
+      {id:"zoom-out", label:"Zoom out", run:click("#zoom-out")},
+      {id:"center-map", label:"Center map on you", run:click("#center-map")},
+      {id:"copy-embed", label:"Copy run embed", aliases:"share replay", run:click("#copy-embed")},
+      {id:"sound", label:"Toggle sound", run:click("#sound-button")},
+      {id:"fullscreen", label:"Toggle fullscreen", run:click("#fullscreen-button")},
+      {id:"credits", label:"About & credits", run:click("#credits-button")},
+    ];
+    for (const link of this.querySelectorAll<HTMLAnchorElement>(".hud-menu-body a")) commands.push({
+      id:"link:"+link.pathname, label:link.textContent!.trim(), run:()=>{this.closeMenu();link.click();},
+    });
+    for (const command of commands) {
+      const button = this.querySelector<HTMLButtonElement>("#"+CSS.escape(command.id));
+      if (button?.disabled) command.reason = "Unavailable right now";
+      if (["quit", "pickup-settings"].includes(command.id) && !this.playable()) command.reason = this.game?.state.ended ? "This run has ended" : "Start or resume a run first";
+      if (["return","copy-embed","encyclopedia"].includes(command.id) && !this.game) command.reason = "Start or resume a run first";
+    }
+    return commands;
+  }
   private more() {
-    if (!this.playable()) return;
-    const game = this.game!;
+    if (this.busy || this.yielding || this.uncertain() || this.game?.decision) return;
+    const game = this.game;
     this.openMenu("");
-    const current = () => this.actionPicker === picker && this.game === game && game.state.revision === picker.revision && this.playable();
+    const current = () => this.actionPicker === picker && this.game === game && game?.state.revision === picker.revision && this.playable();
     const menu = actionMenu({
-      unavailable: action => this.actionUnavailable(action),
-      action: action => { if (current()) this.action(action, undefined, undefined, true); },
+      extra: this.appCommands().map(entry=>({...entry, run:()=>{if(this.actionPicker===picker && this.game===game && (game?.state.revision ?? -1)===picker.revision)entry.run();}})),
+      unavailable: action => this.playable() ? this.actionUnavailable(action) : this.game?.state.ended ? "This run has ended" : "Start or resume a run first",
+      action: action => {
+        if (!current()) return;
+        if (["move","moveWithoutAttack","attack","run"].includes(action)) {
+          menu.element.showChoices({title:gameActions.find(a=>a.id===action)!.label, rows:directions.map(([id])=>({id,label:id})),
+            choose:id=>{if(current()){this.closeMenu();this.executeKeyCommand({kind:action, direction:id, ...(action === "run" ? {mode:"normal",noPickup:false} : {})} as CommandIntent);}},
+            back:()=>menu.element.showActions()});
+        } else this.action(action, undefined, undefined, true);
+      },
       command: intent => {
         if (!current()) return;
         this.closeMenu(); this.executeKeyCommand(intent);
       },
     });
-    const picker = {element:menu.element, game, revision:game.state.revision};
+    const picker = {element:menu.element, game, revision:game?.state.revision ?? -1};
     this.actionPicker = picker;
     this.$("#menu-content").append(menu.element);
     menu.focus();
   }
   private async leaveActionChoices(back: boolean) {
     const picker = this.actionPicker, d = this.game?.decision;
-    if (!picker || picker.game !== this.game || !d || d.id !== picker.decisionId ||
+    if (!picker?.game || picker.game !== this.game || !d || d.id !== picker.decisionId ||
         !d.cancellable || this.busy || this.yielding || this.uncertain()) return;
     // Escape cancels THIS engine question. It never rewinds previously spent
     // turns or answers a newer question which happens to have the same labels.
     picker.returning = true;
-    await this.run(() => picker.game.cancel(d.id));
+    await this.run(() => picker.game!.cancel(d.id));
     picker.returning = false;
     if (this.actionPicker !== picker) return;
     if (!this.playable()) { this.renderDecision(); return; }
@@ -2365,7 +2406,7 @@ class PixelNethack extends HTMLElement {
 
   private renderActionChoices(d: Decision | null | undefined): boolean {
     const picker = this.actionPicker;
-    if (!picker?.action) return false;
+    if (!picker?.action || !picker.game) return false;
     if (picker.game !== this.game || this.uncertain()) { this.closeMenu(); return false; }
     if (!d && picker.returning) return true;
     // Only single-selection item/choice questions fit the palette. Transfers,
@@ -2916,11 +2957,12 @@ class PixelNethack extends HTMLElement {
   }
   private key(e: KeyboardEvent) {
     if (e.defaultPrevented) return;
+    if (e.key === "Escape" && this.actionPicker?.element.choices?.back && !this.actionPicker.action) { e.preventDefault(); this.actionPicker.element.choices.back(); return; }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
       if (this.actionPicker) {
         e.preventDefault();
         if (!e.repeat) void this.actionPicker.element.focusSearch();
-      } else if (this.playable() && !this.querySelector("dialog[open]") &&
+      } else if (!this.busy && !this.yielding && !this.uncertain() && !this.game?.decision && !this.querySelector("dialog[open]") &&
           !(e.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) {
         e.preventDefault();
         if (!e.repeat) this.more();

@@ -560,16 +560,15 @@ supported by the actual decision. Above, below and permitted self targets remain
 explicit. Other decisions, especially confirmations, retain their modal controls.
 A confirmed kick that consumes time gets the short impact/shake, including a miss;
 it does not claim damage. Reduced motion suppresses this feedback.
-When field notes are closed, the last three journal messages sit faintly at bottom
-right on desktop. On mobile, place the preview beneath the top HUD, clear of the
-player, stairs and bottom actions. Show it expanded by default; three single-line
-entries truncate visually, while the full journal retains the original text. A
-counted action's multiline event batch follows the same compact preview rule;
-desktop previews allow two lines per ordinary batch, with repeat counts kept visible.
-Only the full journal preserves its line breaks; engine-marked scrolls keep their
-separate reading link and four-source-line classification. A
-small chevron collapses/expands the preview, and a separate small arrow opens the
-full journal. Both have 44px touch targets around compact 24px visible controls.
+When field notes are closed, a newest-first journal preview sits at bottom right
+on desktop and below the HUD on phones. Show three entries on phones/short
+screens, five on ordinary desktop windows, and eight on large, tall displays.
+Each newly appended entry slides in over 200ms using transform/opacity; unchanged
+entries keep their nodes and do not animate on redraw. Reduced motion disables
+animation. Ordinary entries use one line on phones and at most two on desktop;
+full text, passage classification and repeat counts remain in the journal.
+Click a preview message to open the full journal. The small chevron collapses it,
+and the expansion arrow remains a 44px touch target.
 Keep the user’s collapsed choice through subsequent actions. Direction shortcuts
 must not answer a standing choice while a modal, menu, drawer or editable control
 has focus. Returning to the welcome screen from any decision releases the runtime
@@ -724,13 +723,25 @@ also accept h/j/k/l and y/u/b/n.
 A faint 15×9 classic-symbol neighborhood sits above the direction pad, centered
 on the current player. It uses bundled JetBrains Mono (SIL OFL in public/fonts),
 current public occupants and remembered terrain only. Unknown cells stay blank;
-the decorative view consumes no engine input and does not intercept clicks.
-Keep downstairs out of the permanent action dock: its contextual stair offer,
-More actions and > shortcut remain. The hamburger offers Abandon run through
+clicking this map opens Surroundings without engine input. The full perceived
+ASCII map leads that panel, followed by compact nearby descriptions. The map and
+header stay visible while nearby details scroll.
+The compact dock keeps Search and More actions. Eat appears only when canonical
+hunger needs attention. Current, revision-bound nearby offers promote doors,
+containers, stairs and water features in that same area. Pickup remains in ground
+loot and the palette; prayer remains in the palette. Every action stays searchable
+even when not promoted. An offered attempt is never a guarantee of success. The hamburger offers Abandon run through
 public game.quit, preserving the engine's explicit confirmation and terminal journal.
 
 Disable item actions only when the current revision's C action offer says
 knownBlocked. More actions includes a short reason below unavailable choices.
+More actions includes every supported player operation and app control: journal,
+Backpack, full map, settings, encyclopedia, camera, sound, sharing, run management
+and navigation links. Skill enhancement and two-weapon use are explicit actions;
+directional movement/attack choices stay within the picker. App commands reuse
+the same guarded handlers as their visible controls. Abandon still asks the
+engine’s exact confirmation. A finished run can still open the palette to read its
+journal or start another adventure.
 More actions opens with `Ctrl+K` (`Cmd+K` on Mac), `#` or its visible button. Its Lit search component keeps
 the input across the top, focused on opening; the matching list alone scrolls.
 Match action labels and names by ordered fuzzy letters alongside exact classic shortcuts and
@@ -758,6 +769,9 @@ Chat is available by searching `chat` (or `#chat`) in More actions. It opens the
 engine's “Talk to whom?” direction question; choose an adjacent character's
 direction. Consultations, donations and other dialogue choices remain explicit
 engine decisions. Opening/filtering the menu never initiates a conversation.
+Chat and payment currently have no targeted C action offers describing a useful
+conversation or an outstanding bill. Keep both searchable; do not promote them
+by guessing character identity or usefulness from art or a humanoid appearance.
 `auto:explore` and `auto:descend` are neohack conveniences, not vanilla NetHack
 commands: they walk perceived frontiers or remembered downstairs through ordinary
 moves and one door attempt, then stop for decisions, damage, hunger or new
@@ -1451,9 +1465,9 @@ Source projects and script notes remain private to their owner.
 
 Selecting a map square opens its perceived description and a free, revision-bound
 C route preview. Sage ground markers show only returned known route steps. Walk
-here, or double-clicking a map square, requests destination walking across the current level (at most 1,659 actions) through the same library
-navigator used by agents. Reaching a destination never overrides a standing
-choice, changed creature scene, damage, uncertainty or a level change. Each
+here, double-clicking, or right-clicking a remembered map square, requests destination walking across the current level (at most 1,659 actions) through the same library
+navigator used by agents. Remembered tiles outside the local neighborhood remain valid destinations. Reaching a destination never overrides a standing
+choice, damage, uncertainty or a level change. Each
 executed step updates the human view and recording. Escape, blur, a hidden page,
 opening a dialog or removing the component aborts subsequent steps. The final
 unexpected stop reason remains visible; normal arrival is silent. Continuing requires another deliberate selection.

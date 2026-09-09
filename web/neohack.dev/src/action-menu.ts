@@ -22,6 +22,12 @@ export const gameActions = [
   { id: "fire", label: "Fire readied ammunition", key: "f" },
   { id: "cast", label: "Cast a spell", key: "Z" },
   { id: "quiver", label: "Ready ammunition", key: "Q" },
+  { id: "enhance", label: "Improve skills", key: "" },
+  { id: "twoWeapon", label: "Use two weapons", key: "" },
+  { id: "move", label: "Move one step", key: "" },
+  { id: "moveWithoutAttack", label: "Move without pickup or fighting", key: "" },
+  { id: "attack", label: "Force attack", key: "" },
+  { id: "run", label: "Run in a direction", key: "" },
   { id: "swap", label: "Swap weapons", key: "x" },
   { id: "open", label: "Open a door", key: "o" },
   { id: "close", label: "Close a door", key: "c" },
@@ -49,7 +55,9 @@ function commandLabel(intent: CommandIntent): string {
   return `${intent.kind === "attack" ? "Force attack" : "Move"} ${intent.direction}${intent.kind === "moveWithoutAttack" ? " · no pickup or fighting" : ""}`;
 }
 
+export type MenuAction = { id: string; label: string; key?: string; aliases?: string; reason?: string; run: () => void };
 type MenuOptions = {
+  extra?: MenuAction[];
   unavailable: (action: string) => string;
   action: (action: string) => void;
   command: (intent: CommandIntent) => void;
@@ -61,7 +69,7 @@ export type ActionChoices = {
   choose: (id: string) => void;
   back?: () => void;
 };
-type Match = { label: string; key: string; run: () => void; reason?: string; action?: string; item?: string; icon?: string; positions?: number[] };
+type Match = { score?: number; label: string; key: string; run: () => void; reason?: string; action?: string; item?: string; icon?: string; positions?: number[] };
 
 function highlighted(label: string, positions: number[] = []) {
   if (!positions.length) return label;
@@ -108,11 +116,15 @@ export class ActionMenu extends LitElement {
     }
     const actions = gameActions.map(action => {
       const label = fuzzyMatch(query, action.label), alias = fuzzyMatch(query, action.id);
-      return {action, positions:label?.positions, score:!query ? 0 : action.key === query ? 1000000 : action.id === lower ? 100000 : Math.max(label?.score ?? -Infinity,alias?.score ?? -Infinity)};
+      return {action, positions:label?.positions, score:!query ? 0 : action.key === query ? 1000000 : action.id === lower ? 100000 : Math.max(label?.score ?? -Infinity,alias ? alias.score - 10000 : -Infinity)};
     }).filter(entry => entry.score !== -Infinity).sort((a,b) => b.score - a.score);
-    for(const {action,positions} of actions) matches.push({label:action.label,key:action.key || "#"+action.id,positions,
+    for(const {action,positions,score} of actions) matches.push({score,label:action.label,key:action.key || "#"+action.id,positions,
       action:action.id,reason:this.options.unavailable(action.id),run:()=>this.options.action(action.id)});
-    return matches;
+    for (const entry of this.options.extra ?? []) {
+      const label = fuzzyMatch(query, entry.label), alias = fuzzyMatch(query, entry.aliases ?? entry.id);
+      if (label || alias) matches.push({score:!query ? 0 : entry.key === query ? 1000000 : entry.id === lower ? 100000 : Math.max(label?.score ?? -Infinity,alias ? alias.score - 10000 : -Infinity),label:entry.label, key:entry.key ?? "", action:entry.id, reason:entry.reason, positions:label?.positions, run:entry.run});
+    }
+    return matches.sort((a,b)=>(b.score ?? 2000000)-(a.score ?? 2000000));
   }
   showChoices(choices: ActionChoices) {
     if (!this.choices) this.rootSelection = {query:this.query, active:this.active};

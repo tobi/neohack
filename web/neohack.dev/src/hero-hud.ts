@@ -30,6 +30,7 @@ export function renderHeroHud(host: HTMLElement, o: Observation) {
   for (const button of host.querySelectorAll<HTMLElement>(
     '[data-action="eat"], [data-action="pray"]',
   )) {
+    if (button.closest(".action-grid") && button.dataset.action === "eat") button.hidden = !hungry;
     const active = button.dataset.action === "eat" ? hungry : danger;
     button.classList.toggle("action-cue", active);
     button.setAttribute(
