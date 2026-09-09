@@ -25,14 +25,14 @@ test('confirmed engine death replaces the hero, and seeking back restores the he
   await page.goto(new URL('/component',url).href);
   await page.waitForFunction(()=>!!document.querySelector('neohack-world')?.loadReplay);
   await page.evaluate(({first,last})=>{const w=document.querySelector('neohack-world');w.parentElement.classList.remove('world-stage');w.style.height='420px';w.setAttribute('role','tourist');w.removeAttribute('static');w.setAttribute('controls','');w.loadReplay([first,last]);w.seek(1);},{first,last});
-  await page.waitForFunction(()=>document.querySelector('neohack-world').shadowRoot.querySelector('canvas').dataset.motion==='still');
-  const canvas=page.locator('neohack-world canvas');
+  await page.waitForFunction(()=>document.querySelector('neohack-world').shadowRoot.querySelector('canvas[role="img"]').dataset.motion==='still');
+  const canvas=page.locator('neohack-world').getByRole('img', { name: /^NetHack world/ });
   assert.equal(await canvas.getAttribute('data-hero'),'tombstone');
   assert.match(await canvas.getAttribute('aria-label'),/tombstone/);
   assert.deepEqual(await page.evaluate(()=>document.querySelector('neohack-world').snapshot),last,'presentation does not mutate the terminal receipt');
   await page.locator('neohack-world').screenshot({path:'/tmp/neohack-tombstone.png'});
   await page.evaluate(()=>document.querySelector('neohack-world').seek(0));
-  await page.waitForFunction(()=>document.querySelector('neohack-world').shadowRoot.querySelector('canvas').dataset.motion==='idle');
+  await page.waitForFunction(()=>document.querySelector('neohack-world').shadowRoot.querySelector('canvas[role="img"]').dataset.motion==='idle');
   assert.equal(await canvas.getAttribute('data-hero'),'hero');
   for(const kind of ['quit','ascended','escaped','disconnected','engineError','unknown']){
     await page.evaluate(({last,kind})=>{last.end.kind=kind;document.querySelector('neohack-world').snapshot=last;},{last,kind});

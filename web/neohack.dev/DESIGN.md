@@ -24,6 +24,11 @@ instructions when a decision changes; do not leave competing rules below.
 - Ground is drawn first; walls and doors share per-pixel structure depth. Actors
   and known raised objects share foreground foot ordering. Do not restore an
   unconditional doors-on-top pass.
+- The live dungeon uses a retained scene: canvas bakes native-pixel art into
+  bounded atlases and world-space terrain chunks; browser compositor transforms
+  move the camera and sprite strips. There is no live-game animation-frame
+  redraw loop. Observation changes invalidate affected art; pan, zoom, idle
+  animation and elapsed turn count never regenerate static terrain.
 
 For API guarantees use [PROTOCOL.md](../../lib/neonethack/docs/PROTOCOL.md);
 for hosting use [the Vercel guide](../../hosting/vercel/README.md).
@@ -104,6 +109,37 @@ The first interface is a foundation. The dungeon art must develop beyond uniform
 flat square tiles before we call it finished.
 
 ## View, geometry and depth
+
+### Retained rendering and compositor motion
+
+`src/retained-scene.ts` owns persistent scene nodes and browser animations;
+`src/terrain-scene.ts` invalidates 8×8-cell terrain chunks from perceived
+geometry, relevant cutaway anchors and visible torch state. Neighbor margins
+preserve connected masonry and depth across chunk edges. `dungeon-art.ts`
+remains the common rasterizer for live chunks and standalone art. Its bounded
+earth atlas preserves the original deterministic pixels; four recent palettes
+and seeds use at most 8 MiB of atlas pixels per document.
+
+The camera transforms a world-space container. Hero directions and walk/idle
+clips share one baked atlas; visible torch chunks have three baked frames.
+Sprite-strip transforms, observed movement and visibility opacity use the Web
+Animations API. The main thread updates stacking order during observed movement
+so moving creatures and raised objects keep their foot ordering. It does not
+redraw their pixels. Hit testing inverts the actual animated camera transform
+and tests the retained sprite alpha at its current displayed position.
+
+Remembered terrain uses a clipped grayscale/tint backdrop. Settled memory shares
+one layer; only active sight transitions create temporary opacity layers, which
+are merged after the fade. Unknown cells never acquire inferred visibility.
+Death impressions still age only on engine turns, with opacity set by that age.
+Reduced motion settles movement and displays static sprite frames; hidden pages
+pause motion. Run/level changes and removal release retained scene state.
+
+The authored title courtyard retains its separate portal animation; it is not a
+live game observation. Keyboard and pointer access remain on the accessible
+canvas surface, while visible gameplay is composed from its retained sibling.
+Do not restore a duplicate viewport bitmap for canvas readback: art tests inspect
+retained buffers, and browser screenshots/traces validate the composited result.
 
 - Fixed three-quarter pixel view. Bake 3D masonry with an oblique projection
   that preserves NetHack's square ground grid and eight directions. There is no

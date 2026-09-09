@@ -63,3 +63,32 @@ Use the shared native scrollbar style in `src/scrollbars.mjs` by default. The
 build emits `/scrollbars.css` for page shells; shadow-root components embed the
 same style. Do not add per-panel scrollbar skins or JavaScript scrolling widgets.
 Retain the system's scrollbar colors and sizing in forced-colors mode.
+
+## Web performance
+
+Design for low CPU use and responsive interaction, including long games and
+replays. Retain static scenery and reuse rasterized art; update only what changed.
+Avoid full-scene redraw loops, repeated layout reads/writes, and work that grows
+with the entire game history on every move.
+
+Prefer compositor-friendly CSS transforms and opacity for camera movement,
+animation and fades. Use Web Animations or View Transitions where appropriate.
+Verify actual compositing rather than assuming CSS guarantees GPU acceleration;
+keep layers and texture memory bounded. Respect reduced motion, suspend needless
+work in hidden tabs, and dispose of unused animations and resources.
+
+Use the web platform efficiently: serve content-hashed or version-pinned static
+assets with long-lived immutable caching headers, revalidate mutable entry points
+and manifests, and keep private responses out of shared caches. Follow the
+delivery and storage rules in [hosting documentation](../../hosting/vercel/README.md).
+Cache policy must preserve exact runtime pins.
+
+Keep storage incremental and caches bounded. Avoid reading, serializing or
+rewriting whole histories during interaction; batch noncritical work away from
+the input path. Preserve awaited pre-input durability, ownership checks, receipts
+and integrity guarantees. Performance never justifies dropping required writes
+or clearing supported saves.
+
+Measure representative gameplay and long replays in a real browser. Use traces
+to check main-thread time, frame pacing, painting, allocations, network requests
+and storage work; verify improvements instead of relying on API choice alone.

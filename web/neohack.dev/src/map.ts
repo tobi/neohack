@@ -1,4 +1,6 @@
-import { DeathTraces } from './death-traces';
+import { RetainedScene, type SceneSprite } from "./retained-scene";
+import { TerrainScene } from "./terrain-scene";
+import { DeathTraces } from "./death-traces";
 import { companionAsset, knownCreatureArt } from "./creature-families";
 import { DungeonSound } from "./sound";
 import { layoutForSeed, type LayoutType } from "./layout-art";
@@ -9,12 +11,19 @@ import {
   STRUCTURE_RISE,
   STRUCTURE_OVERHANG,
 } from "./dungeon-art";
-import { categoryMark, drawCreatureArt, drawUnknownCreature, drawCreatureQuestion, drawObjectArt, drawItemArt } from "./symbol-art";
+import {
+  categoryMark,
+  drawCreatureArt,
+  drawUnknownCreature,
+  drawCreatureQuestion,
+  drawObjectArt,
+  drawItemArt,
+} from "./symbol-art";
 
 import { roles, heroArt } from "./characters";
 
 const images = new Map<string, HTMLImageElement>();
-export async function loadArt(base: string | Record<string,string> = "/art/") {
+export async function loadArt(base: string | Record<string, string> = "/art/") {
   await Promise.all(
     [
       ...roles.flatMap(({ art }) => [art, `${art}-motion`]),
@@ -123,7 +132,7 @@ function drawContents(
     rect(c, "#26312b", x + 3, y + 13, 10, 2);
     if (symbols) glyph(c, mark, color, x, y);
     else {
-      const sprite = images.get(companionAsset(cell.occupant.appearance) ?? '');
+      const sprite = images.get(companionAsset(cell.occupant.appearance) ?? "");
       if (sprite) c.drawImage(sprite, x, y - 2);
       else if (!drawCreatureArt(c, cell.occupant.appearance, x, y))
         drawUnknownCreature(c, x, y);
@@ -136,7 +145,9 @@ function drawContents(
   }
 }
 
-export function creatureLabel(occupant: Pick<NonNullable<Cell["occupant"]>, "kind" | "appearance">) {
+export function creatureLabel(
+  occupant: Pick<NonNullable<Cell["occupant"]>, "kind" | "appearance">,
+) {
   if (occupant.kind === "self") return "You";
   if (occupant.appearance) return occupant.appearance;
   return "Unknown creature";
@@ -147,13 +158,20 @@ export function cellDescription(cell: Cell) {
     cell.terrain.type.replace(/([A-Z])/g, " $1").toLowerCase() +
     (cell.visible === false ? " · Remembered, out of sight" : "");
   const occupant = cell.occupant;
-  const objects = cell.objects?.map(o => o.known?.appearance
-    ? `${o.known.appearance}${o.known.depictedCreature ? ` of ${o.known.depictedCreature}` : ''} (${o.mark})`
-    : `Object ${o.mark}`).join(', ');
-  const actor = occupant ? (occupant.kind === 'self' ? 'You' : `${creatureLabel(occupant)}${occupant.kind === 'ally' ? ' · Ally' : ''} (${occupant.mark})`) : undefined;
-  const contents=[actor,objects].filter(Boolean).join(' · ');
-  return `${cell.x}, ${cell.y}: ${contents ? `${contents} · ` : ''}${terrain}`;
-
+  const objects = cell.objects
+    ?.map((o) =>
+      o.known?.appearance
+        ? `${o.known.appearance}${o.known.depictedCreature ? ` of ${o.known.depictedCreature}` : ""} (${o.mark})`
+        : `Object ${o.mark}`,
+    )
+    .join(", ");
+  const actor = occupant
+    ? occupant.kind === "self"
+      ? "You"
+      : `${creatureLabel(occupant)}${occupant.kind === "ally" ? " · Ally" : ""} (${occupant.mark})`
+    : undefined;
+  const contents = [actor, objects].filter(Boolean).join(" · ");
+  return `${cell.x}, ${cell.y}: ${contents ? `${contents} · ` : ""}${terrain}`;
 }
 
 export function actionMessages(snapshot: Snapshot): string[] {
@@ -170,9 +188,9 @@ export function actionMessages(snapshot: Snapshot): string[] {
 }
 
 export class DungeonMap {
-  readonly deathTraces=new DeathTraces();
+  readonly deathTraces = new DeathTraces();
   private perceptionSession?: string;
-  route: {x:number;y:number}[] = [];
+  route: { x: number; y: number }[] = [];
   selectedTile: { x: number; y: number } | null = null;
   context: { x: number; y: number } | null = null;
   positionCursor: { x: number; y: number } | null = null;
@@ -254,14 +272,21 @@ export class DungeonMap {
     return y <= 96 && Math.abs(x - 160) <= 16 ? "entered" : "moved";
   }
   zoom = 3;
-  private zoomTarget = 3;
-  private zoomFrame = 0;
   private drag: { id: number; x: number; y: number } | null = null;
   private wheel = (event: WheelEvent) => {
-    if (!this.observation || event.ctrlKey || event.metaKey || !event.deltaY) return;
+    if (!this.observation || event.ctrlKey || event.metaKey || !event.deltaY)
+      return;
     event.preventDefault();
-    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? this.canvas.clientHeight : 1;
-    this.zoomTo((this.zoomFrame ? this.zoomTarget : this.zoom) * Math.exp(-Math.max(-300, Math.min(300, event.deltaY * unit)) * .002));
+    const unit =
+      event.deltaMode === 1
+        ? 16
+        : event.deltaMode === 2
+          ? this.canvas.clientHeight
+          : 1;
+    this.zoomTo(
+      this.zoom *
+        Math.exp(-Math.max(-300, Math.min(300, event.deltaY * unit)) * 0.002),
+    );
   };
   private dragStart = (event: PointerEvent) => {
     if (!this.observation || event.button !== 1) return;
@@ -272,29 +297,32 @@ export class DungeonMap {
   };
   private dragMove = (event: PointerEvent) => {
     if (this.drag?.id !== event.pointerId) return;
-    if (!(event.buttons & 4)) { this.endDrag(); return; }
+    if (!(event.buttons & 4)) {
+      this.endDrag();
+      return;
+    }
     event.preventDefault();
-    this.pan((this.drag.x - event.clientX) / (16 * this.zoom), (this.drag.y - event.clientY) / (16 * this.zoom));
-    this.drag.x = event.clientX; this.drag.y = event.clientY;
+    this.pan(
+      (this.drag.x - event.clientX) / (16 * this.zoom),
+      (this.drag.y - event.clientY) / (16 * this.zoom),
+    );
+    this.drag.x = event.clientX;
+    this.drag.y = event.clientY;
   };
   private endDrag = () => {
-    const drag = this.drag; this.drag = null;
-    if (drag && this.canvas.hasPointerCapture(drag.id)) this.canvas.releasePointerCapture(drag.id);
+    const drag = this.drag;
+    this.drag = null;
+    if (drag && this.canvas.hasPointerCapture(drag.id))
+      this.canvas.releasePointerCapture(drag.id);
     this.canvas.classList.remove("panning");
   };
-  private auxiliary = (event: MouseEvent) => { if (event.button === 1 && this.observation) event.preventDefault(); };
+  private auxiliary = (event: MouseEvent) => {
+    if (event.button === 1 && this.observation) event.preventDefault();
+  };
   zoomTo(value: number) {
-    cancelAnimationFrame(this.zoomFrame);
-    this.zoomTarget = Math.max(1, Math.min(4, value));
-    if (this.reducedMotion.matches) { this.zoom = this.zoomTarget; this.zoomFrame = 0; this.draw(); return; }
-    const from = this.zoom, start = performance.now();
-    const frame = (now: number) => {
-      const t = Math.min(1, (now - start) / 160);
-      this.zoom = from + (this.zoomTarget - from) * (1 - (1 - t) ** 3);
-      this.draw(now);
-      this.zoomFrame = t < 1 ? requestAnimationFrame(frame) : 0;
-    };
-    this.zoomFrame = requestAnimationFrame(frame);
+    this.zoom = Math.max(1, Math.min(4, value));
+    this.cameraDuration = this.reducedMotion.matches ? 0 : 160;
+    this.draw();
   }
   symbols = false;
   private offset = { x: 0, y: 0 };
@@ -316,15 +344,13 @@ export class DungeonMap {
     string,
     { fromX: number; fromY: number; started: number }
   >();
-  private fog = new Map<
-    string,
-    { from: number; to: number; started: number }
-  >();
   private bubbles: {
     element: HTMLDivElement;
     x: number;
     y: number;
     timer: ReturnType<typeof setTimeout>;
+    camera?: Animation;
+    movement?: Animation;
   }[] = [];
   readonly sound = new DungeonSound();
   private reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -336,22 +362,17 @@ export class DungeonMap {
     }
     if (this.reducedMotion.matches) {
       this.actorMotions.clear();
-      if (this.zoomFrame) { cancelAnimationFrame(this.zoomFrame); this.zoomFrame = 0; this.zoom = this.zoomTarget; }
     }
     this.draw();
-    if (!document.hidden && (!this.reducedMotion.matches || this.portalComplete))
+    if (
+      !this.observation &&
+      !document.hidden &&
+      (!this.reducedMotion.matches || this.portalComplete)
+    )
       this.animation = requestAnimationFrame(this.animate);
   };
   private animate = (now: number) => {
-    if (
-      now - this.lastDraw >=
-      (now < this.travelStarted + 110 ||
-      this.actorMotions.size ||
-      this.fog.size ||
-      this.portalComplete
-        ? 16
-        : 80)
-    ) {
+    if (now - this.lastDraw >= (this.portalComplete ? 16 : 80)) {
       this.draw(now);
       this.lastDraw = now;
     }
@@ -366,13 +387,24 @@ export class DungeonMap {
       delete this.canvas.dataset.portalProgress;
       complete();
     }
-    if (!document.hidden && (!this.reducedMotion.matches || this.portalComplete))
+    if (
+      !this.observation &&
+      !document.hidden &&
+      (!this.reducedMotion.matches || this.portalComplete)
+    )
       this.animation = requestAnimationFrame(this.animate);
   };
   constructor(
     private canvas: HTMLCanvasElement,
-    private inspect: (text: string, x: number, y: number, walk: boolean) => void,
+    private inspect: (
+      text: string,
+      x: number,
+      y: number,
+      walk: boolean,
+    ) => void,
   ) {
+    this.scene = new RetainedScene(canvas);
+    this.terrainScene = new TerrainScene(canvas.ownerDocument);
     this.observer = new ResizeObserver(() => this.draw());
     this.observer.observe(canvas.parentElement!);
     window.visualViewport?.addEventListener("resize", this.viewportChanged);
@@ -391,94 +423,89 @@ export class DungeonMap {
     let clickedObservation: Observation | null = null;
     canvas.addEventListener("click", (e) => {
       if (!this.observation || e.button !== 0) return;
-      if(e.detail > 1 && clickedObservation !== this.observation)return;
+      if (e.detail > 1 && clickedObservation !== this.observation) return;
       clickedObservation = this.observation;
-      const bounds = canvas.getBoundingClientRect();
-      const shift = this.travel(performance.now());
-      let x =
-        Math.floor(((e.clientX - bounds.left) / this.zoom - shift.x) / 16 + this.origin.x);
-      let y =
-        Math.floor(((e.clientY - bounds.top) / this.zoom - shift.y) / 16 + this.origin.y);
-      // Raised sprite pixels belong to their ground anchor, not the floor above.
-      if (!this.symbols) {
-        const px=(e.clientX-bounds.left)/this.zoom-shift.x,py=(e.clientY-bounds.top)/this.zoom-shift.y;
-        const mask=document.createElement('canvas');mask.width=32;mask.height=48;
-        const context=mask.getContext('2d')!;
-        const candidates=this.observation.world.flatMap(cell=>{
-          const result:{cell:Cell;pass:'actor'|'loot';x:number;y:number;foot:number}[]=[];
-          if(cell.objects?.length)result.push({cell,pass:'loot',x:(cell.x-this.origin.x)*16,y:(cell.y-this.origin.y)*16,foot:cell.y});
-          if(cell.occupant&&cell.occupant.kind!=='self'){
-            const actor=this.actorPosition(cell,performance.now());
-            result.push({cell,pass:'actor',x:Math.round((actor.x-this.origin.x)*16),y:Math.round((actor.y-this.origin.y)*16)-actor.hop,foot:actor.y});
-          }
-          return result;
-        }).sort((a,b)=>b.foot-a.foot||b.x-a.x||(a.pass==='actor'?-1:1));
-        for(const target of candidates){
-          const mx=Math.floor(px-target.x)+8,my=Math.floor(py-target.y)+32;
-          if(mx<0||mx>=32||my<0||my>=48)continue;
-          context.clearRect(0,0,32,48);drawContents(context,target.cell,8,32,false,target.pass);
-          if(target.pass==='actor'&&!knownCreatureArt(target.cell.occupant?.appearance))drawCreatureQuestion(context,8,32);
-          if(context.getImageData(mx,my,1,1).data[3]){x=target.cell.x;y=target.cell.y;break;}
-        }
+      const point = this.scene.worldPoint(e.clientX, e.clientY);
+      let x = Math.floor(point.x / 16),
+        y = Math.floor(point.y / 16);
+      // Test the retained sprite's actual transform and opaque pixels, including
+      // while the camera and creature are moving on the compositor.
+      const picked = !this.symbols && this.scene.pick(e.clientX, e.clientY);
+      if (picked) {
+        x = picked.x;
+        y = picked.y;
       }
       const cell = this.observation.world.find(
         (cell) => cell.x === x && cell.y === y,
       );
       this.inspect(
-        this.heroDead && this.observation.you?.x === x && this.observation.you.y === y
+        this.heroDead &&
+          this.observation.you?.x === x &&
+          this.observation.you.y === y
           ? `${x}, ${y}: Your final position. Tombstone marks your death; it is not a dungeon object.`
-          : cell ? cellDescription(cell) : `${x}, ${y}: Unexplored`,
+          : cell
+            ? cellDescription(cell)
+            : `${x}, ${y}: Unexplored`,
         x,
         y,
         e.detail === 2,
       );
     });
   }
-  update(observation: Observation | null, hero = heroArt("valkyrie"), seed = "0", terminal?: (Pick<Snapshot, "ended" | "end"> & Partial<Pick<Snapshot, "sessionId">>) | null) {
-    if (terminal?.sessionId && terminal.sessionId !== this.perceptionSession) {
-      this.deathTraces.clear();this.perceptionSession=terminal.sessionId;
+  update(
+    observation: Observation | null,
+    hero = heroArt("valkyrie"),
+    seed = "0",
+    terminal?:
+      | (Pick<Snapshot, "ended" | "end"> & Partial<Pick<Snapshot, "sessionId">>)
+      | null,
+  ) {
+    const changedSession = Boolean(
+      terminal?.sessionId && terminal.sessionId !== this.perceptionSession,
+    );
+    if (changedSession) {
+      this.deathTraces.clear();
+      this.perceptionSession = terminal?.sessionId;
     }
     this.heroDead = terminal?.ended === true && terminal.end?.kind === "death";
-    this.canvas.dataset.hero = this.heroDead && observation?.you ? "tombstone" : observation?.you ? "hero" : "none";
-    this.canvas.setAttribute("aria-description", this.heroDead && observation?.you ? "A tombstone marks your final position." : "");
+    this.canvas.dataset.hero =
+      this.heroDead && observation?.you
+        ? "tombstone"
+        : observation?.you
+          ? "hero"
+          : "none";
+    this.canvas.setAttribute(
+      "aria-description",
+      this.heroDead && observation?.you
+        ? "A tombstone marks your final position."
+        : "",
+    );
     const now = performance.now();
-    if (
+    const resetScene =
       !observation ||
+      changedSession ||
       this.seed !== seed ||
-      this.observation?.location.id !== observation.location.id
-    ) {
+      this.observation?.location.id !== observation.location.id;
+    if (resetScene) {
       this.clearMessages();
       this.deathTraces.clear();
       this.travelStarted = -Infinity;
       this.actorMotions.clear();
-      this.fog.clear();
+      this.scene.reset();
+      this.terrainScene.clear();
+      this.terrainSprites = [];
+      this.sceneObservation = null;
     } else if (
       !this.reducedMotion.matches &&
+      this.observation &&
+      observation &&
       observation !== this.observation
     ) {
-      const old = new Map(
-        this.observation?.world.map((cell) => [`${cell.x},${cell.y}`, cell]),
-      );
-      for (const cell of observation.world) {
-        const key = `${cell.x},${cell.y}`,
-          previous = old.get(key);
-        if (
-          previous &&
-          cell.visible !== previous.visible &&
-          cell.visible !== undefined &&
-          previous.visible !== undefined
-        )
-          this.fog.set(key, {
-            from: this.shade(previous, now),
-            to: cell.visible ? 0 : 1,
-            started: now,
-          });
-      }
       this.captureActorMotions(this.observation, observation, now);
     }
     const before = this.observation?.you,
       after = observation?.you;
-    if (!before || !after || this.seed !== seed) {
+    if (!before || !after || resetScene) {
       this.facing = "down";
       this.walkStarted = -Infinity;
       this.walkUntil = -Infinity;
@@ -494,6 +521,7 @@ export class DungeonMap {
         const shift = this.travel(now);
         this.travelFrom = { x: shift.x + dx * 16, y: shift.y + dy * 16 };
         this.travelStarted = now;
+        this.cameraDuration = this.reducedMotion.matches ? 0 : 110;
         // Consecutive steps share a gait phase instead of restarting frame zero.
         if (now >= this.walkUntil) this.walkStarted = now;
         this.walkUntil = now + 600;
@@ -502,14 +530,29 @@ export class DungeonMap {
         this.travelStarted = -Infinity;
       }
     }
-    if (!observation) { this.endDrag(); cancelAnimationFrame(this.zoomFrame); this.zoomFrame = 0; }
-    if(this.heroDead){this.walkUntil = -Infinity;this.travelStarted = -Infinity;}
+    if (!observation) {
+      this.endDrag();
+    }
+    if (this.heroDead) {
+      this.walkUntil = -Infinity;
+      this.travelStarted = -Infinity;
+    }
+    cancelAnimationFrame(this.animation);
+    this.animation = 0;
+    clearTimeout(this.walkTimer);
     this.observation = observation;
+    if (observation && now < this.walkUntil && !this.reducedMotion.matches)
+      this.walkTimer = setTimeout(
+        () => this.draw(),
+        Math.max(0, this.walkUntil - now),
+      );
     this.hero = hero;
     this.seed = seed;
     this.layoutType = observation ? layoutForSeed(seed) : "dungeon";
     this.canvas.dataset.environment = this.layoutType;
     this.draw();
+    if (!observation && !document.hidden && !this.reducedMotion.matches)
+      this.animation = requestAnimationFrame(this.animate);
   }
   private captureActorMotions(
     before: Observation,
@@ -554,24 +597,6 @@ export class DungeonMap {
       });
     }
   }
-  private actorPosition(cell: Cell, now: number) {
-    const key = `${cell.x},${cell.y}`,
-      motion = this.actorMotions.get(key);
-    if (!motion || this.reducedMotion.matches)
-      return { x: cell.x, y: cell.y, hop: 0 };
-    const t = Math.min(1, (now - motion.started) / 140);
-    if (t >= 1) {
-      this.actorMotions.delete(key);
-      return { x: cell.x, y: cell.y, hop: 0 };
-    }
-    // Keep the original pixel grid crisp while adding one small mid-step hop.
-    const eased = 1 - (1 - t) * (1 - t);
-    return {
-      x: motion.fromX + (cell.x - motion.fromX) * eased,
-      y: motion.fromY + (cell.y - motion.fromY) * eased,
-      hop: Math.round(Math.sin(Math.PI * t)),
-    };
-  }
   private travel(now: number) {
     const remaining = this.reducedMotion.matches
       ? 0
@@ -581,16 +606,6 @@ export class DungeonMap {
       x: Math.round(this.travelFrom.x * remaining),
       y: Math.round(this.travelFrom.y * remaining),
     };
-  }
-  private shade(cell: Cell, now: number) {
-    const key = `${cell.x},${cell.y}`,
-      fade = this.fog.get(key);
-    if (!fade) return cell.visible === false ? 1 : 0;
-    const t = this.reducedMotion.matches
-      ? 1
-      : Math.min(1, (now - fade.started) / 240);
-    if (t === 1) this.fog.delete(key);
-    return fade.from + (fade.to - fade.from) * t;
   }
   center() {
     this.offset = { x: 0, y: 0 };
@@ -602,7 +617,10 @@ export class DungeonMap {
     this.draw();
   }
   destroy() {
-    this.endDrag(); cancelAnimationFrame(this.zoomFrame);
+    this.endDrag();
+    clearTimeout(this.walkTimer);
+    this.scene.destroy();
+    this.terrainScene.clear();
     this.canvas.removeEventListener("wheel", this.wheel);
     this.canvas.removeEventListener("pointerdown", this.dragStart);
     this.canvas.removeEventListener("pointermove", this.dragMove);
@@ -624,12 +642,13 @@ export class DungeonMap {
   clearMessages() {
     for (const bubble of this.bubbles) {
       clearTimeout(bubble.timer);
+      bubble.movement?.cancel();
       bubble.element.remove();
     }
     this.bubbles = [];
   }
   showMessages(before: Snapshot, after: Snapshot) {
-    this.deathTraces.observe(before,after);
+    this.deathTraces.observe(before, after);
     this.draw();
     this.sound.observe(before, after, actionMessages(after));
     if (
@@ -699,6 +718,7 @@ export class DungeonMap {
       if (this.bubbles.length >= 3) {
         const oldest = this.bubbles.shift()!;
         clearTimeout(oldest.timer);
+        oldest.movement?.cancel();
         oldest.element.remove();
       }
       const element = document.createElement("div");
@@ -736,7 +756,8 @@ export class DungeonMap {
     const struck = messages.some((text) =>
       /^You (?:hit|smite|bite|claw|strike|punch) /.test(text),
     );
-    const kicked = after.outcome.action === "kick" && after.outcome.turnsElapsed > 0;
+    const kicked =
+      after.outcome.action === "kick" && after.outcome.turnsElapsed > 0;
     if (!hurt && !struck && !kicked) return;
     const effect = document.createElement("div");
     effect.className = "combat-impact" + (hurt ? " hurt" : "");
@@ -755,7 +776,7 @@ export class DungeonMap {
     });
     setTimeout(() => effect.remove(), 500);
     if (hurt || kicked)
-      this.canvas.animate(
+      (this.observation ? this.scene.element : this.canvas).animate(
         [
           { transform: "translate(0,0)" },
           { transform: "translate(-2px,1px)" },
@@ -802,11 +823,12 @@ export class DungeonMap {
   }
   private positionMessages(now = performance.now()) {
     const canvas = this.canvas;
-    const shift = this.travel(now);
+    const camera = this.scene.camera.getAnimations().find(animation => animation.playState === "running");
+    const matrix = this.bubbles.length && camera ? new DOMMatrix(getComputedStyle(this.scene.camera).transform) : null;
     let previousTop = Infinity;
     for (const bubble of [...this.bubbles].reverse()) {
-      const x = ((bubble.x - this.origin.x + 0.5) * 16 + shift.x) * this.zoom;
-      const y = ((bubble.y - this.origin.y) * 16 + shift.y) * this.zoom;
+      const x = (bubble.x - this.origin.x + 0.5) * 16 * this.zoom;
+      const y = (bubble.y - this.origin.y) * 16 * this.zoom;
       const visible =
         x >= 0 && x < canvas.clientWidth && y >= 0 && y < canvas.clientHeight;
       bubble.element.hidden = !visible;
@@ -839,29 +861,49 @@ export class DungeonMap {
         "--tail-x",
         `${Math.max(8, Math.min(width - 16, canvas.offsetLeft + x - left))}px`,
       );
+      if (bubble.camera !== camera) {
+        bubble.movement?.cancel();
+        bubble.camera = camera;
+        if (camera && matrix) {
+          const dx = Math.max(8 - left, Math.min(canvas.clientWidth - width - 8 - left, matrix.a * (bubble.x + .5) * 16 + matrix.e - x));
+          const dy = Math.max(8 - top, matrix.d * bubble.y * 16 + matrix.f - y);
+          const duration = Math.max(0, Number(camera.effect?.getTiming().duration) - Number(camera.currentTime));
+          // Individual translate composes with the bubble's existing CSS entry
+          // animation, and follows camera motion without a JS positioning loop.
+          bubble.movement = bubble.element.animate([{ translate: `${dx}px ${dy}px` }, { translate: "0px 0px" }], { duration });
+        }
+      }
       previousTop = top;
     }
   }
+  private scene!: RetainedScene;
+  private terrainScene!: TerrainScene;
+  private sceneObservation: Observation | null = null;
+  private sceneState = "";
+  private terrainSprites: SceneSprite[] = [];
+  private walkTimer?: ReturnType<typeof setTimeout>;
+  private cameraDuration = 0;
+
   draw(now = performance.now()) {
-    const canvas = this.canvas,
-      c = canvas.getContext("2d")!;
+    const canvas = this.canvas;
     const width = canvas.parentElement?.clientWidth ?? 640;
     const height = canvas.parentElement?.clientHeight ?? 640;
-    const scale = this.observation
-      ? this.zoom
-      : width >= 850 && height >= 750
-        ? 3
-        : 2;
-    const cols = Math.max(7, Math.ceil(width / (16 * scale)));
-    const rows = Math.max(7, Math.ceil(height / (16 * scale)));
-    if (canvas.width !== cols * 16) canvas.width = cols * 16;
-    if (canvas.height !== rows * 16) canvas.height = rows * 16;
-    canvas.style.width = `${cols * 16 * scale}px`;
-    canvas.style.height = `${rows * 16 * scale}px`;
-    c.imageSmoothingEnabled = false;
-    rect(c, "#171f23", 0, 0, canvas.width, canvas.height);
+    const motion = !this.reducedMotion.matches && !document.hidden;
+    this.scene.setMotion(motion);
+    this.scene.element.hidden = !this.observation;
     if (!this.observation) {
-      const gate = canvas.parentElement?.querySelector<HTMLElement>("#enter-gate");
+      const scale = width >= 850 && height >= 750 ? 3 : 2;
+      const cols = Math.max(7, Math.ceil(width / (16 * scale))),
+        rows = Math.max(7, Math.ceil(height / (16 * scale)));
+      if (canvas.width !== cols * 16) canvas.width = cols * 16;
+      if (canvas.height !== rows * 16) canvas.height = rows * 16;
+      canvas.style.width = `${cols * 16 * scale}px`;
+      canvas.style.height = `${rows * 16 * scale}px`;
+      const c = canvas.getContext("2d")!;
+      c.imageSmoothingEnabled = false;
+      rect(c, "#171f23", 0, 0, canvas.width, canvas.height);
+      const gate =
+        canvas.parentElement?.querySelector<HTMLElement>("#enter-gate");
       if (gate) {
         gate.style.left = (Math.floor(cols * 8 - 160) + 137) * scale + "px";
         gate.style.top = (Math.floor(rows * 8 - 128) + 44) * scale + "px";
@@ -871,76 +913,193 @@ export class DungeonMap {
       this.drawWelcomeArt(c, cols, rows, now);
       return;
     }
+    // The original canvas remains the keyboard/pointer surface. It does not
+    // carry a duplicate bitmap of the retained scene.
+    if (canvas.width !== 1 || canvas.height !== 1) {
+      canvas.width = canvas.height = 1;
+    }
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
     const you = this.observation.you;
     this.origin = {
-      x: Math.round(((you?.x ?? 40) + .5 - width / (32 * scale) + this.offset.x) * 16) / 16,
-      y: Math.round(((you?.y ?? 10) + .5 - height / (32 * scale) + this.offset.y) * 16) / 16,
+      x:
+        Math.round(
+          ((you?.x ?? 40) + 0.5 - width / (32 * this.zoom) + this.offset.x) *
+            16,
+        ) / 16,
+      y:
+        Math.round(
+          ((you?.y ?? 10) + 0.5 - height / (32 * this.zoom) + this.offset.y) *
+            16,
+        ) / 16,
     };
+    this.scene.moveCamera(
+      -this.origin.x * 16 * this.zoom,
+      -this.origin.y * 16 * this.zoom,
+      this.zoom,
+      this.cameraDuration,
+    );
+    this.cameraDuration = 0;
     this.positionMessages(now);
     this.positionCommandInput();
-    const target = canvas.parentElement!.querySelector<HTMLElement>("#direction-target");
+    const target =
+      canvas.parentElement!.querySelector<HTMLElement>("#direction-target");
     if (target && you) {
-      target.style.left = canvas.offsetLeft + Math.max(100, Math.min(canvas.clientWidth - 100, (you.x - this.origin.x + 0.5) * 16 * this.zoom)) + "px";
-      target.style.top = canvas.offsetTop + Math.max(120, Math.min(canvas.clientHeight - 160, (you.y - this.origin.y + 0.5) * 16 * this.zoom)) + "px";
+      target.style.left =
+        Math.max(
+          100,
+          Math.min(width - 100, (you.x - this.origin.x + 0.5) * 16 * this.zoom),
+        ) + "px";
+      target.style.top =
+        Math.max(
+          120,
+          Math.min(
+            height - 160,
+            (you.y - this.origin.y + 0.5) * 16 * this.zoom,
+          ),
+        ) + "px";
     }
-    const shift = this.travel(now);
-    c.save();
-    c.translate(shift.x, shift.y);
-    for (let wy = Math.floor(this.origin.y) - 1; wy < this.origin.y + rows + 1; wy++)
-      for (let wx = Math.floor(this.origin.x) - 1; wx < this.origin.x + cols + 1; wx++) {
-        const x = (wx - this.origin.x) * 16, y = (wy - this.origin.y) * 16;
-        if (((wx * 31 + wy * 17) & 7) === 0)
-          rect(c, "#1b2429", x + 3, y + 9, 3, 1);
-      }
-    c.save();
-    c.translate(-16, -16);
-    renderTerrain(c, this.observation.world, {
-      seed: this.seed,
-      layoutType: this.layoutType,
-      originX: this.origin.x - 1,
-      originY: this.origin.y - 1,
-      columns: cols + 2,
-      rows: rows + 2,
-      readableCells: [
-        ...(you ? [{ x: you.x, y: you.y, rise: 16 }] : []),
-        ...this.observation.world.filter(cell => cell.visible !== false &&
-          (cell.occupant || cell.objects?.length ||
-           (cell.visible === true && ["closedDoor", "openDoor", "doorway"].includes(cell.terrain.type))))
-          .map(cell => ({ x: cell.x, y: cell.y,
-            rise: cell.occupant ? 16 : cell.objects?.length ? 4 : STRUCTURE_RISE })),
-      ],
-      ambienceTimeMs: this.reducedMotion.matches || document.hidden ? undefined : now,
+    const walking = motion && now < this.walkUntil;
+    const state = JSON.stringify([
+      this.seed,
+      this.layoutType,
+      this.hero,
+      this.heroDead,
+      this.facing,
+      walking,
+      motion,
+      this.symbols,
+      this.route,
+      this.selectedTile,
+      this.context,
+      this.positionCursor,
+      this.deathTraces.entries,
+      this.observation,
+    ]);
+    if (this.sceneObservation === this.observation && this.sceneState === state)
+      return;
+    this.sceneState = state;
+    this.sceneObservation = this.observation;
+    {
+      this.terrainSprites = this.terrainScene.prepare(
+        this.observation.world,
+        {
+          seed: this.seed,
+          layoutType: this.layoutType,
+          readableCells: [
+            ...(you ? [{ x: you.x, y: you.y, rise: 16 }] : []),
+            ...this.observation.world
+              .filter(
+                (cell) =>
+                  cell.visible !== false &&
+                  (cell.occupant ||
+                    cell.objects?.length ||
+                    (cell.visible === true &&
+                      ["closedDoor", "openDoor", "doorway"].includes(
+                        cell.terrain.type,
+                      ))),
+              )
+              .map((cell) => ({
+                x: cell.x,
+                y: cell.y,
+                rise: cell.occupant
+                  ? 16
+                  : cell.objects?.length
+                    ? 4
+                    : STRUCTURE_RISE,
+              })),
+          ],
+        },
+        motion,
+      );
+    }
+    const sprites: SceneSprite[] = [...this.terrainSprites];
+    // Fixed, world-space dust. No camera-driven rasterization.
+    sprites.push({
+      key: "dust",
+      signature: "dust-1",
+      x: -32,
+      y: -32,
+      width: 1344,
+      height: 400,
+      z: -1,
+      paint: (c) => {
+        for (let y = 0; y < 25; y++)
+          for (let x = 0; x < 84; x++)
+            if ((((x - 2) * 31 + (y - 2) * 17) & 7) === 0)
+              rect(c, "#1b2429", x * 16 + 3, y * 16 + 9, 3, 1);
+      },
     });
-    c.restore();
-    // Inspection belongs to the ground tile. Actors and objects, including tall
-    // sprites anchored on a neighboring tile, must occlude its outline.
-    if (this.selectedTile) {
-      const x = (this.selectedTile.x - this.origin.x) * 16,
-        y = (this.selectedTile.y - this.origin.y) * 16;
-      c.strokeStyle = "#b8c995";
-      c.lineWidth = 1;
-      c.strokeRect(x + 0.5, y + 0.5, 15, 15);
-    }
+    const depth = (x: number, y: number, actor = false) =>
+      1000 + Math.round(y * 16) * 256 + Math.round(x * 2) + Number(actor);
+    const sprite = (
+      key: string,
+      signature: unknown,
+      x: number,
+      y: number,
+      z: number,
+      paint: SceneSprite["paint"],
+      extra: Partial<SceneSprite> = {},
+    ) => {
+      sprites.push({
+        key,
+        signature: JSON.stringify(signature),
+        x: x * 16 - 8,
+        y: y * 16 - 32,
+        width: 32,
+        height: 48,
+        z,
+        paint,
+        ...extra,
+      });
+    };
+    if (this.selectedTile)
+      sprite(
+        "selection",
+        "selection",
+        this.selectedTile.x,
+        this.selectedTile.y,
+        1,
+        (c) => {
+          c.strokeStyle = "#b8c995";
+          c.lineWidth = 1;
+          c.strokeRect(8.5, 32.5, 15, 15);
+        },
+      );
     this.deathTraces.age(this.observation.turn);
-    if (!this.symbols) for(const trace of this.deathTraces.entries) {
-      const cell=this.observation.world.find(cell=>cell.x===trace.x&&cell.y===trace.y);
-      if(cell?.visible===true)this.deathTraces.draw(c,trace,(trace.x-this.origin.x)*16,(trace.y-this.origin.y)*16,this.observation.turn);
-    }
-    const foreground: { x: number; y: number; draw: () => void }[] = [];
-
+    if (!this.symbols)
+      for (const trace of this.deathTraces.entries) {
+        const cell = this.observation.world.find(
+          (cell) => cell.x === trace.x && cell.y === trace.y,
+        );
+        if (cell?.visible === true) {
+          const age = this.observation.turn - trace.turn;
+          sprite(
+            `death:${trace.x},${trace.y}:${trace.turn}`,
+            trace,
+            trace.x,
+            trace.y,
+            1,
+            (c) => this.deathTraces.draw(c, trace, 8, 32, trace.turn),
+            { opacity: age < 5 ? 1 : age === 5 ? 0.4 / 0.65 : 0.2 / 0.65 },
+          );
+        }
+      }
+    const actorCounts = new Map<string, number>();
+    const actorKey = (cell: Cell) =>
+      JSON.stringify([
+        cell.occupant?.kind,
+        cell.occupant?.mark,
+        cell.occupant?.color,
+        cell.occupant?.appearance,
+      ]);
+    for (const cell of this.observation.world)
+      if (cell.occupant)
+        actorCounts.set(
+          actorKey(cell),
+          (actorCounts.get(actorKey(cell)) ?? 0) + 1,
+        );
     for (const cell of this.observation.world) {
-      const x = (cell.x - this.origin.x) * 16,
-        y = (cell.y - this.origin.y) * 16;
-      // Tall/wide sprites can remain visible with their anchor just offscreen.
-      if (
-        x < -32 ||
-        y < -32 ||
-        x >= canvas.width + 32 ||
-        y >= canvas.height + 32
-      )
-        continue;
-      // The player glyph covers floor glyphs. Current underfoot perception is
-      // still public and lets loot survive beneath that actor, without caching.
       const contents =
         !cell.objects &&
         you?.x === cell.x &&
@@ -953,163 +1112,190 @@ export class DungeonMap {
                 mark: categoryMark(item.category),
                 color: 7,
                 category: item.category,
-                known: item.known?.appearance ? {appearance: item.known.appearance, depictedCreature: item.known.depictedCreature} : undefined,
+                known: item.known?.appearance
+                  ? {
+                      appearance: item.known.appearance,
+                      depictedCreature: item.known.depictedCreature,
+                    }
+                  : undefined,
               })),
             }
           : cell;
-      foreground.push({
-        x,
-        y,
-        draw: () => drawContents(c, contents, x, y, this.symbols, "loot"),
-      });
+      if (contents.objects?.length)
+        sprite(
+          `loot:${cell.x},${cell.y}`,
+          [this.symbols, contents.objects],
+          cell.x,
+          cell.y,
+          depth(cell.x, cell.y),
+          (c) => drawContents(c, contents, 8, 32, this.symbols, "loot"),
+          { target: { x: cell.x, y: cell.y } },
+        );
       if (cell.occupant && cell.occupant.kind !== "self") {
-        const actor = this.actorPosition(cell, now),
-          actorX = Math.round((actor.x - this.origin.x) * 16),
-          actorY = Math.round((actor.y - this.origin.y) * 16) - actor.hop;
-        foreground.push({
-          x: actorX,
-          y: Math.round((actor.y - this.origin.y) * 16),
-          draw: () =>
-            drawContents(c, cell, actorX, actorY, this.symbols, "actor"),
-        });
+        const identity =
+          actorCounts.get(actorKey(cell)) === 1
+            ? actorKey(cell)
+            : `${cell.x},${cell.y}`;
+        const movement = this.actorMotions.get(`${cell.x},${cell.y}`);
+        const from =
+          movement && now < movement.started + 140
+            ? {
+                x: movement.fromX * 16 - 8,
+                y: movement.fromY * 16 - 32,
+                duration: Math.max(0, 140 - (now - movement.started)),
+                hop: true,
+              }
+            : undefined;
+        sprite(
+          `actor:${identity}`,
+          [this.symbols, cell.occupant],
+          cell.x,
+          cell.y,
+          depth(cell.x, cell.y, true),
+          (c) => drawContents(c, cell, 8, 32, this.symbols, "actor"),
+          { from, target: { x: cell.x, y: cell.y } },
+        );
+        if (!this.symbols && !knownCreatureArt(cell.occupant.appearance))
+          sprite(
+            `question:${identity}`,
+            "question",
+            cell.x,
+            cell.y,
+            110000,
+            (c) => drawCreatureQuestion(c, 8, 32),
+            { from, target: { x: cell.x, y: cell.y } },
+          );
       }
     }
-    // Position comes from observation.you, never from a remembered cell.
     if (you) {
-      const x = (you.x - this.origin.x) * 16 - shift.x,
-        y = (you.y - this.origin.y) * 16 - shift.y;
-      foreground.push({
-        x,
-        y,
-        draw: () => {
-          if(this.heroDead){
-            drawTombstone(c,x,y);
-            this.canvas.dataset.motion="still";this.canvas.dataset.frame="0";
+      this.canvas.dataset.facing = this.facing;
+      this.canvas.dataset.motion = this.heroDead
+        ? "still"
+        : walking
+          ? "walk"
+          : "idle";
+      this.canvas.dataset.frame = "0";
+      const shift = this.travel(now);
+      const image = images.get(`${this.hero}-motion`);
+      const facing = this.facing,
+        dead = this.heroDead;
+      sprite(
+        "hero",
+        [this.hero, dead, Boolean(image)],
+        you.x,
+        you.y,
+        depth(you.x, you.y, true),
+        (c, frame) => {
+          if (dead) {
+            drawTombstone(c, 8, 32);
             return;
           }
-          rect(c, "#26312b", x + 2, y + 13, 12, 2);
-          rect(c, "#a6be87", x + 4, y + 15, 8, 1);
-          const image = images.get(`${this.hero}-motion`);
-          const width = 16;
-          const walking = !this.reducedMotion.matches && now < this.walkUntil;
-          const frame = this.reducedMotion.matches
-            ? 0
-            : Math.floor(
-                (walking ? now - this.walkStarted : now) /
-                  (walking ? 100 : 167),
-              ) % 6;
-          this.canvas.dataset.facing = this.facing;
-          this.canvas.dataset.motion = walking ? "walk" : "idle";
-          this.canvas.dataset.frame = String(frame);
+          rect(c, "#26312b", 10, 45, 12, 2);
+          rect(c, "#a6be87", 12, 47, 8, 1);
           if (image)
             c.drawImage(
               image,
-              // Audited face direction in the source sheet: right, up, left, down.
-              { right: 0, up: 1, left: 2, down: 3 }[this.facing] * 6 * width +
-                frame * width,
-              walking ? 32 : 0,
-              width,
+              (frame % 24) * 16,
+              frame >= 24 ? 32 : 0,
+              16,
               32,
-              x + 8 - width / 2,
-              y - 16,
-              width,
+              8,
+              16,
+              16,
               32,
             );
-          else glyph(c, "@", "#e7d498", x, y);
+          else glyph(c, "@", "#e7d498", 8, 32);
         },
-      });
+        {
+          atlasFrames: !dead && image ? 48 : 1,
+          frameOffset:
+            !dead && image
+              ? (walking ? 24 : 0) +
+                { right: 0, up: 1, left: 2, down: 3 }[facing] * 6
+              : 0,
+          frames: motion && !dead && image ? 6 : 1,
+          period: walking ? 100 : 167,
+          phase: walking ? now - this.walkStarted : now % 1002,
+          from:
+            shift.x || shift.y
+              ? {
+                  x: you.x * 16 - 8 - shift.x,
+                  y: you.y * 16 - 32 - shift.y,
+                  duration: Math.max(0, 110 - (now - this.travelStarted)),
+                }
+              : undefined,
+        },
+      );
     }
-    // Objects and actors share foot-Y order above the readable cutaway terrain.
-    // A nearer boulder covers a figure behind it; underfoot objects stay below it.
-    foreground.sort((a, b) => a.y - b.y || a.x - b.x);
-    for (const layer of foreground) layer.draw();
-    for (const point of this.route) {
-      const x=(point.x-this.origin.x)*16, y=(point.y-this.origin.y)*16;
-      rect(c,"#b8c995",x+7,y+7,3,3);
-    }
+    for (const point of this.route)
+      sprite(
+        `route:${point.x},${point.y}`,
+        "route",
+        point.x,
+        point.y,
+        100000,
+        (c) => rect(c, "#b8c995", 15, 39, 3, 3),
+      );
     const cursor = this.positionCursor ?? this.context;
-    if (cursor) {
-      const x = (cursor.x - this.origin.x) * 16,
-        y = (cursor.y - this.origin.y) * 16;
-      c.strokeStyle = "#efd092";
-      c.lineWidth = 1;
-      c.strokeRect(x + 0.5, y + 0.5, 15, 15);
-    }
-    // Modifiers are a separate pass above all world sprites.
-    if (!this.symbols)
-      for (const cell of this.observation.world) {
-        const actor = this.actorPosition(cell, now),
-          x = Math.round((actor.x - this.origin.x) * 16),
-          y = Math.round((actor.y - this.origin.y) * 16) - actor.hop;
-        if (
-          cell.occupant &&
-          cell.occupant.kind !== "self" &&
-          !knownCreatureArt(cell.occupant.appearance)
-        ) {
-          drawCreatureQuestion(c, x, y);
-        }
-      }
-    const neighborhood = this.observation.neighborhood;
-    if (neighborhood?.status === "available")
-      for (const cell of neighborhood.cells) {
+    if (cursor)
+      sprite("cursor", "cursor", cursor.x, cursor.y, 100001, (c) => {
+        c.strokeStyle = "#efd092";
+        c.lineWidth = 1;
+        c.strokeRect(8.5, 32.5, 15, 15);
+      });
+    if (this.observation.neighborhood?.status === "available")
+      for (const cell of this.observation.neighborhood.cells) {
         if (cell.door?.lock !== "locked") continue;
-        const x = (cell.x - this.origin.x) * 16,
-          y = (cell.y - this.origin.y) * 16;
-        rect(c, "#182128", x + 10, y - 6, 9, 12);
-        rect(c, "#d4be83", x + 12, y - 5, 5, 5);
-        rect(c, "#182128", x + 13, y - 3, 3, 3);
-        rect(
-          c,
-          cell.door.freshness === "remembered" ? "#92978a" : "#efd092",
-          x + 11,
-          y,
-          7,
-          5,
+        sprite(
+          `lock:${cell.x},${cell.y}`,
+          cell.door.freshness,
+          cell.x,
+          cell.y,
+          120000,
+          (c) => {
+            rect(c, "#182128", 18, 26, 9, 12);
+            rect(c, "#d4be83", 20, 27, 5, 5);
+            rect(c, "#182128", 21, 29, 3, 3);
+            rect(
+              c,
+              cell.door?.freshness === "remembered" ? "#92978a" : "#efd092",
+              19,
+              32,
+              7,
+              5,
+            );
+            rect(c, "#524a37", 22, 33, 1, 2);
+          },
         );
-        rect(c, "#524a37", x + 14, y + 1, 1, 2);
       }
-    // The engine owns sight. Dim only explicitly out-of-sight terrain; older
-    // packages omit visibility and must not be assigned a guessed sight radius.
-    c.save();
-    for (const cell of this.observation.world) {
-      const shade = this.shade(cell, now);
-      if (!shade || ["dark", "unknown"].includes(cell.terrain.type)) continue;
-      const x = (cell.x - this.origin.x) * 16,
-        y = (cell.y - this.origin.y) * 16;
-      const structure = ["wall", "closedDoor", "openDoor", "doorway"].includes(
-        cell.terrain.type,
-      );
-      const rise = structure
-        ? STRUCTURE_RISE
-        : cell.occupant && cell.occupant.kind !== "self"
-          ? 8
-          : cell.objects?.length
-            ? 4
-            : 0;
-      const shadeX = structure ? x - STRUCTURE_OVERHANG : x;
-      const shadeWidth = structure ? 16 + STRUCTURE_OVERHANG : rise ? 19 : 16;
-      if (
-        shadeX + shadeWidth <= 0 ||
-        y + 16 <= 0 ||
-        shadeX >= canvas.width ||
-        y - rise >= canvas.height
-      )
-        continue;
-      c.globalAlpha = shade;
-      c.globalCompositeOperation = "saturation";
-      rect(c, "#000", shadeX, y - rise, shadeWidth, 16 + rise);
-      c.globalCompositeOperation = "source-over";
-      rect(
-        c,
-        "rgba(23, 31, 35, 0.32)",
-        shadeX,
-        y - rise,
-        shadeWidth,
-        16 + rise,
-      );
-    }
-    c.restore();
-    c.restore();
+    this.scene.reconcile(sprites);
+    this.scene.visibility(
+      this.observation.world
+        .filter((cell) => !["dark", "unknown"].includes(cell.terrain.type))
+        .map((cell) => {
+          const structure = [
+            "wall",
+            "closedDoor",
+            "openDoor",
+            "doorway",
+          ].includes(cell.terrain.type);
+          const rise = structure
+            ? STRUCTURE_RISE
+            : cell.occupant && cell.occupant.kind !== "self"
+              ? 8
+              : cell.objects?.length
+                ? 4
+                : 0;
+          return {
+            key: `${cell.x},${cell.y}`,
+            x: cell.x * 16 - (structure ? STRUCTURE_OVERHANG : 0),
+            y: cell.y * 16 - rise,
+            width: structure ? 16 + STRUCTURE_OVERHANG : rise ? 19 : 16,
+            height: 16 + rise,
+            opacity: cell.visible === false ? 1 : 0,
+          };
+        }),
+    );
   }
   // An authored welcome courtyard, never inserted into a game observation.
   drawWelcomeArt(
@@ -1183,7 +1369,15 @@ export class DungeonMap {
       rect(c, "#a18b56", 143, 44, 34, 58);
       rect(c, "#d5b873", 150, 44, 20, 58);
       rect(c, "#f3dda0", 156, 44, 8, 58);
-      for (let i = 0; i < 7; i++) rect(c, i % 2 ? "#d5b873" : "#edcf87", 139 + i * 6, 96 - (i % 3) * 7, 2, 2);
+      for (let i = 0; i < 7; i++)
+        rect(
+          c,
+          i % 2 ? "#d5b873" : "#edcf87",
+          139 + i * 6,
+          96 - (i % 3) * 7,
+          2,
+          2,
+        );
     }
     if (portal !== null) {
       const charge = Math.min(1, portal / 0.28),
@@ -1285,9 +1479,7 @@ export class DungeonMap {
       this.intro.fromY + (this.intro.y - this.intro.fromY) * t,
     );
     const pull =
-      portal === null
-        ? 0
-        : Math.max(0, Math.min(1, (portal - 0.12) / 0.64));
+      portal === null ? 0 : Math.max(0, Math.min(1, (portal - 0.12) / 0.64));
     const easedPull = pull * pull * (3 - 2 * pull);
     y -= Math.round(easedPull * 34);
     const shadowWidth = Math.max(2, 12 - Math.round(easedPull * 10));

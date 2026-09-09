@@ -1,4 +1,8 @@
-import { layoutProfile, type LayoutType, type SurfacePalette as Palette } from "./layout-art";
+import {
+  layoutProfile,
+  type LayoutType,
+  type SurfacePalette as Palette,
+} from "./layout-art";
 import { ambienceHash, decorationAt, drawDecoration } from "./ambience";
 /** Original, deterministic dungeon surfaces. This module knows no game rules. */
 import {
@@ -31,6 +35,8 @@ export interface TerrainOptions {
   omitDecals?: boolean;
   /** Optional presentation clock; omitted for static/reduced-motion/workshop art. */
   ambienceTimeMs?: number;
+  /** Retained renderers bake the three torch frames only when a chunk needs them. */
+  onAnimatedStructure?: () => void;
   /** Current public sprite anchors; world coordinates, independent of the camera. */
   readableCells?: readonly { x: number; y: number; rise: number }[];
 }
@@ -104,12 +110,128 @@ export function renderDecals(
   c.clip();
   for (const cell of cells) {
     if (cell.terrain.type !== "floor") continue;
-    const x = (cell.x - options.originX) * 16, y = (cell.y - options.originY) * 16;
-    if (x + 16 <= 0 || y + 16 <= 0 || x >= options.columns * 16 || y >= options.rows * 16) continue;
-    const ground = decorationAt(options.seed, cell.x, cell.y, false, options.layoutType);
+    const x = (cell.x - options.originX) * 16,
+      y = (cell.y - options.originY) * 16;
+    if (
+      x + 16 <= 0 ||
+      y + 16 <= 0 ||
+      x >= options.columns * 16 ||
+      y >= options.rows * 16
+    )
+      continue;
+    const ground = decorationAt(
+      options.seed,
+      cell.x,
+      cell.y,
+      false,
+      options.layoutType,
+    );
     if (ground) drawDecoration(c, ground, x, y);
   }
   c.restore();
+}
+
+/** Shared perceived geometry for rasterization and precise cache invalidation. */
+export function terrainGeometry(
+  cells: readonly TerrainCell[],
+  options: Pick<TerrainOptions, "readableCells">,
+) {
+  const known = new Map(
+    cells.map((cell) => [`${cell.x},${cell.y}`, cell.terrain.type]),
+  );
+  const typeAt = (x: number, y: number) => known.get(`${x},${y}`);
+  const cellsByPosition = new Map(
+    cells.map((cell) => [`${cell.x},${cell.y}`, cell]),
+  );
+  const joinsWall = (x: number, y: number, vertical: boolean) =>
+    typeAt(x, y) === "wall" ||
+    (DOORS.has(typeAt(x, y) ?? "") &&
+      (cellsByPosition.get(`${x},${y}`)?.terrain.orientation === "vertical") ===
+        vertical);
+  const surface = (x: number, y: number) => {
+    const t = typeAt(x, y);
+    return Boolean(t && SURFACES.has(t) && t !== "wall" && !DOORS.has(t));
+  };
+  const contactHeight = (x: number, y: number) => {
+    if (DOORS.has(typeAt(x, y) ?? "")) return 24;
+    // The south edge stays low; the east edge retains an enclosing wall.
+    if (surface(x, y - 1) && !surface(x, y + 1)) return 6;
+    if (surface(x - 1, y) && !surface(x + 1, y)) return 14;
+    if (surface(x + 1, y) || surface(x, y + 1)) return 20;
+    if (surface(x - 1, y - 1) || surface(x + 1, y - 1)) return 6;
+    if (surface(x - 1, y + 1)) {
+      // A disclosed northeast elbow belongs to the continuous rear cap.
+      if (typeAt(x - 1, y) === "wall" && typeAt(x, y + 1) === "wall") return 20;
+      return 14;
+    }
+    return 20;
+  };
+  const baseHeight = (x: number, y: number) => {
+    const height = contactHeight(x, y);
+    if (height !== 14 || typeAt(x, y) !== "wall") return height;
+    // End the raised east run one cell before the disclosed low south elbow.
+    // The preceding cell forms a shoulder. Unknown neighbors never imply an end.
+    if (typeAt(x, y + 1) === "wall" && contactHeight(x, y + 1) === 6) return 6;
+    if (
+      typeAt(x, y + 1) === "wall" &&
+      contactHeight(x, y + 1) === 14 &&
+      typeAt(x, y + 2) === "wall" &&
+      contactHeight(x, y + 2) === 6
+    )
+      return 10;
+    // Carry the rear cap around the elbow and two complete cells down the east
+    // run before stepping to its intermediate height. Require disclosed joins.
+    for (let distance = 1; distance <= 2; distance++) {
+      const cornerY = y - distance;
+      if (
+        Array.from({ length: distance }, (_, i) => y - i).every(
+          (row) => typeAt(x, row) === "wall" && contactHeight(x, row) === 14,
+        ) &&
+        typeAt(x, cornerY) === "wall" &&
+        typeAt(x - 1, cornerY) === "wall" &&
+        surface(x - 1, cornerY + 1) &&
+        contactHeight(x, cornerY) === 20
+      )
+        return 20;
+    }
+    return height;
+  };
+  const lowered = new Set<string>();
+  for (const cell of cells) {
+    if (
+      cell.terrain.type !== "wall" ||
+      contactHeight(cell.x, cell.y) !== 14 ||
+      baseHeight(cell.x, cell.y) < 10
+    )
+      continue;
+    const retainedHeight = baseHeight(cell.x, cell.y);
+    // Bounds of the east wall's projected central band at its retained height.
+    // Never use a camera-relative player radius or unseen room membership.
+    const left = cell.x * 16 + 3 - retainedHeight * 0.375,
+      right = cell.x * 16 + 13;
+    const top = cell.y * 16 - retainedHeight * 0.75,
+      bottom = cell.y * 16 + 16;
+    if (
+      options.readableCells?.some(
+        (target) =>
+          target.x * 16 + 15 > left &&
+          target.x * 16 + 1 < right &&
+          target.y * 16 + 15 > top &&
+          target.y * 16 - target.rise < bottom,
+      )
+    )
+      lowered.add(`${cell.x},${cell.y}`);
+  }
+  const heightAt = (x: number, y: number) => {
+    const height = baseHeight(x, y);
+    if (height < 10 || contactHeight(x, y) !== 14 || typeAt(x, y) !== "wall")
+      return height;
+    if (lowered.has(`${x},${y}`)) return 6;
+    // A short shoulder keeps a local notch from jumping straight to full height.
+    if (lowered.has(`${x},${y - 1}`) || lowered.has(`${x},${y + 1}`)) return 10;
+    return height;
+  };
+  return { typeAt, cellsByPosition, joinsWall, heightAt };
 }
 
 /** Ground stays inside known cells; observed masonry sprites rise above their anchors. */
@@ -124,72 +246,10 @@ export function renderTerrain(
   const rock = profile.geometry === "rock";
   const seed = seedHash(options.seed);
   const material = hash(seed, 0, 0, 4);
-  const known = new Map(
-    cells.map((cell) => [`${cell.x},${cell.y}`, cell.terrain.type]),
+  const { typeAt, cellsByPosition, joinsWall, heightAt } = terrainGeometry(
+    cells,
+    options,
   );
-  const typeAt = (x: number, y: number) => known.get(`${x},${y}`);
-  const cellsByPosition = new Map(cells.map(cell => [`${cell.x},${cell.y}`, cell]));
-  const joinsWall = (x: number, y: number, vertical: boolean) =>
-    typeAt(x, y) === "wall" ||
-    (DOORS.has(typeAt(x, y) ?? "") && (cellsByPosition.get(`${x},${y}`)?.terrain.orientation === "vertical") === vertical);
-  const surface = (x: number, y: number) => {
-    const t = typeAt(x, y);
-    return Boolean(t && SURFACES.has(t) && t !== "wall" && !DOORS.has(t));
-  };
-  const contactHeight = (x: number, y: number) => {
-    if (DOORS.has(typeAt(x,y) ?? "")) return 24;
-    // The south edge stays low; the east edge retains an enclosing wall.
-    if (surface(x, y - 1) && !surface(x, y + 1)) return 6;
-    if (surface(x - 1, y) && !surface(x + 1, y)) return 14;
-    if (surface(x + 1, y) || surface(x, y + 1)) return 20;
-    if (surface(x - 1, y - 1) || surface(x + 1, y - 1)) return 6;
-    if (surface(x - 1, y + 1)) {
-      // A disclosed northeast elbow belongs to the continuous rear cap.
-      if (typeAt(x-1,y) === "wall" && typeAt(x,y+1) === "wall") return 20;
-      return 14;
-    }
-    return 20;
-  };
-  const baseHeight = (x: number, y: number) => {
-    const height = contactHeight(x,y);
-    if (height !== 14 || typeAt(x,y) !== "wall") return height;
-    // End the raised east run one cell before the disclosed low south elbow.
-    // The preceding cell forms a shoulder. Unknown neighbors never imply an end.
-    if (typeAt(x,y+1) === "wall" && contactHeight(x,y+1) === 6) return 6;
-    if (typeAt(x,y+1) === "wall" && contactHeight(x,y+1) === 14 &&
-        typeAt(x,y+2) === "wall" && contactHeight(x,y+2) === 6) return 10;
-    // Carry the rear cap around the elbow and two complete cells down the east
-    // run before stepping to its intermediate height. Require disclosed joins.
-    for (let distance = 1; distance <= 2; distance++) {
-      const cornerY = y - distance;
-      if (Array.from({length: distance}, (_,i) => y-i).every(row =>
-          typeAt(x,row) === "wall" && contactHeight(x,row) === 14) &&
-          typeAt(x,cornerY) === "wall" && typeAt(x-1,cornerY) === "wall" &&
-          surface(x-1,cornerY+1) && contactHeight(x,cornerY) === 20) return 20;
-    }
-    return height;
-  };
-  const lowered = new Set<string>();
-  for (const cell of cells) {
-    if (cell.terrain.type !== "wall" || contactHeight(cell.x,cell.y) !== 14 || baseHeight(cell.x,cell.y) < 10) continue;
-    const retainedHeight = baseHeight(cell.x,cell.y);
-    // Bounds of the east wall's projected central band at its retained height.
-    // Never use a camera-relative player radius or unseen room membership.
-    const left = cell.x * 16 + 3 - retainedHeight * .375, right = cell.x * 16 + 13;
-    const top = cell.y * 16 - retainedHeight * .75, bottom = cell.y * 16 + 16;
-    if (options.readableCells?.some(target =>
-      target.x * 16 + 15 > left && target.x * 16 + 1 < right &&
-      target.y * 16 + 15 > top && target.y * 16 - target.rise < bottom))
-      lowered.add(`${cell.x},${cell.y}`);
-  }
-  const heightAt = (x: number, y: number) => {
-    const height = baseHeight(x,y);
-    if (height < 10 || contactHeight(x,y) !== 14 || typeAt(x,y) !== "wall") return height;
-    if (lowered.has(`${x},${y}`)) return 6;
-    // A short shoulder keeps a local notch from jumping straight to full height.
-    if (lowered.has(`${x},${y-1}`) || lowered.has(`${x},${y+1}`)) return 10;
-    return height;
-  };
   c.save();
   c.imageSmoothingEnabled = false;
   c.beginPath();
@@ -344,7 +404,11 @@ export function renderTerrain(
   if (!options.omitDecals) renderDecals(c, cells, options);
   // Bake connected 3D masonry after ground. Include offscreen anchors whose
   // raised/overhanging silhouette still enters the viewport.
-  const layer = structureLayer(c, Math.ceil(columns * 16), Math.ceil(rows * 16));
+  const layer = structureLayer(
+    c,
+    Math.ceil(columns * 16),
+    Math.ceil(rows * 16),
+  );
   const structures = [...cells].sort((a, b) => a.y - b.y || a.x - b.x);
   for (const cell of structures) {
     const x = (cell.x - originX) * 16,
@@ -361,13 +425,38 @@ export function renderTerrain(
       const wallHeight = heightAt(wx, wy);
       // Dress the real south/east face, using only a supplied adjoining floor.
       // Keep fixtures away from endcaps and doorway jambs.
-      const front = typeAt(wx, wy + 1) === "floor" && [-1, 1].every(dx => typeAt(wx + dx, wy) === "wall");
-      const side = typeAt(wx + 1, wy) === "floor" && [-1, 1].every(dy => typeAt(wx, wy + dy) === "wall");
-      const floorX = front ? wx : wx + 1, floorY = front ? wy + 1 : wy;
-      const prop = wallHeight === 20 && (front || side) && !options.omitDecals
-        ? decorationAt(options.seed, front ? floorX : floorY, front ? floorY : floorX, true, options.layoutType) : undefined;
-      const flame = cell.visible === true && cellsByPosition.get(`${floorX},${floorY}`)?.visible === true && options.ambienceTimeMs !== undefined
-        ? (Math.floor(options.ambienceTimeMs / 420) + ambienceHash(options.seed, wx, wy, "flame")) % 3 : 0;
+      const front =
+        typeAt(wx, wy + 1) === "floor" &&
+        [-1, 1].every((dx) => typeAt(wx + dx, wy) === "wall");
+      const side =
+        typeAt(wx + 1, wy) === "floor" &&
+        [-1, 1].every((dy) => typeAt(wx, wy + dy) === "wall");
+      const floorX = front ? wx : wx + 1,
+        floorY = front ? wy + 1 : wy;
+      const prop =
+        wallHeight === 20 && (front || side) && !options.omitDecals
+          ? decorationAt(
+              options.seed,
+              front ? floorX : floorY,
+              front ? floorY : floorX,
+              true,
+              options.layoutType,
+            )
+          : undefined;
+      const flame =
+        cell.visible === true &&
+        cellsByPosition.get(`${floorX},${floorY}`)?.visible === true &&
+        options.ambienceTimeMs !== undefined
+          ? (Math.floor(options.ambienceTimeMs / 420) +
+              ambienceHash(options.seed, wx, wy, "flame")) %
+            3
+          : 0;
+      if (
+        prop === "torch" &&
+        cell.visible === true &&
+        cellsByPosition.get(`${floorX},${floorY}`)?.visible === true
+      )
+        options.onAnimatedStructure?.();
       (rock ? drawRockSprite : drawWallSprite)(
         c,
         x,
@@ -389,7 +478,9 @@ export function renderTerrain(
         hash(seed, wx, wy, 10),
         wx,
         wy,
-        prop ? { kind: prop, side: front ? "front" : "side", flame } : undefined,
+        prop
+          ? { kind: prop, side: front ? "front" : "side", flame }
+          : undefined,
         layer,
       );
     }
@@ -638,27 +729,140 @@ function liquid(
   if (banks[3]) rect(c, bank, x, y + 1, 1, 14);
 }
 
-/** Continuous world-space soil, with no paving grid or tile-boundary seams. */
-function earth(c: CanvasRenderingContext2D,x:number,y:number,wx:number,wy:number,seed:number,p:Palette) {
-  for(let py=0;py<16;py++) for(let px=0;px<16;px++) {
-    const gx=wx*16+px, gy=wy*16+py;
-    // Jittered mineral patches cross cell boundaries without rectangular blocks.
-    let distance=Infinity, patch=0;
-    const bx=Math.floor(gx/12),by=Math.floor(gy/12);
-    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
-      const id=hash(seed,bx+dx,by+dy,73);
-      const px=(bx+dx)*12+id%12,py=(by+dy)*12+(id>>>8)%12;
-      const d=(gx-px)**2+(gy-py)**2;
-      if(d<distance){distance=d;patch=id;}
-    }
-    const grain=hash(seed,gx,gy,74);
-    const color=grain%227===0?p.light:grain%97===0?p.seam:p.floor[patch%p.floor.length]!;
-    rect(c,color,x+px,y+py,1,1);
+// Bounded document-local atlases contain only cosmetic ground,
+// never visibility, occupants, wall cutaways or other observation state.
+const EARTH_COLUMNS = 32;
+const EARTH_CAPACITY = 2048;
+class EarthAtlas {
+  readonly canvas: HTMLCanvasElement;
+  readonly context: CanvasRenderingContext2D;
+  readonly pixels: ImageData;
+  readonly colors: Uint8ClampedArray;
+  readonly slots = new Map<string, number>();
+  next = 0;
+  constructor(
+    readonly seed: number,
+    readonly palette: Palette,
+    document: Document,
+  ) {
+    this.canvas = document.createElement("canvas");
+    this.canvas.width = EARTH_COLUMNS * 16;
+    this.canvas.height = (EARTH_CAPACITY / EARTH_COLUMNS) * 16;
+    this.context = this.canvas.getContext("2d")!;
+    // Resolve CSS colors once, using the same canvas color conversion as before.
+    [palette.light, palette.seam, ...palette.floor].forEach((color, index) => {
+      rect(this.context, color, index, 0, 1, 1);
+    });
+    this.colors = this.context.getImageData(
+      0,
+      0,
+      palette.floor.length + 2,
+      1,
+    ).data;
+    this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.pixels = this.context.createImageData(16, 16);
   }
+}
+// Share the atlas across terrain chunks and replay instances in one document.
+// Four recent seed/palette combinations cap bitmap storage at 8 MiB, rather
+// than allocating a full atlas for every small chunk canvas.
+const earthAtlases = new WeakMap<Document, Map<string, EarthAtlas>>();
+
+/** Continuous world-space soil, baked once and copied on subsequent frames. */
+function earth(
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  wx: number,
+  wy: number,
+  seed: number,
+  p: Palette,
+) {
+  const document = c.canvas.ownerDocument;
+  let atlases = earthAtlases.get(document);
+  if (!atlases) {
+    atlases = new Map();
+    earthAtlases.set(document, atlases);
+  }
+  const paletteKey = `${seed}:${p.light}:${p.seam}:${p.floor.join(",")}`;
+  let atlas = atlases.get(paletteKey);
+  if (!atlas) {
+    atlas = new EarthAtlas(seed, p, c.canvas.ownerDocument);
+    if (atlases.size >= 4) atlases.delete(atlases.keys().next().value!);
+    atlases.set(paletteKey, atlas);
+  }
+  const key = `${wx},${wy}`;
+  let slot = atlas.slots.get(key);
+  if (slot === undefined) {
+    slot = atlas.next;
+    atlas.next = (slot + 1) % EARTH_CAPACITY;
+    if (atlas.slots.size === EARTH_CAPACITY)
+      atlas.slots.delete(atlas.slots.keys().next().value!);
+    atlas.slots.set(key, slot);
+    bakeEarth(atlas, wx, wy);
+    atlas.context.putImageData(
+      atlas.pixels,
+      (slot % EARTH_COLUMNS) * 16,
+      Math.floor(slot / EARTH_COLUMNS) * 16,
+    );
+  }
+  c.drawImage(
+    atlas.canvas,
+    (slot % EARTH_COLUMNS) * 16,
+    Math.floor(slot / EARTH_COLUMNS) * 16,
+    16,
+    16,
+    x,
+    y,
+    16,
+    16,
+  );
+}
+
+function bakeEarth(atlas: EarthAtlas, wx: number, wy: number) {
+  const { seed, palette: p, pixels, colors } = atlas;
+  for (let py = 0; py < 16; py++)
+    for (let px = 0; px < 16; px++) {
+      const gx = wx * 16 + px,
+        gy = wy * 16 + py;
+      // Jittered mineral patches cross cell boundaries without rectangular blocks.
+      let distance = Infinity,
+        patch = 0;
+      const bx = Math.floor(gx / 12),
+        by = Math.floor(gy / 12);
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const id = hash(seed, bx + dx, by + dy, 73);
+          const px = (bx + dx) * 12 + (id % 12),
+            py = (by + dy) * 12 + ((id >>> 8) % 12);
+          const d = (gx - px) ** 2 + (gy - py) ** 2;
+          if (d < distance) {
+            distance = d;
+            patch = id;
+          }
+        }
+      const grain = hash(seed, gx, gy, 74);
+      const color =
+        (grain % 227 === 0
+          ? 0
+          : grain % 97 === 0
+            ? 1
+            : 2 + (patch % p.floor.length)) * 4;
+      const pixel = (py * 16 + px) * 4;
+      pixels.data[pixel] = colors[color]!;
+      pixels.data[pixel + 1] = colors[color + 1]!;
+      pixels.data[pixel + 2] = colors[color + 2]!;
+      pixels.data[pixel + 3] = colors[color + 3]!;
+    }
 }
 
 /** Existing original grave artwork, also used as a presentation-only death marker. */
-export function drawTombstone(c: CanvasRenderingContext2D, x: number, y: number, face = "#68715f") {
+export function drawTombstone(
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  face = "#68715f",
+) {
   rect(c, "#27322e", x + 3, y + 12, 11, 3);
   rect(c, face, x + 5, y + 3, 8, 10);
   rect(c, "#a4a38c", x + 4, y + 3, 7, 10);

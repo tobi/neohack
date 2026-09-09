@@ -8,6 +8,8 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Smoother dungeon rendering: static scenery and sprites are reused while camera
+  movement, animation and visibility fades run through the browser compositor.
 - Thin, muted scrollbars now match across the game, ledger, workshop, account
   dialogs and replay viewer, including embedded and offline views.
 - More actions opens with Ctrl+K (Cmd+K on Mac), with fuzzy search and highlighted

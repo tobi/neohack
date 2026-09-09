@@ -1,3 +1,4 @@
+import { installScenePixels } from "./scene-pixels.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -59,6 +60,7 @@ async function fixture(
     hasTouch: touch,
   });
   const page = await context.newPage();
+  await installScenePixels(page);
   const errors = [],
     requests = [];
   page.on("pageerror", (e) => errors.push(String(e)));
@@ -553,11 +555,8 @@ test("authored directional motion follows real engine movement without spending 
   await page.waitForFunction(
     () => document.querySelector("#dungeon").dataset.motion === "idle",
   );
-  const frame = await page.locator("#dungeon").getAttribute("data-frame");
-  await page.waitForFunction(
-    (frame) => document.querySelector("#dungeon").dataset.frame !== frame,
-    frame,
-  );
+  const transform = await page.locator('[data-sprite="hero"] canvas').evaluate(el => getComputedStyle(el).transform);
+  await page.waitForFunction(transform => getComputedStyle(document.querySelector('[data-sprite="hero"] canvas')).transform !== transform, transform);
   assert.deepEqual(
     await snapshot(page),
     after,
@@ -574,12 +573,12 @@ test("authored directional motion follows real engine movement without spending 
   );
   const still = await page
     .locator("#dungeon")
-    .evaluate((canvas) => canvas.toDataURL());
+    .evaluate(() => window.scenePixels(document.querySelector("pixel-nethack").map).toDataURL());
   await page.getByLabel("Game menu", { exact: true }).click();
   await page.getByRole("button", { name: "Show NetHack symbols" }).click();
   const symbols = await page
     .locator("#dungeon")
-    .evaluate((canvas) => canvas.toDataURL());
+    .evaluate(() => window.scenePixels(document.querySelector("pixel-nethack").map).toDataURL());
   assert.notEqual(
     symbols,
     still,
@@ -663,9 +662,9 @@ test("perception-only corridor and sprite study: directions, loot and static red
       sheet
         .getContext("2d")
         .drawImage(
-          canvas,
-          Math.floor(canvas.width / 32) * 16,
-          Math.floor(canvas.height / 32) * 16 - 16,
+          window.scenePixels(map),
+          (map.observation.you.x - map.origin.x) * 16,
+          (map.observation.you.y - map.origin.y) * 16 - 16,
           16,
           32,
           0,
@@ -700,7 +699,7 @@ test("perception-only corridor and sprite study: directions, loot and static red
     // Render-only overlap fixture: a tall rock in front of the north wall.
     map.update(observation, "valkyrie", "study:42");
     const rockPixel = (dx, dy) => [
-      ...canvas
+      ...window.scenePixels(map)
         .getContext("2d")
         .getImageData(
           (6 - map.origin.x) * 16 + dx,
@@ -711,13 +710,13 @@ test("perception-only corridor and sprite study: directions, loot and static red
     ];
     const crownOverWall = rockPixel(8, -3);
     const outsideTile = rockPixel(-3, 3);
-    const ordered = canvas.toDataURL();
+    const ordered = window.scenePixels(map).toDataURL();
     map.update(
       { ...observation, world: [...world].reverse() },
       "valkyrie",
       "study:42",
     );
-    const inputOrderStable = canvas.toDataURL() === ordered;
+    const inputOrderStable = window.scenePixels(map).toDataURL() === ordered;
     // A nearer boulder covers an actor behind it; use the rock-only pixel as reference.
     const expectedRock = rockPixel(6, -3);
     map.update({ ...observation, you: { x: 6, y: 1 } }, "valkyrie", "study:42");
@@ -1226,7 +1225,7 @@ test(
         const app = document.querySelector("pixel-nethack");
         await app.run(() => app.game.move("south"));
       });
-    const fog = await page.evaluate(() => {
+    const fog = await page.evaluate(async () => {
       const app = document.querySelector("pixel-nethack");
       const cell = app.snapshot.observation.world.find(
         (cell) =>
@@ -1239,8 +1238,8 @@ test(
       if (!cell) throw Error("No remembered floor");
       const map = app.map,
         canvas = document.querySelector("#dungeon");
-      const sample = () => [
-        ...canvas
+      const sample = async () => [
+        ...(await window.sceneScreenPixels(map))
           .getContext("2d")
           .getImageData(
             (cell.x - map.origin.x) * 16 + 8,
@@ -1249,7 +1248,7 @@ test(
             1,
           ).data,
       ];
-      const dim = sample();
+      const dim = await sample();
       const current = structuredClone(app.snapshot.observation);
       current.world.find((c) => c.x === cell.x && c.y === cell.y).visible =
         true;
@@ -1258,7 +1257,7 @@ test(
         "valkyrie",
         `${app.current.seed}:${current.location.id}`,
       );
-      const lit = sample();
+      const lit = await sample();
       app.render();
       return { dim, lit };
     });
@@ -1333,28 +1332,20 @@ test(
           cell.terrain.type === "floor" &&
           !cell.occupant &&
           !cell.objects &&
-          map.fog.has(`${cell.x},${cell.y}`),
+          map.scene.shades.has(`${cell.x},${cell.y}`),
       );
       if (!cell) throw Error("No real sight transition occurred");
-      const fade = map.fog.get(`${cell.x},${cell.y}`);
-      const canvas = document.querySelector("#dungeon");
-      const shades = [0, 120, 240].map((ms) => {
-        const now = fade.started + ms;
-        map.draw(now);
-        const shift = map.travel(now);
-        return [
-          ...canvas
-            .getContext("2d")
-            .getImageData(
-              (cell.x - map.origin.x) * 16 + 8 + shift.x,
-              (cell.y - map.origin.y) * 16 + 8 + shift.y,
-              1,
-              1,
-            ).data,
-        ]
-          .slice(0, 3)
-          .reduce((a, b) => a + b, 0);
-      });
+      const fade = map.scene.shades.get(`${cell.x},${cell.y}`);
+      if (!fade?.animation) throw Error("No compositor visibility animation");
+      map.scene.camera.getAnimations().forEach(animation => animation.finish());
+      fade.animation.pause();
+      clearTimeout(map.scene.fogTimer);
+      const shades = [];
+      for (const ms of [0, 120, 240]) {
+        fade.animation.currentTime = ms;
+        const canvas = await window.sceneScreenPixels(map);
+        shades.push([...canvas.getContext('2d').getImageData((cell.x-map.origin.x)*16+8,(cell.y-map.origin.y)*16+8,1,1).data].slice(0,3).reduce((a,b)=>a+b,0));
+      }
       return { travel, shades, turn: app.snapshot.observation.turn };
     });
     assert.ok(Math.abs(result.travel[0].y) > Math.abs(result.travel[1].y));
@@ -2114,16 +2105,17 @@ test("early creatures stay small beside the hero and known appearances clear que
     map.update({ ...observation, world: world.map(cell =>
       cell.y === 3 ? { ...cell, occupant: undefined } : cell)
     }, "valkyrie", "creatures:42");
-    const context = canvas.getContext("2d");
-    const before = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const beforeCanvas = window.scenePixels(map);
+    const before = beforeCanvas.getContext("2d").getImageData(0, 0, beforeCanvas.width, beforeCanvas.height).data;
     map.update(observation, "valkyrie", "creatures:42");
-    const after = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const afterCanvas = window.scenePixels(map);
+    const after = afterCanvas.getContext("2d").getImageData(0, 0, afterCanvas.width, afterCanvas.height).data;
     const sizes = species.map((name, i) => {
       const ox = (2 + i * 2 - map.origin.x) * 16;
       const oy = (3 - map.origin.y) * 16;
       const changed = [];
       for (let dy = -24; dy < 16; dy++) for (let dx = -8; dx < 24; dx++) {
-        const offset = ((oy + dy) * canvas.width + ox + dx) * 4;
+        const offset = ((oy + dy) * afterCanvas.width + ox + dx) * 4;
         if ([0, 1, 2, 3].some(channel => before[offset + channel] !== after[offset + channel]))
           changed.push([dx, dy]);
       }
@@ -2131,7 +2123,7 @@ test("early creatures stay small beside the hero and known appearances clear que
         height: Math.max(...changed.map(p => p[1])) - Math.min(...changed.map(p => p[1])) + 1 };
     });
     const pixel = (x, y, dx, dy) => [
-      ...canvas
+      ...window.scenePixels(map)
         .getContext("2d")
         .getImageData(
           (x - map.origin.x) * 16 + dx,
@@ -2265,12 +2257,15 @@ test(
       );
       map.update(observation(afterWorld), "valkyrie", "motion:42");
       const keys = [...map.actorMotions.keys()];
-      const started = map.actorMotions.get("5,4").started;
-      const petCell = at(afterWorld, 5, 4);
-      const halfway = map.actorPosition(petCell, started + 70);
-      map.draw(started + 70);
-      const settled = map.actorPosition(petCell, started + 140);
-      const remaining = map.actorMotions.size;
+      const node = [...map.scene.sprites.values()].find(node=>node.target?.x===5&&node.target?.y===4);
+      const animation=node.movement; animation.pause();
+      animation.currentTime=animation.effect.getTiming().duration/2;
+      const transform=new DOMMatrix(getComputedStyle(node.element).transform);
+      const halfway={x:(transform.e+8)/16,y:4,hop:4*16-32-transform.f};
+      animation.finish();
+      const end=new DOMMatrix(getComputedStyle(node.element).transform);
+      const settled={x:(end.e+8)/16,y:(end.f+32)/16,hop:0};
+      const remaining=node.element.getAnimations().filter(a=>a.playState==='running').length;
       map.destroy();
       return { keys, halfway, settled, remaining, inspections };
     });
@@ -2361,7 +2356,7 @@ test(
       return {
         hurt,
         impacts: document.querySelectorAll(".combat-impact.hurt").length,
-        animations: app.map.canvas.getAnimations().length,
+        animations: app.map.scene.element.getAnimations().length,
       };
     });
     assert.equal(
@@ -2384,7 +2379,7 @@ test(
       app.map.showMessages(previous, before);
       return {
         impacts: document.querySelectorAll(".combat-impact").length,
-        animations: app.map.canvas.getAnimations().length,
+        animations: app.map.scene.element.getAnimations().length,
       };
     });
     assert.deepEqual(quiet, { impacts: 0, animations: 0 });
@@ -2606,7 +2601,7 @@ test("additional encounters including hobbits have distinct small art and preser
       ["gas spore", "e"], ["acid blob", "b"], ["brown mold", "F"], ["hobbit", "h"]];
     const crop = (pixels = false) => {
       const out = document.createElement("canvas"); out.width = 24; out.height = 32;
-      out.getContext("2d").drawImage(canvas, (8-map.origin.x)*16-4, (4-map.origin.y)*16-16, 24, 32, 0, 0, 24, 32);
+      out.getContext("2d").drawImage(window.scenePixels(map), (8-map.origin.x)*16-4, (4-map.origin.y)*16-16, 24, 32, 0, 0, 24, 32);
       return pixels ? out.getContext("2d").getImageData(0, 0, 24, 32).data : out.toDataURL();
     };
     const results = [];
@@ -2632,7 +2627,7 @@ test("additional encounters including hobbits have distinct small art and preser
       const title = document.createElement("h3"); title.textContent = appearance; title.style.margin = "0 0 12px";
       const view = document.createElement("canvas"); view.width=80; view.height=48;
       view.style.cssText = "width:320px;height:192px;max-width:100%;image-rendering:pixelated";
-      view.getContext("2d").drawImage(canvas,(5-map.origin.x)*16-8,(4-map.origin.y)*16-24,80,48,0,0,80,48);
+      view.getContext("2d").drawImage(window.scenePixels(map),(5-map.origin.x)*16-8,(4-map.origin.y)*16-24,80,48,0,0,80,48);
       card.append(title,view);host.append(card);
       delete target.occupant.appearance;map.draw();
       const unknown = crop();
@@ -2848,7 +2843,7 @@ test('tile outlines stay below neighboring sprites and track pan and zoom', asyn
   const before = await snapshot(page);
   const checks = await page.evaluate(() => {
     const app = document.querySelector('pixel-nethack'), map = app.map;
-    const c = document.querySelector('#dungeon').getContext('2d');
+
     const you = app.snapshot.observation.you;
     // Renderer-only fixture: the selected floor is behind the hero's upper body.
     // The real engine observation and durable history stay untouched.
@@ -2860,17 +2855,15 @@ test('tile outlines stay below neighboring sprites and track pan and zoom', asyn
       map.zoomTo(zoom); map.pan(1,-1);
       const now = performance.now()+10000;
       map.selectedTile = null; map.draw(now);
-      const baseline = c.getImageData(0,0,c.canvas.width,c.canvas.height).data;
+      const bitmap=window.scenePixels(map), c=bitmap.getContext("2d");
+      const baseline = c.getImageData(0,0,bitmap.width,bitmap.height).data;
       // Read the real frame's alpha mask as an independent occlusion oracle.
       const mask = document.createElement('canvas'); mask.width=c.canvas.width; mask.height=c.canvas.height;
-      const mc=mask.getContext('2d'), original=c.drawImage;
-      c.drawImage=function(image,...args) {
-        if(args.length===8 && args[2]===16 && args[3]===32) mc.drawImage(image,...args);
-        return original.call(this,image,...args);
-      };
-      map.selectedTile={x:you.x,y:you.y-1};
-      try {map.draw(now);} finally {c.drawImage=original;}
-      const selected=c.getImageData(0,0,c.canvas.width,c.canvas.height).data;
+      const mc=mask.getContext('2d');
+      const hero=map.scene.camera.querySelector('[data-sprite="hero"] canvas');
+      mc.drawImage(hero,-new DOMMatrix(getComputedStyle(hero).transform).e,0,32,48,(you.x-map.origin.x)*16-8,(you.y-map.origin.y)*16-32,32,48);
+      map.selectedTile={x:you.x,y:you.y-1}; map.draw(now);
+      const selected=window.scenePixels(map).getContext('2d').getImageData(0,0,bitmap.width,bitmap.height).data;
       const alpha=mc.getImageData(0,0,mask.width,mask.height).data;
       const x=Math.round((you.x-map.origin.x)*16), y=Math.round((you.y-1-map.origin.y)*16);
       let changed=0, covered=0, overwritten=0, outside=0;
@@ -2901,11 +2894,11 @@ test("illustrated dogs remain sprites and focus feedback has no map rectangle", 
   await create(page);
   const dog = await page.evaluate(() => {
     const app = document.querySelector("pixel-nethack"), map = app.map;
-    const c = document.querySelector("#dungeon").getContext("2d");
+    const c = CanvasRenderingContext2D.prototype;
     const images = [], letters = [];
-    const draw = c.drawImage.bind(c), text = c.fillText.bind(c);
-    c.drawImage = (...args) => { images.push(args[0].src ?? ""); return draw(...args); };
-    c.fillText = (...args) => { letters.push(args[0]); return text(...args); };
+    const draw = c.drawImage, text = c.fillText;
+    c.drawImage = function(...args) { images.push(args[0].src ?? ""); return draw.apply(this,args); };
+    c.fillText = function(...args) { letters.push(args[0]); return text.apply(this,args); };
     const you = app.snapshot.observation.you;
     // Presentation fixture: a currently perceived canine, independent of which
     // pet a generated world chooses. No game request or saved state is changed.
@@ -3122,12 +3115,12 @@ test('wheel zoom and middle drag move only the camera and preserve tile picking'
   const zoom = await page.evaluate(() => document.querySelector('pixel-nethack').map.zoom);
   await page.mouse.wheel(0, -180);
   await page.waitForFunction(z => document.querySelector('pixel-nethack').map.zoom > z, zoom);
-  await page.waitForFunction(() => !document.querySelector('pixel-nethack').map.zoomFrame);
+  await page.waitForFunction(() => !document.querySelector('pixel-nethack').map.scene.camera.getAnimations().some(a=>a.playState==='running'));
   const enlarged = await page.evaluate(() => document.querySelector('pixel-nethack').map.zoom);
   assert.ok(enlarged <= 4);
   await page.mouse.wheel(0, 160);
   await page.waitForFunction(z => document.querySelector('pixel-nethack').map.zoom < z, enlarged);
-  await page.waitForFunction(() => !document.querySelector('pixel-nethack').map.zoomFrame);
+  await page.waitForFunction(() => !document.querySelector('pixel-nethack').map.scene.camera.getAnimations().some(a=>a.playState==='running'));
   const origin = await page.evaluate(() => ({ ...document.querySelector('pixel-nethack').map.origin }));
   await page.mouse.down({ button: 'middle' });
   await page.mouse.move(880, 448, { steps: 8 });
@@ -3392,17 +3385,17 @@ test('live map uses all seeded environment profiles and restores them on revisit
     for(let i=0;i<40&&Object.keys(seen).length<3;i++){
       const seed=`${i}:public-level`;
       map.update(observation,'valkyrie',seed);
-      const type=canvas.dataset.environment, pixels=canvas.toDataURL();
+      const type=canvas.dataset.environment, pixels=window.scenePixels(map).toDataURL();
       if(seen[type])continue;
       seen[type]=seed;
       map.update({...observation,world:[...world].reverse()},'valkyrie',seed);
-      if(canvas.toDataURL()!==pixels)throw Error('order changed environment');
+      if(window.scenePixels(map).toDataURL()!==pixels)throw Error('order changed environment');
       map.update(observation,'valkyrie','another-level');
       map.update(observation,'valkyrie',seed);
-      if(canvas.toDataURL()!==pixels)throw Error('revisit changed environment');
+      if(window.scenePixels(map).toDataURL()!==pixels)throw Error('revisit changed environment');
       if(type!=='dungeon'){
         map.layoutType='dungeon';map.draw();
-        if(canvas.toDataURL()===pixels)throw Error('selected environment not used in live pixels');
+        if(window.scenePixels(map).toDataURL()===pixels)throw Error('selected environment not used in live pixels');
       }
       proofs.push(type);
     }
@@ -4191,10 +4184,10 @@ test('creature families compose in the live map with fixed anchors and neutral u
       target.occupant={kind:'creature',appearance,mark:i===5?'D':'d',color:i+1};
       map.update(observation,'valkyrie','family-proof:42');
       const tile=document.createElement('canvas');tile.width=32;tile.height=40;
-      tile.getContext('2d').drawImage(canvas,(8-map.origin.x)*16-8,(4-map.origin.y)*16-24,32,40,0,0,32,40);crops.push(tile.toDataURL());
+      tile.getContext('2d').drawImage(window.scenePixels(map),(8-map.origin.x)*16-8,(4-map.origin.y)*16-24,32,40,0,0,32,40);crops.push(tile.toDataURL());
       const card=document.createElement('article');const text=document.createElement('p');text.textContent=label;
       const view=document.createElement('canvas');view.width=80;view.height=48;view.style.cssText='width:240px;height:144px;image-rendering:pixelated';
-      view.getContext('2d').drawImage(canvas,(5-map.origin.x)*16-8,(4-map.origin.y)*16-24,80,48,0,0,80,48);
+      view.getContext('2d').drawImage(window.scenePixels(map),(5-map.origin.x)*16-8,(4-map.origin.y)*16-24,80,48,0,0,80,48);
       card.append(text,view);host.append(card);
     });
     map.destroy();hidden.remove();return {knownDistinct:new Set(crops.slice(0,4)).size,unknownEqual:crops[4]===crops[5]};
