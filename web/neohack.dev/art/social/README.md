@@ -7,7 +7,7 @@ Typography and framing are editable in `composition.html`; the scene comes from
 Run `bun web/neohack.dev/scripts/build-social.ts` from the repository root.
 It uses sandboxed Chromium and writes these finished PNGs to `public/social/`:
 
-- `open-graph.png`: 1200 × 630, linked by the page's Open Graph and Twitter metadata.
+- `open-graph-<hash>.png`: 1200 × 630. The builder updates both Open Graph and Twitter metadata to its content-based URL. It also refreshes `open-graph.png` for already cached page metadata.
 - `profile-banner.png`: 1500 × 500, with room at left for a profile avatar.
 - `stream-overlay.png`: 1920 × 1080, transparent center for gameplay or video.
 

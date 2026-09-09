@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { chromium } from 'playwright-core';
@@ -31,10 +31,20 @@ try {
     await page.goto(`http://127.0.0.1:${server.port}/?format=${format}`);
     await page.waitForFunction(() => (window as unknown as { artReady: boolean }).artReady);
     if (errors.length) throw Error(errors.join('\n'));
+    if (await page.locator('h1').textContent() !== 'neohack') throw Error('Social artwork must use the canonical neohack name');
     const png = await page.screenshot({ path: resolve(out, name), omitBackground: format === 'overlay' });
-    results.push({ file: name, width, height, sha256: createHash('sha256').update(png).digest('hex') });
+    const sha256 = createHash('sha256').update(png).digest('hex');
+    const file = format === 'card' ? `open-graph-${sha256.slice(0, 16)}.png` : name;
+    // A new image URL prevents a changed composition reusing an old share-card
+    // image cache. Keep the unversioned PNG usable by already cached metadata.
+    if (file !== name) await writeFile(resolve(out, file), png);
+    results.push({ file, width, height, sha256 });
     await page.close();
   }
+  const index = resolve(root, 'public/index.html'), html = await readFile(index, 'utf8');
+  const imageTags = /(<meta (?:property="og:image"|name="twitter:image") content=")[^"]+("\s*\/>)/g;
+  if ([...html.matchAll(imageTags)].length !== 2) throw Error('Expected both Open Graph and Twitter image metadata');
+  await writeFile(index, html.replace(imageTags, `$1https://neohack.dev/social/${results[0]!.file}$2`));
   await writeFile(resolve(out, 'recipe.json'), JSON.stringify({ version: 1, composition: 'art/social/composition.html', renderer: 'src/map.ts:drawWelcomeArt', frameTime: 0, scale: 'integer nearest-neighbor', outputs: results }, null, 2) + '\n');
   console.log(JSON.stringify(results, null, 2));
 } finally { await browser.close(); server.stop(true); }

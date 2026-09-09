@@ -788,6 +788,9 @@ Provide a 1200×630 Open Graph card, 1500×500 profile banner with avatar space,
 1920×1080 transparent stream overlay. `art/social/composition.html` is the editable
 composition; `scripts/build-social.ts` renders static, integer-scale frames through
 the shared welcome-art method. Website metadata uses absolute neohack.dev URLs.
+The social builder checks the rendered name is `neohack` and updates both Open
+Graph and Twitter image metadata to the content-hashed card filename, so revised
+artwork gets a new share-image URL.
 
 Mouse wheel zooms the dungeon between 1× and 4× over a short eased camera
 transition; reduced motion applies it immediately. Fractional CSS enlargement

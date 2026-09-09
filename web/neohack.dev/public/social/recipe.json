@@ -6,7 +6,7 @@
   "scale": "integer nearest-neighbor",
   "outputs": [
     {
-      "file": "open-graph.png",
+      "file": "open-graph-02ea16e87779a4a0.png",
       "width": 1200,
       "height": 630,
       "sha256": "02ea16e87779a4a0f4b6110a6fdcdd0f7fabacbff7d959a1625387b1d5db6c8f"
