@@ -141,9 +141,12 @@ export async function chronicle(request: Request, id: string) {
     await markChronicled(id);
     return json({ available: true, ...(stored?.value ?? document) });
   } catch (error) {
-    await store.write(pendingPath(id), { startedAt: 0, failedAt: Date.now() }, claim).catch(() => {});
+    // The released claim records only the stage and an upstream HTTP status:
+    // bounded operational facts, never the exception, URL or credential.
+    const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : undefined;
+    await store.write(pendingPath(id), { startedAt: 0, failedAt: Date.now(), stage: progress.stage, ...(status ? { status } : {}) }, claim).catch(() => {});
     if (error instanceof Ineligible) return json({ available: false, error: error.message }, 409);
-    console.warn(JSON.stringify({ event: "chronicle_failed", stage: progress.stage, kind: failureKind(error) }));
+    console.warn(JSON.stringify({ event: "chronicle_failed", stage: progress.stage, kind: failureKind(error), ...(status ? { status } : {}) }));
     return json({ available: false, error: "The chronicler could not finish this tale. Nothing was charged twice; try again in a little while." }, 502);
   }
 }

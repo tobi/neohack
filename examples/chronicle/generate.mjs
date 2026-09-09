@@ -50,7 +50,10 @@ export async function gatewayStory(digest, { token, fetch: request = fetch, sign
     }),
   });
   if (!response.ok)
-    throw Error(`Story model request failed (${response.status}); not retried automatically.`);
+    throw Object.assign(
+      Error(`Story model request failed (${response.status}); not retried automatically.`),
+      { status: response.status },
+    );
   const result = await response.json();
   if (result.choices?.[0]?.finish_reason === "length")
     throw Error("The model reached its output limit; evidence and prompt are saved for review.");
