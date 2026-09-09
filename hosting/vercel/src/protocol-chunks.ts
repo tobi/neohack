@@ -96,11 +96,12 @@ export async function readInputChunk(
     )
       throw Error("Stored input identity differs");
   });
-  // Previously published upload-sized chunks have one implicit receipt. Packed
-  // chunks keep those exact hashes, including receipts spanning a packing boundary.
-  const uploads: Upload[] = body.uploads ?? [
-    { from: chunk.from, count: chunk.count, sha256: chunk.sha256 },
-  ];
+  // Original uploads require `complete`; packed envelopes omit it. Original
+  // client extension fields are not writer-authored receipts. Their one exact
+  // receipt is always the stored upload's hash, including after repacking.
+  const uploads: Upload[] = typeof body.complete === "boolean"
+    ? [{ from: chunk.from, count: chunk.count, sha256: chunk.sha256 }]
+    : body.uploads;
   if (!Array.isArray(uploads) || uploads.length > chunk.count)
     throw Error("Invalid stored upload receipts");
   let previous = chunk.from - 1;

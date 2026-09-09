@@ -353,8 +353,13 @@ test("existing fragmented archives compact once, retain pins/checkpoints/receipt
   const f = await fixture(),
     records = Array.from({ length: 400 }, (_, i) => record(i)),
     chunks = [];
+  let originalUpload;
   for (const r of records) {
-    const bytes = gzipSync(JSON.stringify(body(r.index, [r]))),
+    // Older writers stored the client's whole upload envelope. A client-supplied
+    // extension must not be mistaken for the new writer's authoritative receipts.
+    const envelope = body(r.index, [r]);
+    if(r.index===277) envelope.uploads=[{from:277,count:1,sha256:hash('untrusted extension')}];
+    const bytes = gzipSync(JSON.stringify(envelope)),
       h = hash(bytes),
       chunk = {
         from: r.index,
@@ -364,6 +369,7 @@ test("existing fragmented archives compact once, retain pins/checkpoints/receipt
         path: "chunks/" + h + ".gz",
       };
     chunks.push(chunk);
+    if(r.index===277)originalUpload=bytes;
     await f.cdn.write("replays/" + id + "/" + chunk.path, bytes);
   }
   const doc = {
@@ -408,8 +414,7 @@ test("existing fragmented archives compact once, retain pins/checkpoints/receipt
     "summary",
   ])
     assert.deepEqual(after[key], doc[key]);
-  const u = f.upload([record(277)]);
-  assert.equal((await u.result()).status, 200);
+  assert.equal((await f.send(originalUpload)).status, 200);
   const stable = await f.store.read(f.head);
   await f.scope(() => compactProtocolReplay(id));
   assert.deepEqual(
