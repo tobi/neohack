@@ -4320,6 +4320,7 @@ test('More actions searches labels and commands without typing gameplay input', 
   const query = page.getByRole('combobox',{name:'Search actions or type a command'});
   await query.waitFor();
   assert.equal(await query.evaluate(el=>el===document.activeElement),true);
+  assert.equal(await page.getByRole('option').first().getAttribute('data-action'),'search','empty search preserves common-action order');
   assert.equal(await page.locator('#more-actions kbd').textContent(),'#');
   assert.equal(await page.locator('#more-grid button:not(:has(kbd))').count(),0);
   for(const [width,height] of [[1440,844],[390,667],[390,390]]) {

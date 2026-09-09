@@ -75,7 +75,7 @@ export class ActionMenu extends LitElement {
       }
     }
     const actions = gameActions.filter(action => !query || action.key === query || `${action.label} ${action.id}`.toLowerCase().includes(lower));
-    actions.sort((a,b) => Number(b.key === query || b.id === lower) - Number(a.key === query || a.id === lower));
+    if (query) actions.sort((a,b) => Number(b.key === query || b.id === lower) - Number(a.key === query || a.id === lower));
     for(const action of actions) matches.push({label:action.label,key:action.key || "#"+action.id,
       action:action.id,reason:this.options.unavailable(action.id),run:()=>this.options.action(action.id)});
     return matches;
