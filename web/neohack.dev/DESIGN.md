@@ -579,10 +579,13 @@ Consecutive identical journal messages share one entry with an accessible ×N re
 count and their first/last turns. The preview shows the latest three groups with the
 same counts as the full journal. New occurrences count; rerendering a receipt does not.
 
-When the current public neighborhood offers an attemptable climb at the player's
-cell, show a large Go upstairs/Go downstairs button centered at 70% viewport height.
-It uses that offer and revision and disappears while input is busy, uncertain, ended
-or awaiting a decision. Drawers and menus hide it to keep their controls clear.
+Nearby opportunities (stairs, an underfoot container, an adjacent door, a fountain
+or sink) sit in their own row above Search in the action dock. They use the current
+neighborhood offer and revision and disappear while input is busy, uncertain, ended
+or awaiting a decision. Drawers and menus hide them to keep their controls clear.
+Assigned hotkeys stay visible on those buttons, including on phones. Opening a
+container or an adjacent door uses the same restrained glow as a hungry Eat cue;
+they never automate the action.
 
 ## Class roster and scale
 
@@ -866,10 +869,11 @@ Reports go to structured Vercel logs; the public ledger API excludes diagnostics
 ### Approachable action choices
 
 Backpack rows show candidate actions supplied by the shared C driver, bound to the
-current item ID and revision. Eligibility does not promise safety. The everyday
-dock offers Search, Pick up, Eat and Pray; doors, stairs and drinking from a fountain
-or sink appear in context. Ascending from the top dungeon floor reads “Leave” and
-still goes through the engine's confirmation. Other actions remain in More actions.
+current item ID and revision. Eligibility does not promise safety. The everyday dock offers Search, a hungry Eat cue and More actions. Doors, stairs,
+underfoot containers and drinking from a fountain or sink appear in a row above
+those buttons. Ascending from the top dungeon floor reads “Leave” and still goes
+through the engine's confirmation. Other actions remain in More actions. Every
+control that has a hotkey shows it.
 The HUD shows current wielded/offhand equipment and experience level at top right.
 Low health or severe hunger outlines the HUD orange-red, then red at
 critical severity; condition text and the health meter retain the same information.

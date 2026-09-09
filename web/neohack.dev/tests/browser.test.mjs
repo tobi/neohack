@@ -2454,7 +2454,8 @@ test("contextual stairs use the current engine offer inside the action dock", as
   await create(page);
   const stairs = page.locator("#contextual-stairs button");
   await stairs.waitFor();
-  assert.equal(await stairs.textContent(), "Leave");
+  assert.match(await stairs.textContent(), /^Leave/);
+  assert.equal(await stairs.locator("kbd").textContent(), "<");
   for (const size of [{ width: 1440, height: 1050 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(size);
     // Resizing asks for a fresh contextual offer; its previous button can be
@@ -3289,6 +3290,9 @@ test('nearby door controls execute the offered direction and refresh after openi
     }, direction);
   }
   const open = page.locator('#contextual-stairs button').filter({hasText: 'Open door · south'});
+  await open.waitFor();
+  assert.equal(await open.locator('kbd').textContent(), 'o');
+  assert.equal(await open.evaluate(el => el.classList.contains('action-cue')), true);
   await open.click();
   await ready(page);
   assert.equal((await snapshot(page)).outcome.action, 'open');
@@ -3502,6 +3506,7 @@ test('underfoot chest opens a container dialog, shows contents and transfers cho
   });
   const closed = await snapshot(page);
   assert.equal(closed.observation.here.items.length, 1);
+  assert.equal(await open.evaluate(el => el.classList.contains('action-cue')), true);
   await open.click();
   await page.locator('#decision[open]').waitFor();
   assert.equal(await open.count(), 0);

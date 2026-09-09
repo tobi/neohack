@@ -369,7 +369,7 @@ class PixelNethack extends HTMLElement {
                 `<button data-move="${d}" data-game aria-label="Move ${d}">${g}</button>`,
             )
             .join("")}</div></div>
-          <div class="action-dock"><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><div id="contextual-stairs" aria-label="Available nearby actions" hidden></div><button data-action="eat" data-game hidden>Eat<kbd>e</kbd></button><button id="more-actions" aria-keyshortcuts="Control+k Meta+k #">More actions<kbd>Ctrl K / #</kbd></button></div>
+          <div class="action-dock"><div id="navigation-status" hidden><span id="navigation-status-text"></span><button id="navigation-stop">Stop walking</button></div><div id="contextual-stairs" aria-label="Available nearby actions" hidden></div><div class="action-grid"><button data-action="search" data-game>Search<kbd>s</kbd></button><button data-action="eat" data-game hidden>Eat<kbd>e</kbd></button><button id="more-actions" aria-keyshortcuts="Control+k Meta+k #">More actions<kbd>Ctrl K / #</kbd></button></div>
           <nav class="side-nav" aria-label="Adventure views"><button data-view="inventory">Backpack <span id="inventory-count"></span><kbd>i</kbd></button><button data-view="journal">Journal</button></nav></div>
         </section>
         <aside class="ground-loot" id="ground-loot" aria-label="On the ground" hidden><h2>On the ground</h2><p>At your feet · choose what to take</p><div id="ground-items"></div></aside>
@@ -889,11 +889,18 @@ class PixelNethack extends HTMLElement {
     label: string,
     action: () => unknown,
     className = "secondary",
+    key = "",
   ) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = className;
-    b.textContent = label;
+    b.append(label);
+    if (key) {
+      const kbd = document.createElement("kbd");
+      kbd.textContent = key;
+      kbd.setAttribute("aria-hidden", "true");
+      b.append(kbd);
+    }
     b.onclick = () => {
       if (!b.disabled) action();
     };
@@ -1655,28 +1662,43 @@ class PixelNethack extends HTMLElement {
     const game = this.game, n = game?.observation.neighborhood;
     if (!game || !this.playable() || n?.status !== "available" || n.inputGate.state !== "ready" || n.basis.revision !== game.state.revision) return;
     const here = n.cells.find(cell => cell.movement.relation === "here");
+    const keyFor = (id: string) => gameActions.find(action => action.id === id)?.key ?? "";
     for (const offer of here?.actions ?? []) {
       const water = here?.terrain?.freshness === "current" && ["fountain", "sink"].includes(here.terrain.type);
       if (offer.availability !== "attemptable" || (offer.method !== "game.climb" && offer.method !== "game.loot" && !(water && offer.method === "game.drink"))) continue;
       const revision = n.basis.revision;
-      const button = this.button(offer.method === "game.climb" ? this.climbLabel(offer.arguments.direction) : offer.method === "game.loot" ? "Open container" : `Drink from ${here!.terrain!.type}`, () => {
-        if (this.game !== game || !this.playable() || game.state.revision !== revision) return;
-        this.stopMovement();
-        void this.run(() => this.executeOffer(game, offer, revision));
-      });
-      if (offer.method === "game.climb") button.dataset.direction = offer.arguments.direction;
+      const climb = offer.method === "game.climb";
+      const loot = offer.method === "game.loot";
+      const button = this.button(
+        climb ? this.climbLabel(offer.arguments.direction) : loot ? "Open container" : `Drink from ${here!.terrain!.type}`,
+        () => {
+          if (this.game !== game || !this.playable() || game.state.revision !== revision) return;
+          this.stopMovement();
+          void this.run(() => this.executeOffer(game, offer, revision));
+        },
+        "secondary",
+        climb ? keyFor(offer.arguments.direction === "down" ? "down" : "up") : loot ? keyFor("loot") : "",
+      );
+      if (climb) button.dataset.direction = offer.arguments.direction;
+      if (loot) button.classList.add("action-cue");
       host.append(button);
     }
     for (const cell of n.cells.filter(c => c.movement.relation === "adjacent" && c.terrain?.freshness === "current")) {
       for (const offer of cell.actions) {
         if ((offer.method !== "game.open" && offer.method !== "game.close") || offer.availability !== "attemptable") continue;
         const revision = n.basis.revision;
-        const label = offer.method === "game.open" ? "Open door" : "Close door";
-        const button = this.button(label + " · " + offer.arguments.target?.direction, () => {
-          if (this.game !== game || !this.playable() || game.state.revision !== revision) return;
-          this.stopMovement();
-          void this.run(() => this.executeOffer(game, offer, revision));
-        });
+        const opening = offer.method === "game.open";
+        const button = this.button(
+          (opening ? "Open door" : "Close door") + " · " + offer.arguments.target?.direction,
+          () => {
+            if (this.game !== game || !this.playable() || game.state.revision !== revision) return;
+            this.stopMovement();
+            void this.run(() => this.executeOffer(game, offer, revision));
+          },
+          "secondary",
+          keyFor(opening ? "open" : "close"),
+        );
+        if (opening) button.classList.add("action-cue");
         host.append(button);
       }
     }

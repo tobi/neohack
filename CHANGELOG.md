@@ -8,6 +8,8 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Nearby actions (stairs, containers, doors) sit above Search and always show
+  their hotkeys. Open container and Open door glow like a hungry Eat cue.
 - `go`/`explore`/`descend` now say why there is no known path: occupied, unknown,
   closed door or disconnected, with a next-tool hint. Partial legs point at recover
   instead of inviting a blind retry.

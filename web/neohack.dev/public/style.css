@@ -1150,8 +1150,9 @@ dialog p {
     font-size: 11px;
     padding: 6px;
   }
-  .action-grid kbd {
-    display: none;
+  .action-grid kbd,
+  .side-nav kbd {
+    font-size: 10px;
   }
   .side-nav {
     gap: 3px;
@@ -1160,9 +1161,6 @@ dialog p {
     font-size: 11px;
     padding: 6px;
     flex: 1;
-  }
-  .side-nav kbd {
-    display: none;
   }
   .rightbar {
     right: 12px;
@@ -1422,9 +1420,9 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
 }
 
 .journal-repeat { white-space: nowrap; color: #e3c88c; font-size: .85em; }
-#contextual-stairs { display: contents; }
+#contextual-stairs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 #contextual-stairs[hidden], pixel-nethack:has(.rightbar:not([hidden])) #contextual-stairs, pixel-nethack:has(#menu[open]) #contextual-stairs { display: none; }
-#contextual-stairs button { min-height: var(--control-height); min-width: 0; padding: var(--control-padding); font-size: var(--control-font); color: #f0e4bd; background: #283a30; border: 2px solid #96a77c; box-shadow: 3px 3px #101819; }
+#contextual-stairs button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--control-height); min-width: 0; padding: var(--control-padding); font-size: var(--control-font); color: #f0e4bd; background: #283a30; border: 2px solid #96a77c; box-shadow: 3px 3px #101819; }
 
 /* Keep thirteen paths navigable without pushing the submit action off-screen. */
 .class-picker {
@@ -1598,10 +1596,9 @@ button.action-cue:not(:disabled) { border-color: #e9b66c; box-shadow: 0 0 0 2px 
 .inventory-actions button:hover { background: #364434; color: #eee4ba; }
 .inventory-actions button:focus-visible { outline: 1px solid #c5d49e; outline-offset: -3px; }
 .inventory-actions svg { width: 22px; height: 22px; }
-#contextual-stairs { flex-wrap: wrap; justify-content: center; width: max-content; max-width: min(640px, calc(100vw - 24px)); max-height: 22vh; overflow-y: auto; }
+#contextual-stairs { width: 100%; }
 #contextual-stairs button { min-width: 0; }
 @media (max-width: 600px) {
-  #contextual-stairs { gap: 6px; }
   #contextual-stairs button { padding: 10px 12px; font-size: 14px; }
   .weapon-line { max-width: 210px; }
 }
@@ -1918,7 +1915,7 @@ pixel-nethack.in-game .rail-game-info { visibility: hidden; }
 .rightbar:has(#accessible-map:not([hidden])) .section-title { flex-shrink:0; margin-bottom:8px; }
 .nearby-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; padding:0; list-style:none; }
 .nearby-list .text-button { text-align:left; font-size:13px; padding:5px; width:100%; }
-/* One compact place for the current opportunities, with no floating duplicate. */
+/* Nearby opportunities sit above Search so the everyday buttons stay put. */
 .action-grid { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
 #contextual-stairs button { font-size:13px; min-height:36px; padding:6px 10px; }
 .action-grid > button { min-height:36px; }
