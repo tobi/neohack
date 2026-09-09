@@ -1,4 +1,4 @@
-# neonethack Protocol v0.1
+# neohack Protocol v0.1
 
 Status: implemented, with current semantic regressions and documented limits.
 This describes the raw headless engine boundary, not the public named-action

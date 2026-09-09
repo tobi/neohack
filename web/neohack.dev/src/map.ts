@@ -1,3 +1,5 @@
+import { DeathTraces } from './death-traces';
+import { companionAsset, knownCreatureArt } from "./creature-families";
 import { DungeonSound } from "./sound";
 import { layoutForSeed, type LayoutType } from "./layout-art";
 import type { Cell, Observation, Snapshot, Compass } from "neonethack/types";
@@ -7,7 +9,7 @@ import {
   STRUCTURE_RISE,
   STRUCTURE_OVERHANG,
 } from "./dungeon-art";
-import { categoryMark, drawCreatureArt, drawSymbolArt, drawItemArt } from "./symbol-art";
+import { categoryMark, drawCreatureArt, drawUnknownCreature, drawCreatureQuestion, drawObjectArt, drawItemArt } from "./symbol-art";
 
 import { roles, heroArt } from "./characters";
 
@@ -105,9 +107,8 @@ function drawContents(
     const object = cell.objects[0]!;
     if (symbols) glyph(c, object.mark, colors[object.color] ?? "#dbc887", x, y);
     else if (!drawItemArt(c, object, x, y))
-      drawSymbolArt(
+      drawObjectArt(
         c,
-        "object",
         object.mark,
         colors[object.color] ?? "#dbc887",
         x,
@@ -122,19 +123,10 @@ function drawContents(
     rect(c, "#26312b", x + 3, y + 13, 10, 2);
     if (symbols) glyph(c, mark, color, x, y);
     else {
-      // Use apparent species when supplied, otherwise a category illustration.
-      const sprite = images.get(
-        ({ d: "dog", f: "cat", B: "bat" } as Record<string, string>)[mark] ??
-          "",
-      );
-      if (!drawCreatureArt(c, cell.occupant.appearance, x, y)) {
-        if (sprite) c.drawImage(sprite, x, y - 2);
-        else {
-          drawSymbolArt(c, "creature", mark, color, x, y);
-        }
-      }
-      // Preserve the engine's display color as a small perception swatch.
-      if (!cell.occupant.appearance) rect(c, color, x + 13, y + 2, 2, 2);
+      const sprite = images.get(companionAsset(cell.occupant.appearance) ?? '');
+      if (sprite) c.drawImage(sprite, x, y - 2);
+      else if (!drawCreatureArt(c, cell.occupant.appearance, x, y))
+        drawUnknownCreature(c, x, y);
     }
     if (ally) {
       rect(c, "#b5ce8e", x + 5, y + 15, 6, 1);
@@ -144,19 +136,10 @@ function drawContents(
   }
 }
 
-export function creatureLabel(occupant: NonNullable<Cell["occupant"]>) {
+export function creatureLabel(occupant: Pick<NonNullable<Cell["occupant"]>, "kind" | "appearance">) {
   if (occupant.kind === "self") return "You";
   if (occupant.appearance) return occupant.appearance;
-  const category =
-    (
-      {
-        f: "Feline",
-        d: "Canine",
-        B: "Bat-like creature",
-        ":": "Reptile",
-      } as Record<string, string>
-    )[occupant.mark] ?? "Creature";
-  return category;
+  return "Unknown creature";
 }
 
 export function cellDescription(cell: Cell) {
@@ -167,7 +150,10 @@ export function cellDescription(cell: Cell) {
   const objects = cell.objects?.map(o => o.known?.appearance
     ? `${o.known.appearance}${o.known.depictedCreature ? ` of ${o.known.depictedCreature}` : ''} (${o.mark})`
     : `Object ${o.mark}`).join(', ');
-  return `${cell.x}, ${cell.y}: ${terrain}${occupant ? (occupant.kind === "self" ? " · You" : ` · ${creatureLabel(occupant)}${occupant.kind === "ally" ? " · Ally" : ""} (${occupant.mark})`) : ""}${objects ? ` · ${objects}` : ""}`;
+  const actor = occupant ? (occupant.kind === 'self' ? 'You' : `${creatureLabel(occupant)}${occupant.kind === 'ally' ? ' · Ally' : ''} (${occupant.mark})`) : undefined;
+  const contents=[actor,objects].filter(Boolean).join(' · ');
+  return `${cell.x}, ${cell.y}: ${contents ? `${contents} · ` : ''}${terrain}`;
+
 }
 
 export function actionMessages(snapshot: Snapshot): string[] {
@@ -184,6 +170,8 @@ export function actionMessages(snapshot: Snapshot): string[] {
 }
 
 export class DungeonMap {
+  readonly deathTraces=new DeathTraces();
+  private perceptionSession?: string;
   route: {x:number;y:number}[] = [];
   context: { x: number; y: number } | null = null;
   positionCursor: { x: number; y: number } | null = null;
@@ -404,10 +392,32 @@ export class DungeonMap {
       clickedObservation = this.observation;
       const bounds = canvas.getBoundingClientRect();
       const shift = this.travel(performance.now());
-      const x =
+      let x =
         Math.floor(((e.clientX - bounds.left) / this.zoom - shift.x) / 16 + this.origin.x);
-      const y =
+      let y =
         Math.floor(((e.clientY - bounds.top) / this.zoom - shift.y) / 16 + this.origin.y);
+      // Raised sprite pixels belong to their ground anchor, not the floor above.
+      if (!this.symbols) {
+        const px=(e.clientX-bounds.left)/this.zoom-shift.x,py=(e.clientY-bounds.top)/this.zoom-shift.y;
+        const mask=document.createElement('canvas');mask.width=32;mask.height=48;
+        const context=mask.getContext('2d')!;
+        const candidates=this.observation.world.flatMap(cell=>{
+          const result:{cell:Cell;pass:'actor'|'loot';x:number;y:number;foot:number}[]=[];
+          if(cell.objects?.length)result.push({cell,pass:'loot',x:(cell.x-this.origin.x)*16,y:(cell.y-this.origin.y)*16,foot:cell.y});
+          if(cell.occupant&&cell.occupant.kind!=='self'){
+            const actor=this.actorPosition(cell,performance.now());
+            result.push({cell,pass:'actor',x:Math.round((actor.x-this.origin.x)*16),y:Math.round((actor.y-this.origin.y)*16)-actor.hop,foot:actor.y});
+          }
+          return result;
+        }).sort((a,b)=>b.foot-a.foot||b.x-a.x||(a.pass==='actor'?-1:1));
+        for(const target of candidates){
+          const mx=Math.floor(px-target.x)+8,my=Math.floor(py-target.y)+32;
+          if(mx<0||mx>=32||my<0||my>=48)continue;
+          context.clearRect(0,0,32,48);drawContents(context,target.cell,8,32,false,target.pass);
+          if(target.pass==='actor'&&!knownCreatureArt(target.cell.occupant?.appearance))drawCreatureQuestion(context,8,32);
+          if(context.getImageData(mx,my,1,1).data[3]){x=target.cell.x;y=target.cell.y;break;}
+        }
+      }
       const cell = this.observation.world.find(
         (cell) => cell.x === x && cell.y === y,
       );
@@ -421,7 +431,10 @@ export class DungeonMap {
       );
     });
   }
-  update(observation: Observation | null, hero = heroArt("valkyrie"), seed = "0", terminal?: Pick<Snapshot, "ended" | "end"> | null) {
+  update(observation: Observation | null, hero = heroArt("valkyrie"), seed = "0", terminal?: (Pick<Snapshot, "ended" | "end"> & Partial<Pick<Snapshot, "sessionId">>) | null) {
+    if (terminal?.sessionId && terminal.sessionId !== this.perceptionSession) {
+      this.deathTraces.clear();this.perceptionSession=terminal.sessionId;
+    }
     this.heroDead = terminal?.ended === true && terminal.end?.kind === "death";
     this.canvas.dataset.hero = this.heroDead && observation?.you ? "tombstone" : observation?.you ? "hero" : "none";
     this.canvas.setAttribute("aria-description", this.heroDead && observation?.you ? "A tombstone marks your final position." : "");
@@ -432,6 +445,7 @@ export class DungeonMap {
       this.observation?.location.id !== observation.location.id
     ) {
       this.clearMessages();
+      this.deathTraces.clear();
       this.travelStarted = -Infinity;
       this.actorMotions.clear();
       this.fog.clear();
@@ -610,6 +624,8 @@ export class DungeonMap {
     this.bubbles = [];
   }
   showMessages(before: Snapshot, after: Snapshot) {
+    this.deathTraces.observe(before,after);
+    this.draw();
     this.sound.observe(before, after, actionMessages(after));
     if (
       before.sessionId !== after.sessionId ||
@@ -873,7 +889,13 @@ export class DungeonMap {
       ambienceTimeMs: this.reducedMotion.matches || document.hidden ? undefined : now,
     });
     c.restore();
+    this.deathTraces.age(this.observation.turn);
+    if (!this.symbols) for(const trace of this.deathTraces.entries) {
+      const cell=this.observation.world.find(cell=>cell.x===trace.x&&cell.y===trace.y);
+      if(cell?.visible===true)this.deathTraces.draw(c,trace,(trace.x-this.origin.x)*16,(trace.y-this.origin.y)*16,this.observation.turn);
+    }
     const foreground: { x: number; y: number; draw: () => void }[] = [];
+
     for (const cell of this.observation.world) {
       const x = (cell.x - this.origin.x) * 16,
         y = (cell.y - this.origin.y) * 16;
@@ -990,14 +1012,9 @@ export class DungeonMap {
         if (
           cell.occupant &&
           cell.occupant.kind !== "self" &&
-          !cell.occupant.appearance
+          !knownCreatureArt(cell.occupant.appearance)
         ) {
-          // Only missing engine descriptions get a question mark.
-          rect(c, "#182128", x + 11, y - 7, 8, 11);
-          rect(c, "#f1dfac", x + 12, y - 6, 6, 2);
-          rect(c, "#f1dfac", x + 16, y - 4, 2, 2);
-          rect(c, "#f1dfac", x + 14, y - 2, 3, 2);
-          rect(c, "#f1dfac", x + 14, y + 1, 2, 2);
+          drawCreatureQuestion(c, x, y);
         }
       }
     const neighborhood = this.observation.neighborhood;

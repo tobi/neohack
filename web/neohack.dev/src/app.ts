@@ -33,6 +33,7 @@ import {
   loadArt,
 } from "./map";
 import { creatureArtUrl, inventoryArt } from "./symbol-art";
+import { knownCreatureArt } from "./creature-families";
 import { MovementInput } from "./movement-input";
 import type { WebMcpRegistration } from "/runtime/typescript/webmcp.js";
 import { loadRuntime, warmPackage, runtimePackage } from "./runtime-loader";
@@ -279,7 +280,7 @@ class PixelNethack extends HTMLElement {
 
       <main id="main" tabindex="-1">
         <div class="map-viewport"><canvas id="dungeon" tabindex="0" aria-label="Dungeon entrance. Use arrow keys to walk into the hall."></canvas><button id="enter-gate" aria-label="Walk into the glowing gate and create an adventurer" title="Enter the dungeon"></button></div>
-        <section id="welcome-copy" class="intro-title"><p class="eyebrow">A LITTLE COURAGE. A DEEP DUNGEON.</p><h1>neo<span>nethack</span></h1><p>The old world has an open door.</p><a class="paths-jump" href="#welcome-paths">Play, bring an agent, or build something new ↓</a></section>
+        <section id="welcome-copy" class="intro-title"><p class="eyebrow">A LITTLE COURAGE. A DEEP DUNGEON.</p><h1>neo<span>hack</span></h1><p>The old world has an open door.</p><a class="paths-jump" href="#welcome-paths">Play, bring an agent, or build something new ↓</a></section>
         <section id="welcome-actions" class="intro-controls" aria-label="Learn to walk">
           <p id="intro-instruction">Walk into the light</p>
           <div class="intro-arrows" aria-label="Arrow keys move your traveler">
@@ -362,7 +363,7 @@ class PixelNethack extends HTMLElement {
         <div class="sr-only"><span id="inspect-text" role="status"></span><span id="latest-message" role="status"></span></div>
       </main>
       <dialog id="dungeon-loading" aria-labelledby="loading-title" aria-describedby="loading-detail"><div class="descent-scene" aria-hidden="true"><div class="descent-arch arch-far"></div><div class="descent-arch arch-mid"></div><div class="descent-arch arch-near"></div><div class="descent-path"></div><i class="descent-torch torch-left"></i><i class="descent-torch torch-right"></i><img id="loading-traveler" src="/art/${heroArt("ranger")}.png" alt=""></div><h2 id="loading-title">Entering the dungeon</h2><p id="loading-detail" role="status"></p><div class="descent-dots" aria-hidden="true"><i></i><i></i><i></i></div></dialog>
-      <dialog id="menu" aria-labelledby="menu-title"><div class="dialog-top"><span class="eyebrow">NEONETHACK</span><button aria-label="Close dialog" class="close-dialog">×</button></div><div id="menu-content"></div></dialog>
+      <dialog id="menu" aria-labelledby="menu-title"><div class="dialog-top"><span class="eyebrow">neohack</span><button aria-label="Close dialog" class="close-dialog">×</button></div><div id="menu-content"></div></dialog>
       <dialog id="journal-scroll" aria-labelledby="scroll-title"><div class="dialog-top"><span class="eyebrow">FROM YOUR JOURNAL</span><button id="close-scroll" aria-label="Close scroll">×</button></div><h2 id="scroll-title">A page from your adventure</h2><p id="scroll-turn" class="eyebrow"></p><div id="scroll-text" role="region" aria-label="Journal passage" tabindex="0"></div><button id="finish-scroll" class="primary">Return to the adventure</button></dialog>
       <dialog id="decision" aria-labelledby="decision-title"><div class="eyebrow">ONE MOMENT, ADVENTURER</div><h2 id="decision-title"></h2><p id="decision-about"></p><p id="decision-error" class="notice error" role="alert" hidden></p><div id="decision-body"></div><div id="decision-footer"></div></dialog>`;
     this.map = new DungeonMap(this.querySelector("#dungeon")!, (text, x, y, walk) => {
@@ -1709,14 +1710,17 @@ class PixelNethack extends HTMLElement {
     const perceived = game.observation.world.find(
       (c) => c.x === x && c.y === y,
     );
-    const occupant = perceived?.occupant;
-    const title = occupant
-      ? creatureLabel(occupant)
-      : cell.door?.lock === "locked"
-        ? cell.door.freshness === "remembered"
-          ? "Last known: locked"
-          : "A locked door"
-        : (cell.terrain?.type.replace(/([A-Z])/g, " $1") ?? "Beyond the map");
+    const occupant = perceived?.occupant ?? cell.occupant;
+    const here = game.observation.here;
+    const atFeet = game.observation.you?.x === x && game.observation.you?.y === y;
+    const objects = perceived?.objects ?? cell.objects ??
+      (atFeet && game.observation.perception.here === 'current' && here.known ? here.items : []);
+    const object = objects[0];
+    const objectTitle = object?.known?.appearance ?? (object ? 'Object' : undefined);
+    const title = occupant && occupant.kind !== 'self' ? creatureLabel(occupant)
+      : objectTitle ?? (occupant?.kind === 'self' ? 'You'
+      : cell.door?.lock === 'locked' ? (cell.door.freshness === 'remembered' ? 'Last known: locked' : 'A locked door')
+      : (cell.terrain?.type.replace(/([A-Z])/g, ' $1') ?? 'Beyond the map'));
     panel.innerHTML =
       '<header class="tile-heading"><strong></strong></header><p class="subtle"></p><div class="tile-buttons"></div>';
     panel.querySelector("strong")!.textContent = title;
@@ -1730,8 +1734,14 @@ class PixelNethack extends HTMLElement {
       tag.textContent = occupant.kind === "ally" ? "Ally" : "Creature";
       panel.querySelector("header")!.append(tag);
     }
+    if (object && (!occupant || occupant.kind === 'self')) {
+      const image=document.createElement('img');image.alt='';
+      image.src=inventoryArt({...object,category:object.category ?? 'object'});
+      panel.querySelector('header')!.prepend(image);
+    }
     panel.setAttribute(
       "aria-description",
+
       `${x}, ${y}. ${cell.terrain?.freshness ?? "unknown"}. Arrow keys inspect neighboring tiles.`,
     );
     panel.querySelector("p")!.textContent =
@@ -1739,14 +1749,17 @@ class PixelNethack extends HTMLElement {
         ? (occupant.kind === "ally"
             ? "A companion. Moving toward them may swap places."
             : "Moving toward this creature may attack it.") +
-          (occupant.appearance
+          (knownCreatureArt(occupant.appearance)
             ? ""
-            : " ? means this game version supplies only a creature category; there is no identify action to clear it.")
+            : " The cloud and ? mean its shape is uncertain from what you perceive.")
         : cell.terrain?.freshness === "remembered"
           ? "Remembered · out of sight"
           : cell.movement.relation === "distant"
             ? "Select a known walking route, or inspect nearby actions."
             : "Attempts can fail or need a choice.";
+    if (perceived?.visible === true && this.map.deathTraces.entries.some(trace=>trace.x===x&&trace.y===y)) {
+      panel.querySelector('p')!.textContent += ' A fading impression marks a witnessed death here; it is not an item.';
+    }
     const labels: Record<string, string> = {
       move: "Move",
       open: "Try opening",
@@ -2786,7 +2799,7 @@ class PixelNethack extends HTMLElement {
   }
   private credits() {
     this.openMenu(
-      `<h2 id="menu-title">An old world. An open door.</h2><p>neonethack is a new, approachable window into NetHack, built on the neonethack library and its shared C engine.</p><p>NetHack by the NetHack DevTeam and its contributors, under the NetHack General Public License. Original notices remain with the engine.</p><p>Character art from Modern Interiors by <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noreferrer">LimeZu</a>. Companion and bat illustrations use original templates from the pixel-art-interfaces skill. Dungeon tiles and interface design are original to this example.</p><p>JetBrains Mono by the JetBrains Mono Project Authors, under the <a href="/fonts/OFL.txt" target="_blank" rel="noreferrer">SIL Open Font License</a>.</p><p>Sound effects: <a href="https://kenney.nl/assets/rpg-audio" target="_blank" rel="noreferrer">Kenney RPG Audio</a>, <a href="/audio/Kenney-LICENSE.txt">CC0</a>.</p><p>Gameplay runs in your browser.</p>`,
+      `<h2 id="menu-title">An old world. An open door.</h2><p>neohack is a new, approachable window into NetHack, built on the neohack library and its shared C engine.</p><p>NetHack by the NetHack DevTeam and its contributors, under the NetHack General Public License. Original notices remain with the engine.</p><p>Character art from Modern Interiors by <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noreferrer">LimeZu</a>. Companion and bat illustrations use original templates from the pixel-art-interfaces skill. Dungeon tiles and interface design are original to this example.</p><p>JetBrains Mono by the JetBrains Mono Project Authors, under the <a href="/fonts/OFL.txt" target="_blank" rel="noreferrer">SIL Open Font License</a>.</p><p>Sound effects: <a href="https://kenney.nl/assets/rpg-audio" target="_blank" rel="noreferrer">Kenney RPG Audio</a>, <a href="/audio/Kenney-LICENSE.txt">CC0</a>.</p><p>Gameplay runs in your browser.</p>`,
     );
   }
 }

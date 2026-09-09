@@ -1,9 +1,9 @@
-import { encounterArt, type CreaturePixels } from "./encounter-art";
+import { creaturePixels, companionAsset } from "./creature-families";
 import { itemPixels, itemSilhouette } from "./item-art";
 import { equipmentPixels, drawEquipment } from "./equipment-pixels";
 
 /** Original pixel silhouettes for public display categories, never item IDs.
- * A food token also covers remains; a canine token does not identify a species.
+ * A food token also covers remains. Creature art uses disclosed appearance only.
  * Source grids are editable assets. Each character is one native pixel.
  */
 const icons: Record<string, string[]> = {
@@ -203,90 +203,7 @@ const icons: Record<string, string[]> = {
     "............",
     "............",
   ],
-  insect: [
-    "..#......#..",
-    "...#.##.#...",
-    "....#hh#....",
-    ".#..#oo#..#.",
-    "..###ss###..",
-    "...#hoos#...",
-    ".##hoooos##.",
-    "...#hoos#...",
-    "..##ssss##..",
-    ".#..####..#.",
-    "............",
-    "............",
-  ],
-  snake: [
-    "............",
-    ".......###..",
-    "......#hho#.",
-    "......#o#o#.",
-    ".......#os#.",
-    "...####oss#.",
-    "..#hhhooos#.",
-    ".#hoo#####..",
-    ".#os#.......",
-    "..#oooo###..",
-    "...######...",
-    "............",
-  ],
-  rodent: [
-    "............",
-    "....##..##..",
-    "...#hh##hh#.",
-    "...#hoooos#.",
-    "..#hho#o#ss#",
-    "..#hoooooss#",
-    "..#hoooo#ss#",
-    ".#hoooooos#.",
-    "#.#ossss##..",
-    "#..#s##s#...",
-    ".##.........",
-    "............",
-  ],
-  humanoid: [
-    "....####....",
-    "...#hhho#...",
-    "...#hhoos#..",
-    "...#o#o#s#..",
-    "....#oss#...",
-    "...######...",
-    "..#hhoooos#.",
-    "..#sooooss#.",
-    "...#oooos#..",
-    "...#ss#ss#..",
-    "...#ss#ss#..",
-    "...###.###..",
-  ],
-  ghost: [
-    "....####....",
-    "...#hhhh#...",
-    "..#hhhhhh#..",
-    "..#h#hh#h#..",
-    "..#hhhhhh#..",
-    "..#hhoohh#..",
-    ".#hhhoohhh#.",
-    ".#hhoooohh#.",
-    ".#hooooosh#.",
-    "..#osssos#..",
-    "...##..##...",
-    "............",
-  ],
-  blob: [
-    "............",
-    "............",
-    "....####....",
-    "...#hhhh#...",
-    "..#hhhooos#.",
-    "..#hhoooss#.",
-    ".#hho#o#oss#",
-    ".#hooooosss#",
-    "#hooooossss#",
-    "#ooooosssss#",
-    ".##########.",
-    "............",
-  ],
+
 };
 
 const objectIcons: Record<string, string> = {
@@ -305,43 +222,15 @@ const objectIcons: Record<string, string> = {
   "`": "boulder",
   "0": "boulder",
 };
-const creatureIcons: Record<string, string> = {
-  a: "insect",
-  x: "insect",
-  s: "insect",
-  S: "snake",
-  r: "rodent",
-  b: "blob",
-  j: "blob",
-  P: "blob",
-  F: "blob",
-  v: "ghost",
-  " ": "ghost",
-  "@": "humanoid",
-  h: "humanoid",
-  k: "humanoid",
-  o: "humanoid",
-  H: "humanoid",
-  K: "humanoid",
-  O: "humanoid",
-  T: "humanoid",
-  G: "humanoid",
-  L: "humanoid",
-  M: "humanoid",
-  Z: "humanoid",
-};
-
-export function drawSymbolArt(
+export function drawObjectArt(
   c: CanvasRenderingContext2D,
-  kind: "object" | "creature",
   mark: string,
   color: string,
   x: number,
   y: number,
   raised = false,
 ) {
-  const icon =
-    (kind === "object" ? objectIcons : creatureIcons)[mark] ?? "unknown";
+  const icon = objectIcons[mark] ?? "unknown";
   if (raised && icon === "boulder") {
     drawBoulder(c, x, y);
     return;
@@ -433,11 +322,13 @@ export function drawItemArt(c: CanvasRenderingContext2D, item: IllustratedItem, 
   if (!silhouette) return false;
   if (equipmentPixels[silhouette]) drawEquipment(c, silhouette, x, y);
   else {
-    const palette: Record<string, string> = { '#': '#20282b', h: '#d4c8a9', o: silhouette === 'chest' ? '#a77c52' : '#a9b39a', s: '#62645a' };
-    for (const [row, pixels] of (itemPixels[silhouette] ?? icons[silhouette]!).entries())
+    const palette: Record<string, string> = { '#': '#20282b', h: '#d4c8a9', o: ['chest','box'].includes(silhouette) ? '#a77c52' : silhouette === 'iceBox' ? '#b9c7bc' : '#a9b39a', s: '#62645a' };
+    const grid=itemPixels[silhouette] ?? icons[silhouette]!;
+    const left=x+Math.floor((16-grid[0]!.length)/2),top=y+14-grid.length;
+    for (const [row, pixels] of grid.entries())
       for (const [col, pixel] of [...pixels].entries()) if (pixel !== '.') {
         c.fillStyle = palette[pixel]!;
-        c.fillRect(x + col + 2, y + row + 2, 1, 1);
+        c.fillRect(left + col, top + row, 1, 1);
       }
   }
   return true;
@@ -461,116 +352,19 @@ export function inventoryArt(item: IllustratedItem & {category: string}): string
     c.font = 'bold 14px monospace';
     c.textAlign = 'center';
     c.fillText(mark, 8, 13);
-  } else drawSymbolArt(c, "object", mark, "#a9b39a", 0, 0);
+  } else drawObjectArt(c, mark, "#a9b39a", 0, 0);
   const url = canvas.toDataURL();
   inventoryImages.set(key, url);
   return url;
 }
 
-// Original editable creature pixels, independent of the private asset packs.
-// The engine's apparent species selects art; glyph/color never supplies identity.
-const earlyCreatures: Record<
-  string,
-  CreaturePixels
-> = {
-  newt: {
-    body: "#c1a66d",
-    shade: "#76623e",
-    pixels: [
-      "......###.",
-      ".....#hoo#",
-      "..###oo#o#",
-      ".#hhooos#.",
-      "#ss#os#...",
-      ".##.##....",
-    ],
-  },
-  jackal: {
-    body: "#c09461",
-    shade: "#79573d",
-    pixels: [
-      "..##...##...",
-      "..#h#.#oh#..",
-      "..#hh#hoo#..",
-      "..#hhoooo#..",
-      "..#o#oo#o#..",
-      "...#hhoss#..",
-      "...#oo#ss#..",
-      "..#hooss#...",
-      ".#hooooos#..",
-      ".#ooossss#..",
-      "..#os#os#...",
-      "..###.###...",
-    ],
-  },
-  lichen: {
-    body: "#9dac65",
-    shade: "#536a4b",
-    pixels: [
-      "...###...",
-      ".##hoo##.",
-      "#hhooooh#",
-      "#ooossoo#",
-      ".#ssssss#",
-      "..######.",
-    ],
-  },
-  goblin: {
-    body: "#91a76d",
-    shade: "#4c6450",
-    pixels: [
-      "....####....",
-      "...#hhho#...",
-      "###hhoos###.",
-      "#oo#o#o#oo#.",
-      ".###oho###..",
-      "...#ohhs#...",
-      "..##ssss##..",
-      ".#hsoooosh#.",
-      ".#osssssso#.",
-      "..#ooooss#..",
-      "..#ss##ss#..",
-      "..###..###..",
-    ],
-  },
-  kobold: {
-    body: "#b38b63",
-    shade: "#725a43",
-    pixels: [
-      "....###.....",
-      "...#hho#....",
-      "..#hhoos#...",
-      "..#o#o#os#..",
-      "...#hhooos#.",
-      "...#oo####..",
-      "..##ssss#...",
-      ".#hhoooos#..",
-      ".#sooooos#..",
-      "..#osssos#..",
-      "..#os##os#..",
-      "..###..###..",
-    ],
-  },
-  "sewer rat": {
-    body: "#a58a78",
-    shade: "#655b57",
-    pixels: [
-      "....##....",
-      "..##ho###.",
-      ".#hoooo#o#",
-      "#sssssoss#",
-      "#..##.##..",
-    ],
-  },
-  "giant rat": { body: "#a99b83", shade: "#6f6759", pixels: icons.rodent! },
-};
 export function drawCreatureArt(
   c: CanvasRenderingContext2D,
   appearance: string | undefined,
   x: number,
   y: number,
 ): boolean {
-  const art = appearance ? earlyCreatures[appearance] ?? encounterArt[appearance] : undefined;
+  const art = creaturePixels(appearance);
   if (!art) return false;
   const palette: Record<string, string> = {
     "#": "#1c2729",
@@ -591,28 +385,27 @@ export function drawCreatureArt(
     }
   return true;
 }
-export function creatureArtUrl(
-  appearance: string | undefined,
-  mark: string,
-): string {
-  if (
-    ["kitten", "housecat", "large cat"].includes(appearance ?? "") ||
-    (!appearance && mark === "f")
-  )
-    return "/art/cat.png";
-  if (
-    ["little dog", "dog", "large dog"].includes(appearance ?? "") ||
-    (!appearance && mark === "d")
-  )
-    return "/art/dog.png";
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 32;
-  const c = canvas.getContext("2d")!;
-  // Inspection is a magnified illustration, independent of world size.
-  c.save();
-  c.scale(2, 2);
-  const drawn = drawCreatureArt(c, appearance, 0, 0);
-  c.restore();
-  if (!drawn) drawSymbolArt(c, "creature", mark, "#b6bba0", 8, 12);
+/** One neutral silhouette for every uncertain appearance, independent of glyph/color. */
+export function drawUnknownCreature(c: CanvasRenderingContext2D, x: number, y: number) {
+  const pixels = ['.....ssss.......','...sshhhhs......','..shhhhhhhsss...','.shhhooooohhhs..','shhhooooooooohs.','shoooooooooooss.','.ssoooooooooss..','...sssssssss....'];
+  const palette: Record<string,string> = {s:'#667977',h:'#b8c6bd',o:'#94a6a0'};
+  for (const [row,line] of pixels.entries()) for(const [col,p] of [...line].entries())
+    if(p!=='.'){c.fillStyle=palette[p]!;c.fillRect(x+col,y+6+row,1,1);}
+}
+export function drawCreatureQuestion(c: CanvasRenderingContext2D, x:number,y:number) {
+  c.fillStyle='#182128'; c.fillRect(x+11,y-7,8,11);
+  c.fillStyle='#f1dfac';
+  for(const [dx,dy,w,h] of [[12,-6,6,2],[16,-4,2,2],[14,-2,3,2],[14,1,2,2]])
+    c.fillRect(x+dx!,y+dy!,w!,h!);
+}
+export function creatureArtUrl(appearance: string | undefined, _mark?: string): string {
+  const asset=companionAsset(appearance);
+  if(asset)return `/art/${asset}.png`;
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=64;
+  const c=canvas.getContext('2d')!;
+  c.scale(2,2);
+  if(!drawCreatureArt(c,appearance,8,16)){
+    drawUnknownCreature(c,8,16);drawCreatureQuestion(c,8,16);
+  }
   return canvas.toDataURL();
 }

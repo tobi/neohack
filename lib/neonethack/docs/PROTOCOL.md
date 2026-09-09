@@ -225,7 +225,7 @@ World, neighborhood and `session.actions` share displayed occupant
 `kind`, `appearance`, `mark`, `color` and disclosed `attitude`, plus displayed `objects`. An already
 perceived boulder carries `objects[].kind: "boulder"`, independently of any
 `movement.intent: "possiblePush"` offer. This does not reveal whether a push will
-succeed or what is beyond it. Rendered weapons and statues may also carry `category` and
+succeed or what is beyond it. Rendered weapons, rigid containers (chest, large box, ice box) and statues may also carry `category` and
 `known.appearance`. A statue may carry `known.depictedCreature`, the subject
 shown by its rendered glyph, not a living occupant. These facts describe the
 apparent shape, including disguises and remembered display; they are withheld
@@ -746,3 +746,14 @@ Execution witnesses distinguish completed and interrupted occupations from the
 requested count; a refused search does not emit `searched`. Standing decisions,
 including client-facing item selections, block a new occupation. Exact request
 retries and close/resume retain the original counted command and receipt.
+
+### Witnessed creature deaths
+
+`creatureDied` is an action-local visual event with `levelId`, `x`, `y`,
+`turn`, and optional perceived `appearance`. It is emitted after lifesaving and
+form-recovery checks, before hidden true-form restoration. It requires direct
+visibility of the creature and its square; unseen, disguised, undetected,
+hallucinatory and swallowed scenes do not disclose it. Disappearance and `saw`
+events are never death evidence. The event does not promise a corpse object,
+loot, a particular cause or a stable monster identity. Clients may show a
+labelled cosmetic aftereffect; actual items remain authoritative.

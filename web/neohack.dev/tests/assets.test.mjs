@@ -74,7 +74,7 @@ test("art sources retain portable recipes, not raw templates or retired studies"
     "ATTRIBUTION.md", "LimeZu-LICENSE.txt", "README.md", "classes.json", "errors/README.md", "errors/style.css",
     "layout-types/README.md", "layout-types/defaults/profile.json", "layout-types/dungeon/profile.json", "layout-types/cave/profile.json", "layout-types/dungeon-damp/profile.json", "layout-types/cave/README.md",
     "layouts/cavern.txt", "layouts/geometry.txt", "layouts/rooms.txt", "layouts/waterworks.txt",
-    "recipe.json", "social/README.md", "social/composition.html",
+    "monster-families.json", "recipe.json", "social/README.md", "social/composition.html",
   ].sort());
 });
 

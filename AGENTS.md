@@ -1,4 +1,7 @@
-# neonethack
+# neohack
+
+The system's canonical name is **neohack**, always lowercase in branding, prose
+and conversation. NetHack is the upstream game's name; retain its attribution.
 
 NetHack's engine, exposed through a semantic protocol, with an approachable web
 UX. Humans and agents play the same game through the same perceived information

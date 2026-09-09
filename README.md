@@ -1,4 +1,4 @@
-# neonethack
+# neohack
 
 **Play live at [neohack.dev](https://neohack.dev)**
 

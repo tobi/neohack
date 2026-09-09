@@ -117,6 +117,7 @@ export interface LootItem { id: string; label: string; quantity: number }
 export type WorldEvent =
   | { type: "itemLooted"; item: LootItem; quantity: number; source: "floor" | "container" | "engulfer"; container?: LootItem; turn: number }
   | { type: "containerOpened"; container: LootItem; contents: LootItem[]; turn: number }
+  | { type: "creatureDied"; levelId: string; x: number; y: number; turn: number; appearance?: string }
   | { type: "doorWitness"; levelId: string; x: number; y: number; fact: "locked" | "unlocked" | "opened" | "closed" | "resisted" | "notClosed"; turn: number }
   | { type: "saw"; x: number; y: number; kind: string; mark: string; color: number }
   | { type: "felt"; sense: string; value: string }

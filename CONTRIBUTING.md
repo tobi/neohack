@@ -1,6 +1,6 @@
-# Contributing to neonethack
+# Contributing to neohack
 
-neonethack is an alpha. Keep changes focused and include a reproduction and
+neohack is an alpha. Keep changes focused and include a reproduction and
 relevant test results.
 
 ## Start here

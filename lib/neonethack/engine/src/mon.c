@@ -3114,6 +3114,9 @@ mondead(struct monst *mtmp)
     if (mtmp->isgd && !grddead(mtmp))
         return;
 
+#ifdef HEADLESS_GRAPHICS
+    headless_creature_died(mtmp);
+#endif
     mptr = mtmp->data; /* save this for m_detach() */
     /* restore chameleon, lycanthropes to true form at death */
     if (ismnum(mtmp->cham)) {

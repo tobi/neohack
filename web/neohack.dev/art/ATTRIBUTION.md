@@ -73,3 +73,13 @@ Original cave environment: faceted rock sprite meshes and procedural earth in
 `src/structure-sprites.ts` and `src/dungeon-art.ts`, with editable palette under
 `art/layout-types/cave/`. Original project work; no vendor cave pixels or raw
 LimeZu environment assets are included in these generated tiles.
+
+The creature family masters, size/palette recipes and uncertain-creature cloud in
+`src/creature-families.ts`, `src/creature-presets.ts` and `src/symbol-art.ts` are
+original neohack pixel artwork. They extend the existing original encounter grids.
+The appearance mapping derives names and drawing groups from the pinned NetHack
+source; NetHack notices and NGPL attribution remain in the engine distribution.
+
+The rigid-container master and prone death impressions in `src/item-art.ts` and
+`src/death-traces.ts` are original neohack pixel compositions. Impressions reuse
+only already disclosed creature artwork and are decorative, not engine objects.

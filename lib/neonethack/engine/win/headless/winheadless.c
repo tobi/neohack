@@ -226,12 +226,13 @@ headless_flush(void)
             struct monst *seen = m_at(x, y);
             /* Only the rendered object, including apparent disguises and
              * remembered glyphs. No floor object lookup or identification.
-             * Weapons have unshuffled physical descriptions; other classes
+             * Weapons and rigid containers have unshuffled physical descriptions; other classes
              * may require close inspection and remain class-only here. */
             if (!Hallucination && glyph_is_object(c->glyph)) {
                 int type = glyph_to_obj(c->glyph);
                 if (type >= 0 && type < NUM_OBJECTS
-                    && (objects[type].oc_class == WEAPON_CLASS || type == STATUE))
+                    && (objects[type].oc_class == WEAPON_CLASS || type == STATUE
+                        || type == CHEST || type == LARGE_BOX || type == ICE_BOX))
                     object_type = type + 1;
                 if (glyph_is_statue(c->glyph))
                     depicted_creature = glyph_to_statue_corpsenm(c->glyph) + 1;
@@ -310,7 +311,7 @@ headless_flush(void)
                 int type = c->object_type - 1;
                 const char *description = OBJ_DESCR(objects[type]);
                 jb_key(&cells, "objectCategory");
-                jb_str(&cells, type == STATUE ? "object" : "weapon");
+                jb_str(&cells, type == STATUE ? "object" : objects[type].oc_class == TOOL_CLASS ? "tool" : "weapon");
                 jb_key(&cells, "objectAppearance");
                 jb_str(&cells, description ? description : OBJ_NAME(objects[type]));
             }
@@ -742,6 +743,31 @@ headless_door_witness(coordxy x, coordxy y, const char *fact)
     jb_key(&jb, "epoch"); jb_int(&jb, hl_knowledge_epoch + 1);
     jb_end_obj(&jb);
     if (jb.ok) rpc_notify("door_witness", jb.buf);
+    jb_free(&jb);
+}
+
+/* A visual death, after lifesaving, before true-form restoration. Never infer
+ * death from disappearance, sensed positions, unseen victims or hallucination. */
+void
+headless_creature_died(struct monst *mon)
+{
+    JBuf jb;
+    int appearance;
+    coordxy x = mon->mx, y = mon->my;
+    if (windowprocs.wp_id != wp_headless || !isok(x, y) || Hallucination
+        || u.uswallow || mon->mundetected || mon->m_ap_type != M_AP_NOTHING
+        || !cansee(x, y) || !canseemon(mon)) return;
+    appearance = monsndx(mon->data) + 1;
+    jb_init(&jb); jb_begin_obj(&jb);
+    jb_key(&jb, "branch"); jb_int(&jb, u.uz.dnum);
+    jb_key(&jb, "level"); jb_int(&jb, u.uz.dlevel);
+    jb_key(&jb, "x"); jb_int(&jb, x); jb_key(&jb, "y"); jb_int(&jb, y);
+    jb_key(&jb, "turn"); jb_int(&jb, svm.moves);
+    if (appearance > 0 && appearance <= NUMMONS) {
+        jb_key(&jb, "appearance"); jb_str(&jb, mons[appearance - 1].pmnames[NEUTRAL]);
+    }
+    jb_end_obj(&jb);
+    if (jb.ok) rpc_notify("creature_died", jb.buf);
     jb_free(&jb);
 }
 

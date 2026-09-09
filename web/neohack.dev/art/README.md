@@ -108,3 +108,21 @@ node --test tests/assets.test.mjs
 Full generated sheets and exporter metadata stay in a temporary directory; only
 the selected portrait and idle/walk PNGs are copied into the client. Ordinary app
 builds use the included PNGs.
+
+## Creature family artwork
+
+`monster-families.json` is an authoring recipe for the pinned source roster, not a
+runtime bestiary. `src/creature-families.ts` provides original masters and native
+size/palette composition; only disclosed appearance selects live artwork.
+
+```sh
+node scripts/generate-monster-art.mjs --check
+bun scripts/render-monsters.ts
+```
+
+The ignored `test-results/art/monsters/report.html` previews families without a
+species catalogue. The transparent atlas and JSON manifest share fixed anchors.
+
+`bun scripts/render-floor-art.ts` exports the current chest/box sizes and
+turn-aged prone silhouettes to `test-results/art/floor/report.html`. The browser
+inspection regression supplies its linked chest, creature and impression views.

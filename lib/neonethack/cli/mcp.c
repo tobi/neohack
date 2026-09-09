@@ -49,7 +49,7 @@ void mcp_finish(mcp_job *j, char *value, int error, int status)
         if (!members) b.ok = 0;
         else {
             char *modern;
-            if (asprintf(&modern,"{\"resultType\":\"complete\",\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"neonethack\",\"version\":\"%s\"}}%s%s}",nnh_version(), *members ? "," : "",members) < 0) b.ok = 0;
+            if (asprintf(&modern,"{\"resultType\":\"complete\",\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"neohack\",\"version\":\"%s\"}}%s%s}",nnh_version(), *members ? "," : "",members) < 0) b.ok = 0;
             else { mj_rawv(&b,modern); free(modern); }
             free(members);
         }
@@ -135,7 +135,7 @@ void mcp_request(mcp_server *s, const char *line, size_t length, struct evhttp_r
             mj_Buf b; mj_init(&b); mj_obj(&b);
             mj_key(&b,"protocolVersion"); mj_strv(&b,negotiated);
             mj_key(&b,"capabilities"); mj_rawv(&b,"{\"tools\":{}}");
-            mj_key(&b,"serverInfo"); mj_rawv(&b,"{\"name\":\"neonethack\",\"version\":\"1.0.0-alpha.1\"}");
+            mj_key(&b,"serverInfo"); mj_rawv(&b,"{\"name\":\"neohack\",\"version\":\"1.0.0-alpha.1\"}");
             mj_key(&b,"instructions"); mj_strv(&b,mcp_guidance);
             mj_endobj(&b); s->initialized = 1; mcp_finish(j,mcp_take(&b),0,200);
         }

@@ -1,6 +1,6 @@
 # cli-mcp-bot — an LLM plays NetHack through native MCP HTTP
 
-An autonomous bot that plays NetHack using the neonethack C engine directly.
+An autonomous bot that plays NetHack using the neohack C engine directly.
 A Vercel AI SDK agent drives the installed native MCP HTTP target
 (`~/.local/bin/neohack-mcp --http`) — no browser or stdio bridge involved.
 

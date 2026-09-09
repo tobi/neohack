@@ -80,7 +80,7 @@ const observation = object({
  * unknown properties, and fail closed on unknown decision kinds/outcomes. */
 export const responseSchema: Schema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  title: "libneonethack response v1",
+  title: "neohack response v1",
   ...object({
     kind: enumeration("actions", "route", "navigation", "lore"), name:string, found:boolean, lines:array(string), basis, inputGate, cell: cellActions,
     doors: array(closed({x:integer,y:integer,lock:enumeration("locked","unlocked","unknown"),distance:nullable(integer),approach:closed({x:integer,y:integer}),direction:compass}, ["x","y","lock","distance"])),
@@ -100,6 +100,7 @@ export const responseSchema: Schema = {
     events: array({ oneOf: [
       event("itemLooted", {item: lootItem, quantity: integer, source: enumeration("floor", "container", "engulfer"), container: lootItem, turn: integer}, ["container"]),
       event("containerOpened", {container: lootItem, contents: array(lootItem), turn: integer}),
+      event("creatureDied", { levelId: string, x: integer, y: integer, turn: integer, appearance: string }, ["appearance"]),
       event("doorWitness", { levelId: string, x: integer, y: integer, fact: enumeration("locked", "unlocked", "opened", "closed", "resisted", "notClosed"), turn: integer }),
       event("saw", { x: integer, y: integer, kind: string, mark: string, color: integer }),
       event("felt", { sense: string, value: string }), event("heard", { text: string, textWindow: boolean }, ["textWindow"]), event("passage", { text: string }),

@@ -24,7 +24,7 @@ async function fixture(
     );
     const data = (chunk) => {
       log += chunk;
-      const match = /NEONETHACK READY (http:\/\/127\.0\.0\.1:\d+)/.exec(log);
+      const match = /neohack READY (http:\/\/127\.0\.0\.1:\d+)/.exec(log);
       if (match) {
         clearTimeout(timer);
         resolve(match[1]);
@@ -2607,8 +2607,14 @@ test("additional encounters including hobbits have distinct small art and preser
       delete target.occupant.appearance;map.draw();
       const unknown = crop();
       target.occupant.appearance = "unpictured creature";map.draw();
-      // Unknown and unpictured stay category art; only the knowledge badge differs.
-      results.at(-1).unknownBadge = unknown !== crop();
+      // Unknown and unsupported appearances share the same cloud and question mark.
+      results.at(-1).unknownBadge = unknown === crop();
+      delete target.occupant.appearance;
+      results.at(-1).neutral = ['D', 'f', '@', 'B'].every((glyph, i) => {
+        target.occupant.mark = glyph; target.occupant.color = i + 1; map.draw();
+        return crop() === unknown;
+      });
+
     }
     map.destroy(); mapHost.remove();
     return results;
@@ -2617,7 +2623,8 @@ test("additional encounters including hobbits have distinct small art and preser
     assert.ok(result.width > 0 && result.width <= 14, result.appearance + " fits its native footprint");
     assert.ok(result.height > 0 && result.height <= 12, result.appearance + " remains small including hover clearance");
     assert.ok(result.distinct, result.appearance + " has species art instead of its generic category");
-    assert.ok(result.unknownBadge, result.appearance + " does not suppress missing-appearance feedback");
+    assert.ok(result.unknownBadge, result.appearance + " keeps uncertain art neutral");
+    assert.ok(result.neutral, "unknown cloud does not vary with glyph or color");
   }
   assert.equal(new Set(report.map(r => r.art)).size, 13);
   assert.deepEqual(errors, []);
@@ -4077,4 +4084,86 @@ test('classic prefixes dispatch explicit protocol parameters and counts stay nat
   for (const key of ['1','0','s','g','G','m','F']) await page.keyboard.press(key);
   assert.equal((await snapshot(page)).revision,decision.revision);
   assert.equal(await page.locator('#keyboard-prefix').isVisible(),false);
+});
+
+test('creature families compose in the live map with fixed anchors and neutral uncertainty', async t => {
+  const {page,errors}=await fixture(t);
+  const result=await page.evaluate(()=>{
+    const app=document.querySelector('pixel-nethack');
+    const host=document.createElement('section');host.id='creature-family-study';
+    host.style.cssText='position:absolute;left:0;top:0;z-index:80;padding:20px;background:#202e29;color:#e4dec9;font:16px system-ui;display:grid;grid-template-columns:repeat(3,260px);gap:12px';document.body.append(host);
+    const hidden=document.createElement('div');hidden.style.cssText='position:fixed;width:800px;height:480px;visibility:hidden';
+    const canvas=document.createElement('canvas');hidden.append(canvas);document.body.append(hidden);
+    const map=new app.map.constructor(canvas,()=>{});map.zoom=2;
+    const world=[];for(let y=0;y<9;y++)for(let x=0;x<13;x++)world.push({x,y,visible:true,terrain:{type:'floor',knowledge:'remembered'}});
+    world.find(c=>c.x===5&&c.y===4).occupant={kind:'self',mark:'@',color:7};
+    const target=world.find(c=>c.x===8&&c.y===4);
+    const observation={location:{id:'family-proof',depthLabel:'Artwork study'},you:{x:5,y:4},world};
+    const examples=[['goblin','Small preset'],['imp','Small family variant'],['orc','Larger shared base'],['ogre','Large family variant'],[undefined,'Unknown · glyph d'],[undefined,'Unknown · glyph D']];
+    const crops=[];
+    examples.forEach(([appearance,label],i)=>{
+      target.occupant={kind:'creature',appearance,mark:i===5?'D':'d',color:i+1};
+      map.update(observation,'valkyrie','family-proof:42');
+      const tile=document.createElement('canvas');tile.width=32;tile.height=40;
+      tile.getContext('2d').drawImage(canvas,(8-map.origin.x)*16-8,(4-map.origin.y)*16-24,32,40,0,0,32,40);crops.push(tile.toDataURL());
+      const card=document.createElement('article');const text=document.createElement('p');text.textContent=label;
+      const view=document.createElement('canvas');view.width=80;view.height=48;view.style.cssText='width:240px;height:144px;image-rendering:pixelated';
+      view.getContext('2d').drawImage(canvas,(5-map.origin.x)*16-8,(4-map.origin.y)*16-24,80,48,0,0,80,48);
+      card.append(text,view);host.append(card);
+    });
+    map.destroy();hidden.remove();return {knownDistinct:new Set(crops.slice(0,4)).size,unknownEqual:crops[4]===crops[5]};
+  });
+  assert.equal(result.knownDistinct,4);assert.ok(result.unknownEqual);assert.deepEqual(errors,[]);
+  await page.locator('#creature-family-study').screenshot({path:`${root}/test-results/art/monsters/map.png`});
+});
+
+test('floor containers and raised creatures select their perceived names and death impressions stay background-only',async t=>{
+ const {page,errors}=await fixture(t);await create(page);await ready(page);
+ const before=await snapshot(page);
+ const target=await page.evaluate(async()=>{
+  const app=document.querySelector('pixel-nethack');app.game.current=structuredClone(app.game.state);
+  const observation=app.game.observation,you=observation.you;
+  const cell=observation.world.find(c=>c.x===you.x+1&&c.y===you.y);
+  cell.terrain={type:'floor',knowledge:'remembered'};cell.visible=true;delete cell.occupant;
+  cell.objects=[{mark:'(',color:3,category:'tool',known:{appearance:'chest'}}];
+  app.render();await app.inspectTile(cell.x,cell.y);
+  return {x:cell.x,y:cell.y};
+ });
+ const panel=page.getByRole('dialog',{name:'Tile actions'});
+ assert.equal(await panel.locator('header strong').textContent(),'chest');
+ await page.screenshot({path:`${root}/test-results/chest-inspection.png`});
+ assert.ok((await panel.locator('header img').getAttribute('src')).startsWith('data:image/png'));
+ await page.evaluate(async({x,y})=>{
+  const app=document.querySelector('pixel-nethack');app.closeTile();
+  const cell=app.game.observation.world.find(c=>c.x===x&&c.y===y);delete cell.objects;
+  cell.occupant={kind:'creature',mark:'O',color:1,appearance:'ogre'};
+  app.render();
+ },target);
+ // Click an opaque head pixel above the creature's ground tile.
+ await page.evaluate(({x,y})=>{
+  const app=document.querySelector('pixel-nethack'),map=app.map,canvas=app.querySelector('#dungeon'),r=canvas.getBoundingClientRect();
+  canvas.dispatchEvent(new MouseEvent('click',{bubbles:true,button:0,clientX:r.left+((x-map.origin.x)*16+8)*map.zoom,clientY:r.top+((y-map.origin.y)*16-7)*map.zoom}));
+ },target);
+ assert.equal(await panel.locator('header strong').textContent(),'ogre');
+ assert.match(await page.locator('#inspect-text').textContent(),/: ogre/);
+ await page.screenshot({path:`${root}/test-results/creature-inspection.png`});
+ const trace=await page.evaluate(({x,y})=>{
+  const app=document.querySelector('pixel-nethack');app.closeTile();
+  const cell=app.game.observation.world.find(c=>c.x===x&&c.y===y);delete cell.occupant;
+  app.map.deathTraces.entries=[{x,y,turn:app.game.observation.turn,appearance:'ogre'}];app.render();
+  return {objects:cell.objects??[],occupant:cell.occupant??null};
+ },target);
+ assert.deepEqual(trace,{objects:[],occupant:null});
+ await page.evaluate(async({x,y})=>document.querySelector('pixel-nethack').inspectTile(x,y),target);
+ assert.match(await panel.locator('p').first().textContent(),/fading impression.*not an item/);
+ assert.equal((await snapshot(page)).revision,before.revision);
+ assert.deepEqual(errors,[]);
+ await page.screenshot({path:`${root}/test-results/chest-death-inspection.png`});
+ const remaining=await page.evaluate(()=>{
+  const app=document.querySelector('pixel-nethack'),map=app.map;
+  map.update(app.game.observation,'valkyrie',map.seed,{...app.game.state,sessionId:'another-adventure'});
+  return map.deathTraces.entries.length;
+ });
+ assert.equal(remaining,0,'same seed and level in another run cannot inherit impressions');
+
 });

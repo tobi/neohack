@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "libneonethack response v1",
+  "title": "neohack response v1",
   "type": "object",
   "properties": {
     "kind": {
@@ -13875,6 +13875,36 @@
               "type",
               "container",
               "contents",
+              "turn"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "creatureDied"
+              },
+              "levelId": {
+                "type": "string"
+              },
+              "x": {
+                "type": "integer"
+              },
+              "y": {
+                "type": "integer"
+              },
+              "turn": {
+                "type": "integer"
+              },
+              "appearance": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "levelId",
+              "x",
+              "y",
               "turn"
             ]
           },

@@ -159,6 +159,6 @@ int mcp_http_start(mcp_server *s)
     s->listener = evhttp_bind_socket_with_handle(s->http,"127.0.0.1",s->port);
     if (!s->listener) { perror("MCP HTTP listen"); return -1; }
     evutil_make_socket_closeonexec(evhttp_bound_socket_get_fd(s->listener));
-    fprintf(stderr,"neonethack MCP listening at http://127.0.0.1:%d/mcp\n",s->port);
+    fprintf(stderr,"neohack MCP listening at http://127.0.0.1:%d/mcp\n",s->port);
     return 0;
 }

@@ -1,4 +1,5 @@
-# Pixel NetHack: a place worth descending into
+<!-- Canonical product name: neohack (lowercase). NetHack denotes the upstream game. -->
+# neohack: a place worth descending into
 
 ## Current UX and implementation boundaries
 
@@ -261,7 +262,7 @@ standing decisions, uncertainty, menus, blur or a hidden tab. Occupations and
 other actions remain explicit one-shot inputs. Repeated successful steps share
 one animation phase so the walk cycle does not restart at every tile.
 
-Dog, cat and bat class illustrations use the installed original creature templates.
+Disclosed dog, cat and bat appearances use the installed original creature templates.
 Other creature and loot categories use original outlined pixel grids in
 `src/symbol-art.ts`. Food art includes the `%` class of food/remains; it does not
 claim edibility or identify a corpse. No art choice supplies an operation target.
@@ -470,7 +471,8 @@ contract plus actual engine calls.
 Use the engine's optional `occupant.appearance` to name the displayed creature and
 choose species art. A visible newt is recognizable by looking; fighting is not an
 identification requirement. This is the apparent form, never the hidden identity
-of a disguised creature. Do not parse combat prose into identity. Hallucinated observations may omit the field; show a category and
+of a disguised creature. Do not parse combat prose into identity. Hallucinated
+observations may omit the field; show a neutral cloud with a question mark and
 explain the question mark in inspection rather than inventing an identify action.
 
 Inspection leads with the clicked occupant, a sprite portrait and an Ally/Creature
@@ -587,7 +589,7 @@ small static hover offsets, retaining their ground contact shadow and tile
 anchor. Hover offset is illustration only, not a flight or collision rule.
 No extra world scaling is applied. Portrait magnification remains separate.
 Art selection requires the engine's apparent species; undisclosed or unpictured
-creatures retain category art and normal knowledge badges. Static images do not
+creatures use the same neutral cloud and question mark, independent of glyph and color. Static images do not
 imply a turn, attack or movement.
 
 The browser encounter-art test renders all twelve beside the hero using the live
@@ -1145,7 +1147,7 @@ for a selection before transfer, preserving its suggestions without auto-selecti
 Backpack, ground list and item details share appearance-based icon selection from
 `known.appearance`, supplied by the engine independently of decorated labels,
 nicknames and magical identification. Shields, gloves, boots, helmets, cloaks,
-maces and chests have distinct original 12px silhouettes in `src/item-art.ts`,
+maces and rigid containers have distinct original native-pixel silhouettes in `src/item-art.ts`,
 extending the existing original item grids. Modern Interiors catalog searches
 found no named shield/chest assets; no vendor pack or runtime PNG was added.
 Unsupported weapon/armor/tool appearances use their neutral class glyph rather
@@ -1359,3 +1361,54 @@ coalesce the latest run state, and ledger availability does not gate input backu
 ### Classic keyboard commands
 
 Use the pinned Guidebook chapter 4 bindings, keeping arrow movement and dropping WASD. h/j/k/l and y/u/b/n step; uppercase directions execute one native game.run command, with engine stopping and no automatic fight. s searches, comma picks up, period waits, and < / > climb. a/w/d/c/q/r/z/t apply, wield, drop, close, drink, read, zap and throw. f/Z/x/p/E/Q fire, cast, swap, pay, engrave and ready quiver. i opens inventory; ? opens help. Direction decisions and tile inspection use the same lowercase direction layout. Shift-arrows still pan. Native runs settle as one operation; held lowercase movement retains the existing serial cadence. g/G map to game.run modes untilInteresting/pastBranches; m maps to moveWithoutAttack and combines with running via noPickup. F maps to attack. Counts 1–1000 before s or . request native search/rest once; other counted commands are rejected without input. A visible live status shows pending prefixes. Escape/Backspace, menus, another action, blur and hidden tabs clear them. Prefixes never answer a standing decision; never simulate them with ordinary attacks or auto-answer dialogs.
+
+## Source-backed creature families
+
+The user requested reusable base shapes with size and palette modifiers, without
+spoilers. `art/monster-families.json` assigns broad source drawing groups and explicit
+anatomy exceptions; `scripts/generate-monster-art.mjs` reads the pinned active roster
+and generates `src/monster-appearances.ts`. Its only runtime key is the engine's
+disclosed appearance. Never resolve ambiguous names using glyph, color or hidden
+identity. No roster, mechanics, threat scale or bestiary is added to the game.
+
+`src/creature-families.ts` holds 45 original outlined family masters, three authored
+sizes and nine muted palettes. Recipes compose as `family.size.palette`; canvas
+rasterizes to native pixels, keeping a common bottom-center ground anchor and the
+full 16px interaction tile. Sizes and unnamed colors are artistic choices; source
+size, color, resistance, attack and level fields are discarded. Color adjectives
+already disclosed in appearance names may select paint. Existing early grids and
+selected companion PNGs remain exact presets. Family sprites are bounded at 26px;
+inspection magnification is separate from world size.
+
+Missing, unsupported or ambiguous appearances use one fixed neutral cloud with a
+question mark in both map and inspection. Neither cloud size nor paint changes with
+glyph or color. Accessible labels say Unknown creature when appearance is absent;
+a disclosed name remains readable even if art is ambiguous. Symbol mode preserves
+the public engine glyphs. The question annotation renders above world sprites.
+
+Run `node scripts/generate-monster-art.mjs --check` and
+`bun scripts/render-monsters.ts` to verify coverage and export the transparent
+135-variant atlas, manifest and family-only HTML proof under ignored
+`test-results/art/monsters/`. The proof does not enumerate named species.
+
+## Containers, sprite selection and fading death impressions
+
+Recognizable chests, large boxes and ice boxes receive structured map appearances
+from their rendered glyphs, including apparent disguises, with no contents, lock,
+trap or magic disclosure. The shared chest master has a 16×12 chest and ice-box
+variant and a 12×9 wooden box; inventory and ground use the same foot anchor.
+Inspection titles and accessible map descriptions prioritize a perceived creature, then floor objects (including
+current underfoot knowledge), then terrain. The object's icon accompanies its
+name. Raised creature/object pixels select their ground square according to
+foreground draw order; transparent padding does not steal clicks from the floor.
+
+The user requested corpse-like impressions for six to seven game turns. These
+are a cosmetic exception to the no-invented-props rule: `creatureDied` evidence
+creates a flattened, muted impression beneath real objects and actors. It is
+never an item, target, movement obstruction or corpse-production claim. Keep it
+through age six, fade on ages five and six, and remove at age seven. Age uses
+engine turns, never animation frames or free observations. Duplicate receipts
+do not refresh it. Clear on run/level changes; render only on currently visible
+squares. Missing appearance uses a neutral shape. Do not infer deaths from
+disappearance, combat prose, damage, or kill counts. These temporary effects are
+not persisted or recreated from old receipts on resume.

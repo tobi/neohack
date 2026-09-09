@@ -148,6 +148,9 @@ void manual_fixture(void)
             o=mksobj(STATUE,FALSE,FALSE);o->corpsenm=subjects[i];o->owt=weight(o);
             place_object(o,37+i,9);
         }
+        o=mksobj(CHEST,FALSE,FALSE);place_object(o,39,12);
+        o=mksobj(LARGE_BOX,FALSE,FALSE);place_object(o,40,12);
+        o=mksobj(ICE_BOX,FALSE,FALSE);place_object(o,41,12);
         o=mksobj(CROSSBOW_BOLT,FALSE,FALSE);place_object(o,40,11);
         o=mksobj(LONG_SWORD,FALSE,FALSE);place_object(o,41,11);
         /* Rendered disguise must remain an apparent sword, not a monster. */
@@ -155,5 +158,18 @@ void manual_fixture(void)
         m->m_ap_type=M_AP_OBJECT;m->mappearance=LONG_SWORD;m->msleeping=1;
         if (!strcmp(svp.plname,"ArtHallucinated")) make_hallucinated(100L,FALSE,0L);
     }
-    vision_recalc(0);docrt();update_inventory();disp.botl=TRUE;
+    if (!strncmp(svp.plname,"DeathArt",8)) {
+        m=makemon(&mons[PM_NEWT],41,10,NO_MM_FLAGS);
+        m->mhp=1;m->mhpmax=1;m->mpeaceful=0;m->msleeping=1;m->mcanmove=0;m->mfrozen=127;
+        if (!strcmp(svp.plname,"DeathArtHidden")) m->minvis=1;
+        if (!strcmp(svp.plname,"DeathArtHallucinated")) make_hallucinated(100L,FALSE,0L);
+        if (!strcmp(svp.plname,"DeathArtSaved")) {
+            o=mksobj(AMULET_OF_LIFE_SAVING,FALSE,FALSE);
+            o->owornmask=W_AMUL; m->misc_worn_check|=W_AMUL; (void)mpickobj(m,o);
+        }
+        u.ulevel=30;
+
+    }
+    vision_recalc(0);docrt();
+update_inventory();disp.botl=TRUE;
 }

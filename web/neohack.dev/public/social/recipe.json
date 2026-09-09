@@ -9,19 +9,19 @@
       "file": "open-graph.png",
       "width": 1200,
       "height": 630,
-      "sha256": "4e7903ae2146016dcc15f7ed81cd690ab1e420920074d4c5615dc96bda9a8266"
+      "sha256": "02ea16e87779a4a0f4b6110a6fdcdd0f7fabacbff7d959a1625387b1d5db6c8f"
     },
     {
       "file": "profile-banner.png",
       "width": 1500,
       "height": 500,
-      "sha256": "6900bf73d62ce2bb66aca6bf7e01f10beb72f5955a58e0d354daa7cf0e956266"
+      "sha256": "526b4cfbcd8c9a8d1ed92968f9847d84929f0a43b8971ffc1968a753b3460a8e"
     },
     {
       "file": "stream-overlay.png",
       "width": 1920,
       "height": 1080,
-      "sha256": "5c673b2952813e6a4b77c1db40d3e611910150676704d4b8bac9d5017d1e2d31"
+      "sha256": "d0e3d42e9529e8a497ee6d9b011c1c6dd401da914dc1ea5e6042c3af78215763"
     }
   ]
 }

@@ -18,7 +18,7 @@ test('inventory illustrations distinguish perceived shapes and ignore nicknames'
     const { inventoryArt, drawItemArt } = await import(URL.createObjectURL(new Blob([source], {type: 'text/javascript'})));
     document.body.style.cssText = 'margin:0;padding:24px;background:#192421;color:#e5dfcf;font:18px system-ui';
     const samples = [
-      ['armor', 'small shield'], ['weapon', 'mace'], ['tool', 'chest'],
+      ['armor', 'small shield'], ['weapon', 'mace'], ['tool', 'chest'], ['tool','large box'], ['tool','ice box'],
       ['armor', 'riding gloves'], ['armor', 'hard shoes'], ['armor', 'plumed helmet'],
       ['armor', 'ornamental cope'], ['armor', 'leather armor'],
       ['weapon', 'long sword'], ['weapon', 'dagger'], ['weapon', 'curved sword'],

@@ -1357,6 +1357,27 @@ static void index_door_facts(game_t *g)
         if (!strcmp(g->door_facts[i].level, g->location_id))
             g->door_index[g->door_facts[i].y][g->door_facts[i].x] = (int) i;
 }
+static void ingest_creature_death(game_t *g, const char *params)
+{
+    mj_val v; long long branch, level, x, y, turn;
+    char id[80], *appearance = NULL;
+    mj_Buf b;
+#define DEATH_INT(key, dest) if (!mj_find(params, key, &v) || !mj_int(v, &dest)) return
+    DEATH_INT("branch", branch); DEATH_INT("level", level);
+    DEATH_INT("x", x); DEATH_INT("y", y); DEATH_INT("turn", turn);
+#undef DEATH_INT
+    if (x < 1 || x >= MAP_W || y < 0 || y >= MAP_H || branch < 0 || level < 1 || turn < 0) return;
+    if (mj_find(params, "appearance", &v)) appearance = mj_str(v);
+    snprintf(id, sizeof id, "level-%lld-%lld", branch, level);
+    mj_init(&b); mj_obj(&b);
+    mj_key(&b, "type"); mj_strv(&b, "creatureDied");
+    mj_key(&b, "levelId"); mj_strv(&b, id);
+    mj_key(&b, "x"); mj_intv(&b, x); mj_key(&b, "y"); mj_intv(&b, y);
+    mj_key(&b, "turn"); mj_intv(&b, turn);
+    if (appearance && *appearance) { mj_key(&b, "appearance"); mj_strv(&b, appearance); }
+    mj_endobj(&b); if (b.ok) push_event(g, b.buf); mj_free(&b); free(appearance);
+}
+
 static void ingest_door_witness(game_t *g, const char *params)
 {
     mj_val v; long long branch, level, x, y, turn, epoch;
@@ -1605,8 +1626,10 @@ ingest(game_t *g, const char *line)
     if (g->terminal_kind[0] && (!strcmp(method, "perception") ||
         !strcmp(method, "snapshot") || !strcmp(method, "map_delta") ||
         !strcmp(method, "status_update") || !strcmp(method, "window_clear") ||
-        !strcmp(method, "cursor") || !strcmp(method, "text") || !strcmp(method, "message") || !strcmp(method, "door_witness"))) goto done;
-    if (!strcmp(method, "door_witness")) {
+        !strcmp(method, "cursor") || !strcmp(method, "text") || !strcmp(method, "message") || !strcmp(method, "door_witness") || !strcmp(method, "creature_died"))) goto done;
+    if (!strcmp(method, "creature_died")) {
+        ingest_creature_death(g, params);
+    } else if (!strcmp(method, "door_witness")) {
         ingest_door_witness(g, params);
     } else if (!strcmp(method, "perception")) {
         ingest_belongings(g, params);

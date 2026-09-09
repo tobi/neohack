@@ -1,4 +1,4 @@
-# libneonethack
+# neohack
 
 NetHack as a library, not a terminal.
 

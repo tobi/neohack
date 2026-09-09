@@ -1,4 +1,4 @@
-/** Original 12px item silhouettes. Select only from the engine's undecorated
+/** Original native-pixel item silhouettes. Select only from the engine's undecorated
  * perceived appearance, never labels, nicknames, slots or opaque references. */
 export const itemPixels: Record<string, string[]> = {
   shield: [
@@ -27,11 +27,17 @@ export const itemPixels: Record<string, string[]> = {
     '#hhooooooss#', '#hooooossss#', '.##########.', '............',
   ],
   chest: [
-    '............', '..########..', '.#hhhhhhhs#.', '#hoooooooss#',
-    '#hoooooooss#', '############', '#oooo##ooss#', '#oooohhooss#',
-    '#ooooooooss#', '#ssssssssss#', '.##########.', '............',
+    '...##########...', '..#hhhhhhhhhh#..', '.#hhooooooooss#.',
+    '#hhooooooooooss#', '#hoooooooooooss#', '################',
+    '#hooosshhsssoos#', '#hoooos##ssooss#', '#hooooohhooooss#',
+    '#hooooooooossss#', '.#ssssssssssss#.', '..############..',
   ],
 };
+
+// Same master, authored size variants. Names come from perceived appearance;
+// never use weight, contents or private container flags as visual clues.
+itemPixels.box = Array.from({length:9},(_,y)=>Array.from({length:12},(_,x)=>itemPixels.chest![Math.floor(y*12/9)]![Math.floor(x*16/12)]).join(''));
+itemPixels.iceBox = itemPixels.chest!;
 
 export function itemSilhouette(category: string, appearance?: string, depictedCreature?: string): string | undefined {
   if (!appearance) return;
@@ -81,5 +87,9 @@ export function itemSilhouette(category: string, appearance?: string, depictedCr
     if (/\bdragon\b/.test(subject)) return 'statueDragon';
     return 'statue';
   }
-  if (category === 'tool' && /^(chest|large box)$/.test(appearance)) return 'chest';
+  if (category === 'tool') {
+    if (appearance === 'chest') return 'chest';
+    if (appearance === 'large box') return 'box';
+    if (appearance === 'ice box') return 'iceBox';
+  }
 }

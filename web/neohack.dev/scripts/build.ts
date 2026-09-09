@@ -79,7 +79,7 @@ const result = await Bun.build({
 if (!result.success)
   throw new AggregateError(result.logs, "Browser build failed");
 console.log(
-  "Pixel client typechecked and built. Gameplay uses the public neonethack API.",
+  "Pixel client typechecked and built. Gameplay uses the public neohack API.",
 );
 
 for (const [entry, target, format] of [
@@ -90,6 +90,6 @@ for (const [entry, target, format] of [
 ] as const) {
   const built = await Bun.build({entrypoints:[root+'/src/'+entry+'.ts'],target:'browser',format,minify:true,define:defines});
   if(!built.success) throw new AggregateError(built.logs, entry+' build failed');
-  const notice = entry === 'component' ? '/*! NeoHack viewer. NetHack attribution and project terms: https://github.com/tobi/neohack/blob/main/lib/neonethack/NOTICE.md . Character art by LimeZu (https://limezu.itch.io/moderninteriors), licensed for project use; raw asset redistribution is restricted. See web/neohack.dev/art/ATTRIBUTION.md in the matching source. */\n' : '';
+  const notice = entry === 'component' ? '/*! neohack viewer. NetHack attribution and project terms: https://github.com/tobi/neohack/blob/main/lib/neonethack/NOTICE.md . Character art by LimeZu (https://limezu.itch.io/moderninteriors), licensed for project use; raw asset redistribution is restricted. See web/neohack.dev/art/ATTRIBUTION.md in the matching source. */\n' : '';
   await Bun.write(root+'/public/'+target,notice + await built.outputs[0]!.text());
 }

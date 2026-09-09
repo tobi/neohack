@@ -70,7 +70,7 @@ export async function startServer(port = Number(process.env.PORT ?? 3333)) {
 }
 if (import.meta.main) {
   const server = await startServer();
-  console.log(`NEONETHACK READY http://127.0.0.1:${server.port}`);
+  console.log(`neohack READY http://127.0.0.1:${server.port}`);
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.on(signal, () => {
       server.stop(true);

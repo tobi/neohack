@@ -82,7 +82,7 @@ export class Accounts {
       const userId = crypto.randomUUID();
       const options = register
         ? await generateRegistrationOptions({
-            rpName: "NeoHack",
+            rpName: "neohack",
             rpID: url.hostname,
             userName: body.name,
             userID: new TextEncoder().encode(userId),
