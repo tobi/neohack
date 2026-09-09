@@ -46,7 +46,11 @@ test('dedicated replay page shares public identity, metadata and embeds without 
  assert.match(await page.locator('#embed-code').inputValue(),new RegExp('/replays/'+id));
  const world=page.locator('#replay');
  assert.equal(await world.locator('#replay-page').getAttribute('href'),canonical);
- assert.match(await world.locator('#replay-page').textContent(),new RegExp(id));
+ const openSite=world.getByRole('link',{name:'Open neohack.dev',exact:true});
+ assert.equal(await openSite.getAttribute('target'),'_blank');
+ assert.equal(await openSite.getAttribute('rel'),'noopener');
+ assert.equal(await world.locator('.hud a').count(),0);
+ assert.equal(await world.locator('#sound').count(),0);
  await world.getByLabel('Playback speed',{exact:true}).selectOption('20');
  await page.evaluate(()=>{window.positions=[];document.querySelector('#replay').addEventListener('replayframe',e=>window.positions.push(e.detail.index));});
  await world.getByRole('button',{name:'Play replay',exact:true}).click();
@@ -56,9 +60,14 @@ test('dedicated replay page shares public identity, metadata and embeds without 
  await world.getByLabel('Replay frame',{exact:true}).fill('0');
  assert.equal(await page.evaluate(()=>document.querySelector('#replay').index),0,'seeking retains the selected index when pausing');
  assert.deepEqual(await selected(),initialDetails,'seeking back restores opening details, not ledger totals');
- for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
+ for(const viewport of [{width:1440,height:1000},{width:390,height:844},{width:320,height:667}]){
   await page.setViewportSize(viewport);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  assert.deepEqual(await openSite.evaluate(el=>{
+   const box=el.getBoundingClientRect(),bar=el.parentElement.getBoundingClientRect();
+   return {text:el.innerText,readable:box.width>=44&&box.height>=44,inside:box.left>=bar.left&&box.right<=bar.right&&box.bottom<=bar.bottom,
+    right:Math.abs(bar.right-box.right-10)<1,bottom:Math.abs(bar.bottom-box.bottom-10)<1};
+  }),{text:'Open\nneohack.dev',readable:true,inside:true,right:true,bottom:true});
   await page.screenshot({path:`/tmp/neohack-replay-page-${viewport.width}.png`,fullPage:true});
  }
  // A denied clipboard still exposes selectable text; metadata is optional.

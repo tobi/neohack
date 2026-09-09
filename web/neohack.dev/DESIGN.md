@@ -1306,8 +1306,11 @@ unsynced progress reached the server. Keep ordinary API errors structured JSON.
 `neohack-world` accepts a public replay `src` (`/replays/{run-id}`), a static manifest, or paginated
 observation JSON, `autoplay`, `speed`, `sound`, `controls` and `loop`. Default speed
 is 4× (16 recorded frames per second); controls overlay the bottom with Play/Pause,
-frame seeking, speed and gesture-enabled optional sound. HTML controls retain
-44px targets and keyboard focus. Removal cancels loading and pauses playback.
+frame seeking and speed. The bottom-right link reads “Open” above “neohack.dev”
+and opens the run's page in a new tab, or the site home when no public run is
+identified. It replaces the sound toggle and the former replay-ID link in the
+top HUD. HTML controls retain 44px targets and keyboard focus. Optional sound
+remains an embed attribute, enabled by a playback gesture. Removal cancels loading and pauses playback.
 The game hamburger remains anchored beneath its 44px button with a bounded menu.
 Its Copy run embed action supplies a public source without the private vault URL.
 
@@ -1566,8 +1569,8 @@ outcome and date live in a separate, initially collapsed Run totals and outcome
 disclosure so later events are not presented as the start of the adventure.
 Missing metadata is labelled rather than inferred; optional ledger failures do
 not gate static CDN playback. This page is unlisted and requires no sign-in.
-The component shows a visible ID and link to this page for public replay sources,
-including existing manifest and ledger URLs. Account input runs expose their
+The component's bottom-right “Open / neohack.dev” link opens this page for public
+replay sources, including existing manifest and ledger URLs. Account input runs expose their
 page directly. Older private frame recordings still require explicit publication;
 private source, notes, saves and account metadata are never part of the link.
 Use the component's shared controls in account playback too. Speeds range from

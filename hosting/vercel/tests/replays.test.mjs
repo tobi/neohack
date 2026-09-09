@@ -110,13 +110,24 @@ test('real cloud run reconstructs public scenes, embeds after death and forwards
   assert.equal(await external.getByRole('button',{name:'Play replay',exact:true}).count(),1);
   const soundRequest=page.waitForRequest(r=>r.url()===new URL('/audio/footstep00.ogg',url).href);
   await external.getByRole('button',{name:'Play replay',exact:true}).click();await soundRequest;
-  await page.waitForFunction(()=>document.querySelector('neohack-world').shadowRoot.querySelector('#sound').getAttribute('aria-pressed')==='true');
+  await page.waitForFunction(()=>document.querySelector('neohack-world').audio?.enabled);
   await external.getByRole('button',{name:'Pause replay',exact:true}).click();
+  const openSite=external.getByRole('link',{name:'Open neohack.dev',exact:true});
+  assert.equal(await openSite.getAttribute('href'),new URL('/replays/'+state.sessionId,url).href,'external embed links back to the hosting site, not its own origin');
+  const popupPromise=page.waitForEvent('popup');
+  await openSite.click();
+  const popup=await popupPromise;
+  await popup.waitForURL(new URL('/replays/'+state.sessionId,url).href);
+  await popup.close();
   await page.waitForFunction(()=>!document.querySelector('neohack-world').sourcePending);
   await page.evaluate(async()=>{const w=document.querySelector('neohack-world');await w.seek(w.sourceTotal-1);w.setAttribute('loop','');w.play(50);});
   await page.waitForFunction(()=>Number(document.querySelector('neohack-world').shadowRoot.querySelector('#seek').value)<5);
   await page.evaluate(()=>{window.detachedWorld=document.querySelector('neohack-world');window.detachedWorld.remove();});
   const stopped=await page.evaluate(()=>window.detachedWorld.snapshot.revision);
   await page.waitForTimeout(150);assert.equal(await page.evaluate(()=>window.detachedWorld.snapshot.revision),stopped);
+  assert.equal(await page.evaluate(()=>{
+    const world=window.detachedWorld;world.loadReplay([world.snapshot]);
+    return world.shadowRoot.querySelector('#replay-page').href;
+  }),new URL('/',url).href,'supplied snapshots reset the public run link to the hosting site home');
   assert.deepEqual(errors,[]);
 });

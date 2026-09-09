@@ -172,7 +172,10 @@ viewer is removed. A failed or missing recording remains a visible error.
 `autoplay`, `controls`, `sound` and `loop` are boolean attributes (absent or
 `="false"` means disabled). `speed` is 0.5–5×, default 4×; 1× is 250ms/frame.
 `play(interval)` still accepts explicit milliseconds; no interval uses `speed`.
-Controls overlay the bottom. Sound is off by default and requires a user gesture;
+Controls overlay the bottom. A two-line “Open / neohack.dev” link at bottom right
+opens the public run page in a new tab, or the module's site home when the source
+has no public run identity. There is no replay-ID link in the top HUD or sound
+toggle in the controls. Sound is off by default and requires the `sound` attribute and a playback gesture;
 when embedding on another origin, allow the module origin's `/audio/` in your CSP.
 Every ledger run links to its own page, `/replays/RUN_ID`, which is the share
 link and leads with the run's chronicle when one exists; `/dashboard?run=RUN_ID`

@@ -38,17 +38,13 @@ export class NeohackWorld extends HTMLElement {
   constructor() {
     super();
     this.root.innerHTML = `<style>${scrollbarStyles}:host{display:block;position:relative;min-height:320px;height:100%;background:#10181d;color:#eee8d0;contain:content;font:14px system-ui} .surface{position:absolute;inset:0}canvas{display:block;width:100%;height:100%;image-rendering:pixelated;pointer-events:none}.hud{position:absolute;top:16px;left:16px;right:16px;display:flex;justify-content:space-between;gap:16px;pointer-events:none}span{background:#10181de8;padding:8px 12px}details{position:absolute;bottom:12px;left:12px;max-height:45%;overflow:auto;background:#10181df0;padding:8px}pre{white-space:pre-wrap;max-width:60ch}summary{cursor:pointer} :host([static]) details{display:none}
-      .playback{position:absolute;bottom:0;left:0;right:0;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px;background:#10181df2}.playback[hidden]{display:none}button,select{min-height:44px;background:#25322f;color:inherit;border:1px solid #67745a;padding:6px 10px;font:inherit}input{min-width:70px;flex:1;accent-color:#b9ca9c;min-height:44px}button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid #e0c38a;outline-offset:2px}:host([controls]) details{bottom:124px}output{font-size:12px} .hud a{pointer-events:auto;align-self:flex-start;max-width:45%;overflow-wrap:anywhere;color:#e0c38a;background:#10181de8;padding:10px;min-height:24px}.hud a[hidden]{display:none}.hud{font-size:12px}.hud span{min-width:0} @media(min-width:600px){:host([controls]) details{bottom:78px}}</style><div class="surface"><canvas aria-label="NetHack world" role="img"></canvas></div><div class="hud"><span id="status">A world, waiting for a story.</span><a id="replay-page" hidden target="_blank" rel="noopener">Open replay</a><span id="read-only">READ ONLY</span></div><details><summary>Text observation</summary><pre></pre></details><div class="playback" role="group" aria-label="Replay controls" hidden><button id="play" aria-label="Play replay">Play</button><input id="seek" type="range" min="0" max="0" value="0" aria-label="Replay frame"><output id="progress">No frames</output><select id="speed" aria-label="Playback speed"><option value="0.5">0.5×</option><option value="1">1×</option><option value="2">2×</option><option value="4" selected>4×</option><option value="5">5×</option><option value="10">10×</option><option value="20">20×</option></select><button id="sound" aria-pressed="false">Sound: off</button></div>`;
+      .playback{position:absolute;bottom:0;left:0;right:0;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px;background:#10181df2}.playback[hidden]{display:none}button,select,.playback a{box-sizing:border-box;min-height:44px;background:#25322f;color:inherit;border:1px solid #67745a;padding:6px 10px;font:inherit}input{min-width:70px;flex:1;accent-color:#b9ca9c;min-height:44px}button:focus-visible,.playback a:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid #e0c38a;outline-offset:2px}:host([controls]) details{bottom:124px}output{font-size:12px} .playback a{flex:none;align-self:flex-end;margin-left:auto;text-align:center;text-decoration:none;white-space:nowrap;font-size:12px;line-height:1.2}.hud{font-size:12px}.hud span{min-width:0} @media(min-width:600px){:host([controls]) details{bottom:78px}}</style><div class="surface"><canvas aria-label="NetHack world" role="img"></canvas></div><div class="hud"><span id="status">A world, waiting for a story.</span><span id="read-only">READ ONLY</span></div><details><summary>Text observation</summary><pre></pre></details><div class="playback" role="group" aria-label="Replay controls" hidden><button id="play" aria-label="Play replay">Play</button><input id="seek" type="range" min="0" max="0" value="0" aria-label="Replay frame"><output id="progress">No frames</output><select id="speed" aria-label="Playback speed"><option value="0.5">0.5×</option><option value="1">1×</option><option value="2">2×</option><option value="4" selected>4×</option><option value="5">5×</option><option value="10">10×</option><option value="20">20×</option></select><a id="replay-page" href="${new URL('/',import.meta.url).href}" target="_blank" rel="noopener" aria-label="Open neohack.dev">Open<br>neohack.dev</a></div>`;
     this.canvas = this.root.querySelector('canvas')!;
     this.status = this.root.querySelector('#status')!;
     this.text = this.root.querySelector('pre')!;
     this.root.querySelector('#play')!.addEventListener('click',()=>{void this.enableSound();this.timer ? this.pause() : this.play();});
     this.root.querySelector('#seek')!.addEventListener('input',event=>{const index=Number((event.target as HTMLInputElement).value);this.pause();void Promise.resolve(this.seek(index)).catch(()=>{});});
     this.root.querySelector('#speed')!.addEventListener('change',event=>this.setAttribute('speed',(event.target as HTMLSelectElement).value));
-    this.root.querySelector('#sound')!.addEventListener('click',()=>{
-      if(this.audio?.enabled) this.removeAttribute('sound');
-      else {this.setAttribute('sound','');void this.enableSound();}
-    });
   }
   connectedCallback() {
     this.map ??= new DungeonMap(this.canvas, () => {});
@@ -86,7 +82,6 @@ export class NeohackWorld extends HTMLElement {
     const speed=this.root.querySelector('#speed') as HTMLSelectElement;
     if(!Array.from(speed.options).some(o=>Number(o.value)===this.speed)) speed.add(new Option(this.speed+"×",String(this.speed)));
     speed.value=String(this.speed);
-    const sound=this.root.querySelector('#sound')!;sound.textContent=this.audio?.enabled ? 'Sound: on' : 'Sound: off';sound.setAttribute('aria-pressed',String(!!this.audio?.enabled));
     if(this.inputPlayback){
       play.disabled=this.sourcePending||!this.sourceTotal;
       seek.max=String(Math.max(0,(this.sourceTotal??1)-1));seek.value=String(this.index);seek.disabled=this.inputStepping||this.sourcePending;
@@ -105,7 +100,7 @@ export class NeohackWorld extends HTMLElement {
       const privateId=url.pathname.match(/^\/api\/account\/runs\/([\w-]{1,100})\/frames$/)?.[1];
       if(privateId)this.root.querySelector('#read-only')!.textContent='Private replay '+privateId+' · READ ONLY';
       const link=this.root.querySelector<HTMLAnchorElement>('#replay-page')!;
-      if(identity){link.href=identity.href;link.textContent='Replay '+identity.id+' ↗';link.hidden=false;}
+      if(identity)link.href=identity.href;
       if(url.pathname==='/dashboard' || /^\/replays\/[\w-]{1,64}\/?$/.test(url.pathname)) {
         const id=identity?.id;if(!id || !/^[\w-]{1,64}$/.test(id))throw Error('Ledger URL needs a run id');
         const configResponse=await fetch(new URL('/replay-config.json',url),{signal:controller.signal,credentials:'omit'});
@@ -201,7 +196,7 @@ export class NeohackWorld extends HTMLElement {
   loadReplay(frames: Snapshot[]) {
     void this.inputPlayback?.close();this.inputPlayback=undefined;
     if(!Array.isArray(frames) || frames.length > 100000 || frames.some(f=>!f || typeof f!=='object' || !isSnapshot(f) || !Array.isArray(f.observation.world) || f.observation.world.length>10000)) throw Error('Invalid replay');
-    (this.root.querySelector('#replay-page') as HTMLElement).hidden=true;
+    this.root.querySelector<HTMLAnchorElement>('#replay-page')!.href=new URL('/',import.meta.url).href;
     this.root.querySelector('#read-only')!.textContent='READ ONLY';
     this.loading?.abort();this.sourcePending=false;this.sourceTotal=undefined;this.sourceMessage=undefined;
     this.pause(); this.frames = structuredClone(frames); this.index = 0;
