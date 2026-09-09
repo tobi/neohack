@@ -14,10 +14,10 @@ const rank = (a: Run, b: Run) =>
   (b.maxLevel ?? 0) - (a.maxLevel ?? 0) ||
   b.turn - a.turn ||
   a.id.localeCompare(b.id);
-type Entry = { run: Run; recorded: boolean };
+type Entry = { run: Run; recorded: boolean; chronicled?: boolean };
 type Shard = { version: number; entries: Record<string, Entry> };
 const emptyShard = (): Shard => ({ version: 0, entries: {} });
-type PublicRun = Run & { replayAvailable: boolean };
+type PublicRun = Run & { replayAvailable: boolean; chronicleAvailable: boolean };
 type DailyRecords = { runs: number; level: PublicRun[]; depth: PublicRun[] };
 const recentOrder = (a: Run, b: Run) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
 const score = (run: Run, metric: "level" | "depth") => metric === "level" ? run.maxLevel : run.maxDepth;
@@ -35,7 +35,7 @@ function progress(old: Run | undefined, run: Run): Run {
 function summarize(shard: Shard, now = Date.now()) {
   const entries = Object.values(shard.entries),
     runs = entries
-      .map((e) => ({ ...e.run, replayAvailable: e.recorded }))
+      .map((e) => ({ ...e.run, replayAvailable: e.recorded, chronicleAvailable: e.chronicled === true }))
       .sort(rank),
     roles: Record<string, number> = {};
   for (const run of runs) roles[run.role] = (roles[run.role] ?? 0) + 1;
@@ -78,12 +78,13 @@ async function indexEntries(shard: number, entries: Entry[]) {
     "ledger/shards/" + shard + ".json",
     emptyShard,
     (doc) => {
-      for (const { run, recorded } of entries) {
+      for (const { run, recorded, chronicled } of entries) {
         const prior = doc.entries[run.id];
         if (
           (newer(prior?.run, run) &&
             JSON.stringify(prior?.run) !== JSON.stringify(run)) ||
-          (recorded && !prior?.recorded)
+          (recorded && !prior?.recorded) ||
+          (chronicled && !prior?.chronicled)
         ) {
           doc.entries[run.id] = {
             // Indexing may arrive after a newer write with the same timestamp.
@@ -93,6 +94,7 @@ async function indexEntries(shard: number, entries: Entry[]) {
                 : progress(prior?.run, run)
               : prior!.run,
             recorded: recorded || prior?.recorded || false,
+            ...(chronicled || prior?.chronicled ? { chronicled: true } : {}),
           };
           doc.version++;
         }
@@ -102,8 +104,8 @@ async function indexEntries(shard: number, entries: Entry[]) {
   );
   await publishSummary(shard, summary);
 }
-const indexRun = (run: Run, recorded = false) =>
-  indexEntries(partition(run.id), [{ run, recorded }]);
+const indexRun = (run: Run, recorded = false, chronicled = false) =>
+  indexEntries(partition(run.id), [{ run, recorded, chronicled }]);
 async function writeRun(run: Run, recorded = false) {
   const original = (await read("ledger/runs/" + run.id + ".json"))
     ? undefined
@@ -180,6 +182,12 @@ export async function markRecorded(id: string) {
   await initialize();
   const run = await ledgerRun(id);
   if (run) await indexRun(run, true);
+}
+/** A cached public chronicle exists for this run; the ledger shows its icon. */
+export async function markChronicled(id: string) {
+  await initialize();
+  const run = await ledgerRun(id);
+  if (run) await indexRun(run, false, true);
 }
 export async function ledgerRun(id: string) {
   await initialize();

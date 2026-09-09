@@ -1,21 +1,20 @@
 #!/usr/bin/env node
 import { createReadStream } from "node:fs";
 import { mkdir, writeFile, readFile, mkdtemp, rm } from "node:fs/promises";
-import { createHash } from "node:crypto";
 import { parseArgs } from "node:util";
 import { createInterface } from "node:readline";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { ChronicleDigest } from "./digest.mjs";
+import { prompt, validateStory, renderStory } from "./prompt.mjs";
+import { buildGlossary } from "./lore.mjs";
 import {
-  MODEL,
-  PROMPT_VERSION,
-  SYSTEM,
-  prompt,
-  validateStory,
-  renderStory,
-} from "./prompt.mjs";
+  evidenceHash as hashEvidence,
+  gatewayStory,
+  parseStory,
+  chronicleDocument,
+} from "./generate.mjs";
 
 const argv = process.argv.slice(2);
 const { values } = parseArgs({
@@ -30,7 +29,7 @@ const { values } = parseArgs({
 const option = (name) => values[name.slice(2)];
 if (argv.includes("--help") || (!option("--input") && !option("--replay"))) {
   console.log(
-    "node examples/chronicle/cli.mjs (--input replies.jsonl | --replay STATIC_MANIFEST_URL) --out /tmp/chronicle [--runtime LOCAL_PACKAGE_DIR] [--name NAME --role ROLE] [--prepare-only | --provider muse|gateway]\nFull public snapshots, MCP structuredContent or {request,response}, one JSON value per line. Replay mode verifies immutable chunks and reconstructs every input with its exact WASM pin. Outputs digest.json, prompt.txt, story.json and index.html. Default: Muse Spark 1.3 through authenticated muse CLI; gateway uses AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN.",
+    "node examples/chronicle/cli.mjs (--input replies.jsonl | --replay STATIC_MANIFEST_URL) --out /tmp/chronicle [--runtime LOCAL_PACKAGE_DIR] [--name NAME --role ROLE] [--prepare-only | --provider muse|gateway]\nFull public snapshots, MCP structuredContent or {request,response}, one JSON value per line. Replay mode verifies immutable chunks, reconstructs every input with its exact WASM pin and adds encyclopedia notes for witnessed names. Outputs digest.json, prompt.txt, story.json and index.html. Default: Muse Spark 1.3 through authenticated muse CLI; gateway uses AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN.",
   );
   process.exit(argv.includes("--help") ? 0 : 1);
 }
@@ -44,11 +43,15 @@ const out = resolve(option("--out") ?? "/tmp/neohack-chronicle"),
     name: option("--name"),
     role: option("--role"),
   });
-let line = 0;
+let line = 0,
+  glossary = {};
 if (option("--replay")) {
   const { collectReplay } = await import("./replay.mjs");
   await collectReplay(option("--replay"), collector, {
     runtime: option("--runtime"),
+    lookup: async (lookup) => {
+      glossary = await buildGlossary(lookup, collector.finish());
+    },
   });
 } else
   for await (const text of createInterface({
@@ -68,9 +71,7 @@ if (option("--replay")) {
     collector.add(value);
   }
 const digest = collector.finish();
-const evidenceHash = createHash("sha256")
-  .update(`${MODEL}\n${PROMPT_VERSION}\n${prompt(digest)}`)
-  .digest("hex");
+const evidenceHash = hashEvidence(digest);
 await mkdir(out, { recursive: true });
 await writeFile(
   join(out, "digest.json"),
@@ -78,7 +79,7 @@ await writeFile(
 );
 await writeFile(join(out, "prompt.txt"), prompt(digest));
 console.log(
-  `${digest.coverage.observedReplies} replies → ${digest.events.length} events, ${Buffer.byteLength(JSON.stringify(digest))} evidence bytes`,
+  `${digest.coverage.observedReplies} replies → ${digest.events.length} events, ${Buffer.byteLength(JSON.stringify(digest))} evidence bytes, ${Object.keys(glossary).length} encyclopedia names`,
 );
 let cached;
 try {
@@ -92,8 +93,16 @@ if (!cached)
   for (const name of ["story.json", "index.html", "model-output.txt"])
     await rm(join(out, name), { force: true });
 if (argv.includes("--prepare-only")) process.exit(0);
+const save = async (story, usage) => {
+  const document = chronicleDocument({ digest, story, glossary, usage });
+  await writeFile(join(out, "story.json"), JSON.stringify(document, null, 2) + "\n");
+  await writeFile(
+    join(out, "index.html"),
+    renderStory(document.story, digest, document.model, document.glossary),
+  );
+};
 if (cached) {
-  await writeFile(join(out, "index.html"), renderStory(cached, digest));
+  await save(cached);
   console.log(`Reused chronicle: ${join(out, "index.html")} (no model call)`);
   process.exit(0);
 }
@@ -104,38 +113,7 @@ if (provider === "gateway") {
     throw Error(
       "Set AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN; never put a key in the prompt or command arguments.",
     );
-  const response = await fetch(
-    "https://ai-gateway.vercel.sh/v1/chat/completions",
-    {
-      method: "POST",
-      signal: AbortSignal.timeout(90000),
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: "system", content: SYSTEM },
-          { role: "user", content: JSON.stringify(digest) },
-        ],
-        max_tokens: 2200,
-        reasoning: { effort: "minimal" },
-        response_format: { type: "json_object" },
-      }),
-    },
-  );
-  if (!response.ok)
-    throw Error(
-      `Story model request failed (${response.status}); not retried automatically.`,
-    );
-  const result = await response.json();
-  raw = result.choices?.[0]?.message?.content;
-  usage = result.usage;
-  if (result.choices?.[0]?.finish_reason === "length")
-    throw Error(
-      "The model reached its output limit; evidence and prompt are saved for review.",
-    );
+  ({ raw, usage } = await gatewayStory(digest, { token }));
 } else if (provider === "muse") {
   const work = await mkdtemp(join(tmpdir(), "neohack-chronicler-"));
   try {
@@ -206,26 +184,5 @@ if (provider === "gateway") {
 if (typeof raw !== "string") throw Error("Model returned no story text");
 // Keep the actual model result even if structural/citation checks fail.
 await writeFile(join(out, "model-output.txt"), raw);
-const json = raw
-  .trim()
-  .replace(/^```(?:json)?\s*/, "")
-  .replace(/\s*```$/, "");
-let value;
-try {
-  value = JSON.parse(json);
-} catch {
-  throw Error(
-    "Model returned invalid JSON; raw result is retained for review.",
-  );
-}
-const story = validateStory(value, digest);
-await writeFile(
-  join(out, "story.json"),
-  JSON.stringify(
-    { model: MODEL, promptVersion: PROMPT_VERSION, evidenceHash, usage, story },
-    null,
-    2,
-  ) + "\n",
-);
-await writeFile(join(out, "index.html"), renderStory(story, digest));
+await save(parseStory(raw, digest), usage);
 console.log(`One-page chronicle: ${join(out, "index.html")}`);

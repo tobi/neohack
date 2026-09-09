@@ -13,7 +13,7 @@ const sha = (bytes: Uint8Array | string) =>
   createHash("sha256").update(bytes).digest("hex");
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
-function manifestUrl(path: string, request: Request) {
+export function manifestUrl(path: string, request: Request) {
   const base =
     process.env.PUBLIC_REPLAY_ORIGIN ??
     new URL("/replay-files/", request.url).href;
@@ -47,7 +47,7 @@ function inputManifest(id: string, doc: any) {
     complete: doc.complete,
   };
 }
-async function publishManifest(id: string) {
+export async function publishManifest(id: string) {
   const store = publicReplayStorage(),
     manifestPath = "replays/" + id + "/manifest.json";
   for (let attempt = 0; attempt < 12; attempt++) {

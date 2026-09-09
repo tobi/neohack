@@ -223,6 +223,38 @@ notes are not exported. Future frame uploads preserve the selection; publication
 failures do not invalidate a successful private recording commit. The account
 page displays publishedCount and allows an explicit retry.
 
+### Dungeon chronicles (AI retellings)
+
+`GET|POST /api/runs/:id/chronicle` serves a one-page comic retelling of a
+concluded public run, written by Muse Spark 1.3 through
+[Vercel AI Gateway](https://vercel.com/docs/ai-gateway). The death screen and
+the ledger's replay lightbox offer **Tell the tale** for runs that reached
+dungeon level 3 and experience level 2 and ended in death (eligibility mirrors
+`examples/chronicle` and is checked against the ledger record first). Generation
+replays the published input archive with its exact pinned WASM engine inside the
+function, using the same module closure as the CLI (staged into
+`.generated/chronicle/`), then makes **one** paid model request. The validated
+story, its dotted encyclopedia segments and the glossary are cached as the
+public object `chronicles/<id>/story.json`; the ledger entry gains
+`chronicleAvailable`, which draws the scroll icon beside *Show replay*.
+Page views only read the cached object; nothing is regenerated on view. A
+`chronicles/<id>/pending.json` claim keeps concurrent requests from paying
+twice (later callers receive 202 and poll), and a failed generation releases the
+claim without retrying automatically. Failures log `chronicle_failed` with a
+stage and error kind only. The function is configured with a 300-second budget
+and bundles `public/runtime/wasm/**` so the current engine package replays
+without a network fetch; older pins are fetched from the site's own runtime
+directory into `/tmp`.
+
+No model key lives in this repository. The function authenticates with the
+deployment's [Vercel OIDC token](https://vercel.com/docs/oidc) (the
+`x-vercel-oidc-token` request header or `VERCEL_OIDC_TOKEN`), which AI Gateway
+accepts directly. `scripts/chronicle-deploy-env.mjs` runs at deploy time and
+enables the project's OIDC federation when it is off; an operator-managed
+`AI_GATEWAY_API_KEY` in Vercel production is accepted as the alternative and is
+never read or printed. Without either, the endpoint answers 503 before any
+replay work.
+
 Significant, verified improvements should be committed and deployed, followed by
 production smoke checks, as requested by the project owner. Keep unfinished
 changes outside the release candidate.

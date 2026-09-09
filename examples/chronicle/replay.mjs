@@ -15,9 +15,10 @@ import {
   inputManifest,
   inputRecords,
 } from "../../lib/neonethack/wasm/protocol-reader.mjs";
+import { isFullReply } from "./digest.mjs";
 const hash = (b) => createHash("sha256").update(b).digest("hex");
 
-async function packageAt(id, existing) {
+async function packageAt(id, existing, origin = "https://neohack.dev/") {
   if (existing) {
     const dir = resolve(existing),
       m = JSON.parse(await readFile(join(dir, "manifest.json"), "utf8"));
@@ -34,7 +35,7 @@ async function packageAt(id, existing) {
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
-  const base = `https://neohack.dev/runtime/wasm/${id}/`;
+  const base = new URL(`runtime/wasm/${id}/`, origin).href;
   const get = async (name) => {
     const r = await fetch(base + name, {
       redirect: "error",
@@ -106,13 +107,26 @@ async function check(dir, m, id) {
 }
 
 /** One pass, all authoritative inputs. Checkpoints cannot substitute for the
- * incidents before them. No observation recording or server-side game engine. */
-export async function collectReplay(url, collector, { runtime, signal } = {}) {
+ * incidents before them. No observation recording or server-side game engine.
+ * `runtime` is a local exact package directory (or a function of the pin);
+ * `runtimeOrigin` is where the official package is fetched from otherwise.
+ * `lookup(fn)` runs after the replay with the pinned engine's free encyclopedia. */
+export async function collectReplay(
+  url,
+  collector,
+  { runtime, runtimeOrigin, signal, lookup, maxInputs = Infinity } = {},
+) {
   const source = new URL(url);
   if (!["https:", "http:"].includes(source.protocol))
     throw Error("Provide a static HTTP(S) input manifest URL");
-  const manifest = await inputManifest(source, signal),
-    dir = await packageAt(manifest.buildId, runtime);
+  const manifest = await inputManifest(source, signal);
+  if (manifest.count > maxInputs)
+    throw Error("This run is longer than the chronicler can replay");
+  const dir = await packageAt(
+    manifest.buildId,
+    typeof runtime === "function" ? await runtime(manifest.buildId) : runtime,
+    runtimeOrigin,
+  );
   const base = pathToFileURL(dir + "/");
   const transport = await WasmTransport.create({
     storage: { kind: "memory" },
@@ -130,10 +144,35 @@ export async function collectReplay(url, collector, { runtime, signal } = {}) {
             collector.hero[k] = p[k].slice(0, 80);
       }
       const reply = await transport.playback(record);
-      if (!collector.add(reply))
-        throw Error("An archived input did not yield a new full public reply");
+      // Decision prompts and cancelled actions are full replies at the same
+      // revision; the digest counts them as ignored rather than as new events.
+      if (!collector.add(reply) && !isFullReply(reply))
+        throw Error("An archived input did not yield a full public reply");
     }
-    return collector.finish();
+    const digest = collector.finish();
+    if (lookup) {
+      // The replayed game has usually ended, and lore needs a live boundary. A
+      // throwaway session in the same isolated package reads the same pinned
+      // encyclopedia; it is never recorded, uploaded or shown as the hero's run.
+      const created = await transport.send({
+        version: 1,
+        method: "session.create",
+        params: { name: "Chronicler", role: "valkyrie", seed: 1 },
+      });
+      if (typeof created?.sessionId !== "string")
+        throw Error("The pinned encyclopedia is unavailable");
+      await lookup((name) =>
+        transport.send({
+          version: 1,
+          method: "session.lookup",
+          params: {
+            sessionId: created.sessionId,
+            name: String(name).slice(0, 255),
+          },
+        }),
+      );
+    }
+    return digest;
   } finally {
     await transport.close();
   }

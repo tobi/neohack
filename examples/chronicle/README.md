@@ -48,9 +48,10 @@ message window is only initial context. Health changes become qualitative
 reversals rather than a stream of HP numbers. A companion sighting establishes
 presence at that incident, not a claim that it survived or followed later.
 
-Memory stays bounded: at most 96 candidate entries plus three recent entries;
+Memory stays bounded: at most 320 candidate entries plus three recent entries;
 context holds one event, never a chain of the entire history. The final prompt
-contains at most about 28 events and **16,000 UTF-8 evidence bytes**. Long runs can
+contains at most 80 events and **48,000 UTF-8 evidence bytes** (roughly 12,000
+input tokens, about 1.5 cents at Muse Spark's list price). Long runs can
 omit minor episodes; the packet reports that omission. Evidence selection is not
 a claim that every important event is guaranteed to survive compression.
 
@@ -82,12 +83,29 @@ remaining decorative embellishments. This is a labelled creative retelling, not
 an authoritative replacement for the journal or a machine-verified factual summary.
 
 Vercel lists Muse Spark 1.3 at $1.25 / million input tokens and $4.25 / million
-output tokens as checked 2026-09-08. A 4,000-input / 1,000-output-token story is
-about **$0.00925**, excluding any extra billed reasoning. Actual usage varies;
-the gateway's returned usage is saved in `story.json`. Byte limits are not exact
-token counts. The CLI caches by evidence, model and prompt; a future service
-should share that cache and serve successful stories statically, never regenerate
-them on page views. This tool does not add a website button or hosting endpoint.
+output tokens as checked 2026-09-08. The evidence budget is deliberately
+generous because the model is cheap: a full 48,000-byte packet (about 12,000
+input tokens) plus a 1,000-token story is about **$0.019**, and typical runs are
+far smaller (the reference run above selects 80 events in under 10,000 bytes).
+Actual usage varies; the gateway's returned usage is saved in `story.json`. Byte
+limits are not exact token counts. The CLI caches by evidence, model and prompt.
+
+The website shares this code: `hosting/vercel/src/chronicle.ts` stages
+`digest.mjs`, `prompt.mjs`, `lore.mjs`, `generate.mjs` and `replay.mjs` into
+its function, generates a story once per eligible run (dungeon level 3,
+experience level 2, ended in death), caches it as a public object and serves it
+statically from the death screen and the ledger. See the hosting README.
+
+## Encyclopedia notes
+
+[lore.mjs](lore.mjs) turns names the witnessed messages actually mention
+(monsters, items, gods, roles, dungeon features) into dotted lookups. Candidate
+noun phrases come only from the evidence, are resolved with the pinned engine's
+own `session.lookup` encyclopedia, and only names that then appear in the story
+are annotated. Words the model introduced on its own are never linked, so a
+dotted term is reference lore for something the log mentioned, not an inferred
+identity. The HTML page lists the entries below the story; the website opens them
+inline.
 
 Sources: [model and pricing](https://vercel.com/ai-gateway/models/muse-spark-1.3),
 [gateway authentication](https://vercel.com/docs/ai-gateway/authentication-and-byok).
@@ -101,6 +119,6 @@ node --test examples/chronicle/*.test.mjs
 Tests include 100,000 noisy replies with early reversals and a terminal event,
 query/receipt deduplication, mixed-run rejection, incomplete endings, safe HTML,
 source citation checks, fresh versus rolling narration, paid-call cache/failure
-handling, actual native decisions and a real WASM input archive
-served statically. Model quality is evaluated separately; synthetic story cases
+handling, actual native decisions, encyclopedia term selection and a real WASM
+input archive served statically. Model quality is evaluated separately; synthetic story cases
 are labelled as such and do not claim those events occurred in NetHack.

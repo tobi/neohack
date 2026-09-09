@@ -34,3 +34,32 @@ h2{font-size:24px;margin:0 0 8px}h3,h4{margin:0}.section-heading{display:flex;al
 button:focus-visible,select:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid #e4d18f;outline-offset:3px}
 @media(max-width:800px){#period-records{grid-template-columns:1fr;gap:22px}.ledger-header{display:block}.ledger-header #freshness{text-align:left;max-width:none;margin-top:12px}.plot-section{padding:14px 12px 6px}.period-heading{margin-bottom:10px}.class-filter{min-height:44px}.record-hero button{min-height:32px}}
 @media(max-width:480px){main{padding:14px}.ledger-header{padding-top:20px}.section-heading{align-items:start;flex-direction:column;gap:8px}.metric-choice{display:flex;align-items:center;gap:8px}.metric-choice select{margin-top:0;font-size:12px}.plot-section{padding:12px 8px 4px}.plot-section h2{font-size:23px}.class-filter{padding:4px 6px;font-size:11px}.class-filter small{display:none}.period-heading{align-items:start;flex-direction:column;gap:4px}.record-columns{gap:14px}.record-value{font-size:23px}.metric{padding:12px;border-bottom:1px solid #3b4c45}.metric:nth-child(2){border-right:0}.metric:nth-child(3){border-bottom:0}.plot-selection{min-height:86px}.plot-identity{gap:6px}.plot-data summary{min-height:44px}}
+
+/* Chronicles: a scroll icon beside Show replay; the tale opens in its own lightbox. */
+.replay-tools { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
+.run-chronicle { display: inline-grid; place-items: center; width: 36px; min-height: 36px; padding: 6px; border: 1px solid #54654f; background: transparent; color: #c9d6af; cursor: pointer; }
+.run-chronicle svg { width: 20px; height: 20px; }
+.run-chronicle:hover, .run-chronicle:focus-visible { color: #e9cd8e; border-color: #8a9a7a; }
+.replay-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
+#tell-tale, #chronicle-replay, #copy-chronicle { display: inline-flex; align-items: center; gap: 8px; }
+#tell-tale svg, #chronicle-replay svg { width: 18px; height: 18px; }
+#chronicle-lightbox { width: min(760px, calc(100vw - 24px)); max-width: none; max-height: calc(100dvh - 24px); padding: 20px 24px 24px; border: 1px solid #67745a; background: #10181d; color: #eee8d0; }
+#chronicle-lightbox::backdrop { background: #060d12df; }
+#chronicle-lightbox header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 8px; padding: 0; }
+#chronicle-lightbox button { min-height: 44px; }
+#chronicle-lightbox p { font-size: inherit; }
+.chronicle { font: 18px/1.65 Georgia, serif; }
+.chronicle-eyebrow { font: 11px/1.4 ui-monospace, monospace; letter-spacing: .14em; color: #9baa94; margin: 0; }
+.chronicle-title { font-size: 2rem; line-height: 1.1; margin: .3rem 0 1rem; }
+.chronicle-paragraph { margin: 1em 0; }
+.chronicle .lore-link { display: inline; min-height: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-decoration: underline dotted #a9bd90; text-underline-offset: 4px; text-decoration-thickness: 1px; cursor: pointer; }
+.chronicle .lore-link:hover, .chronicle .lore-link:focus-visible, .chronicle .lore-link[aria-expanded="true"] { color: #e9cd8e; text-decoration-style: solid; }
+.chronicle-lore { border: 1px solid #53614b; background: #0d151a; padding: 12px 16px; margin: 1rem 0; font-size: 15px; }
+.chronicle-lore-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.chronicle-lore h3 { margin: 0; text-transform: capitalize; font-size: 1.1rem; }
+.chronicle-lore p { margin: .6rem 0; }
+.chronicle-lore .text-button { background: transparent; border: 0; color: #c9d6af; text-decoration: underline; cursor: pointer; font: inherit; }
+.chronicle-footer { font: 13px/1.5 ui-monospace, monospace; color: #9baa94; margin-top: 1.5rem; border-top: 1px solid #34413d; padding-top: .8rem; }
+.chronicle-footer a { color: #b8cc9e; }
+.subtle { color: #9baa94; }
+@media (max-width: 700px) { .chronicle { font-size: 16px; } .chronicle-title { font-size: 1.6rem; } .run-chronicle { width: 44px; min-height: 44px; } }

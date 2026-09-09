@@ -1,6 +1,7 @@
 import { stage } from "./runtime-package.mjs";
 import {stageOffline} from './stage-offline.mjs';
 import './stage-validator.mjs';
+import './stage-chronicle.mjs';
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 

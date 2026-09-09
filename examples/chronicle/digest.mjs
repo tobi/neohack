@@ -1,7 +1,9 @@
 /** Presentation-only evidence selection. Never used to choose game actions.
  * Feed full public replies in order, not raw inputs or observation deltas. */
 export const DIGEST_VERSION = 1;
-export const MAX_DIGEST_BYTES = 16000;
+export const MAX_DIGEST_BYTES = 48000;
+export const MAX_EVENTS = 80;
+const POOL_LIMIT = 320, POOL_KEEP = 240;
 const clean = (value, limit = 700) =>
   typeof value === "string"
     ? value.replace(/[\u0000-\u0008\u000b-\u001f]/g, "").slice(0, limit)
@@ -60,6 +62,18 @@ const selectedVitals = (v) =>
       ]),
   );
 
+/** A full public reply, whether or not it advances the run. Pending decision
+ * prompts and cancelled actions keep their revision and are still real replies. */
+export const isFullReply = (reply) => {
+  const s = reply?.structuredContent ?? reply?.response ?? reply;
+  return (
+    s?.version === 1 &&
+    !!s.observation &&
+    Array.isArray(s.observation.heard) &&
+    Array.isArray(s.events)
+  );
+};
+
 export class ChronicleDigest {
   constructor(identity = {}) {
     this.hero = Object.fromEntries(
@@ -82,13 +96,7 @@ export class ChronicleDigest {
   add(reply) {
     // SDK/MCP captures may wrap a full snapshot. Never accept arbitrary script notes.
     const s = reply?.structuredContent ?? reply?.response ?? reply;
-    if (
-      s?.version !== 1 ||
-      !s.observation ||
-      !Array.isArray(s.observation.heard) ||
-      !Array.isArray(s.events)
-    )
-      return false;
+    if (!isFullReply(reply)) return false;
     if (
       !Number.isSafeInteger(s.revision) ||
       !Number.isSafeInteger(s.observation.turn) ||
@@ -231,10 +239,10 @@ export class ChronicleDigest {
     if (score > 2 || !this.pool.length) this.pool.push(entry);
     // Bound selection memory even for million-input transcripts. Context is one beat,
     // not a linked chain retaining the discarded run.
-    if (this.pool.length > 96)
+    if (this.pool.length > POOL_LIMIT)
       this.pool = this.pool
         .sort((a, b) => b.score - a.score || b.order - a.order)
-        .slice(0, 64);
+        .slice(0, POOL_KEEP);
     this.previous = { v, place };
     return true;
   }
@@ -271,7 +279,7 @@ export class ChronicleDigest {
     for (const entry of [...this.pool].sort(
       (a, b) => b.score - a.score || a.order - b.order,
     )) {
-      if (chosen.size >= 28) break;
+      if (chosen.size >= MAX_EVENTS) break;
       const additions = [entry.context, entry].filter(
         (e) => e && !chosen.has(e.order),
       );

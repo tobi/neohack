@@ -44,6 +44,7 @@ const program = ts.createProgram(
     `${root}/src/login.ts`,
     `${root}/src/bots.ts`,
     `${root}/src/rail.ts`,
+    `${root}/src/chronicle.ts`,
     `${root}/src/bot-worker.ts`,
     `${root}/bots/imp/main.js`,
     `${root}/src/bot-language.ts`,
@@ -71,7 +72,7 @@ for (const name of new Bun.Glob('lib.*.d.ts').scanSync(root + '/node_modules/typ
 const defines = { __NEOHACK_ART__: JSON.stringify(embeddedArt), __BOT_TYPES__: JSON.stringify(botTypes), __BOT_EXAMPLES__: JSON.stringify(Object.fromEntries(await Promise.all(catalog.map(async (example) => [example.id, await exampleProject(example)])))) };
 const result = await Bun.build({
   define: defines,
-  entrypoints: [`${root}/src/replay-page.ts`, `${root}/src/app.ts`, `${root}/src/login.ts`, `${root}/src/bots.ts`, `${root}/src/rail.ts`],
+  entrypoints: [`${root}/src/replay-page.ts`, `${root}/src/app.ts`, `${root}/src/login.ts`, `${root}/src/bots.ts`, `${root}/src/rail.ts`, `${root}/src/chronicle.ts`],
   outdir: `${root}/public/build`,
   target: "browser",
   minify: true,

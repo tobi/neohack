@@ -10,6 +10,7 @@ export function routeName(request: Request) {
   if (/^\/api\/runs\/[^/]+\/replay$/.test(path)) return '/api/runs/:run/replay';
   if (/^\/api\/runs\/[^/]+\/inputs$/.test(path)) return '/api/runs/:run/inputs';
   if (/^\/api\/runs\/[^/]+\/checkpoint$/.test(path)) return '/api/runs/:run/checkpoint';
+  if (/^\/api\/runs\/[^/]+\/chronicle$/.test(path)) return '/api/runs/:run/chronicle';
   if (/^\/api\/runs\/[^/]+$/.test(path)) return '/api/runs/:run';
   if (path.startsWith('/api/account/')) return '/api/account/*';
   return ['/api/account', '/api/health', '/api/stats', '/api/runs', '/api/errors'].includes(path) ? path : 'unmatched';

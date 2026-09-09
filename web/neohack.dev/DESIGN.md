@@ -1056,6 +1056,20 @@ The component defaults to no engine connection. An explicitly supplied transport
 controls discovery and execution. New replay playback reconstructs observations
 in isolated pinned WASM from static input archives.
 
+A dungeon chronicle is a one-page comic retelling of a public run that ended in
+death after reaching dungeon level 3 and experience level 2. The death screen
+offers **Tell the tale** once the recording is public; the ledger's replay
+lightbox offers the same, and rows with a written tale show a scroll icon beside
+Show replay. The server replays the archive, asks the model once, and caches the
+story publicly; opening a tale never regenerates it. Present the story in serif
+reading type with the hero's name as an eyebrow, and label it plainly as an AI
+retelling of the recorded journey, not the journal. Names the recording actually
+mentioned (monsters, items, gods, roles) are dotted lookups that open the pinned
+encyclopedia entry inline; words the model introduced are never linked, and the
+lore is reference text, not a claim about what the hero met. Ineligible runs show
+no tale controls; a failed generation reports a readable reason and offers a
+plain retry.
+
 `/login` uses discoverable, user-verified passkeys and unique case-insensitive
 handles. Explain the browser's phone/QR option for cross-device use. Private run
 history associates input archives, observed locations and experience level.

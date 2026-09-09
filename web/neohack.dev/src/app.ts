@@ -5,6 +5,7 @@ import { renderHeroHud } from './hero-hud';
 import { encyclopedia, loreButton } from './encyclopedia';
 import './component';
 import { PublicReplayRecorder,InputReplayRecorder, embedCode, replayLink } from './public-replay';
+import { chronicleEligible, chronicleIcon, chronicleLink, chronicleView, requestChronicle, type ChronicleDocument } from './chronicle';
 import { adventurerName } from './adventurer-names';
 import { renderCharacterSheet, equipmentDescription } from './character-sheet';
 import { actionIcon } from "./action-icons";
@@ -1444,7 +1445,7 @@ class PixelNethack extends HTMLElement {
       this.show("#ended", state.ended);
       if (state.ended && this.$('#ended').dataset.session !== state.sessionId) {
         const ended=this.$('#ended');ended.dataset.session=state.sessionId;
-        ended.innerHTML = '<strong>This chapter has ended.</strong><p>'+escape(state.end?.cause ?? state.end?.kind ?? 'Your adventure is over.')+' · Turn '+o.turn+'. Your journal is still here. Start another chapter from Your adventures.</p><div id="death-replay"></div><div class="replay-sharing"><button id="death-copy-embed">Copy embed</button><button id="death-copy-link">Copy replay link</button><a id="death-replay-link">Open replay ↗</a></div><p id="death-share-status" role="status">Loading the recorded journey…</p><textarea id="death-share-code" readonly hidden aria-label="Share replay"></textarea>';
+        ended.innerHTML = '<strong>This chapter has ended.</strong><p>'+escape(state.end?.cause ?? state.end?.kind ?? 'Your adventure is over.')+' · Turn '+o.turn+'. Your journal is still here. Start another chapter from Your adventures.</p><div id="death-replay"></div><div class="replay-sharing"><button id="death-copy-embed">Copy embed</button><button id="death-copy-link">Copy replay link</button><a id="death-replay-link">Open replay ↗</a><button id="death-tell-tale" class="tell-tale" hidden>'+chronicleIcon()+'<span>Tell the tale</span></button></div><p id="death-share-status" role="status">Loading the recorded journey…</p><textarea id="death-share-code" readonly hidden aria-label="Share replay"></textarea>';
         const id=state.sessionId;
         const viewer=document.createElement('neohack-world');viewer.setAttribute('controls','');viewer.setAttribute('autoplay','');viewer.setAttribute('speed','4');
         this.$('#death-replay').append(viewer);
@@ -1458,6 +1459,7 @@ class PixelNethack extends HTMLElement {
           if(!viewer.isConnected)return;
           viewer.setAttribute('src',replayLink(id));
           this.text('#death-share-status','Share this read-only replay. Recording may begin partway through the run.');
+          this.offerChronicle(id);
         });
       }
       if(!state.ended){this.$('#ended').replaceChildren();delete this.$('#ended').dataset.session;}
@@ -1994,6 +1996,39 @@ class PixelNethack extends HTMLElement {
     }
     this.$("#menu-content").append(book);
     book.querySelector<HTMLInputElement>("input")!.focus();
+  }
+  /** After a death deep enough for a story, the hero's chronicle can be requested
+   * once. The server replays the public recording and caches the tale. */
+  private offerChronicle(id: string) {
+    const button = this.querySelector<HTMLButtonElement>('#death-tell-tale');
+    const save = this.current;
+    if (!button || !save || save.id !== id || !this.cloudEnabled || !(this.publicRecorder instanceof InputReplayRecorder) || !chronicleEligible(save)) return;
+    button.hidden = false;
+    button.onclick = async () => {
+      button.disabled = true;
+      try {
+        // The ledger must know this run ended before the chronicler will write it.
+        await publishCloud([save], this.vault).catch(() => {});
+        const doc = await requestChronicle(id, { onStatus: (text) => this.text('#death-share-status', text) });
+        this.text('#death-share-status', 'The tale is written and kept with the replay in the ledger.');
+        button.innerHTML = chronicleIcon() + '<span>Read the chronicle</span>';
+        this.showChronicle(doc, id);
+      } catch (error) {
+        this.text('#death-share-status', error instanceof Error ? error.message : 'The chronicler could not finish this tale.');
+      } finally {
+        button.disabled = false;
+      }
+    };
+  }
+  private showChronicle(doc: ChronicleDocument, id: string) {
+    this.openMenu('');
+    const view = chronicleView(doc, { replayHref: replayLink(id) });
+    view.querySelector('.chronicle-title')?.setAttribute('id', 'menu-title');
+    const share = this.button('Copy chronicle link', async () => {
+      try { await navigator.clipboard.writeText(chronicleLink(id)); this.text('#death-share-status', 'Chronicle link copied.'); } catch { /* clipboard unavailable; the ledger keeps the link */ }
+    }, 'text-button');
+    view.querySelector('.chronicle-footer')?.append(share);
+    this.$('#menu-content').append(view);
   }
   private openMenu(html: string, preservePanel = false) {
     this.menuBack = null;

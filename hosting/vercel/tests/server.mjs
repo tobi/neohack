@@ -26,7 +26,7 @@ export class MemoryStorage {
 }
 const publicStores=new WeakMap();
 export function publicStoreFor(store){let publicStore=publicStores.get(store);if(!publicStore){publicStore=new MemoryStorage();publicStores.set(store,publicStore);}return publicStore;}
-export function createTestHarness({ store = new MemoryStorage() } = {}) {
+export function createTestHarness({ store = new MemoryStorage(), wrap = (fn) => fn() } = {}) {
   const publicStore=publicStoreFor(store);
   const root = resolve(import.meta.dirname, "../public");
   const server = createServer(async (req, res) => {
@@ -45,7 +45,7 @@ export function createTestHarness({ store = new MemoryStorage() } = {}) {
             : { body: Buffer.concat(chunks) }),
         });
         const response = await storageContext.run(store, () =>
-          publicReplayContext.run(publicStore,()=>handler(request)),
+          publicReplayContext.run(publicStore,()=>wrap(()=>handler(request))),
         );
         res.writeHead(response.status, Object.fromEntries(response.headers));
         res.end(Buffer.from(await response.arrayBuffer()));
