@@ -113,8 +113,9 @@ test('frame compaction cannot overwrite a playlist advanced by another publisher
   for (const p of original.chunks) assert.ok(await cdn.read(prefix + p));
 });
 
-test('already economical frame playlists incur no replacement Blob writes', async () => {
-  const store = new MemoryStorage(), cdn = publicStoreFor(store), prefix = 'replays/economical/';
+test('already economical frame playlists incur no replacement Blob writes or duplicate stream downloads', async t => {
+  const server = createTestHarness(), { url } = await server.listen(); t.after(() => server.close());
+  const store = server.store, cdn = publicStoreFor(store), prefix = 'replays/economical/';
   const frame = { observation: { world: [], location: {}, vitals: {}, heard: ['x'.repeat(900000)] } };
   const manifest = { version: 1, count: 6, chunks: ['chunks/a.json', 'chunks/b.json', 'chunks/c.json'] };
   for (const p of manifest.chunks) await cdn.write(prefix + p, { frames: [frame, frame] });
@@ -122,8 +123,16 @@ test('already economical frame playlists incur no replacement Blob writes', asyn
   const prior = await cdn.read(prefix + 'manifest.json');
   const checked = await inspectFrames(manifest, async p => (await cdn.read(prefix + p)).value);
   assert.equal(checked.packingChunks, 4);
+  let downloads = 0; const read = cdn.read.bind(cdn);
+  cdn.read = async path => { if (path.startsWith(prefix + 'chunks/')) downloads++; return read(path); };
   cdn.write = async () => { assert.fail('No candidate objects or playlists should be written'); };
-  await scope(store, async () => assert.deepEqual(await compactFrames('economical', manifest, prior.etag, checked.packingChunks), manifest));
+  await scope(store, async () => {
+    await saveLedgerRun(hero('economical'));
+    const result = await auditOne('economical', { apply: true, origin: new URL('/replay-files/', url).href });
+    assert.equal(result.status, 'verified', JSON.stringify(result)); assert.equal(result.applied, true);
+    assert.equal(result.before, result.after);
+  });
+  assert.equal(downloads, 3, 'the three unchanged immutable chunks are read just once');
 });
 
 test('a real public frame recording compacts to bounded files, preserves exact scenes and renders in the current embed', { timeout: 90000 }, async t => {

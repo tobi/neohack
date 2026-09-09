@@ -7,7 +7,9 @@ import { publicReplayStorage } from '../src/public-replay-store.ts';
 import { ledgerRuns, ledgerStats, replayState, replaySource, auditReplayAvailability } from '../src/ledger-store.ts';
 import { publishReplay } from '../src/publish-replay.ts';
 import { compactProtocolReplay, publishManifest } from '../src/protocol-replays.ts';
-import { collectReplay } from '../../../examples/chronicle/replay.mjs';
+import { packageAt } from '../../../examples/chronicle/replay.mjs';
+import { WasmTransport } from '../../../lib/neonethack/dist/typescript/wasm.js';
+import { inputManifest, inputRecords } from '../../../lib/neonethack/wasm/protocol-reader.mjs';
 import { fingerprint, frames, inspectFrames, inspectInputs, publicDocument, InvalidReplay, MissingReplay, FRAME_CHUNK_BYTES } from './replay-inspection.mjs';
 import { pathToFileURL } from 'node:url';
 
@@ -49,20 +51,34 @@ export async function compactFrames(id, manifest, revision, planned) {
 }
 
 export async function verifyEngine(url, expected, options = {}) {
-  let count = 0; const hash = createHash('sha256');
-  const collector = { hero: {}, add(reply) {
-    if (!reply?.observation || !Array.isArray(reply.observation.world)) throw new InvalidReplay('Input produced no public scene');
-    hash.update(JSON.stringify(reply) + '\n'); count++; return true;
-  }, finish: () => ({ count, scenes: hash.digest('hex') }) };
+  let count = 0, transport; const hash = createHash('sha256');
   try {
-    const result = await collectReplay(url, collector, { ...options, signal: AbortSignal.timeout(600000) });
+    const signal = AbortSignal.timeout(600000), manifest = await inputManifest(url, signal);
+    const dir = await packageAt(manifest.buildId, options.runtime, options.runtimeOrigin);
+    // Same arrangement as the embed: current batching/receipt plumbing with
+    // the original engine package. Each input is still checked inside the worker.
+    transport = await WasmTransport.create({ storage: { kind: 'memory' }, runtimeUrl: pathToFileURL(dir + '/').href,
+      workerUrl: new URL('../../../lib/neonethack/wasm/core-worker.mjs', import.meta.url) });
+    if (transport.buildId !== manifest.buildId) throw new InvalidReplay('Replay engine pin differs');
+    let batch = [], result;
+    const flush = async () => {
+      result = await transport.playbackBatch(batch);
+      if (!result?.observation || !Array.isArray(result.observation.world)) throw new InvalidReplay('Input produced no public scene');
+      count += batch.length; batch = [];
+    };
+    for await (const record of inputRecords(manifest, new URL(url), { signal })) {
+      if (!record.digest) throw new InvalidReplay('Input has no receipt digest');
+      hash.update(record.digest + '\n'); batch.push(record);
+      if (batch.length === 128) await flush();
+    }
+    if (batch.length) await flush();
     if (count !== expected) throw Error('Archive changed during verification');
-    return result;
+    return { count, receipts: hash.digest('hex'), lastScene: fingerprint(result) };
   } catch (e) {
     if (/Replay (?:RNG boundaries )?differs at input|Runtime checksum differs|Pinned runtime manifest differs/.test(e.message)) throw new InvalidReplay(e.message);
     if (/Pinned runtime unavailable \(404\)/.test(e.message)) throw new MissingReplay('Missing pinned runtime');
     throw e;
-  }
+  } finally { await transport?.close(); }
 }
 
 export async function auditOne(id, { apply = false, origin = process.env.PUBLIC_REPLAY_ORIGIN, verify = verifyEngine } = {}) {
@@ -111,7 +127,7 @@ export async function auditOne(id, { apply = false, origin = process.env.PUBLIC_
       source = await replaySource(id);
       url.searchParams.set('audit', source);
       const after = await publicDocument(url);
-      const again = after.format === 'neonethack.inputs'
+      const again = fingerprint(after.chunks) === fingerprint(manifest.chunks) ? checked : after.format === 'neonethack.inputs'
         ? await inspectInputs(after, url)
         : await inspectFrames(after, p => publicDocument(new URL(p, url)));
       if (checked.count !== again.count || checked.digest !== again.digest) throw Error('Compacted replay stream differs');

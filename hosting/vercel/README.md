@@ -211,6 +211,10 @@ archives. Legacy frame files stay ordinary `{frames:[...]}` JSON, with a small
 first scene and subsequent files bounded to 2 MiB / 256 frames. The input format,
 pins, checkpoint references, exact upload receipts and old objects are preserved.
 An identical ordered stream hash is required before and after compaction.
+The checker batches inputs through the current worker with the original engine;
+every receipt and RNG boundary is still verified inside that worker. The frame
+audit calculates the packing size during its first read, skips layouts that
+would not reduce file count, and does not redownload an unchanged playlist.
 
 The sanitized workflow artifact lists each public ID, verdict, stream hash and
 file counts. Missing or invalid recordings lose their replay link, never their

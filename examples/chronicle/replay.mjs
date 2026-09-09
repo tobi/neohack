@@ -18,7 +18,7 @@ import {
 import { isFullReply } from "./digest.mjs";
 const hash = (b) => createHash("sha256").update(b).digest("hex");
 
-async function packageAt(id, existing, origin = "https://neohack.dev/") {
+export async function packageAt(id, existing, origin = "https://neohack.dev/") {
   if (existing) {
     const dir = resolve(existing),
       m = JSON.parse(await readFile(join(dir, "manifest.json"), "utf8"));
