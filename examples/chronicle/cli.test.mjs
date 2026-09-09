@@ -1,3 +1,4 @@
+import { childEnvironment } from "./no-model-calls.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile, readFile, chmod, rm } from "node:fs/promises";
@@ -40,11 +41,10 @@ process.stdout.write(JSON.stringify({title:'A Short Attempt',paragraphs:[{text:'
     "--out",
     out,
   ];
-  const env = {
-    ...process.env,
+  const env = childEnvironment({
     PATH: `${dir}:${process.env.PATH}`,
     CHRONICLE_TEST_CALLS: calls,
-  };
+  });
   await exec(process.execPath, args, { env });
   const a = JSON.parse(await readFile(join(out, "story.json")));
   assert.match(a.evidenceHash, /^[a-f0-9]{64}$/);
@@ -83,4 +83,17 @@ process.stdout.write(JSON.stringify({title:'A Short Attempt',paragraphs:[{text:'
     "call\ncall\n",
     "prepare never calls the provider",
   );
+  // The gateway provider refuses before any request when no credential exists;
+  // tests never carry one, so this path cannot reach the network.
+  const keyless = await exec(
+    process.execPath,
+    [...args, "--name", "Keyless", "--provider", "gateway"],
+    { env },
+  ).then(
+    () => null,
+    (e) => e,
+  );
+  assert.ok(keyless);
+  assert.match(keyless.stderr, /Set AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN/);
+  assert.equal(await readFile(calls, "utf8"), "call\ncall\n");
 });

@@ -1,3 +1,4 @@
+import '../../../examples/chronicle/no-model-calls.mjs';
 import {publicReplayContext} from '../src/public-replay-store.ts';
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";

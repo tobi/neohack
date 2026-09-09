@@ -116,7 +116,12 @@ Sources: [model and pricing](https://vercel.com/ai-gateway/models/muse-spark-1.3
 node --test examples/chronicle/*.test.mjs
 ```
 
-Tests include 100,000 noisy replies with early reversals and a terminal event,
+No test makes a model request. Every chronicle test (and the website's test
+harness) imports [no-model-calls.mjs](no-model-calls.mjs), which strips
+`AI_GATEWAY_API_KEY`/`VERCEL_OIDC_TOKEN` from the process and makes any fetch to
+the AI Gateway host throw; the CLI test runs a fake `muse` executable, the
+gateway path is exercised with an injected fetch double, and the website tests
+inject a story model. Tests include 100,000 noisy replies with early reversals and a terminal event,
 query/receipt deduplication, mixed-run rejection, incomplete endings, safe HTML,
 source citation checks, fresh versus rolling narration, paid-call cache/failure
 handling, actual native decisions, encyclopedia term selection and a real WASM
