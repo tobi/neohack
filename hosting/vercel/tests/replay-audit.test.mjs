@@ -153,8 +153,9 @@ test('a real public frame recording compacts to bounded files, preserves exact s
   cdn.head = async path => { const doc = await read(path); return doc && { etag: doc.etag }; };
   cdn.read = async path => {
     const doc = await read(path);
-    // The CDN may expose a response validator distinct from the write token.
-    return doc && path === prefix + 'manifest.json' ? { ...doc, etag: 'cdn-validator' } : doc;
+    // Both a stale body and a CDN validator can outlive a successful write.
+    // Query strings do not necessarily bypass that cached alias.
+    return doc && path === prefix + 'manifest.json' ? { value: manifest, etag: 'cdn-validator' } : doc;
   };
   await scope(store, async () => {
     await saveLedgerRun(hero(id));
@@ -162,7 +163,9 @@ test('a real public frame recording compacts to bounded files, preserves exact s
     const result = await auditOne(id, { apply: true, origin: new URL('/replay-files/', url).href });
     assert.equal(result.status, 'verified', JSON.stringify(result)); assert.equal(result.applied, true);
     assert.ok(result.after < result.before / 2, JSON.stringify(result)); assert.equal(result.digest, before.digest);
-    const after = (await cdn.read(prefix + 'manifest.json')).value;
+    const after = (await read(prefix + 'manifest.json')).value;
+    assert.equal(result.after, after.chunks.length, 'verify the written version, not the stale CDN alias');
+    assert.deepEqual((await read(prefix + 'manifest-' + fingerprint(after) + '.json')).value, after);
     assert.equal(after.partial, true); assert.equal(after.complete, false);
     const restored = [];
     for await (const frame of frames(after, async p => {
@@ -173,6 +176,7 @@ test('a real public frame recording compacts to bounded files, preserves exact s
     for (const path of paths) assert.ok(await cdn.read(prefix + path), 'old links retained');
     assert.deepEqual(await inspectFrames(manifest, async p => (await cdn.read(prefix + p)).value), before);
   });
+  cdn.read = read; // Cache expires before the embed opens the published alias.
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM ?? '/usr/bin/chromium', headless: true, chromiumSandbox: true }); t.after(() => browser.close());
   const page = await browser.newPage(), errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(new URL('/replays/' + id, url).href);

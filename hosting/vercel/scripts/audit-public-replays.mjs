@@ -14,6 +14,7 @@ import { fingerprint, frames, inspectFrames, inspectInputs, publicDocument, Inva
 import { pathToFileURL } from 'node:url';
 
 export { FRAME_CHUNK_BYTES };
+const frameVersionPath = (id, manifest) => 'replays/' + id + '/manifest-' + fingerprint(manifest) + '.json';
 /** Replace only the playlist using CAS. All original immutable files remain.
  * First scene stays tiny; every subsequent file is bounded by encoded size. */
 export async function compactFrames(id, manifest, revision, planned) {
@@ -46,6 +47,9 @@ export async function compactFrames(id, manifest, revision, planned) {
   await flush();
   if (chunks.length !== planned) throw Error('Frame packing plan differs');
   const packed = { ...manifest, chunks };
+  const versionPath = frameVersionPath(id, packed);
+  try { await store.write(versionPath, packed); }
+  catch (e) { if (!(e instanceof Conflict)) throw e; if (fingerprint((await store.read(versionPath))?.value) !== fingerprint(packed)) throw new InvalidReplay('Immutable frame manifest differs'); }
   await store.write(prefix + 'manifest.json', packed, revision);
   return packed;
 }
@@ -84,13 +88,14 @@ export async function verifyEngine(url, expected, options = {}) {
 export async function auditOne(id, { apply = false, origin = process.env.PUBLIC_REPLAY_ORIGIN, verify = verifyEngine } = {}) {
   const store = publicReplayStorage(), path = 'replays/' + id + '/manifest.json';
   const row = { id, status: 'uncertain' };
-  let source, version, manifest;
+  let source, version, manifest, frameSource, exact;
   try {
     source = await replaySource(id); version = (await replayState(id))?.version ?? 0;
     let published = await store.read(path);
     if (apply) {
       const inputs = await read('input-runs/' + id + '.json');
       const recording = inputs ? null : await read('replays/' + id + '.json');
+      frameSource = fingerprint(recording);
       if (inputs?.count > 0 && (!published || published.value.count < inputs.count || published.value.generation < inputs.generation)) await publishManifest(id);
       else if (recording?.frames?.length > 0 && (!published || published.value.count < recording.frames.length)) await publishReplay(id);
       published = await store.read(path);
@@ -100,7 +105,8 @@ export async function auditOne(id, { apply = false, origin = process.env.PUBLIC_
     // CDN response validators are not Blob management CAS tokens. Capture the
     // authoritative revision before reading/verifying the candidate stream.
     const publication = store.head ? await store.head(path) : published;
-    // A fresh query prevents a mutable CDN alias lagging its management token.
+    // Compare independent reads, but never treat the mutable CDN alias as the
+    // authoritative post-write version; it can stay positively cached.
     const url = new URL(path, origin.endsWith('/') ? origin : origin + '/');
     url.searchParams.set('audit', source);
     manifest = await publicDocument(url);
@@ -114,26 +120,33 @@ export async function auditOne(id, { apply = false, origin = process.env.PUBLIC_
       row.engine = await verify(url, manifest.count);
       if (apply) {
         if (source !== await replaySource(id)) throw Error('Archive changed during verification');
-        await compactProtocolReplay(id);
+        exact = new URL(await compactProtocolReplay(id), origin.endsWith('/') ? origin : origin + '/');
       }
     } else {
       checked = await inspectFrames(manifest, p => publicDocument(new URL(p, url)));
       if (apply) {
         if (source !== await replaySource(id)) throw Error('Archive changed during verification');
-        await compactFrames(id, manifest, publication?.etag, checked.packingChunks);
+        const packed = await compactFrames(id, manifest, publication?.etag, checked.packingChunks);
+        if (packed !== manifest) exact = new URL(frameVersionPath(id, packed), origin.endsWith('/') ? origin : origin + '/');
       }
     }
     if (apply) {
       source = await replaySource(id);
-      url.searchParams.set('audit', source);
-      const after = await publicDocument(url);
+      // Mutable aliases may remain positively cached even with a query string.
+      // Verify the version we wrote; an unchanged playlist needs no reread.
+      const after = exact ? await publicDocument(exact) : manifest;
       const again = fingerprint(after.chunks) === fingerprint(manifest.chunks) ? checked : after.format === 'neonethack.inputs'
-        ? await inspectInputs(after, url)
-        : await inspectFrames(after, p => publicDocument(new URL(p, url)));
+        ? await inspectInputs(after, exact ?? url)
+        : await inspectFrames(after, p => publicDocument(new URL(p, exact ?? url)));
       if (checked.count !== again.count || checked.digest !== again.digest) throw Error('Compacted replay stream differs');
       // Compaction cannot change completion, role, engine pin or checkpoints.
       const semantics = m => { const { chunks, generation, ...rest } = m; return rest; };
       if (fingerprint(semantics(manifest)) !== fingerprint(semantics(after))) throw Error('Compacted replay metadata differs');
+      if (after.format === 'neonethack.inputs') {
+        const current = await read('input-runs/' + id + '.json');
+        const identity = m => ({ count: m.count, buildId: m.buildId, generation: m.generation, chunks: m.chunks, checkpoints: m.checkpoints ?? [], complete: m.complete });
+        if (!current || fingerprint(identity(current)) !== fingerprint(identity(after))) throw Error('Archive changed during verification');
+      } else if (frameSource !== fingerprint(await read('replays/' + id + '.json'))) throw Error('Archive changed during verification');
       row.after = after.chunks.length;
     } else row.after = row.before;
     if (source !== await replaySource(id)) throw Error('Archive changed during verification');

@@ -215,6 +215,9 @@ The checker batches inputs through the current worker with the original engine;
 every receipt and RNG boundary is still verified inside that worker. The frame
 audit calculates the packing size during its first read, skips layouts that
 would not reduce file count, and does not redownload an unchanged playlist.
+Changed playlists are verified through their exact hash-named immutable manifest,
+then checked against the current source head. A cached older `manifest.json`
+response cannot substitute for verification of the newly packed files.
 
 The sanitized workflow artifact lists each public ID, verdict, stream hash and
 file counts. Missing or invalid recordings lose their replay link, never their
