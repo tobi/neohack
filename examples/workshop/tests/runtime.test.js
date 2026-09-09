@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { runProject } from "../runtime.js";
 import { loadProject, validateProject, botsRoot } from "../projects.js";
 
@@ -115,6 +115,18 @@ test(
     }
   },
 );
+
+test('the script deadline starts after slow native engine startup', { timeout: 20000 }, async t => {
+  const dir = await temporary(t), executable = join(dir, 'delayed-native');
+  const native = process.env.NEONETHACK_EXECUTABLE ?? resolve(import.meta.dirname, '../../../lib/neonethack/build/native/neonethack');
+  const quoted = "'" + native.replaceAll("'", "'\\''") + "'";
+  await writeFile(executable, '#!/bin/sh\nsleep 0.75\nexec ' + quoted + ' "$@"\n', { mode: 0o700 });
+  const result = await runProject(script('log("script started"); while (true) {}'), { executable, timeout: 500 });
+  assert.equal(result.reason, 'timeout', result.error);
+  assert.ok(result.logs.includes('script started'), 'the script actually starts after delayed engine creation');
+  assert.equal(result.calls, 0);
+  assert.equal(result.turn, 1);
+});
 
 test(
   "script exceptions and process exits stop without replacement input",

@@ -127,7 +127,8 @@ export async function runProject(input, options = {}) {
         options.enginePath ?? resolve(library, "engine/playground/nethack"),
       dataPath: options.dataPath ?? resolve(library, "engine/playground"),
       sessionsPath: resolve(temporary, "sessions"),
-      timeoutMs: Math.min(timeout, 150000),
+      // Script execution has its own timer below. Engine startup and an already
+      // accepted operation keep the transport's normal bounded response time.
     });
     const api = new Neonethack(transport);
     const game = await api.create({

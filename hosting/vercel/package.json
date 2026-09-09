@@ -6,7 +6,7 @@
     "stage": "node scripts/stage.mjs",
     "deploy": "node scripts/stage.mjs && vercel deploy --yes --prod",
     "test": "node scripts/stage.mjs && node --test tests/*.test.mjs",
-    "check": "node scripts/stage-validator.mjs && tsc --noEmit"
+    "check": "node scripts/stage-validator.mjs && node scripts/stage-chronicle.mjs && tsc --noEmit"
   },
   "dependencies": {
     "@simplewebauthn/server": "^14.0.1",
