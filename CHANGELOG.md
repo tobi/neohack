@@ -8,6 +8,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Replay uploads are combined into larger compressed CDN files instead of one
+  file per sync. Playback still starts with a small opening scene, and exact
+  retries, checkpoints and original engine pins are preserved.
 - Replay links open a dedicated page with the adventure's tale above the player.
   New tales appear as they are written, with replay progress first and tapped
   names opening compact encyclopedia popovers.

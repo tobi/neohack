@@ -180,6 +180,29 @@ anyone who has the link. Upload authority, account associations, script source a
 notes stay in the separate private store. Checkpoints use immutable hash-named
 objects with the same static delivery; they are derived caches, not log authority.
 
+Input upload batches are packed by the writer into size-bounded playback files:
+2 MiB decoded / 1 MiB gzip / 8,192 records per file (upload batches retain their
+smaller 1 MiB decoded / 512 KiB gzip limits). A small creation chunk
+starts playback early. Similar-sized suffix chunks merge while a run is active;
+conclusion consolidates the last eight chunks. This keeps read counts short
+without rewriting a growing full-size tail on every five-second upload. Original
+upload hashes/ranges remain in the packed files for exact retries; publication
+and CAS guards are unchanged. Old immutable manifests/chunks are retained.
+
+The **Compact public input replay archives** workflow inventories concluded runs
+by default. Select `apply` to pack them, optionally selecting one public run ID
+and a batch limit. It uses existing stores, preserves pins/checkpoints/ownership
+and never deletes prior public objects. Local operator equivalents are:
+
+```sh
+node hosting/vercel/scripts/stage-validator.mjs
+node hosting/vercel/scripts/compact-input-replays.mjs --run PUBLIC_RUN_ID
+node hosting/vercel/scripts/compact-input-replays.mjs --run PUBLIC_RUN_ID --apply
+```
+
+Compaction is explicit writer/maintenance work. Watching a replay never invokes
+it or downloads inputs through a dynamic API.
+
 Staging also generates the offline service worker's exact asset list and copies
 the shared archive validator into `.generated/`, inside Vercel's upload root.
 Deploy the staged folder; do not omit its generated function dependency. API and

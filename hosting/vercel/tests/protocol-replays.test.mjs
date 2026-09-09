@@ -72,10 +72,10 @@ test("compressed input publication is append-only, exactly acknowledged and enti
   const chunk = await cdn.read(
     "replays/" + id + "/" + first.value.chunks[0].path,
   );
-  assert.deepEqual(JSON.parse(gunzipSync(chunk.value)).records, [
-    record(0),
-    record(1),
-  ]);
+  assert.deepEqual(JSON.parse(gunzipSync(chunk.value)).records, [record(0)],'creation is a small stable first scene');
+  const records=[];
+  for(const c of first.value.chunks)records.push(...JSON.parse(gunzipSync((await cdn.read('replays/'+id+'/'+c.path)).value)).records);
+  assert.deepEqual(records,[record(0),record(1)]);
   assert.deepEqual(
     await (await put(0, [record(0), record(1)])).json(),
     ack,

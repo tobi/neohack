@@ -8,6 +8,11 @@ import {
 } from "./public-replay-store.ts";
 import { markRecorded } from "./ledger-store.ts";
 import { validateRecord } from "../.generated/protocol-recording.mjs";
+import {
+  acceptedUpload,
+  appendInputChunks,
+  compactInputChunks,
+} from "./protocol-chunks.ts";
 
 const sha = (bytes: Uint8Array | string) =>
   createHash("sha256").update(bytes).digest("hex");
@@ -60,8 +65,7 @@ export async function publishManifest(id: string) {
       doc = await read("input-runs/" + id + ".json");
     const manifest = inputManifest(id, doc);
     const immutablePath = await immutableManifest(id, manifest);
-    if (current?.value?.generation >= doc.generation)
-      return immutablePath;
+    if (current?.value?.generation >= doc.generation) return immutablePath;
     try {
       await store.write(manifestPath, manifest, current?.etag);
       return immutablePath;
@@ -70,6 +74,30 @@ export async function publishManifest(id: string) {
     }
   }
   throw Error("Manifest publication did not complete");
+}
+/** Explicit maintenance uses the same packer as uploads. CAS preserves later
+ * inputs/checkpoints; it never replays an engine or deletes old public objects. */
+export async function compactProtocolReplay(id: string) {
+  if (!/^[A-Za-z0-9_-]{16}$/.test(id)) throw Error("Invalid replay ID");
+  await update<any, void>(
+    "input-runs/" + id + ".json",
+    () => {
+      throw Error("Run not found");
+    },
+    async (doc) => {
+      if (doc.packedThrough === doc.count) return;
+      const last = doc.chunks.at(-1);
+      if (!last || last.from + last.count !== doc.count)
+        throw Error("Stored input cursor differs");
+      const chunks = await compactInputChunks(id, doc.buildId, doc.chunks);
+      if (JSON.stringify(chunks) !== JSON.stringify(doc.chunks)) {
+        doc.chunks = chunks;
+        doc.generation++;
+      }
+      doc.packedThrough = doc.count;
+    },
+  );
+  return publishManifest(id);
 }
 export async function protocolCheckpoint(request: Request, id: string) {
   if (request.method !== "PUT")
@@ -196,7 +224,9 @@ export async function protocolReplay(request: Request, id: string) {
   let body: any;
   try {
     body = JSON.parse(
-      gunzipSync(bytes, { maxOutputLength: 1024 * 1024 }).toString("utf8"),
+      new TextDecoder("utf-8", { fatal: true }).decode(
+        gunzipSync(bytes, { maxOutputLength: 1024 * 1024 }),
+      ),
     );
   } catch {
     return json({ error: "Invalid compressed input chunk" }, 400);
@@ -252,8 +282,13 @@ export async function protocolReplay(request: Request, id: string) {
     path = "input-runs/" + id + ".json";
   let initial = await read(path);
   if (!initial) {
-    const publicStore = publicReplayStorage(), existingPath = "replays/" + id + "/manifest.json";
-    if (await (publicStore.head ? publicStore.head(existingPath) : publicStore.read(existingPath)))
+    const publicStore = publicReplayStorage(),
+      existingPath = "replays/" + id + "/manifest.json";
+    if (
+      await (publicStore.head
+        ? publicStore.head(existingPath)
+        : publicStore.read(existingPath))
+    )
       return json({ error: "This run already has a published archive" }, 409);
     const adventures = await read("vaults/" + token + "/adventures.json");
     const run = adventures?.values?.find((r: any) => r.id === id);
@@ -295,13 +330,6 @@ export async function protocolReplay(request: Request, id: string) {
       if (session?.expires > Date.now()) accountId = session.userId;
     }
   }
-  const chunk = {
-    path: "chunks/" + hash + ".gz",
-    sha256: hash,
-    bytes: bytes.length,
-    from: body.from,
-    count: body.records.length,
-  };
   const through = body.from + body.records.length;
   const accepted = await update<any, Response | null>(
     path,
@@ -311,17 +339,30 @@ export async function protocolReplay(request: Request, id: string) {
         return json({ error: "Upload authority differs" }, 403);
       if (doc.buildId !== body.buildId)
         return json({ error: "Run package differs" }, 409);
-      const prior = doc.chunks.find((c: any) => c.from === body.from);
-      if (prior)
-        return prior.sha256 === hash
+      if (body.from < doc.count)
+        return (await acceptedUpload(
+          id,
+          doc.buildId,
+          doc.chunks,
+          body.from,
+          body.records.length,
+          hash,
+        ))
           ? null
           : json({ error: "Committed input range differs" }, 409);
       if (body.from !== doc.count || doc.complete)
         return json({ error: "Input cursor differs" }, 409);
       if (doc.chunks.length >= 100000)
         return json({ error: "Run archive is full" }, 413);
-      await writeReplayBytes("replays/" + id + "/" + chunk.path, bytes);
-      doc.chunks.push(chunk);
+      doc.chunks = await appendInputChunks(
+        id,
+        doc.buildId,
+        doc.chunks,
+        body.records,
+        hash,
+      );
+      if (body.complete)
+        doc.chunks = await compactInputChunks(id, doc.buildId, doc.chunks, 8);
       doc.count = through;
       doc.generation++;
       doc.complete = body.complete;

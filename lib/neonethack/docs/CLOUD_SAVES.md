@@ -71,21 +71,33 @@ Other control labels retain their existing replacement behavior. This attributio
 rule does not order other same-turn metadata or change journal ownership.
 
 `PUT /api/runs/:id/inputs` validates the write capability, sequence, runtime and
-size limits. It publishes an immutable `chunks/<sha256>.gz` object and conditionally
-advances the run head and a hash-named immutable manifest. The mutable
+size limits. Upload batches are not playback-file boundaries. The writer packs
+adjacent batches into gzip files limited to **2 MiB decoded, 1 MiB compressed,
+and 8,192 records**; exceeding a bound starts another file. The creation record
+is a small stable first file so progressive playback can start immediately.
+During active play, similarly sized suffix files merge up to the size limit.
+This avoids rewriting an almost-full megabyte on every five-second upload while
+keeping the playlist short. Conclusion consolidates the final eight files;
+explicit maintenance can compact all files in a historical archive.
+
+Packed files keep exact original upload hashes and cursor ranges alongside their
+unchanged input records. Retries find their receipt even when the upload spans
+new file boundaries. All new `chunks/<sha256>.gz` objects exist before the private
+run head advances through CAS. A hash-named immutable manifest follows. The mutable
 `manifest.json` is only a discovery alias; acknowledgements and embed links pin
 the exact immutable playlist, so CDN invalidation cannot hide acknowledged data.
-Previous chunks are never downloaded
-or concatenated on normal upload. Errors leave the local log and exact pending
+Packing reads only a bounded suffix on normal upload. Previously published
+objects and manifests remain immutable and readable; no old prefix link breaks
+when the latest playlist points at a larger replacement. Errors leave the local log and exact pending
 batch intact. Reconnect retries quietly. Upload latency is outside the action
 promise; closing a tab can leave a prefix pending until the browser returns.
 An account can associate the run for later discovery, but is not needed to play.
 
-These are separate immutable batch files, with no mutable growing tail. At scale,
-storage consists mainly of compressed requests rather than repeated maps; a
-batch requires one chunk publication and small head/manifest updates. Accounts
-and ledger indexing have additional costs. This format does not claim the existing
-ledger index is already designed for millions of entries.
+The private head is the mutable writer index. Public playback files are immutable
+packed objects, not one permanent playlist entry per upload. Size-tiered merges
+bound write amplification; retained old public prefixes still have a storage
+cost. Accounts and ledger indexing have additional costs. This format does not
+claim the existing ledger index is already designed for millions of entries.
 
 ## Resume and level checkpoints
 

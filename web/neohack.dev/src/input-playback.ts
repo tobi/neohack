@@ -15,6 +15,7 @@ export class InputPlayback {
   private closed = false;
   private tail: Promise<unknown> = Promise.resolve();
   private last?: Snapshot;
+  private workerUrl?: URL;
   constructor(
     readonly manifest: any,
     private url: URL,
@@ -32,10 +33,26 @@ export class InputPlayback {
       "/runtime/wasm/" + this.manifest.buildId + "/",
       import.meta.url,
     );
+    // Update archive/network plumbing while keeping the original compiler,
+    // engine and checkpoint package. Old engines need not parse new playlists.
+    if (!this.workerUrl) {
+      const response = await fetch(
+        new URL("/runtime/wasm/current.json", import.meta.url),
+        { signal: this.signal, cache: "no-cache" },
+      );
+      if (!response.ok) throw Error("Cannot select the replay reader");
+      const current = await response.json();
+      if (current.version !== 1 || !/^[a-f0-9]{64}$/.test(current.buildId))
+        throw Error("Invalid replay reader package");
+      this.workerUrl = new URL(
+        "/runtime/wasm/" + current.buildId + "/core-worker.mjs",
+        import.meta.url,
+      );
+    }
     const transport = await wasm.WasmTransport.create({
       storage: { kind: "memory" },
       runtimeUrl: base.href,
-      workerUrl: new URL("core-worker.mjs", base),
+      workerUrl: this.workerUrl,
       playbackArchive: { manifest: this.manifest, url: this.url.href },
     });
     if (this.closed || this.signal.aborted) {

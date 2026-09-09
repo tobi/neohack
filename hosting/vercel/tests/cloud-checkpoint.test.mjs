@@ -15,6 +15,9 @@ try {
  await context.route('**/replay-files/**',async route=>{
   const path=new URL(route.request().url()).pathname;
   const response=await route.fetch();
+  if(path.includes('/manifest')&&['cloudInterrupted','cloudCorruptInput'].includes(phase)){
+   const manifest=await response.json();firstChunks.set(phase,new URL(manifest.chunks[0].path,route.request().url()).pathname);
+  }
   if(path.includes('/manifest') && phase==='cloudMissing'){
    const manifest=await response.json();delete manifest.checkpoints;return route.fulfill({response,json:manifest});
   }
@@ -33,7 +36,8 @@ try {
    if(['cloudWrongPin','cloudWrongIndex'].includes(phase))return route.fulfill({status:200,body:Buffer.from(wrong.bytes)});
   }
   if(path.includes('/chunks/') && ['cloudInterrupted','cloudCorruptInput'].includes(phase)){
-   // Reject the second chunk only, after the first genuine level prefix is durable.
+   // Reject every chunk after the stable opening scene; packing is independent
+   // of the later level-checkpoint boundary and prefetch arrival order.
    if(firstChunks.has(phase) && path!==firstChunks.get(phase))return route.fulfill({status:phase==='cloudInterrupted'?503:200,body:'Broken authoritative input chunk'});
    firstChunks.set(phase,path);
   }
@@ -70,7 +74,7 @@ try {
    if(['cloudInterrupted','cloudCorruptInput'].includes(mode)){
     let failed=false;try{await api.resume(id)}catch{failed=true}if(!failed)throw Error('Interrupted inputs were accepted');
     await api.close();const partial=await openProtocolStore(cloudOptions.storage.name),h=await partial.header(id);
-    if(h.count!==cp.index||!h.importing||await partial.checkpoint(id))throw Error('Partial import not retained safely');partial.close();
+    if(h.count!==manifest.chunks[0].count||!h.importing||await partial.checkpoint(id))throw Error('Partial import not retained safely');partial.close();
     begin(mode+'Recovered');transport=await WasmTransport.create(cloudOptions);api=new Neonethack(transport);
    }
    game=await api.resume(id);equal(scene(game.state),scene(expected));rows.push({phase:mode,openMs:cloudOpen-t,resumeMs:performance.now()-cloudOpen});

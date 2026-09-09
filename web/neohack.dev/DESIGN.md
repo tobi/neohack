@@ -1415,6 +1415,11 @@ scene before later chunks arrive. Seeking can use a preceding real checkpoint;
 corrupt optional checkpoints fall back to the verified input log. Broken log
 ranges stop playback with a clear error, preserving the last valid scene.
 
+Upload cadence does not determine playback-file count: the server packs adjacent
+batches into size-bounded files and retains a small stable creation chunk. The
+viewer uses the current archive/network worker with the recorded compiler/engine
+package, so reading a packed playlist never upgrades the game's engine pin.
+
 The range covers recorded input positions. Rejected attempts preserve the current
 scene. Play, Pause and seek serialize reconstruction; replacing or removing a
 viewer cancels its requests and workers. No account, ledger, upload or dynamic

@@ -18,4 +18,4 @@ for(const key of ['BLOB_READ_WRITE_TOKEN','PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN']
  if(env.GITHUB_ACTIONS==='true')console.log(`::add-mask::${result.value}`);
  env[key]=result.value;
 }
-await import('./publish-replays.mjs');
+await import(process.argv.includes('--compact-inputs')?'./compact-input-replays.mjs':'./publish-replays.mjs');

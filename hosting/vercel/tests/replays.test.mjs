@@ -14,6 +14,10 @@ test('real cloud run reconstructs public scenes, embeds after death and forwards
   t.after(async()=>{await browser.close();await server.close();});
   const context=await browser.newContext({permissions:['clipboard-read','clipboard-write']});const page=await context.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+  const inputUploads=[];
+  page.on('request',request=>{
+    if(request.method()==='PUT'&&/^\/api\/runs\/[^/]+\/inputs$/.test(new URL(request.url()).pathname))inputUploads.push(request.postDataBuffer());
+  });
   await fetch(new URL("/api/stats",url)); // Prime an empty availability cache before recording.
   await page.goto(String(url));
   await page.waitForFunction(()=>!document.querySelector('#new-adventure').disabled);
@@ -49,10 +53,11 @@ test('real cloud run reconstructs public scenes, embeds after death and forwards
   const firstBytes=Buffer.from(await(await fetch(new URL(manifest.chunks[0].path,manifestURL))).arrayBuffer());
   assert.ok(!gunzipSync(firstBytes).toString().includes(vault),'upload capability is absent from public input bytes');
   const append=(bytes,token=vault)=>fetch(new URL('/api/runs/'+state.sessionId+'/inputs',url),{method:'PUT',headers:{authorization:'Bearer '+token,'content-type':'application/gzip','x-content-sha256':createHash('sha256').update(bytes).digest('hex')},body:bytes});
-  assert.equal((await append(firstBytes)).status,200,'exact retry does not append twice');
-  const changed=JSON.parse(gunzipSync(firstBytes));changed.records[0].request.params.seed++;
+  const originalUpload=inputUploads[0];assert.ok(originalUpload?.length,'capture the exact upload rather than a repacked playback file');
+  assert.equal((await append(originalUpload)).status,200,'exact retry does not append twice');
+  const changed=JSON.parse(gunzipSync(originalUpload));changed.records[0].request.params.seed++;
   assert.equal((await append(gzipSync(JSON.stringify(changed)))).status,409,'a changed duplicate cannot rewrite a committed range');
-  assert.equal((await append(firstBytes,crypto.randomUUID())).status,403);
+  assert.equal((await append(originalUpload,crypto.randomUUID())).status,403);
   assert.equal((await(await fetch(manifestURL)).json()).count,manifest.count);
   await page.getByLabel('Game menu',{exact:true}).click();
   const summary=await page.getByLabel('Game menu',{exact:true}).boundingBox();const menu=await page.locator('.hud-menu-body').boundingBox();

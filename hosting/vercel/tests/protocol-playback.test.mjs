@@ -22,6 +22,12 @@ test(
     });
     const context = await browser.newContext(),
       page = await context.newPage();
+    // Optional local release verification against a real retained engine pin.
+    // Subsequent viewer/fresh-device contexts still select the current reader.
+    if(process.env.NEOHACK_TEST_ENGINE_PIN){
+      assert.match(process.env.NEOHACK_TEST_ENGINE_PIN,/^[a-f0-9]{64}$/);
+      await context.route('**/runtime/wasm/current.json',route=>route.fulfill({json:{version:1,buildId:process.env.NEOHACK_TEST_ENGINE_PIN}}));
+    }
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     await page.goto(url.href);
@@ -51,7 +57,19 @@ test(
       const app = document.querySelector("pixel-nethack");
       const initial = app.snapshot;
       await app.publicRecorder.flush();
-      for (let i = 0; i < 4; i++) await app.run(() => app.game.wait());
+      let firstReceipt;
+      for (let i = 0; i < 4; i++) {
+        await app.run(() => app.game.wait());
+        if(i===0)firstReceipt=app.snapshot;
+      }
+      // Real engine questions cross the old 128-record file limit without
+      // inventing game inputs or advancing through unobserved danger.
+      for(let i=0;i<140;i++){
+        await app.run(()=>app.game.pray());
+        if(app.game.decision?.kind!=='confirmation')throw Error('Prayer confirmation missing');
+        const decisionId=app.game.decision.id;
+        await app.run(()=>app.game.cancel(decisionId));
+      }
       await app.publicRecorder.flush();
       const header = await app.inputTransport.recordingInfo(app.game.id);
       const checkpoint = await app.inputTransport.checkpoint(header.count);
@@ -77,6 +95,7 @@ test(
       const saved = await app.publicRecorder.flush();
       return {
         initial,
+        firstReceipt,
         saved,
         state: app.snapshot,
         manifest: app.publicRecorder.manifest,
@@ -87,7 +106,8 @@ test(
     assert.equal(result.saved, true);
     const manifest = await (await fetch(result.manifest)).json();
     assert.equal(manifest.format, "neonethack.inputs");
-    assert.ok(manifest.count >= 9);
+    assert.ok(manifest.count >= 289);
+    assert.ok(manifest.chunks.some(c=>c.count>128),'real playback and fresh-device restore consume packed files larger than an upload batch');
     const cdn = publicStoreFor(server.store);
     for (const chunk of manifest.chunks) {
       const object = await cdn.read(
@@ -163,6 +183,12 @@ test(
       result.state,
       "a real CDN checkpoint and its suffix reproduce the complete response",
     );
+    const receipt = await viewer.evaluate(async ({id, requestId}) => {
+      return document.querySelector('neohack-world').inputPlayback.transport.send({
+        version:1,method:'session.receipt',params:{sessionId:id,requestId},
+      });
+    }, {id:manifest.id,requestId:result.firstReceipt.requestId});
+    assert.deepEqual(receipt,result.firstReceipt,'an evicted receipt is reconstructed exactly from the packed archive with the original engine');
     const beginning = await viewer.evaluate(async () => {
       const world = document.querySelector('neohack-world');
       await world.seek(0);

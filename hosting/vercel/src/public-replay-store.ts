@@ -2,10 +2,23 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {createHash} from 'node:crypto';
 import {get,put,head,BlobNotFoundError,BlobPreconditionFailedError} from '@vercel/blob';
 import {Conflict,type Storage} from './storage.ts';
+import {inputChunkLimits} from '../.generated/protocol-recording.mjs';
 export const publicReplayContext=new AsyncLocalStorage<Storage>();
 export const publicReplayConfigured=()=>!!publicReplayContext.getStore() || (!!process.env.PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN && !!process.env.PUBLIC_REPLAY_ORIGIN);
+/** Read one bounded immutable gzip object for packing; never a whole run. */
+export async function readReplayBytes(path:string):Promise<Uint8Array> {
+ const injected=publicReplayContext.getStore();
+ if(injected){const value=(await injected.read(path))?.value;if(!(value instanceof Uint8Array)||value.length>inputChunkLimits.compressedBytes)throw Error('Missing or oversized replay chunk');return value;}
+ if(!publicReplayConfigured())throw Error('Replay store is not configured');
+ const result=await get(path,{access:'public',token:process.env.PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN!,useCache:false});
+ if(result?.statusCode!==200||!result.stream)throw Error('Cannot read replay chunk');
+ const reader=result.stream.getReader(),parts:Uint8Array[]=[];let length=0;
+ try{for(;;){const {value,done}=await reader.read();if(done)break;length+=value.length;if(length>inputChunkLimits.compressedBytes)throw Error('Replay chunk too large');parts.push(value);}}
+ finally{await reader.cancel();}
+ return Buffer.concat(parts);
+}
 /** Content-addressed compressed input chunks. Repeated writes of the same hash
- * are harmless; publication never needs to download older run chunks. */
+ * are harmless; packed replacements never overwrite a published object. */
 export async function writeReplayBytes(path:string,bytes:Uint8Array) {
  const injected=publicReplayContext.getStore();
  if(injected){try{await injected.write(path,bytes);}catch(e){if(!(e instanceof Conflict))throw e;const old=(await injected.read(path))?.value;if(!(old instanceof Uint8Array)||!Buffer.from(old).equals(Buffer.from(bytes)))throw Error('Immutable replay object differs');}return;}
