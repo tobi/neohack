@@ -127,6 +127,13 @@ test('a real public frame recording compacts to bounded files, preserves exact s
   for (let i = 0; i < snapshots.length; i++) { const path = 'chunks/frame-' + i + '.json'; paths.push(path); await cdn.write(prefix + path, { frames: [snapshots[i]] }); }
   const manifest = { version: 1, count: snapshots.length, chunks: paths, role: 'valkyrie', seed: 9, partial: true, complete: false };
   await cdn.write(prefix + 'manifest.json', manifest);
+  const read = cdn.read.bind(cdn);
+  cdn.head = async path => { const doc = await read(path); return doc && { etag: doc.etag }; };
+  cdn.read = async path => {
+    const doc = await read(path);
+    // The CDN may expose a response validator distinct from the write token.
+    return doc && path === prefix + 'manifest.json' ? { ...doc, etag: 'cdn-validator' } : doc;
+  };
   await scope(store, async () => {
     await saveLedgerRun(hero(id));
     const before = await inspectFrames(manifest, async p => (await cdn.read(prefix + p)).value);

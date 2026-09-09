@@ -76,6 +76,9 @@ export async function auditOne(id, { apply = false, origin = process.env.PUBLIC_
     }
     source = await replaySource(id); version = (await replayState(id))?.version ?? 0;
     if (!published) throw new MissingReplay('Missing public manifest');
+    // CDN response validators are not Blob management CAS tokens. Capture the
+    // authoritative revision before reading/verifying the candidate stream.
+    const publication = store.head ? await store.head(path) : published;
     // A fresh query prevents a mutable CDN alias lagging its management token.
     const url = new URL(path, origin.endsWith('/') ? origin : origin + '/');
     url.searchParams.set('audit', source);
@@ -96,7 +99,7 @@ export async function auditOne(id, { apply = false, origin = process.env.PUBLIC_
       checked = await inspectFrames(manifest, p => publicDocument(new URL(p, url)));
       if (apply) {
         if (source !== await replaySource(id)) throw Error('Archive changed during verification');
-        await compactFrames(id, manifest, published.etag);
+        await compactFrames(id, manifest, publication?.etag);
       }
     }
     if (apply) {
