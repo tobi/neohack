@@ -82,5 +82,19 @@ test("real Blob SDK bypasses cached reads and sends create-only / matching-ETag 
   assert.deepEqual(await publicReplayStorage().head("replays/run/manifest.json"), {
     etag: '"current-public"',
   });
+  // A public read that the CDN still answers not-found is re-checked through the
+  // management API and, when the object exists, read under its revision key.
+  const publicCdn = agent.get("https://fixture.public.blob.vercel-storage.com");
+  publicCdn.intercept({ method: "GET", path: "/replays/run/chronicle.json" }).reply(404, "");
+  writes.intercept({ method: "GET", path: "/api/blob?url=replays%2Frun%2Fchronicle.json" })
+    .reply(200, { ...reply, url: "https://fixture.public.blob.vercel-storage.com/replays/run/chronicle.json", etag: '"told"', uploadedAt: new Date().toISOString() });
+  publicCdn.intercept({ method: "GET", path: "/replays/run/chronicle.json?v=told" })
+    .reply(200, '{"title":"Tale"}', { headers: { etag: '"told"', "content-type": "application/json" } });
+  assert.deepEqual(await publicReplayStorage().read("replays/run/chronicle.json"), { value: { title: "Tale" }, etag: '"told"' });
+  // A genuine miss stays a miss after one management-API check.
+  publicCdn.intercept({ method: "GET", path: "/replays/run/untold.json" }).reply(404, "");
+  writes.intercept({ method: "GET", path: "/api/blob?url=replays%2Frun%2Funtold.json" })
+    .reply(404, { error: { code: "not_found", message: "missing" } });
+  assert.equal(await publicReplayStorage().read("replays/run/untold.json"), null);
   agent.assertNoPendingInterceptors();
 });

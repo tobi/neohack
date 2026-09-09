@@ -32,7 +32,20 @@ export function publicReplayStorage(): Storage {
   // Public get() ignores useCache:false. Fetch CAS metadata through the Blob
   // management API so a cached manifest cannot stall publication for a minute.
   async head(path){try{const result=await head(path,{token});if(!result.etag)throw Error('Public replay has no revision token');return {etag:result.etag};}catch(e){if(e instanceof BlobNotFoundError)return null;throw e;}},
-  async read(path){try{const result=await get(path,{access:'public',token,useCache:false});if(!result)return null;if(result.statusCode!==200||!result.stream||!result.blob.etag)throw Error('Cannot read public replay');return {value:await new Response(result.stream).json(),etag:result.blob.etag};}catch(e){if(e instanceof BlobNotFoundError)return null;throw e;}},
+  // A public read goes through the CDN, which can keep a not-found answer for
+  // a while after the object is written (a chronicle is read while it is still
+  // being told, then stored). On a miss, ask the management API; when the object
+  // exists, read it under a revision-specific query so no stale entry applies.
+  async read(path){
+   const decode=async(result:Awaited<ReturnType<typeof get>>)=>{if(!result)return null;if(result.statusCode!==200||!result.stream||!result.blob.etag)throw Error('Cannot read public replay');return {value:await new Response(result.stream).json(),etag:result.blob.etag};};
+   const missing=(e:unknown)=>{if(e instanceof BlobNotFoundError)return null;throw e;};
+   const cached=await get(path,{access:'public',token,useCache:false}).catch(missing);
+   if(cached)return decode(cached);
+   const meta=await head(path,{token}).catch(missing);
+   if(!meta?.etag)return null;
+   const url=new URL(meta.url);url.searchParams.set('v',meta.etag.replace(/"/g,''));
+   return decode(await get(url.href,{access:'public',token}).catch(missing));
+  },
   async write(path,value,etag){try{await put(path,JSON.stringify(value),{access:'public',token,addRandomSuffix:false,allowOverwrite:!!etag,...(etag?{ifMatch:etag}:{}),contentType:'application/json',cacheControlMaxAge:path.endsWith('/manifest.json')?60:31536000});}catch(e){if(e instanceof BlobPreconditionFailedError)throw new Conflict();if(!etag){const existing=await get(path,{access:'public',token,useCache:false});if(existing){await existing.stream?.cancel();throw new Conflict();}}throw e;}},
   async list(){throw Error('Public replay listing is not supported');},
  };

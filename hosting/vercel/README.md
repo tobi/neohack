@@ -246,7 +246,12 @@ per line with replay progress (`{"status":"replaying","done":n,"total":m}`),
 `{"available":false,"error":…}`). The job is registered with `waitUntil` and
 finishes, validates and stores the tale even if the reader leaves; a plain
 `POST` waits and returns the document as before. Page views only read the
-cached object; nothing is regenerated on view. A `chronicles/<id>/pending.json`
+cached object; nothing is regenerated on view. Because the story path is read
+through the public Blob CDN while the tale is still being told, the CDN may
+briefly keep that not-found answer after the store completes; a public read
+that misses therefore re-checks the management API and, when the object exists,
+reads it under a revision-specific query so the first view after completion
+sees the story. A `chronicles/<id>/pending.json`
 claim keeps concurrent requests from paying twice (later callers receive 202
 and poll), and a failed generation releases the claim without retrying
 automatically. The archive holds inputs only, so the messages the hero saw
