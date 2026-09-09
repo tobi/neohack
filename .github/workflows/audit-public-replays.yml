@@ -1,0 +1,53 @@
+name: Audit and compact all ledger replays
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Compact verified archives and correct ledger replay availability
+        type: boolean
+        default: false
+      run_id:
+        description: Optional single public run ID (blank audits every ledger entry)
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: compact-public-input-replays
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile --ignore-scripts --cwd hosting/vercel
+      - run: npm ci --ignore-scripts --prefix lib/neonethack
+      - run: lib/neonethack/node_modules/.bin/tsc -p lib/neonethack/tsconfig.json
+      - run: node hosting/vercel/scripts/stage-validator.mjs
+      - name: Audit the complete ledger and original pinned replay streams
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          APPLY: ${{ inputs.apply }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          args=(--audit-replays --report replay-audit.json)
+          if [ -n "$RUN_ID" ]; then args+=(--run "$RUN_ID"); fi
+          if [ "$APPLY" = true ]; then args+=(--apply); fi
+          node hosting/vercel/scripts/publish-production-replays.mjs "${args[@]}"
+      - name: Retain sanitized public audit evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: public-replay-audit
+          path: replay-audit.json
+          if-no-files-found: warn
+          retention-days: 30

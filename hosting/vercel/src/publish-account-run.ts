@@ -18,7 +18,7 @@ export async function publishAccountRun(key:string) {
  });
  await publishReplay(id);
  await saveLedgerRun({id,name:run.name,role:run.role,turn:run.turn,ended:run.ended,maxLevel:run.maxLevel,heroLevel:run.level,depthLabel:run.depth,endKind:run.ended?run.outcome:undefined,control:run.control==='bot'?'bot':'manual',automated:!!run.automated,buildId:run.buildId,seed:run.seed,updatedAt:Date.now()});
- await markRecorded(id);
+ if(source.frames.length)await markRecorded(id);
  await update<any,void>(key,()=>{throw Error('Recording disappeared');},doc=>{
   if(doc.publicId!==id)throw Error('Public recording identity differs');
   doc.run.publishedCount=Math.max(doc.run.publishedCount??0,source.frames.length);

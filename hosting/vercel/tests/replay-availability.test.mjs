@@ -1,6 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createTestHarness,MemoryStorage} from './server.mjs';
+import {createTestHarness,MemoryStorage,publicStoreFor} from './server.mjs';
+import {storageContext} from '../src/storage.ts';
+import {publicReplayContext} from '../src/public-replay-store.ts';
+import {markRecorded} from '../src/ledger-store.ts';
 import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
 
 test('ledger replay availability comes from public recordings and reaches outside the top 100',async t=>{
@@ -9,13 +12,14 @@ test('ledger replay availability comes from public recordings and reaches outsid
  await store.write('board/index.json',{runs,errors:[{day:new Date().toISOString().slice(0,10),code:'engine',count:7,last:Date.now(),build:''}]});
  await store.write('replays/run-101.json',{frames:['objects/frame.json'],revision:1});
  await store.write('accounts/private-recording.json',{runId:'run-0',frames:['private']});
+ await storageContext.run(store,()=>publicReplayContext.run(publicStoreFor(store),()=>markRecorded('run-101')));
  let listings=0;const list=store.list.bind(store);store.list=async prefix=>{listings++;return list(prefix);};
  const server=createTestHarness({store});const{url}=await server.listen();t.after(()=>server.close());
  const stats=await(await fetch(new URL('/api/stats',url))).json();
  assert.equal(stats.totals.runs,102);assert.equal(stats.best.length,100);
  assert.ok(stats.best.every(r=>r.replayAvailable===false),'client-provided claims and private recordings do not enable public playback');
  assert.deepEqual(stats.recorded.map(r=>r.id),['run-101']);assert.equal(stats.recorded[0].replayAvailable,true);
- await fetch(new URL('/api/stats',url));assert.equal(listings,1,'repeated refreshes reuse the short public index cache');
+ await fetch(new URL('/api/stats',url));assert.equal(listings,0,'refresh reads bounded summaries, never recording files or listings');
  const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());
  const page=await browser.newPage();await page.goto(new URL('/dashboard',url).href);
  await page.waitForFunction(()=>document.querySelectorAll('#runs tr').length===100);

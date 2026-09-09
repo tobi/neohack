@@ -19,9 +19,9 @@ function renderRuns() {
     name.append(element("small",run.role));row.append(name);
     for(const value of [run.maxLevel || "—",format(run.turn),run.depthLabel || "—",run.ended ? run.endKind || "Ended" : "Adventuring"]) row.append(element("td",value));
     const playback=element('td','');playback.className='replay-cell';
-    if(run.replayAvailable===true){
+    if(run.replayAvailable===true || run.chronicleAvailable===true){
       const tools=element('span','');tools.className='replay-tools';
-      const replay=element('a','Show replay');replay.className='run-replay';replay.href=replayHref(run.id);replay.setAttribute('aria-label','Show replay for '+run.name);tools.append(replay);
+      if(run.replayAvailable===true){const replay=element('a','Show replay');replay.className='run-replay';replay.href=replayHref(run.id);replay.setAttribute('aria-label','Show replay for '+run.name);tools.append(replay);}
       if(run.chronicleAvailable===true){
         const tale=element('a','');tale.className='run-chronicle';tale.innerHTML=chronicleIcon();tale.title='Read the chronicle';tale.href=replayHref(run.id,'chronicle');
         tale.setAttribute('aria-label','Read the chronicle of '+run.name);tools.append(tale);

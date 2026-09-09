@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { read, update, storage, type Storage } from "./storage.ts";
 import type { Run } from "./board.ts";
-import { publicReplayIds } from "./replays.ts";
+import { publicReplayStorage } from "./public-replay-store.ts";
 const SHARDS = 32;
 const DAY = 86_400_000;
 const SUMMARY_FORMAT = 2;
@@ -14,7 +14,25 @@ const rank = (a: Run, b: Run) =>
   (b.maxLevel ?? 0) - (a.maxLevel ?? 0) ||
   b.turn - a.turn ||
   a.id.localeCompare(b.id);
-type Entry = { run: Run; recorded: boolean; chronicled?: boolean };
+export type ReplayState = {
+  version: number; available: boolean; checkedAt: number;
+  reason: "published" | "verified" | "missing" | "invalid";
+  source?: string;
+};
+type Entry = { run: Run; recorded: boolean; chronicled?: boolean; replay?: ReplayState };
+const replayStatePath = (id: string) => "ledger/replays/" + id + ".json";
+export const replayState = (id: string) => read<ReplayState>(replayStatePath(id));
+/** A maintenance result is bound to the exact public and authoritative heads.
+ * Tokens and private data never leave this function. */
+export async function replaySource(id: string) {
+  const publicStore = publicReplayStorage();
+  const heads = await Promise.all([
+    storage().read("input-runs/" + id + ".json"),
+    storage().read("replays/" + id + ".json"),
+    publicStore.head ? publicStore.head("replays/" + id + "/manifest.json") : publicStore.read("replays/" + id + "/manifest.json"),
+  ]);
+  return createHash("sha256").update(JSON.stringify(heads.map(h => h?.etag ?? null))).digest("hex");
+}
 type Shard = { version: number; entries: Record<string, Entry> };
 const emptyShard = (): Shard => ({ version: 0, entries: {} });
 type PublicRun = Run & { replayAvailable: boolean; chronicleAvailable: boolean };
@@ -78,12 +96,14 @@ async function indexEntries(shard: number, entries: Entry[]) {
     "ledger/shards/" + shard + ".json",
     emptyShard,
     (doc) => {
-      for (const { run, recorded, chronicled } of entries) {
+      for (const { run, recorded, chronicled, replay } of entries) {
         const prior = doc.entries[run.id];
+        const state = replay && replay.version > (prior?.replay?.version ?? 0) ? replay : prior?.replay;
+        const available = state?.available ?? (recorded || prior?.recorded || false);
         if (
           (newer(prior?.run, run) &&
             JSON.stringify(prior?.run) !== JSON.stringify(run)) ||
-          (recorded && !prior?.recorded) ||
+          available !== prior?.recorded || state?.version !== prior?.replay?.version ||
           (chronicled && !prior?.chronicled)
         ) {
           doc.entries[run.id] = {
@@ -93,7 +113,8 @@ async function indexEntries(shard: number, entries: Entry[]) {
                 ? { ...progress(prior?.run, run), control: "webmcp", automated: true }
                 : progress(prior?.run, run)
               : prior!.run,
-            recorded: recorded || prior?.recorded || false,
+            recorded: available,
+            ...(state ? { replay: state } : {}),
             ...(chronicled || prior?.chronicled ? { chronicled: true } : {}),
           };
           doc.version++;
@@ -104,8 +125,8 @@ async function indexEntries(shard: number, entries: Entry[]) {
   );
   await publishSummary(shard, summary);
 }
-const indexRun = (run: Run, recorded = false, chronicled = false) =>
-  indexEntries(partition(run.id), [{ run, recorded, chronicled }]);
+const indexRun = async (run: Run, recorded = false, chronicled = false) =>
+  indexEntries(partition(run.id), [{ run, recorded, chronicled, replay: await replayState(run.id) ?? undefined }]);
 async function writeRun(run: Run, recorded = false) {
   const original = (await read("ledger/runs/" + run.id + ".json"))
     ? undefined
@@ -142,12 +163,11 @@ async function initialize() {
       (!Array.isArray(original.runs) || !Array.isArray(original.errors))
     )
       throw Error("Published ledger index is invalid");
-    const recorded = await publicReplayIds();
     // Bootstrap bounded summaries in batches. Historical run records remain at
     // their published source until explicitly materialized; no per-run cold-start writes.
     const groups = Array.from({ length: SHARDS }, () => [] as Entry[]);
     for (const run of original?.runs ?? [])
-      groups[partition(run.id)]!.push({ run, recorded: recorded.has(run.id) });
+      groups[partition(run.id)]!.push({ run, recorded: false });
     for (let i = 0; i < SHARDS; i += 4)
       await Promise.all(
         groups
@@ -174,14 +194,35 @@ async function initialize() {
 }
 export async function saveLedgerRun(run: Run) {
   await initialize();
-  // Input publication may beat its independently retried metadata/index write.
-  // The per-run head establishes availability without a global Blob listing.
-  return writeRun(run,((await read('input-runs/'+run.id+'.json'))?.count??0)>0);
+  // A private input head alone does not prove that public publication succeeded.
+  // markRecorded persists publication even when it precedes the metadata write.
+  return writeRun(run);
 }
 export async function markRecorded(id: string) {
   await initialize();
+  await update<ReplayState, void>(replayStatePath(id), () => ({ version: 0, available: false, checkedAt: 0, reason: "missing" }), async state => {
+    // Appending cannot repair an already corrupt prefix. Only another full
+    // audit may reinstate it. A first publication can repair a missing archive.
+    if (state.available || state.reason === "invalid") return;
+    const source = await replaySource(id);
+    if (state.source === source) return;
+    Object.assign(state, { version: state.version + 1, available: true, reason: "published", checkedAt: Date.now(), source });
+  });
   const run = await ledgerRun(id);
   if (run) await indexRun(run, true);
+}
+/** Explicit maintenance only. Transient errors never create a negative verdict.
+ * A later publication/audit or changed source makes this result inapplicable. */
+export async function auditReplayAvailability(id: string, result: { available: boolean; reason: "verified" | "missing" | "invalid"; source: string; version: number }) {
+  await initialize();
+  const applied = await update<ReplayState, boolean>(replayStatePath(id), () => ({ version: 0, available: false, checkedAt: 0, reason: "missing" }), async state => {
+    if (state.version !== result.version || await replaySource(id) !== result.source) return false;
+    Object.assign(state, { version: state.version + 1, available: result.available, reason: result.reason, source: result.source, checkedAt: Date.now() });
+    return true;
+  });
+  const run = await ledgerRun(id);
+  if (run) await indexRun(run);
+  return applied;
 }
 /** A cached public chronicle exists for this run; the ledger shows its icon. */
 export async function markChronicled(id: string) {
@@ -264,8 +305,7 @@ export async function ledgerStats(now = Date.now()) {
 }
 export async function rebuildLedgerSummaries() {
   await initialize();
-  const recorded = await publicReplayIds();
   const runs = await ledgerRuns();
-  for (const run of runs) await indexRun(run, recorded.has(run.id));
+  for (const run of runs) await indexRun(run);
   return { runs: runs.length };
 }

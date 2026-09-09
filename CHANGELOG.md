@@ -8,6 +8,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- The ledger can hide missing or broken replay links without removing adventures,
+  scores or written tales. Archive audits verify complete recordings and compact
+  both input logs and older public frame files while retaining existing links.
 - Replay uploads are combined into larger compressed CDN files instead of one
   file per sync. Playback still starts with a small opening scene, and exact
   retries, checkpoints and original engine pins are preserved.

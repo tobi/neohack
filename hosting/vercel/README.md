@@ -203,6 +203,36 @@ node hosting/vercel/scripts/compact-input-replays.mjs --run PUBLIC_RUN_ID --appl
 Compaction is explicit writer/maintenance work. Watching a replay never invokes
 it or downloads inputs through a dynamic API.
 
+The **Audit and compact all ledger replays** workflow covers every ledger entry,
+including historical public frame recordings. Its default is read-only. `apply`
+repairs interrupted publication where the public source still exists, verifies
+every frame or every input with its original WASM engine, then compacts verified
+archives. Legacy frame files stay ordinary `{frames:[...]}` JSON, with a small
+first scene and subsequent files bounded to 2 MiB / 256 frames. The input format,
+pins, checkpoint references, exact upload receipts and old objects are preserved.
+An identical ordered stream hash is required before and after compaction.
+
+The sanitized workflow artifact lists each public ID, verdict, stream hash and
+file counts. Missing or invalid recordings lose their replay link, never their
+ledger entry, scores, saved games or cached tale. Network/authentication failures
+are inconclusive and leave availability unchanged. Results bind to source heads
+and versioned `ledger/replays/<id>.json` records: stale metadata and summary
+rebuilds cannot revive a known broken replay. Successful first publication can
+repair a missing recording; a corrupt prefix requires another successful audit.
+Publication is recorded even if it precedes the run's ledger metadata. Merely
+having a private input head or a recording filename does not establish playback.
+The audit is a snapshot of the selected ledger; live runs changing during the
+check are reported separately and can be checked again without deleting data.
+
+```sh
+node hosting/vercel/scripts/audit-public-replays.mjs --report replay-audit.json
+node hosting/vercel/scripts/audit-public-replays.mjs --apply --run PUBLIC_RUN_ID
+```
+
+These operator commands require the existing private/public stores configured;
+the production workflow loads credentials internally and never puts them in its
+report. It performs no LLM generation or account-private recording publication.
+
 Staging also generates the offline service worker's exact asset list and copies
 the shared archive validator into `.generated/`, inside Vercel's upload root.
 Deploy the staged folder; do not omit its generated function dependency. API and

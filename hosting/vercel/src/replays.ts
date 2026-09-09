@@ -3,23 +3,12 @@ import {publishReplay} from './publish-replay.ts';
 import {publicReplayConfigured} from './public-replay-store.ts';
 import {markRecorded} from './ledger-store.ts';
 import { createHash } from 'node:crypto';
-import { read, update, immutable, storage, type Storage } from './storage.ts';
+import { read, update, immutable } from './storage.ts';
 
-const availability = new WeakMap<Storage, {expires:number; ids:Promise<Set<string>>}>();
 // Publication fields are allowlisted here; importing engine source types would
 // make the independently deployed Vercel function depend on the library tree.
 function recordingFrame(f:any,id:string) {
   return {version:1 as const,sessionId:id,requestId:f.requestId,revision:f.revision,ended:f.ended,observation:f.observation,outcome:f.outcome,events:f.events,decision:f.decision,end:f.end};
-}
-/** Only committed public recordings count; private account recordings stay private. */
-export async function publicReplayIds() {
-  const backend=storage(), cached=availability.get(backend);
-  if(cached && cached.expires>Date.now())return cached.ids;
-  const ids=backend.list('replays/').then(paths=>new Set(paths.flatMap(path=>{
-    const match=path.match(/^replays\/([\w-]{1,64})\.json$/);return match?[match[1]]:[];
-  })));
-  const entry={expires:Date.now()+60000,ids};availability.set(backend,entry);
-  try{return await ids;}catch(error){if(availability.get(backend)===entry)availability.delete(backend);throw error;}
 }
 
 /** Public presentation recordings are separate from private resumable journals. */
@@ -93,6 +82,6 @@ export async function replay(request: Request, id: string) {
     return json({count:doc.frames.length,acknowledged:doc.frames.length});
   });
   if(result.ok)await publishReplay(id);
-  if(result.ok && body.index===0){availability.delete(storage());await markRecorded(id);}
+  if(result.ok && body.index===0)await markRecorded(id);
   return result;
 }

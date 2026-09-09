@@ -4,6 +4,9 @@ import { chromium } from "../../../web/neohack.dev/node_modules/playwright-core/
 import { createTestHarness, publicStoreFor } from "./server.mjs";
 import { gunzipSync } from "node:zlib";
 import { createServer } from "node:http";
+import { storageContext } from "../src/storage.ts";
+import { publicReplayContext } from "../src/public-replay-store.ts";
+import { auditOne, verifyEngine } from "../scripts/audit-public-replays.mjs";
 
 test(
   "real game uploads inputs, plays from static CDN objects and restores on a fresh device",
@@ -109,6 +112,12 @@ test(
     assert.ok(manifest.count >= 289);
     assert.ok(manifest.chunks.some(c=>c.count>128),'real playback and fresh-device restore consume packed files larger than an upload batch');
     const cdn = publicStoreFor(server.store);
+    const audited = await storageContext.run(server.store, () => publicReplayContext.run(cdn, () => auditOne(manifest.id, {
+      apply: true, origin: new URL('/replay-files/', url).href,
+      verify: (source, count) => verifyEngine(source, count, { runtimeOrigin: url.href }),
+    })));
+    assert.equal(audited.status, 'verified', JSON.stringify(audited));
+    assert.equal(audited.applied, true); assert.equal(audited.engine.count, manifest.count);
     for (const chunk of manifest.chunks) {
       const object = await cdn.read(
         "replays/" + manifest.id + "/" + chunk.path,

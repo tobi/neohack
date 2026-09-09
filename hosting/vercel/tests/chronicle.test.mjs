@@ -6,6 +6,10 @@ import { WasmTransport } from "../../../lib/neonethack/dist/typescript/wasm.js";
 import { digest as sha } from "../../../lib/neonethack/wasm/protocol-recording.mjs";
 import { createTestHarness, MemoryStorage, publicStoreFor } from "./server.mjs";
 import { storyModelContext, CHRONICLE_MIN_DEPTH, CHRONICLE_MIN_LEVEL } from "../src/chronicle.ts";
+import { storageContext } from "../src/storage.ts";
+import { publicReplayContext } from "../src/public-replay-store.ts";
+import { publishManifest } from "../src/protocol-replays.ts";
+import { markRecorded } from "../src/ledger-store.ts";
 
 /** A genuine, short input archive recorded with the staged engine package. */
 async function recordArchive(id, name) {
@@ -26,7 +30,7 @@ async function recordArchive(id, name) {
     await step(call("decision.cancel", { decisionId: s.decision.id }));
     await step(call("game.quit"));
     await step(call("decision.answer", { decisionId: s.decision.id, answer: { kind: "confirmation", confirm: true } }));
-    const bytes = gzipSync(JSON.stringify({ format: "neonethack.inputs", version: 1, id, buildId: live.buildId, from: 0, records }));
+    const bytes = gzipSync(JSON.stringify({ format: "neonethack.inputs", version: 1, id, buildId: live.buildId, from: 0, records, complete: true }));
     const hash = createHash("sha256").update(bytes).digest("hex");
     return { buildId: live.buildId, bytes, chunk: { path: "chunks/" + hash + ".gz", sha256: hash, bytes: bytes.length, from: 0, count: records.length }, count: records.length };
   } finally {
@@ -37,6 +41,9 @@ async function recordArchive(id, name) {
 async function seed(store, id, archive, run) {
   await store.write("input-runs/" + id + ".json", { owner: "x", buildId: archive.buildId, count: archive.count, generation: 1, chunks: [archive.chunk], checkpoints: [], name: run.name, role: "valkyrie", seed: 9, control: "interactive", complete: true });
   await publicStoreFor(store).write("replays/" + id + "/" + archive.chunk.path, archive.bytes);
+  await storageContext.run(store, () => publicReplayContext.run(publicStoreFor(store), async () => {
+    await publishManifest(id); await markRecorded(id);
+  }));
 }
 
 /** NDJSON lines with the time each arrived, so incremental delivery is checked. */
