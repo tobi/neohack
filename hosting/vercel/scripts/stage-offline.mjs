@@ -44,6 +44,7 @@ export async function stageOffline(root) {
   for (const name of [
     "index.html",
     "style.css",
+    "scrollbars.css",
     "studio.css",
     "character-sheet.css",
     "offline.js",

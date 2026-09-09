@@ -1,5 +1,6 @@
 import {readFile,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
+import {scrollbarStyles} from '../src/scrollbars.mjs';
 const root=resolve(import.meta.dirname,'..');
 const hero=(await readFile(resolve(root,'public/art/valkyrie.png'))).toString('base64');
 const dog=(await readFile(resolve(root,'public/art/dog.png'))).toString('base64');
@@ -23,7 +24,7 @@ function art(code){
  for(const [x,y] of [[6,29],[249,38],[19,142],[221,148],[61,143],[143,4]])svg+=rect(x,y,2,2,'#4e6251');
  return `<svg class="scene" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 152" role="img" aria-label="${code} carved in torchlit dungeon stone, with an adventurer and a loyal dog" shape-rendering="crispEdges">${svg}</svg>`;
 }
-const css=await readFile(resolve(root,'art/errors/style.css'),'utf8');
+const css=scrollbarStyles + await readFile(resolve(root,'art/errors/style.css'),'utf8');
 const pages={
  400:{label:'400 · BAD REQUEST',title:'The scroll is unreadable.',copy:'Something about this request didn’t make it through. Check the address, or return to the dungeon entrance.',note:'A wrong turn is still part of the adventure.'},
  404:{label:'404 · NOT FOUND',title:'This passage leads nowhere.',copy:'There’s no page at this address. The dungeon has many secrets. This one is probably a missing link.',note:'Your next adventure is back through the doorway.'},

@@ -8,6 +8,8 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Thin, muted scrollbars now match across the game, ledger, workshop, account
+  dialogs and replay viewer, including embedded and offline views.
 - More actions opens with Ctrl+K (Cmd+K on Mac), with fuzzy search and highlighted
   matches. Item and spell choices stay in the same compact dialog; Escape returns
   to actions, preserving the search. Targets and warnings remain explicit.

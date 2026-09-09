@@ -58,3 +58,8 @@ direction pads keep their dedicated touch geometry. Always show assigned hotkeys
 scope them to the active surface, and never let typing in a field move the hero.
 Test focus, typing, disabled/stale actions, touch layout and viewport overflow in
 the real browser when extracting interaction components.
+
+Use the shared native scrollbar style in `src/scrollbars.mjs` by default. The
+build emits `/scrollbars.css` for page shells; shadow-root components embed the
+same style. Do not add per-panel scrollbar skins or JavaScript scrolling widgets.
+Retain the system's scrollbar colors and sizing in forced-colors mode.

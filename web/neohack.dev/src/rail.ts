@@ -1,5 +1,6 @@
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { accountApi } from './account-client';
+import { scrollbarStyles } from './scrollbars.mjs';
 
 /** Shared site navigation and passkey UI; no engine ownership. */
 class NeohackRail extends HTMLElement {
@@ -7,7 +8,7 @@ class NeohackRail extends HTMLElement {
   private user: {name:string} | null = null;
   private busy = false;
   connectedCallback() {
-    this.root.innerHTML = `<style>
+    this.root.innerHTML = `<style>${scrollbarStyles}
       :host{display:block;height:60px;position:relative;z-index:30;color:#e8e3ce;font:14px Arial,sans-serif}*{box-sizing:border-box}header{height:60px;display:flex;align-items:center;gap:26px;padding:0 24px;border-bottom:1px solid #34413d;background:#10181d}a{color:#b8cc9e;text-decoration:none}a:hover,a[aria-current=page]{color:#f2cf90}a[aria-current=page]{text-decoration:underline;text-underline-offset:8px}.brand{font:18px Georgia,serif;color:#eee8d0;white-space:nowrap}.brand span{color:#9baa94}nav{display:flex;gap:22px;align-items:center;flex:1;min-width:0}nav a{white-space:nowrap}.account{display:flex;align-items:center;gap:14px;margin-left:auto;white-space:nowrap}button{font:inherit;cursor:pointer;background:#b9ca9c;color:#17201c;border:1px solid #708160;padding:9px 15px;min-height:40px}button:disabled{opacity:.5;cursor:wait}.quiet{background:transparent;color:#ccd3bd;border-color:#44524a}a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #e5c68b;outline-offset:3px}dialog{width:min(460px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;background:#141f24;color:#e8e3ce;border:1px solid #64705b;padding:28px}dialog::backdrop{background:#060d12cf}h2{font:32px Georgia,serif;margin:16px 0}p{line-height:1.6;color:#aeb9ab}.dialog-top{display:flex;justify-content:space-between;align-items:center;font:11px monospace;letter-spacing:.14em}.dialog-top button{font-size:22px;min-width:40px;padding:2px}label{display:block;margin-bottom:8px}input{display:block;width:100%;padding:12px;background:#0d171c;color:#eee8d0;border:1px solid #52604f;font:16px Arial,sans-serif}form button{width:100%;margin-top:14px}hr{border:0;border-top:1px solid #34413d;margin:24px 0}#signin{width:100%}#auth-status{color:#e4c68e;min-height:24px}.account[hidden], [hidden]{display:none!important}@media(max-width:650px){header{padding:0 12px;gap:12px}nav{gap:12px;font-size:12px;overflow:auto}nav .secondary{display:none}.brand{font-size:16px}.account{gap:6px;font-size:12px}.account button{padding:8px}#account-name{max-width:100px;overflow:hidden;text-overflow:ellipsis}.signout{font-size:0!important}.signout:after{content:'↪';font-size:18px}}
       :host(:not([game])) slot{display:none}
       :host([game]){height:var(--site-rail-height,60px)}

@@ -258,7 +258,6 @@ dialog {
   width: min(540px, calc(100% - 32px));
   max-height: calc(100dvh - 40px);
   overflow: auto;
-  scrollbar-width: thin;
 }
 dialog::backdrop {
   background: #0c131cbd;
@@ -880,7 +879,6 @@ progress::-moz-progress-bar {
   background: #202d29;
   box-shadow: 4px 4px #111a1e;
   overflow: auto;
-  scrollbar-width: thin;
 }
 #close-panel {
   float: right;
@@ -1436,7 +1434,6 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0 5px 4px;
-  scrollbar-width: thin;
 }
 .role-card:focus-within {
   outline: none;
@@ -1477,7 +1474,7 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
 
 /* The welcome page explains the library; the dungeon keeps the full screen. */
 .welcome-paths { position: absolute; top: max(20px, env(safe-area-inset-top)); right: max(28px, env(safe-area-inset-right)); bottom: 64px; width: 340px; display: flex; flex-direction: column; padding: 0 8px 8px; color: #b7c2ae; }
-.welcome-content { min-height: 0; overflow-y: auto; scrollbar-width: thin; padding-right: 4px; }
+.welcome-content { min-height: 0; overflow-y: auto; padding-right: 4px; }
 .welcome-paths a { color: #dbc995; text-underline-offset: 4px; }
 .welcome-paths article { background: #1e2a2d; border: 1px solid #394743; padding: 19px 20px; margin-bottom: 12px; box-shadow: 3px 3px #111b20; }
 .welcome-paths .path-number { color: #91aa83; font-size: 10px; letter-spacing: 1px; }
@@ -1521,7 +1518,7 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
 #menu:has(#create-form) h2 { font-size: clamp(22px, 4vw, 30px); margin-bottom: 8px; }
 #menu:has(#create-form) .subtle { margin: 0 0 16px; }
 #create-form { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-.create-fields { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 8px; scrollbar-width: thin; }
+.create-fields { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 8px; }
 #create-form .class-picker { max-height: none; overflow: visible; }
 .create-footer { flex-shrink: 0; padding-top: 14px; border-top: 1px solid #46523f; background: #222c28; }
 .create-footer .primary { width: 100%; min-height: 48px; }
@@ -1788,7 +1785,7 @@ pixel-nethack.in-game .rail-game-info { visibility: hidden; }
 .container-transfer > p { flex-shrink:0; margin:0 0 8px; line-height:1.4; }
 .container-columns { flex:1; min-height:0; gap:10px; }
 .container-columns fieldset { min-height:0; display:flex; flex-direction:column; overflow:hidden; padding:6px; }
-.container-items { min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+.container-items { min-height:0; overflow:auto; overscroll-behavior:contain; }
 .container-columns fieldset > button { flex-shrink:0; min-height:44px; padding:6px 10px; margin:0 0 4px; }
 .container-columns .menu-choice { display:flex; flex-shrink:0; margin:0 0 3px; padding:6px 8px; gap:8px; min-height:44px; line-height:1.35; font-size:14px; }
 .container-columns .menu-choice input { flex:0 0 18px; margin:0; }
@@ -1817,7 +1814,7 @@ pixel-nethack.in-game .rail-game-info { visibility: hidden; }
 .action-picker h2 { font-size: 24px; margin: 0 44px 12px 0; display: flex; align-items: center; gap: 12px; min-height: 44px; }
 .action-picker kbd { font: 12px monospace; color: #bccb9c; white-space: nowrap; }
 .action-picker input { width: 100%; min-width: 0; min-height: 44px; margin: 0 0 10px; font-size: 16px; }
-.action-picker #more-grid { display: grid; grid-template-columns: 1fr; gap: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.action-picker #more-grid { display: grid; grid-template-columns: 1fr; gap: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .action-picker #more-grid button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--control-height); flex-shrink: 0; text-align: left; border: 0; border-bottom: 1px solid #39473d; background: transparent; padding: var(--control-padding); font-size: var(--control-font); }
 .action-picker #more-grid button[aria-selected="true"] { background: #354334; box-shadow: inset 3px 0 #b8c995; }
 .action-picker #more-grid button small { display: block; font-size: 11px; margin-top: 2px; color: #b8bea9; }

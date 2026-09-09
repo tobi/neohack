@@ -3,6 +3,7 @@ import ts from "typescript";
 import { resolve } from "node:path";
 import { access } from "node:fs/promises";
 import { catalog, exampleProject } from "../../../examples/workshop/projects.js";
+import { scrollbarStyles } from "../src/scrollbars.mjs";
 
 const root = resolve(import.meta.dir, "..");
 const library = resolve(root, "../../lib/neonethack");
@@ -65,6 +66,7 @@ if (diagnostics.length) {
   process.exit(1);
 }
 const embeddedArt: Record<string,string> = {};
+await Bun.write(root + "/public/scrollbars.css", scrollbarStyles);
 for (const file of new Bun.Glob('*.png').scanSync(root+'/public/art')) embeddedArt[file.replace(/\.png$/, '')] = 'data:image/png;base64,' + Buffer.from(await Bun.file(root+'/public/art/'+file).arrayBuffer()).toString('base64');
 const botTypes: Record<string, string> = {};
 for (const name of new Bun.Glob('*.d.ts').scanSync(library + '/dist/typescript')) botTypes['/types/' + name] = await Bun.file(library + '/dist/typescript/' + name).text();

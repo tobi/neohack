@@ -725,6 +725,13 @@ engine decisions. Opening/filtering the menu never initiates a conversation.
 Share action definitions between the menu's visible key badges and map shortcuts.
 Use compact 36px text buttons on desktop, 44px on phones/coarse pointers, and
 consistent 6px/12px padding; icon targets retain their existing 44px geometry.
+All scrollable surfaces use thin native scrollbars with a muted sage thumb and
+a transparent track. `src/scrollbars.mjs` owns this default across page shells,
+shadow-root components and self-contained error pages. The generated page
+stylesheet is cached for offline play. Use the browser’s normal scrolling,
+keyboard and touch behavior; forced-colors mode keeps native system sizing and
+colors. New panels inherit this style without their own scrollbar rules.
+
 Recurring controls should become small Lit components as they are improved,
 following the examples in AGENTS.md; game state and decisions stay with the caller.
 Never duplicate inventory eligibility rules in the client or probe by spending
