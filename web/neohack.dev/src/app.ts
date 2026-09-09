@@ -331,6 +331,7 @@ class PixelNethack extends HTMLElement {
           <footer><p>A living dungeon since 1987. Decades of the NetHack DevTeam’s imagination, surprising interactions, and player discoveries live underneath this new doorway. <a href="https://www.nethack.org/common/info.html" target="_blank" rel="noopener noreferrer">Meet NetHack ↗</a></p><p>Character sprites: <a href="https://limezu.itch.io/" target="_blank" rel="noopener noreferrer">LimeZu</a>.</p></footer>
           </div>
         </aside>
+        <a id="games-played" href="/dashboard" target="_blank" rel="noopener noreferrer" title="Recorded adventures · open the ledger" hidden></a>
         <a id="creator-link" class="creator-link" href="https://x.com/tobi" target="_blank" rel="noopener noreferrer" aria-label="@tobi on X (opens in a new tab)">@tobi</a>
         <section class="hero-hud" aria-label="Adventurer" hidden>
           <img id="portrait" src="/art/${heroArt("ranger")}.png" alt="">
@@ -383,6 +384,7 @@ class PixelNethack extends HTMLElement {
     });
     this.bind();
     this.bindCommandInput();
+    void this.loadPlayedCount();
     this.hudLayout = new ResizeObserver(() => {
       const top = this.getBoundingClientRect().top;
       const bottom = Math.max(...[".hero-hud", ".location-hud"].map(selector => this.$(selector).getBoundingClientRect().bottom));
@@ -420,6 +422,19 @@ class PixelNethack extends HTMLElement {
     this.preparation = this.prepareRuntime();
     void this.preparation.then(() => this.openLinkedRun()).catch((error) => { reportError(error,this.runtimeBuildId,{kind:"boot",local:!!requestedRun()?.local}); this.error(error); this.entryRecovery(requestedRun()?.id,error); });
     this.controls();
+  }
+  private async loadPlayedCount() {
+    try {
+      const response = await fetch('/api/stats?view=count', {
+        credentials: 'omit',
+        signal: AbortSignal.any([this.preloadAbort.signal, AbortSignal.timeout(5000)]),
+      });
+      if (!response.ok) return;
+      const { runs } = await response.json();
+      if (!this.isConnected || !Number.isSafeInteger(runs) || runs < 0) return;
+      this.text('#games-played', `${runs.toLocaleString()} ${runs === 1 ? 'game' : 'games'} played ↗`);
+      this.show('#games-played', true);
+    } catch { /* Optional public count never blocks offline play or shows a game error. */ }
   }
   private async openLinkedRun() {
     const linked = requestedRun();

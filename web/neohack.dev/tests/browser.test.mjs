@@ -220,6 +220,36 @@ test("welcome creator link stays small, accessible and clear of controls", { tim
   assert.deepEqual(errors, []);
 });
 
+test('frontpage games played count links to the ledger and stays clear on desktop and phone', async t => {
+  const {page,errors}=await fixture(t,{setup:async page=>{
+    await page.route('**/api/stats?view=count',route=>route.fulfill({json:{runs:12345}}));
+  }});
+  const link=page.locator('#games-played');await link.waitFor({state:'visible'});
+  assert.equal(await link.textContent(),'12,345 games played ↗');
+  assert.equal(await link.getAttribute('href'),'/dashboard');
+  for(const [name,width,height] of [['desktop',1440,1050],['mobile',390,844],['landscape',844,390]]) {
+    await page.setViewportSize({width,height});
+    const box=await link.boundingBox(),controls=await page.locator('#welcome-actions').boundingBox();
+    await page.screenshot({path:`${root}/test-results/games-played-${name}.png`});
+    assert.ok(box.width>=44&&box.height>=44);
+    assert.ok(box.x>=0&&box.x+box.width<=width&&box.y>=0&&box.y+box.height<=height);
+    assert.ok(box.x>=controls.x+controls.width||box.x+box.width<=controls.x||box.y>=controls.y+controls.height||box.y+box.height<=controls.y,`${name}: count clears controls ${JSON.stringify({box,controls})}`);
+    assert.equal(await link.evaluate(el=>{const r=el.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===el}),true);
+  }
+  await create(page);assert.equal(await link.isVisible(),false);assert.deepEqual(errors,[]);
+});
+
+test('a held or failed public count never gates entry or becomes a game error or invented zero', async t => {
+  let release;const gate=new Promise(resolve=>release=resolve);t.after(()=>release());
+  const {page,errors}=await fixture(t,{setup:async page=>{
+    await page.route('**/api/stats?view=count',async route=>{await gate;await route.fulfill({status:503,json:{error:'unavailable'}}).catch(()=>{})});
+  }});
+  assert.equal(await page.locator('#games-played').isVisible(),false);
+  await create(page);assert.equal((await snapshot(page)).observation.turn,1);
+  release();await page.waitForFunction(()=>document.querySelector('#games-played').hidden);
+  assert.equal(await page.locator('#error').isVisible(),false);assert.deepEqual(errors,[]);
+});
+
 test("plain HTTP remote origins explain secure access before starting WASM", async (t) => {
   const { page, errors, requests } = await fixture(t, { insecure: true });
   await ready(page);

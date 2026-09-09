@@ -103,6 +103,20 @@ sorting the complete ledger on each request. Updates use conditional writes and
 preserve terminal and highest-progress records. Run records remain authoritative
 if a summary update fails; retrying or rebuilding repairs the projection.
 
+Each partition summary also retains its 200 latest updated runs and three leaders
+per metric (peak hero level and depth) per UTC day for the current seven dates.
+`/api/stats` merges these bounded lists into a global latest 200 and today's /
+last-seven-days records. The windows select runs by their latest `updatedAt`,
+not by creation or achievement time. Missing/nonpositive/noninteger scores are
+omitted; accepted updates retain known peak level and depth. Expired dates are
+filtered at read time even when no new runs arrive. A summary with an older
+projection format is refreshed once from its existing partition using conditional
+writes. Authoritative run records, journals and runtime pins are untouched;
+normal statistics requests still read only the 32 summaries.
+The welcome page requests `/api/stats?view=count`, which returns only `{runs}`.
+Successful public counts cache for 60 seconds with five minutes of stale-while-
+revalidate; failed storage reads keep the normal uncached error response.
+
 The published `board/index.json` is retained read-only as an additive historical
 source. Initial summary construction batches its records by partition; it does
 not perform thousands of per-run writes during a cold start. Existing records

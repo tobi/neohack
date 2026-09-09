@@ -2,11 +2,13 @@ const base = new URL(process.argv[2] ?? "https://neohack.dev");
 for (const [path, type, marker] of [
   ["/", "text/html", "neohack"],
   ["/dashboard", "text/html", "dashboard"],
+  ["/dashboard-chart.js", "javascript", "runChart"],
   ["/component", "text/html", "neohack-world"],
   ["/bots", "text/html", ""],
   ["/login", "text/html", ""],
   ["/api/health", "application/json", ""],
   ["/api/stats", "application/json", ""],
+  ["/api/stats?view=count", "application/json", ""],
 ]) {
   const response = await fetch(new URL(path, base), {
     signal: AbortSignal.timeout(30000),
@@ -16,11 +18,19 @@ for (const [path, type, marker] of [
       `${path}: ${response.status} ${response.headers.get("content-type")}`,
     );
   const body = await response.text();
-  if (marker && !body.toLowerCase().includes(marker))
+  if (marker && !body.toLowerCase().includes(marker.toLowerCase()))
     throw Error(`${path}: wrong page`);
   if (path === "/api/health" && !JSON.parse(body).ok)
     throw Error("API unavailable");
-  if (path === "/api/stats" && !JSON.parse(body).totals)
-    throw Error("Dashboard contract unavailable");
+  if (path === '/api/stats?view=count' && !Number.isSafeInteger(JSON.parse(body).runs))
+    throw Error('Public games-played count unavailable');
+  if (path === "/api/stats") {
+    const stats = JSON.parse(body);
+    if (!stats.totals || !Array.isArray(stats.recent) || stats.recent.length > 200 ||
+        stats.records?.timeZone !== 'UTC' ||
+        !['today', 'week'].every(period => ['level', 'depth'].every(metric =>
+          Array.isArray(stats.records[period]?.[metric]))))
+      throw Error("Dashboard chart/records contract unavailable");
+  }
   console.log("OK", path);
 }

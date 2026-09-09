@@ -660,6 +660,12 @@ existing background package download status without constructing a game worker o
 claiming offline/service-worker support. On narrow screens, stack the cards below
 the courtyard with a visible jump link. Hide this content during gameplay.
 
+A small “N games played” link at the bottom of the courtyard opens the Adventure ledger.
+It uses the ledger's total recorded runs, not players or only completed lives.
+Fetch the compact public count once in the background; its CDN cache may lag by
+a few minutes. Missing, invalid or offline responses leave the link hidden, never
+show an invented zero or a gameplay error, and never gate character creation.
+
 The welcome page includes a syntax-highlighted, selectable TypeScript example
 using `import Nethack from 'neonethack'` and `new Nethack()`. The hamburger menu
 always includes GitHub, including during play. Active runs replace the page URL
@@ -730,10 +736,23 @@ New runs select current runtime metadata and record the immutable package hash.
 Resuming a bookmark loads its recorded package, independent of the current release.
 Title warmup preloads content-addressed URLs without owning a store.
 
-The Adventure ledger opens from the game menu in a separate tab. It ranks public
-run summaries by ascension, peak observed experience level, then turns; dungeon
-location is descriptive, not a cross-branch depth score. Clearly label browser
-reports and missing older data. Error telemetry sends only a bounded category and
+The Adventure ledger opens from the game menu in a separate tab. At the top,
+plot the latest 200 updated public runs: turns on the horizontal axis and deepest
+reported dungeon level on the vertical axis, with an option to show best hero
+level instead. Color by actual character class (falling back to starting class),
+with labelled class filters and an unknown-class color. Selecting a dot shows
+the name, class, progress and an explicit Show replay button when available.
+Coincident points offer a run chooser; keyboard arrows and a complete accessible
+table provide alternatives to pointer selection. Plotting never downloads replays.
+
+Show the top three hero-level and dungeon-depth records separately for Today
+(since midnight UTC) and Last 7 days (today plus six prior UTC dates). These rank
+each run's best reported progress among runs updated in the window, across the
+whole ledger, not just the plotted 200 or all-time leaders. They are not claims
+about when the high score was achieved. Unknown scores are omitted, not zero;
+never parse a dungeon label to manufacture a numeric depth. The all-time list
+continues to rank by ascension, peak experience level, then turns. Clearly label
+browser reports and missing older data. Error telemetry sends only a bounded category and
 engine package, asynchronously and once per category/package/page visit. Never
 send bookmarks, vault IDs, raw messages, stacks or journals in diagnostic reports.
 Reports go to structured Vercel logs; the public ledger API excludes diagnostics.

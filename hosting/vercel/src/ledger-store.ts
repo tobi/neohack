@@ -3,6 +3,10 @@ import { read, update, storage, type Storage } from "./storage.ts";
 import type { Run } from "./board.ts";
 import { publicReplayIds } from "./replays.ts";
 const SHARDS = 32;
+const DAY = 86_400_000;
+const SUMMARY_FORMAT = 2;
+const RECENT_LIMIT = 200;
+const RECORD_LIMIT = 3;
 const partition = (id: string) =>
   createHash("sha256").update(id).digest()[0]! % SHARDS;
 const rank = (a: Run, b: Run) =>
@@ -13,14 +17,35 @@ const rank = (a: Run, b: Run) =>
 type Entry = { run: Run; recorded: boolean };
 type Shard = { version: number; entries: Record<string, Entry> };
 const emptyShard = (): Shard => ({ version: 0, entries: {} });
-function summarize(shard: Shard) {
+type PublicRun = Run & { replayAvailable: boolean };
+type DailyRecords = { runs: number; level: PublicRun[]; depth: PublicRun[] };
+const recentOrder = (a: Run, b: Run) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id);
+const score = (run: Run, metric: "level" | "depth") => metric === "level" ? run.maxLevel : run.maxDepth;
+const knownScore = (value: number | undefined): value is number => Number.isSafeInteger(value) && value! > 0;
+function records(runs: PublicRun[], metric: "level" | "depth") {
+  return runs.filter(run => knownScore(score(run, metric)))
+    .sort((a, b) => score(b, metric)! - score(a, metric)! || recentOrder(a, b))
+    .slice(0, RECORD_LIMIT);
+}
+function progress(old: Run | undefined, run: Run): Run {
+  const peak = (a: number | undefined, b: number | undefined) =>
+    knownScore(a) || knownScore(b) ? Math.max(knownScore(a) ? a : 0, knownScore(b) ? b : 0) : undefined;
+  return { ...run, maxLevel: peak(old?.maxLevel, run.maxLevel), maxDepth: peak(old?.maxDepth, run.maxDepth) };
+}
+function summarize(shard: Shard, now = Date.now()) {
   const entries = Object.values(shard.entries),
     runs = entries
       .map((e) => ({ ...e.run, replayAvailable: e.recorded }))
       .sort(rank),
     roles: Record<string, number> = {};
   for (const run of runs) roles[run.role] = (roles[run.role] ?? 0) + 1;
+  const today = Math.floor(now / DAY), daily: Record<string, DailyRecords> = {};
+  for (let day = today - 6; day <= today; day++) {
+    const active = runs.filter(run => Math.floor(run.updatedAt / DAY) === day);
+    if (active.length) daily[day] = { runs: active.length, level: records(active, "level"), depth: records(active, "depth") };
+  }
   return {
+    format: SUMMARY_FORMAT,
     version: shard.version,
     totals: {
       runs: runs.length,
@@ -31,7 +56,17 @@ function summarize(shard: Shard) {
     roles,
     best: runs.slice(0, 100),
     recorded: runs.filter((r) => r.replayAvailable).slice(0, 100),
+    recent: [...runs].sort(recentOrder).slice(0, RECENT_LIMIT),
+    daily,
   };
+}
+type Summary = ReturnType<typeof summarize>;
+async function publishSummary(shard: number, summary: Summary) {
+  return update("ledger/summaries/" + shard + ".json", () => summarize(emptyShard()), doc => {
+    if (summary.version > doc.version || (summary.version === doc.version && doc.format !== SUMMARY_FORMAT))
+      Object.assign(doc, summary);
+    return doc;
+  });
 }
 const newer = (old: Run | undefined, run: Run) =>
   !old ||
@@ -54,8 +89,8 @@ async function indexEntries(shard: number, entries: Entry[]) {
             // Indexing may arrive after a newer write with the same timestamp.
             run: newer(prior?.run, run)
               ? prior?.run.control === "webmcp" && run.control === "manual"
-                ? { ...run, control: "webmcp", automated: true }
-                : run
+                ? { ...progress(prior?.run, run), control: "webmcp", automated: true }
+                : progress(prior?.run, run)
               : prior!.run,
             recorded: recorded || prior?.recorded || false,
           };
@@ -65,13 +100,7 @@ async function indexEntries(shard: number, entries: Entry[]) {
       return summarize(doc);
     },
   );
-  await update(
-    "ledger/summaries/" + shard + ".json",
-    () => summarize(emptyShard()),
-    (doc) => {
-      if (summary.version > doc.version) Object.assign(doc, summary);
-    },
-  );
+  await publishSummary(shard, summary);
 }
 const indexRun = (run: Run, recorded = false) =>
   indexEntries(partition(run.id), [{ run, recorded }]);
@@ -85,12 +114,11 @@ async function writeRun(run: Run, recorded = false) {
     (doc) => {
       if (newer(doc.run, run))
         doc.run = {
-          ...run,
+          ...progress(doc.run, run),
           // Match the client's sticky WebMCP attribution across owner handoff.
           ...(doc.run?.control === "webmcp" && run.control === "manual"
             ? { control: "webmcp", automated: true }
             : {}),
-          maxLevel: Math.max(run.maxLevel ?? 0, doc.run?.maxLevel ?? 0),
         };
       return doc.run!;
     },
@@ -176,12 +204,18 @@ export async function ledgerRuns() {
   for (const run of runs) merged.set(run.id, run);
   return [...merged.values()].sort((a, b) => b.updatedAt - a.updatedAt);
 }
-export async function ledgerStats() {
+export async function ledgerStats(now = Date.now()) {
   await initialize();
   const summaries = await Promise.all(
-    Array.from({ length: SHARDS }, (_, n) =>
-      read<ReturnType<typeof summarize>>("ledger/summaries/" + n + ".json"),
-    ),
+    Array.from({ length: SHARDS }, async (_, n) => {
+      const summary = await read<Summary>("ledger/summaries/" + n + ".json");
+      if (!summary || summary.format === SUMMARY_FORMAT) return summary;
+      // Summaries are replaceable projections. Refresh the bounded partition once;
+      // never reinterpret or rewrite authoritative run records or saved games.
+      const shard = await read<Shard>("ledger/shards/" + n + ".json");
+      if (!shard) throw Error("Ledger summary has no source partition");
+      return publishSummary(n, summarize(shard, now));
+    }),
   );
   const totals = { runs: 0, living: 0, ascended: 0, longest: 0 },
     roles: Record<string, number> = {};
@@ -194,6 +228,15 @@ export async function ledgerStats() {
     for (const [role, count] of Object.entries(s.roles))
       roles[role] = (roles[role] ?? 0) + count;
   }
+  const today = Math.floor(now / DAY);
+  const window = (startDay: number) => {
+    const days = summaries.flatMap(s => Object.entries(s?.daily ?? {}).filter(([day]) => Number(day) >= startDay && Number(day) <= today).map(([, value]) => value));
+    return {
+      from: startDay * DAY, to: now, runs: days.reduce((n, day) => n + day.runs, 0),
+      level: records(days.flatMap(day => day.level), "level"),
+      depth: records(days.flatMap(day => day.depth), "depth"),
+    };
+  };
   return {
     totals,
     roles: Object.entries(roles)
@@ -207,6 +250,8 @@ export async function ledgerStats() {
       .flatMap((s) => s?.recorded ?? [])
       .sort(rank)
       .slice(0, 100),
+    recent: summaries.flatMap(s => s?.recent ?? []).sort(recentOrder).slice(0, RECENT_LIMIT),
+    records: { timeZone: "UTC", basis: "updatedAt", today: window(today), week: window(today - 6) },
   };
 }
 export async function rebuildLedgerSummaries() {

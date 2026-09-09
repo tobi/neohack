@@ -966,6 +966,21 @@ progress::-moz-progress-bar {
   font-size: 10px;
   letter-spacing: 2px;
 }
+#games-played {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(8px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--muted);
+  background: #171f23e6;
+  text-underline-offset: 3px;
+}
+pixel-nethack.in-game #games-played { display: none; }
 .creator-link {
   position: absolute;
   right: max(12px, env(safe-area-inset-right));
@@ -1466,6 +1481,7 @@ pixel-nethack:not(.in-game) #journal-preview, pixel-nethack:has(.rightbar:not([h
 @media (min-width: 1100px) {
   pixel-nethack:not(.in-game) .map-viewport { right: 396px; }
   pixel-nethack:not(.in-game) .intro-title, pixel-nethack:not(.in-game) .intro-controls { left: calc((100% - 396px) / 2); }
+  #games-played { left: calc((100% - 396px) / 2); }
 }
 @media (max-width: 1099px) {
   pixel-nethack:not(.in-game) { overflow-y: auto; overflow-x: hidden; }

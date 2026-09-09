@@ -8,6 +8,12 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- The ledger opens with a chart of the latest 200 updated adventures, colored by
+  class. Filter classes, compare turns with depth or hero level, and select a run
+  for its replay. Today's and the last seven days' level and depth leaders appear
+  below, using UTC dates.
+- The front page shows the total games played, with a link to the ledger.
+  Loading this count never delays entering the dungeon or playing offline.
 - The top bar brings game controls together. Inspection stays in one place,
   offers numbered shortcuts and opens contextual encyclopedia entries with a
   return to the same tile or item.
