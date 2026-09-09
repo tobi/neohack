@@ -1,9 +1,9 @@
-import { Navigator, NavigationError, WorldError } from "neonethack";
+import { NavigationError, WorldError } from "neonethack";
 const key = ({ x, y }) => `${x},${y}`;
 // Route geometry and frontier selection belong to the shared C navigator.
 // This example only chooses exploration, descent, retreat or a bounded search.
 export function createExplorer() {
-    let level, navigator, game, destination;
+    let level, game, destination;
     const visited = new Set();
     const searches = new Set();
     const probed = new Set();
@@ -11,7 +11,6 @@ export function createExplorer() {
     function update(hero) {
         if (game !== hero.game) {
             game = hero.game;
-            navigator = new Navigator(game);
         }
         if (level !== hero.location.id) {
             level = hero.location.id;
@@ -68,7 +67,7 @@ export function createExplorer() {
             try {
                 let result = null;
                 if (descend && hero.map.some(cell => cell.terrain.type === "stairsDown"))
-                    result = await navigator.descend({ maxActions: 1 });
+                    result = await hero.descend({ maxActions: 1 });
                 if (!result || result.reason === "noRoute") {
                     if (destination && key(destination) === key(hero.position))
                         destination = null;
@@ -78,7 +77,7 @@ export function createExplorer() {
                         if (frontier)
                             destination = { x: frontier.x, y: frontier.y };
                     }
-                    result = destination ? await hero.go({ to: destination, maxActions: 1 }) : await navigator.explore({ maxActions: 1 });
+                    result = destination ? await hero.go({ to: destination, maxActions: 1 }) : await hero.explore({ maxActions: 1 });
                     if (["arrived", "noRoute", "interrupted"].includes(result.reason))
                         destination = null;
                 }

@@ -23,7 +23,7 @@ Each run starts a fresh human Valkyrie with a fixed seed (42 by default). The br
 | `steady-fighter` | Descend and fight single adjacent enemies while healthy; retreat when hurt or surrounded. |
 | `first-steps` | Search once and stop: a small introduction to events. |
 
-The main scripts are short. `explore.js` selects destinations from the shared C navigator and keeps each destination between turns. It does not implement terrain collision tables or pathfinding. Retreat, one-shot adjacent probes, limited searches and ration selection remain editable **example policies**. They use perceived information and explicit engine attempts; they are not safety guarantees. Boulders are left for another strategy.
+The main scripts are short. `hero.explore({ maxActions })` and `hero.descend({ maxActions })` run bounded C navigation legs: nearest perceived frontier or remembered downstairs, ordinary moves/opens/climbs, stop for decisions and changes. `explore.js` calls those methods one action at a time so other example policies can interleave. Retreat, one-shot adjacent probes, limited searches and ration selection remain editable **example policies**. They use perceived information and explicit engine attempts; they are not safety guarantees. Boulders are left for another strategy.
 
 Examples stop when cornered, when navigation cannot handle the current movement, or when they need another strategy; the fighter can die. They do not solve NetHack. The native regression uses seed 7 and a 2,000-request budget, including free route queries, to verify door opening and distinct exploration policies. For fixed, fingerprinted evaluation use [the benchmark](../benchmark/README.md).
 

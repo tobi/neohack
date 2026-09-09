@@ -4394,6 +4394,9 @@ test('More actions searches labels and commands without typing gameplay input', 
   assert.ok(await page.getByRole('option',{name:'Fire readied ammunition',exact:true}).count(), 'action substrings coexist with prefix completions');
   await query.fill('rest');
   assert.equal(await page.getByRole('option',{name:'Rest one turn',exact:true}).count(),1);
+  await query.fill('auto');
+  const autoIds=await page.getByRole('option').evaluateAll(rows=>rows.map(row=>row.dataset.action));
+  assert.ok(autoIds.includes('auto:explore') && autoIds.includes('auto:descend'));
   await query.fill('Z');
   assert.equal(await page.locator('#'+await query.getAttribute('aria-activedescendant')).getAttribute('data-action'),'cast');
   await query.fill('z');

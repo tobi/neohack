@@ -758,6 +758,11 @@ Chat is available by searching `chat` (or `#chat`) in More actions. It opens the
 engine's “Talk to whom?” direction question; choose an adjacent character's
 direction. Consultations, donations and other dialogue choices remain explicit
 engine decisions. Opening/filtering the menu never initiates a conversation.
+`auto:explore` and `auto:descend` are neohack conveniences, not vanilla NetHack
+commands: they walk perceived frontiers or remembered downstairs through ordinary
+moves and one door attempt, then stop for decisions, damage, hunger or new
+creatures. Escape stops the current leg. They do not answer warnings or guess
+unmapped tiles.
 Share action definitions between the menu's visible key badges and map shortcuts.
 Use compact 36px text buttons on desktop, 44px on phones/coarse pointers, and
 consistent 6px/12px padding; icon targets retain their existing 44px geometry.
@@ -1194,8 +1199,11 @@ Plan routes over the disclosed map, open doors, remember failed edges, search a
 bounded number of times and try identified rations. Retreat from nearby enemies;
 stop when no retreat remains or a decision requires another strategy. Cartographer
 stays on one level; Steady fighter adds an explicit combat policy. First steps
-remains a one-action teaching example. Eligibility and movement facts originate in
-C; policy remains in the examples. Never present a sighting event as a hidden spawn/death.
+remains a one-action teaching example. `hero.explore` and `hero.descend` are the
+bounded C navigation legs (nearest perceived frontier or remembered downstairs);
+example policies call them one action at a time so combat and care can interleave.
+Eligibility and movement facts originate in C; policy remains in the examples.
+Never present a sighting event as a hidden spawn/death.
 
 One source catalog supplies the chooser and the Node test runner in examples/workshop.
 Each account copy includes all of its helpers. Keep the chooser's mark/copy/action

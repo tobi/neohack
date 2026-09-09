@@ -109,6 +109,7 @@ class PixelNethack extends HTMLElement {
     if (this.commandOpen && !this.querySelector("#keyboard-prefix")?.contains(e.target as Node)) this.clearKeyPrefix();
   };
   private navigationNotice="";
+  private navigationVerb="Walking";
   private navigationAbort: AbortController | null = null;
   private cloudStatusGeneration = 0;
   private cloudEnabled = false;
@@ -1280,8 +1281,9 @@ class PixelNethack extends HTMLElement {
     (this.$('.close-dialog') as HTMLButtonElement).disabled = !!this.actionPicker?.action &&
       (this.busy || this.yielding || this.uncertain() || !this.game?.decision?.cancellable);
     this.show("#navigation-status",!!this.navigationAbort || !!this.navigationNotice);
-    this.text("#navigation-status-text",this.navigationNotice || "Walking…");
+    this.text("#navigation-status-text",this.navigationNotice || this.navigationVerb+"…");
     this.show("#navigation-stop",!!this.navigationAbort);
+    this.$("#navigation-stop").textContent="Stop "+this.navigationVerb.toLowerCase();
     this.$("#pickup-settings").hidden = !this.game;
     (this.$("#text-map-button") as HTMLButtonElement).disabled = !this.game;
     this.querySelectorAll<HTMLButtonElement>("[data-intro]").forEach(
@@ -1878,21 +1880,13 @@ class PixelNethack extends HTMLElement {
         this.map.route=route.steps;this.map.draw();
         walk.onclick=()=>{
           if(!this.playable() || this.game!==game || game.state.revision!==revision)return;
-          this.stopMovement();
-          const controller=new AbortController();this.navigationAbort=controller;
-          void this.run(async()=>{
-            try {
-              this.map.route=route.steps;
-              const result=await game.go({to:{x,y},signal:controller.signal,onStep:frame=>{
-                this.recordReplays();this.render();
-                const at=route.steps.findIndex(p=>p.x===frame.observation.you?.x&&p.y===frame.observation.you?.y);
-                this.map.route=at<0?[]:route.steps.slice(at+1);this.map.draw();
-              }});
-              this.navigationNotice=result.reason==="arrived"?"":"Walking stopped: "+result.reason+".";
-            } finally {
-              if(this.navigationAbort===controller)this.navigationAbort=null;
-              this.map.route=[];this.map.draw();
-            }
+          this.beginNavigation("Walking", (signal, onStep) => {
+            this.map.route=route.steps;
+            return game.go({to:{x,y},signal,onStep:frame=>{
+              onStep();
+              const at=route.steps.findIndex(p=>p.x===frame.observation.you?.x&&p.y===frame.observation.you?.y);
+              this.map.route=at<0?[]:route.steps.slice(at+1);this.map.draw();
+            }});
           });
         };
         if(walkImmediately && !walk.disabled)walk.click();
@@ -2252,6 +2246,23 @@ class PixelNethack extends HTMLElement {
     });
     return succeeded && this.playable() && this.metadataHealthy;
   }
+  private beginNavigation(verb: string, start: (signal: AbortSignal, onStep: () => void) => Promise<{reason: string}>) {
+    if (!this.playable()) return;
+    this.stopMovement();
+    const controller = new AbortController();
+    this.navigationAbort = controller;
+    this.navigationVerb = verb;
+    void this.run(async () => {
+      try {
+        const result = await start(controller.signal, () => { this.recordReplays(); this.render(); });
+        this.navigationNotice = result.reason === "arrived" ? "" : verb + " stopped: " + result.reason + ".";
+      } finally {
+        if (this.navigationAbort === controller) this.navigationAbort = null;
+        this.map.route = [];
+        this.map.draw();
+      }
+    });
+  }
   private actionUnavailable(name: string) {
     const n = this.game?.observation.neighborhood;
     if (n?.status !== "available" || n.basis.revision !== this.game?.state.revision) return "";
@@ -2271,6 +2282,13 @@ class PixelNethack extends HTMLElement {
     this.movement.stop();
     if (!this.playable() || this.actionUnavailable(name)) return;
     if (name === "pray" && !this.prayerExplained) { this.explainPrayer(); return; }
+    if (name === "auto:explore" || name === "auto:descend") {
+      const game = this.game!;
+      this.closeMenu();
+      this.beginNavigation(name === "auto:descend" ? "Descending" : "Exploring", (signal, onStep) =>
+        name === "auto:descend" ? game.descend({signal, onStep}) : game.explore({signal, onStep}));
+      return;
+    }
     const g = this.game!,
       ref = item ? { id: item.id } : undefined,
       options = { expectedRevision: g.state.revision };

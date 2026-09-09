@@ -8,6 +8,9 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- More actions includes auto:explore and auto:descend: walk perceived frontiers or
+  remembered downstairs, then stop for choices, damage or new creatures. These are
+  neohack helpers, not vanilla NetHack commands. Escape ends the current walk.
 - The ledger can hide missing or broken replay links without removing adventures,
   scores or written tales. Archive audits verify complete recordings and compact
   both input logs and older public frame files while retaining existing links.

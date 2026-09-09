@@ -155,7 +155,9 @@ The workshop requires Web Crypto (HTTPS or localhost) to verify runtime assets.
 An insecure address is explained before any runtime is loaded.
 
 See the [typed Hero API](../../lib/neonethack/docs/HERO.md) for sensing, movement,
-melee and inventory conveniences. Its declarations drive the workshop editor.
+melee and inventory conveniences. `hero.explore` and `hero.descend` are bounded C
+navigation legs from perceived knowledge, not vanilla NetHack commands. Workshop
+editor completions come from those declarations.
 
 ## Public replay embeds
 
