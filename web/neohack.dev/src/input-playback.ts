@@ -6,8 +6,8 @@ import {
   checkpointBytes,
 } from "../../../lib/neonethack/wasm/protocol-reader.mjs";
 
-/** Reconstructs scenes locally. Holds at most one compressed input chunk and
- * the current scene; the renderer never accumulates a second full run buffer. */
+/** Reconstructs scenes locally using a bounded window of prefetched compressed
+ * chunks and the current scene, without accumulating a second full run buffer. */
 export class InputPlayback {
   private transport?: import("neonethack/wasm").WasmTransport;
   private records?: AsyncGenerator<any>;
