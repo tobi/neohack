@@ -1,8 +1,8 @@
 import "./no-model-calls.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ChronicleDigest, MAX_DIGEST_BYTES } from "./digest.mjs";
-import { prompt, validateStory, renderStory } from "./prompt.mjs";
+import { ChronicleDigest, MAX_PROMPT_CHARS } from "./digest.mjs";
+import { prompt, transcript, validateStory, renderStory } from "./prompt.mjs";
 import { fixture } from "../../lib/neonethack/tests/native-fixture.mjs";
 
 const reply = (revision, messages = [], extra = {}) => ({
@@ -47,7 +47,8 @@ test("rolling narration is not repeated as a new incident; a genuinely repeated 
     d.events.filter((e) => e.messages?.includes("Your leg is wounded.")).length,
     2,
   );
-  assert.equal(d.events.find((e) => e.id === "e2")?.messages, undefined);
+  assert.equal(d.events.length, 2, "an unchanged rolling window is not a new incident");
+  assert.deepEqual(d.events.map((e) => e.id), ["T1", "T1.2"]);
 });
 
 test("an incident near the end of a long narration batch survives routine messages", () => {
@@ -90,12 +91,10 @@ test("keeps reversals, context and ending through a long noisy run without retai
   );
   const d = c.finish(),
     json = JSON.stringify(d);
-  assert.ok(Buffer.byteLength(json) <= MAX_DIGEST_BYTES);
-  assert.ok(c.pool.length <= 96);
-  assert.ok(
-    c.recent.every((e) => !e.context?.context),
-    "context cannot retain a linked history",
-  );
+  assert.ok(transcript(d).length <= MAX_PROMPT_CHARS);
+  assert.ok(c.pool.length <= 16000, "retention is bounded for endless transcripts");
+  assert.ok(d.coverage.collapsedRoutineReplies > 99000, "identical routine lines are counted, not retold");
+  assert.ok(transcript(d).includes("repeated ×"));
   for (const m of [
     "bear trap",
     "wounded",
@@ -105,7 +104,7 @@ test("keeps reversals, context and ending through a long noisy run without retai
   ])
     assert.ok(json.includes(m), m);
   assert.equal(d.events.at(-1).ending.cause, "a gas spore explosion");
-  assert.ok(d.coverage.omittedReplies > 99000);
+  assert.ok(d.coverage.omittedReplies + d.coverage.collapsedRoutineReplies > 99000);
   for (const secret of [
     "private-run-token",
     "private-operation",
@@ -152,10 +151,10 @@ test("unrecorded endings remain unknown; strict sources and safe HTML preserve t
   const story = {
     title: "A Short Visit",
     paragraphs: [
-      { text: "An adventurer entered.", sources: ["e1"] },
+      { text: "An adventurer entered.", sources: ["T1"] },
       {
         text: "<img src=x onerror=alert(1)> The account stops here.",
-        sources: ["e1"],
+        sources: ["T1"],
       },
     ],
   };

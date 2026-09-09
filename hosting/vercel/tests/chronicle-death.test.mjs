@@ -58,7 +58,9 @@ test("the death screen offers to tell the tale once the recording is public, ope
   await tell.waitFor({ state: "visible", timeout: 60000 });
   assert.equal(await tell.textContent(), "Tell the tale");
   await tell.click();
-  await page.waitForSelector("#menu[open] .chronicle", { timeout: 90000 });
+  // The story opens at once as a draft and fills in while the server works.
+  await page.waitForSelector("#menu[open] .chronicle-draft", { timeout: 90000 });
+  await page.waitForSelector("#menu[open] .chronicle:not(.chronicle-draft)", { timeout: 90000 });
   assert.equal(calls.length, 1, "one model call");
   assert.equal(calls[0].events.at(-1).ending?.kind, "death", "the replayed evidence ends in the witnessed death");
   assert.ok(calls[0].events.some((e) => e.action === "eat"), "the evidence contains the fatal meals");

@@ -114,7 +114,7 @@ async function check(dir, m, id) {
 export async function collectReplay(
   url,
   collector,
-  { runtime, runtimeOrigin, signal, lookup, maxInputs = Infinity } = {},
+  { runtime, runtimeOrigin, signal, lookup, maxInputs = Infinity, onProgress } = {},
 ) {
   const source = new URL(url);
   if (!["https:", "http:"].includes(source.protocol))
@@ -136,7 +136,9 @@ export async function collectReplay(
   try {
     if (transport.buildId !== manifest.buildId)
       throw Error("Replay requires its exact engine package");
+    onProgress?.(0, manifest.count);
     for await (const record of inputRecords(manifest, source, { signal })) {
+      if (onProgress && record.index % 50 === 49) onProgress(record.index + 1, manifest.count);
       if (record.index === 0) {
         const p = record.request.params;
         for (const k of ["name", "role", "race"])
@@ -149,6 +151,7 @@ export async function collectReplay(
       if (!collector.add(reply) && !isFullReply(reply))
         throw Error("An archived input did not yield a full public reply");
     }
+    onProgress?.(manifest.count, manifest.count);
     const digest = collector.finish();
     if (lookup) {
       // The replayed game has usually ended, and lore needs a live boundary. A

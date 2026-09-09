@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import {createTestHarness} from './server.mjs';
 import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
 
-test('real cloud run reconstructs public scenes, embeds after death and shares a ledger lightbox', {timeout:120000}, async t=>{
+test('real cloud run reconstructs public scenes, embeds after death and forwards ledger links to the run\'s page', {timeout:120000}, async t=>{
   const server=createTestHarness();const {url}=await server.listen();
   const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});
   t.after(async()=>{await browser.close();await server.close();});
@@ -73,15 +73,19 @@ test('real cloud run reconstructs public scenes, embeds after death and shares a
   await page.waitForFunction(()=>document.querySelector('#replay')?.snapshot);
   assert.equal(await page.locator('#share-url').inputValue(),link);
   await page.route('**/replay-files/replays/*/chunks/*.gz',async route=>{if(++chunkRequests===2)await heldPage;await route.continue();});
+  // Ledger links to a run land on its own page; the old dashboard address forwards there.
   await page.goto(new URL('/dashboard?run='+state.sessionId,url).href);
-  await page.waitForFunction(()=>document.querySelector('neohack-world')?.snapshot?.revision>=2);
+  await page.waitForURL(u=>u.pathname==='/replays/'+state.sessionId);
+  await page.waitForFunction(()=>document.querySelector('#replay')?.snapshot);
   await page.evaluate(()=>document.querySelector('neohack-world').setAttribute('role','wizard'));
   assert.match(await page.locator('neohack-world').locator('#status').textContent(),/Turn/);
   assert.match(await page.locator('neohack-world').locator('#progress').textContent(),/actions/);
   releasePage();
 
-  await page.waitForFunction(()=>document.querySelector('#replay-lightbox').open && document.querySelector('neohack-world')?.snapshot);
+  await page.waitForFunction(()=>document.querySelector('neohack-world')?.snapshot);
   const world=page.locator('neohack-world');
+  await world.getByRole('button',{name:'Play replay',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('neohack-world')?.snapshot?.revision>=2);
   await world.getByRole('button',{name:'Pause replay',exact:true}).click();
   await world.getByLabel('Replay frame',{exact:true}).fill('0');
   assert.equal(await world.getByLabel('Playback speed',{exact:true}).inputValue(),'4');
@@ -91,8 +95,8 @@ test('real cloud run reconstructs public scenes, embeds after death and shares a
   await page.setViewportSize({width:390,height:844});
   await page.screenshot({path:'/tmp/neohack-replay-mobile.png',fullPage:true});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-  await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('neohack-world'));
   await page.goto(new URL('/dashboard?run=missing-recording',url).href);
+  await page.waitForURL(u=>u.pathname==='/replays/missing-recording');
   await page.waitForFunction(()=>document.querySelector('neohack-world')?.shadowRoot.textContent.includes('Replay unavailable'));
   // A new visit can append to an existing public recording without rewriting it.
   await page.goto(privateBookmark);

@@ -119,7 +119,9 @@ test(
         await route.continue();
       },
     );
-    viewer.on("request", (r) => requests.push(new URL(r.url()).pathname));
+    viewer.on("request", (r) =>
+      requests.push(r.method() + " " + new URL(r.url()).pathname),
+    );
     await viewer.goto(new URL("/dashboard?run=" + manifest.id, url).href);
     await viewer.waitForFunction(
       () => document.querySelector("neohack-world")?.snapshot?.observation,
@@ -182,10 +184,19 @@ test(
       result.state,
       "invalid optional CDN cache falls back to the verified creation/input log",
     );
+    // The run's page chrome may read exactly three things: its public ledger
+    // record, its stored chronicle and the rail's sign-in state. Playback itself
+    // never touches the dynamic API (no inputs, replay or checkpoint routes) and
+    // nothing is uploaded.
+    const chrome = new Set([
+      "GET /api/runs/" + manifest.id,
+      "GET /api/runs/" + manifest.id + "/chronicle",
+      "GET /api/account",
+    ]);
     assert.deepEqual(
-      requests.filter((path) => path.startsWith("/api/")),
+      requests.filter((r) => r.includes(" /api/") && !chrome.has(r)),
       [],
-      "watching makes no dynamic API request, upload or account lookup",
+      "watching makes no dynamic API request or upload beyond the page chrome",
     );
     // Hold a real decoded response at the component boundary. Detachment must
     // invalidate it even when it completes after the viewer has been removed.

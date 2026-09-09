@@ -1,75 +1,14 @@
 import { runChart, renderRecords } from './dashboard-chart.js';
-import { chronicleEligible, chronicleIcon, chronicleView, fetchChronicle, requestChronicle, chronicleLink } from '/build/chronicle.js';
+import { chronicleIcon } from '/build/chronicle.js';
 const $ = selector => document.querySelector(selector);
 const format = value => Number(value ?? 0).toLocaleString();
 function element(tag, text) {const node=document.createElement(tag);node.textContent=text;return node;}
-let data, openedInitial=false;
-let activeRun;
-const dialog=$('#replay-lightbox');
-function openReplay(run) {
-  activeRun=run;
-  $('#replay-title').textContent=run.name;
-  $('#copy-status').textContent='';$('#embed-code').hidden=true;
-  taleButton(run);
-  const world=document.createElement('neohack-world');
-  world.setAttribute('src',new URL('/replays/'+encodeURIComponent(run.id),location.origin).href);
-  world.setAttribute('autoplay','');world.setAttribute('controls','');world.setAttribute('speed','4');
-  $('#replay-world').replaceChildren(world);
-  if(!dialog.open)dialog.showModal();
-}
-// The chronicle is written once on the server; this button reads the cached tale or asks for it.
-const taleController={abort:null};
-function taleButton(run){
-  const button=$('#tell-tale'),status=$('#tale-status');
-  status.textContent='';taleController.abort?.abort();taleController.abort=null;
-  const eligible=run.chronicleAvailable===true||chronicleEligible(run);
-  button.hidden=!eligible;button.disabled=false;
-  if(!eligible)return;
-  const available=run.chronicleAvailable===true;
-  button.innerHTML=chronicleIcon()+'<span>'+(available?'Read the chronicle':'Tell the tale')+'</span>';
-  button.setAttribute('aria-label',(available?'Read the chronicle of ':'Tell the tale of ')+run.name);
-  button.onclick=async()=>{
-    button.disabled=true;
-    const controller=new AbortController();taleController.abort=controller;
-    try{
-      const doc=(available&&await fetchChronicle(run.id,controller.signal))||await requestChronicle(run.id,{signal:controller.signal,onStatus:text=>{status.textContent=text;}});
-      run.chronicleAvailable=true;status.textContent='';
-      openChronicle(run,doc);
-    }catch(error){if(controller.signal.aborted)return;status.textContent=error instanceof Error?error.message:'The chronicler could not finish this tale.';}
-    finally{if(taleController.abort===controller)taleController.abort=null;button.disabled=false;}
-  };
-}
-const chronicleDialog=$('#chronicle-lightbox');
-let chronicleRun;
-function openChronicle(run,doc){
-  chronicleRun=run;
-  $('#chronicle-status').textContent='';
-  $('#chronicle-body').replaceChildren(chronicleView(doc));
-  if(dialog.open)dialog.close();
-  if(!chronicleDialog.open)chronicleDialog.showModal();
-  $('#chronicle-body').scrollTop=0;
-}
-async function showChronicle(run){
-  try{const doc=await fetchChronicle(run.id);if(doc){openChronicle(run,doc);return;}openReplay(run);$('#tale-status').textContent='No chronicle has been written for this run yet.';}
-  catch(error){openReplay(run);$('#tale-status').textContent=error instanceof Error?error.message:'The chronicle could not be read.';}
-}
-$('#close-chronicle').onclick=()=>chronicleDialog.close();
-chronicleDialog.addEventListener('click',event=>{if(event.target===chronicleDialog){const r=chronicleDialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)chronicleDialog.close();}});
-$('#chronicle-replay').onclick=()=>{chronicleDialog.close();openReplay(chronicleRun);};
-$('#copy-chronicle').onclick=async()=>{
-  try{await navigator.clipboard.writeText(chronicleLink(chronicleRun.id));$('#chronicle-status').textContent='Link copied.';}
-  catch{$('#chronicle-status').textContent=chronicleLink(chronicleRun.id);}
-};
+let data;
+// Every replay and every chronicle lives on its own page, /replays/<id>, which
+// leads with the tale and is the link people share. The ledger only points there.
+const replayHref=(id,view)=>{const url=new URL('/replays/'+encodeURIComponent(id),location.origin);if(view)url.searchParams.set('view',view);return url.href;};
+function openReplay(run){location.assign(replayHref(run.id));}
 const chart = runChart(openReplay);
-$('#close-replay').onclick=()=>dialog.close();
-dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();}});
-dialog.addEventListener('close',()=>$('#replay-world').replaceChildren());
-$('#copy-replay').onclick=async()=>{
-  const src=new URL('/replays/'+encodeURIComponent(activeRun.id),location.origin).href;
-  const code='<script type="module" src="'+location.origin+'/component/neohack.js"></script>\n<neohack-world src="'+src+'" autoplay speed="4" controls style="height:480px"></neohack-world>';
-  try{await navigator.clipboard.writeText(code);$('#copy-status').textContent='Embed copied.';}
-  catch{$('#embed-code').hidden=false;$('#embed-code').value=code;$('#embed-code').select();$('#copy-status').textContent='Copy the selected embed code.';}
-};
 function renderRuns() {
   const filter=$("#status").value;
   $('#leaders-description').textContent=filter==='recorded' ? 'Top 100 adventures with replays, ranked by level and turns.' : 'Top 100 across all recorded runs: ascensions first, then highest experience level, then turns survived.';
@@ -82,10 +21,10 @@ function renderRuns() {
     const playback=element('td','');playback.className='replay-cell';
     if(run.replayAvailable===true){
       const tools=element('span','');tools.className='replay-tools';
-      const replay=element('button','Show replay');replay.className='run-replay';replay.setAttribute('aria-label','Show replay for '+run.name);replay.onclick=()=>openReplay(run);tools.append(replay);
+      const replay=element('a','Show replay');replay.className='run-replay';replay.href=replayHref(run.id);replay.setAttribute('aria-label','Show replay for '+run.name);tools.append(replay);
       if(run.chronicleAvailable===true){
-        const tale=element('button','');tale.className='run-chronicle';tale.innerHTML=chronicleIcon();tale.title='Read the chronicle';
-        tale.setAttribute('aria-label','Read the chronicle of '+run.name);tale.onclick=()=>void showChronicle(run);tools.append(tale);
+        const tale=element('a','');tale.className='run-chronicle';tale.innerHTML=chronicleIcon();tale.title='Read the chronicle';tale.href=replayHref(run.id,'chronicle');
+        tale.setAttribute('aria-label','Read the chronicle of '+run.name);tools.append(tale);
       }
       playback.append(tools);
     }else{const missing=element('span','—');missing.title='No public recording';missing.setAttribute('aria-label','No public recording');playback.append(missing);}
@@ -106,7 +45,6 @@ async function refresh() {
       const node=element("div","");node.className="metric";node.append(element("strong",format(value)),element("span",label));return node;
     }));
     renderRuns();
-    if(!openedInitial){openedInitial=true;const url=new URL(location.href),id=url.searchParams.get("run");if(id){const run=data.best.find(r=>r.id===id)??{id,name:"Adventure replay"};if(url.searchParams.get("view")==="chronicle")void showChronicle(run);else openReplay(run);}}
     $("#roles").replaceChildren(...data.roles.map(role=>{
       const node=element("div","");node.className="role";const label=element("label",role.role);label.append(element("span",format(role.count)));
       const bar=element("div","");bar.className="bar";const fill=element("i","");fill.style.width=(100*role.count/Math.max(1,data.totals.runs))+"%";bar.append(fill);node.append(label,bar);return node;
@@ -122,12 +60,10 @@ async function refresh() {
 }
 $("#refresh").addEventListener("click",refresh);
 $("#status").addEventListener("change",()=>data && renderRuns());
+// Older shared links (/dashboard?run=<id>[&view=chronicle]) land on the run's own page.
 const initialUrl=new URL(location.href),initialRun=initialUrl.searchParams.get('run');
-if(initialRun){
-  openedInitial=true;
-  if(initialUrl.searchParams.get('view')==='chronicle')void showChronicle({id:initialRun,name:'Adventure replay'});
-  else openReplay({id:initialRun,name:'Adventure replay'});
-  $('#freshness').textContent='Replay loads directly from the CDN. Refresh to open the ledger.';
+if(initialRun&&/^[A-Za-z0-9_-]{1,64}$/.test(initialRun)){
+  location.replace(replayHref(initialRun,initialUrl.searchParams.get('view')==='chronicle'?'chronicle':undefined));
 }else{
   setInterval(()=>{if(!document.hidden) void refresh();},60000);
   void refresh();

@@ -5,7 +5,7 @@ import { renderHeroHud } from './hero-hud';
 import { encyclopedia, loreButton } from './encyclopedia';
 import './component';
 import { PublicReplayRecorder,InputReplayRecorder, embedCode, replayLink } from './public-replay';
-import { chronicleEligible, chronicleIcon, chronicleLink, chronicleView, requestChronicle, type ChronicleDocument } from './chronicle';
+import { chronicleEligible, chronicleIcon, chronicleLink, chronicleView, chronicleDraftView, requestChronicle, type ChronicleDocument } from './chronicle';
 import { adventurerName } from './adventurer-names';
 import { renderCharacterSheet, equipmentDescription } from './character-sheet';
 import { actionIcon } from "./action-icons";
@@ -2022,12 +2022,19 @@ class PixelNethack extends HTMLElement {
       try {
         // The ledger must know this run ended before the chronicler will write it.
         await publishCloud([save], this.vault).catch(() => {});
-        const doc = await requestChronicle(id, { onStatus: (text) => this.text('#death-share-status', text) });
+        // The tale opens at once and fills in as the chronicler writes it.
+        const draft = chronicleDraftView(save.name, 'h3');
+        this.openMenu('');
+        this.$('#menu-content').append(draft.element);
+        const doc = await requestChronicle(id, { onStatus: (text) => draft.status(text), onDraft: (d) => draft.update(d) });
         this.text('#death-share-status', 'The tale is written and kept with the replay in the ledger.');
         button.innerHTML = chronicleIcon() + '<span>Read the chronicle</span>';
         this.showChronicle(doc, id);
       } catch (error) {
-        this.text('#death-share-status', error instanceof Error ? error.message : 'The chronicler could not finish this tale.');
+        const message = error instanceof Error ? error.message : 'The chronicler could not finish this tale.';
+        this.text('#death-share-status', message);
+        const progress = this.querySelector<HTMLElement>('#menu-content .chronicle-progress');
+        if (progress) progress.textContent = message;
       } finally {
         button.disabled = false;
       }

@@ -1,13 +1,22 @@
 // On-demand AI chronicle of a concluded public run. The service replays the
 // published input archive with its exact WASM pin (the same reconstruction the
-// browser viewer performs), asks Muse Spark once through Vercel AI Gateway, and
-// caches the validated story as a public, immutable object. Page views read
-// that object statically; a story is generated at most once per run.
+// browser viewer performs; the archive holds inputs only, so the messages the
+// hero saw exist nowhere until the engine replays them), asks Muse Spark once
+// through Vercel AI Gateway, and caches the validated story as a public,
+// immutable object. Page views read that object statically; a story is
+// generated at most once per run.
+//
+// A POST that accepts application/x-ndjson watches the work as it happens:
+// replay progress, then the story text as the model writes it, then the stored
+// document. The work itself never depends on the watcher: it is registered with
+// the platform's waitUntil and finishes, validates and stores the story even if
+// the reader leaves.
 //
 // Credentials: the gateway accepts the deployment's own OIDC token (supplied by
 // Vercel on the request, never stored) or AI_GATEWAY_API_KEY from the project's
 // environment. Nothing in this repository contains a key.
 import { AsyncLocalStorage } from "node:async_hooks";
+import { waitUntil } from "@vercel/functions";
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { read, Conflict } from "./storage.ts";
@@ -34,7 +43,7 @@ const MAX_REPLAY_INPUTS = 20000;
 const PENDING_MS = 5 * 60 * 1000;
 const RUN_ID = /^[A-Za-z0-9_-]{16}$/;
 
-export type StoryModel = (digest: Digest) => Promise<{ raw: unknown; usage?: unknown }>;
+export type StoryModel = (digest: Digest, options: { onDelta: (delta: string, text: string) => void }) => Promise<{ raw: unknown; usage?: unknown }>;
 /** Tests inject a model; production uses the gateway with a request-scoped token. */
 export const storyModelContext = new AsyncLocalStorage<StoryModel>();
 
@@ -72,7 +81,18 @@ function gatewayToken(request: Request) {
   );
 }
 
-type Progress = { stage: "archive" | "replay" | "model" | "store" };
+type Stage = "archive" | "replay" | "model" | "store";
+/** Watchers receive small status objects; the final one carries the document. */
+export type ChronicleEvent =
+  | { status: "replaying"; done: number; total: number }
+  | { status: "writing" }
+  | { delta: string }
+  | { status: "storing" }
+  | { available: true; [key: string]: unknown }
+  | { available: false; error: string };
+type Watcher = (event: ChronicleEvent) => void;
+type Progress = { stage: Stage; watch: Watcher };
+
 async function generate(request: Request, id: string, run: Run, progress: Progress): Promise<ChronicleDocument> {
   const archive = await read("input-runs/" + id + ".json");
   if (!archive || archive.complete !== true || !(archive.count > 0))
@@ -82,23 +102,35 @@ async function generate(request: Request, id: string, run: Run, progress: Progre
     source = manifestUrl(immutable, request),
     collector = new ChronicleDigest({ name: run.name, role: run.role });
   let glossary: Glossary = {};
+  let last = 0;
   const digest = await collectReplay(source, collector, {
     runtime: localRuntime,
     runtimeOrigin: new URL("/", request.url).href,
     maxInputs: MAX_REPLAY_INPUTS,
+    onProgress: (done, total) => {
+      const now = Date.now();
+      if (done === total || done === 0 || now - last > 400) {
+        last = now;
+        progress.watch({ status: "replaying", done, total });
+      }
+    },
     lookup: async (lookup) => {
       glossary = await buildGlossary(lookup, collector.finish());
     },
   });
   progress.stage = "model";
+  progress.watch({ status: "writing" });
+  const onDelta = (delta: string) => progress.watch({ delta });
   const model = storyModelContext.getStore();
   const { raw, usage } = model
-    ? await model(digest)
-    : await gatewayStory(digest, { token: gatewayToken(request) });
+    ? await model(digest, { onDelta })
+    : await gatewayStory(digest, { token: gatewayToken(request), onDelta });
   return chronicleDocument({ digest, story: parseStory(raw, digest), glossary, usage });
 }
 
 class Ineligible extends Error {}
+
+const wantsStream = (request: Request) => (request.headers.get("accept") ?? "").includes("application/x-ndjson");
 
 export async function chronicle(request: Request, id: string) {
   if (!RUN_ID.test(id)) return json({ error: "not found" }, 404);
@@ -127,26 +159,76 @@ export async function chronicle(request: Request, id: string) {
     throw error;
   }
   const claim = (await store.read(pendingPath(id)))?.etag;
-  const progress: Progress = { stage: "archive" };
-  try {
-    const document = await generate(request, id, run!, progress);
-    progress.stage = "store";
+  const watchers = new Set<Watcher>();
+  const progress: Progress = { stage: "archive", watch: (event) => watchers.forEach((w) => w(event)) };
+  // The whole job, independent of any reader. It resolves with the final
+  // event and never rejects; the platform keeps the function alive for it.
+  const work: Promise<{ status: number; body: ChronicleEvent }> = (async () => {
     try {
-      await store.write(storyPath(id), document);
+      const document = await generate(request, id, run!, progress);
+      progress.stage = "store";
+      progress.watch({ status: "storing" });
+      try {
+        await store.write(storyPath(id), document);
+      } catch (error) {
+        if (!(error instanceof Conflict)) throw error;
+      }
+      const stored = await store.read(storyPath(id));
+      await store.write(pendingPath(id), { startedAt: now, finishedAt: Date.now() }, claim).catch(() => {});
+      await markChronicled(id);
+      return { status: 200, body: { available: true as const, ...((stored?.value ?? document) as object) } };
     } catch (error) {
-      if (!(error instanceof Conflict)) throw error;
+      // The released claim records only the stage and an upstream HTTP status:
+      // bounded operational facts, never the exception, URL or credential.
+      const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : undefined;
+      await store.write(pendingPath(id), { startedAt: 0, failedAt: Date.now(), stage: progress.stage, ...(status ? { status } : {}) }, claim).catch(() => {});
+      if (error instanceof Ineligible) return { status: 409, body: { available: false as const, error: error.message } };
+      console.warn(JSON.stringify({ event: "chronicle_failed", stage: progress.stage, kind: failureKind(error), ...(status ? { status } : {}) }));
+      return { status: 502, body: { available: false as const, error: "The chronicler could not finish this tale. Nothing was charged twice; try again in a little while." } };
     }
-    const stored = await store.read(storyPath(id));
-    await store.write(pendingPath(id), { startedAt: now, finishedAt: Date.now() }, claim).catch(() => {});
-    await markChronicled(id);
-    return json({ available: true, ...(stored?.value ?? document) });
-  } catch (error) {
-    // The released claim records only the stage and an upstream HTTP status:
-    // bounded operational facts, never the exception, URL or credential.
-    const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : undefined;
-    await store.write(pendingPath(id), { startedAt: 0, failedAt: Date.now(), stage: progress.stage, ...(status ? { status } : {}) }, claim).catch(() => {});
-    if (error instanceof Ineligible) return json({ available: false, error: error.message }, 409);
-    console.warn(JSON.stringify({ event: "chronicle_failed", stage: progress.stage, kind: failureKind(error), ...(status ? { status } : {}) }));
-    return json({ available: false, error: "The chronicler could not finish this tale. Nothing was charged twice; try again in a little while." }, 502);
+  })();
+  const finished = work.then((result) => {
+    progress.watch(result.body);
+    watchers.clear();
+  });
+  try {
+    waitUntil(finished);
+  } catch {
+    /* outside the platform the promise simply runs to completion */
   }
+  if (!wantsStream(request)) {
+    const result = await work;
+    return json(result.body, result.status);
+  }
+  const encoder = new TextEncoder();
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined, open = true;
+  const watcher: Watcher = (event) => {
+    if (!open || !controller) return;
+    try {
+      controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+      if ("available" in event) controller.close();
+    } catch {
+      open = false;
+    }
+    if ("available" in event) {
+      open = false;
+      watchers.delete(watcher);
+    }
+  };
+  watchers.add(watcher);
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) {
+      controller = c;
+      watcher({ status: "replaying", done: 0, total: 0 });
+    },
+    cancel() {
+      // The reader left; the work continues and is stored regardless.
+      open = false;
+      watchers.delete(watcher);
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" },
+  });
 }

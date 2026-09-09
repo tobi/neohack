@@ -174,7 +174,10 @@ viewer is removed. A failed or missing recording remains a visible error.
 `play(interval)` still accepts explicit milliseconds; no interval uses `speed`.
 Controls overlay the bottom. Sound is off by default and requires a user gesture;
 when embedding on another origin, allow the module origin's `/audio/` in your CSP.
-Every ledger run opens in a modal viewer. `/dashboard?run=RUN_ID` is the share link.
+Every ledger run links to its own page, `/replays/RUN_ID`, which is the share
+link and leads with the run's chronicle when one exists; `/dashboard?run=RUN_ID`
+forwards there. As a component `src`, either address resolves to the same public
+recording.
 The game menu and death notice copy an embed with that public source; private save
 URLs are never included. New cloud game visits record observed scenes separately
 from the engine journal. Older entries without public frames show unavailable.

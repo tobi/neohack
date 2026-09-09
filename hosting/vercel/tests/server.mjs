@@ -49,7 +49,20 @@ export function createTestHarness({ store = new MemoryStorage(), wrap = (fn) => 
           publicReplayContext.run(publicStore,()=>wrap(()=>handler(request))),
         );
         res.writeHead(response.status, Object.fromEntries(response.headers));
-        res.end(Buffer.from(await response.arrayBuffer()));
+        // Streamed bodies (the chronicle watcher) reach the client as they are
+        // written, like the platform; buffered ones end in one piece.
+        if (response.body) {
+          const reader = response.body.getReader();
+          const pump = async () => {
+            for (;;) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              if (!res.write(value)) await new Promise((r) => res.once("drain", r));
+            }
+          };
+          await pump().catch(() => {});
+          res.end();
+        } else res.end();
         return;
       }
       let path = url.pathname;

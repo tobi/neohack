@@ -8,6 +8,11 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Replay links open a dedicated page with the adventure's tale above the player.
+  New tales appear as they are written, with replay progress first and tapped
+  names opening compact encyclopedia popovers.
+- Long replays fetch several recording chunks ahead while preserving their
+  exact order and integrity checks.
 - Smoother dungeon rendering: static scenery and sprites are reused while camera
   movement, animation and visibility fades run through the browser compositor.
 - Thin, muted scrollbars now match across the game, ledger, workshop, account

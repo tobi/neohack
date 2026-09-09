@@ -9,8 +9,9 @@
     "check": "node scripts/stage-validator.mjs && tsc --noEmit"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^14.0.1",
     "@vercel/blob": "^2.8.0",
-    "@simplewebauthn/server": "^14.0.1"
+    "@vercel/functions": "^3.9.5"
   },
   "devDependencies": {
     "@types/node": "24.10.1",

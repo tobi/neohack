@@ -36,24 +36,36 @@ as the new run. Replay reconstruction itself still runs to establish that eviden
 
 ## What survives preprocessing
 
-The collector retains the opening, apparent starting companions, actual ending,
-witnessed messages, explicit life-saving events, large health reversals, condition
-changes and level transitions. It scores unusual messages and recurring themes
-such as traps, prayers and pets, with the preceding event for context. It drops
-maps, coordinates, inventory dumps, opaque references, transport diagnostics,
-private script notes, repeated observation queries and old receipts. This ranking
-is editorial only: it never provides game strategy or interprets hidden state.
-Narration comes from fresh `heard`/`passage` events; the rolling observation
-message window is only initial context. Health changes become qualitative
-reversals rather than a stream of HP numbers. A companion sighting establishes
-presence at that incident, not a claim that it survived or followed later.
+The collector keeps nearly everything the hero witnessed. Every reply that
+carried a message, a vitals reversal, a place or level change, a notable action
+(prayer, eating, quaffing, reading…), a life-saving event or the ending becomes
+one **turn line** of a markdown journal; moves that reported nothing are left
+out, and identical consecutive routine lines ("You hit the jackal.") are counted
+once with a repeat count instead of retold. It drops maps, coordinates, inventory
+dumps, opaque references, transport diagnostics, private script notes, repeated
+observation queries and old receipts. This ranking is editorial only: it never
+provides game strategy or interprets hidden state. Narration comes from fresh
+`heard`/`passage` events; the rolling observation message window is only initial
+context. Health changes become qualitative reversals rather than a stream of HP
+numbers. A companion sighting establishes presence at that incident, not a claim
+that it survived or followed later.
 
-Memory stays bounded: at most 320 candidate entries plus three recent entries;
-context holds one event, never a chain of the entire history. The final prompt
-contains at most 80 events and **48,000 UTF-8 evidence bytes** (roughly 12,000
-input tokens, about 1.5 cents at Muse Spark's list price). Long runs can
-omit minor episodes; the packet reports that omission. Evidence selection is not
-a claim that every important event is guaranteed to survive compression.
+Lines are cited by turn: `T340` is the event at turn 340 and `T340.2` a second
+event within that turn, so the story's citations read as coordinates in the
+journal rather than opaque IDs. The journal is plain markdown:
+
+```
+T295 Dlvl:2 · apply — You slip the leash around your little dog.
+T296 Dlvl:2 — A tower of flame erupts from the floor under the little dog! The little dog is killed!
+T383 Dlvl:3 · HP lost, critically low · ENDING death — killed by a hill orc (score 362)
+```
+
+Memory stays bounded for endless transcripts (at most 16,000 retained entries,
+trimmed by score; no linked history chain). The rendered journal is capped at
+**245,000 characters, roughly 70,000 input tokens**; a run that exceeds it drops
+its lowest-scored lines and says so in the coverage note. A typical short run
+(400 replies) is about 14 KB / 3,500 tokens; an 8,300-reply run about 225 KB /
+60,000 tokens.
 
 Replay mode verifies the static manifest and immutable input chunk checksums,
 then reconstructs **every** input in an isolated WASM worker. It deliberately
@@ -72,29 +84,38 @@ the full public replies first. Name/role can be supplied as display metadata.
 ## Prompt and cost
 
 [prompt.mjs](prompt.mjs) is the versioned editorial contract. The model writes
-3–6 connected scenes with affectionate understatement and an earned callback.
+4–6 connected paragraphs with affectionate understatement and an earned callback.
 It must not turn a wounded leg into an amputation, healing into resurrection,
 a missing pet into a death, or quit into death. Incomplete logs stay incomplete.
-Every paragraph lists source event IDs. Structural checks reject unknown IDs,
-a missing final-ending citation, invalid JSON and stories over 550 words.
-These checks make review possible; they cannot prove every sentence true.
-See [EVALUATION.md](EVALUATION.md) for the actual Muse prompt trials, including
-remaining decorative embellishments. This is a labelled creative retelling, not
-an authoritative replacement for the journal or a machine-verified factual summary.
+The story comes back as markdown (`# Title`, then paragraphs, each ending in
+its turn citations such as `[T12, T340]`), which is why it can be streamed to a
+reader word by word; the citations are parsed out of the prose afterwards.
+Structural checks reject unknown turn ids, a missing final-ending citation,
+malformed output and stories over 650 words. These checks make review possible;
+they cannot prove every sentence true. See [EVALUATION.md](EVALUATION.md) for
+the actual Muse prompt trials, including remaining decorative embellishments.
+This is a labelled creative retelling, not an authoritative replacement for the
+journal or a machine-verified factual summary.
 
 Vercel lists Muse Spark 1.3 at $1.25 / million input tokens and $4.25 / million
 output tokens as checked 2026-09-08. The evidence budget is deliberately
-generous because the model is cheap: a full 48,000-byte packet (about 12,000
-input tokens) plus a 1,000-token story is about **$0.019**, and typical runs are
-far smaller (the reference run above selects 80 events in under 10,000 bytes).
-Actual usage varies; the gateway's returned usage is saved in `story.json`. Byte
+generous because the model is cheap: a full 70,000-token journal plus a
+1,000-token story is about **$0.09**, a typical short run under a cent. Actual
+usage varies; the gateway's returned usage is saved in `story.json`. Character
 limits are not exact token counts. The CLI caches by evidence, model and prompt.
+
+Where the time goes: the public archive stores **inputs only**, so the messages
+the hero saw exist nowhere until the pinned engine replays them. Chunks are
+fetched several at a time; the engine itself then takes about 3–4 ms per input,
+so a 400-input run replays in a couple of seconds and an 8,000-input run in
+about half a minute. The model's answer streams back as it is written.
 
 The website shares this code: `hosting/vercel/src/chronicle.ts` stages
 `digest.mjs`, `prompt.mjs`, `lore.mjs`, `generate.mjs` and `replay.mjs` into
 its function, generates a story once per eligible run (dungeon level 3,
-experience level 2, ended in death), caches it as a public object and serves it
-statically from the death screen and the ledger. See the hosting README.
+experience level 2, ended in death), streams progress and the story to the
+reader, caches it as a public object and serves it statically from the death
+screen, the ledger and the replay page. See the hosting README.
 
 ## Encyclopedia notes
 

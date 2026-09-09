@@ -2,6 +2,7 @@ import './component';
 import { NeohackWorld } from './component';
 import { replayLink, embedCode } from './public-replay';
 import { validReplayId } from './replay-links';
+import { chronicleEligible, chronicleDraftView, chronicleView, fetchChronicle, requestChronicle, type ChronicleDocument } from './chronicle';
 const $ = <T extends HTMLElement>(id:string) => document.getElementById(id) as T;
 const id=location.pathname.split('/')[2]??'';
 const viewer=$<NeohackWorld>('replay');
@@ -40,9 +41,41 @@ else {
   viewer.setAttribute('src',replayLink(id));
   details();
   // Optional public ledger details never gate CDN playback or require sign-in.
-  void fetch('/api/runs/'+encodeURIComponent(id),{credentials:'omit',signal:AbortSignal.timeout(10000)})
+  const ledger=fetch('/api/runs/'+encodeURIComponent(id),{credentials:'omit',signal:AbortSignal.timeout(10000)})
     .then(async response=>{if(!response.ok)throw Error('Details unavailable');summary=await response.json();
       if(typeof summary.name==='string'){$('replay-title').textContent=summary.name;document.title=summary.name+' · Replay · neohack';}
-      $('metadata-status').textContent='Totals describe the full recording, independently of the selected moment.';details();})
-    .catch(()=>{$('metadata-status').textContent='Run totals and date are unavailable. Playback is still available.';});
+      $('metadata-status').textContent='Totals describe the full recording, independently of the selected moment.';details();return true;})
+    .catch(()=>{$('metadata-status').textContent='Run totals and date are unavailable. Playback is still available.';return false;});
+  void chronicle(ledger);
+}
+
+/** The chronicle is the first thing on the page when it exists, and a shared
+ * link with ?view=chronicle scrolls straight to it. A dead hero deep enough
+ * for a tale can have it told here; the story then streams in as it is written. */
+async function chronicle(ledger:Promise<boolean>){
+  const section=$('chronicle-section'),body=$('chronicle-body'),status=$('chronicle-status'),tell=$<HTMLButtonElement>('tell-tale'),copy=$<HTMLButtonElement>('copy-chronicle');
+  const storyLink=()=>{const url=new URL(replayLink(id));url.searchParams.set('view','chronicle');return url.href;};
+  const route=(open:boolean)=>{const url=new URL(location.href);if(open)url.searchParams.set('view','chronicle');else url.searchParams.delete('view');if(url.href!==location.href)history.replaceState(null,'',url);};
+  const wanted=new URL(location.href).searchParams.get('view')==='chronicle';
+  const show=(doc:ChronicleDocument)=>{
+    body.replaceChildren(chronicleView(doc));
+    section.hidden=false;tell.hidden=true;copy.hidden=false;status.textContent='';
+    $('chronicle-lead').textContent=`An AI retelling of ${typeof summary.name==='string'?summary.name+"'s":'this'} recorded journey, written once from ${doc.coverage?.selectedEvents??'the'} witnessed moments.`;
+    route(true);
+  };
+  copy.onclick=async()=>{try{await navigator.clipboard.writeText(storyLink());status.textContent='Story link copied.';}catch{status.textContent=storyLink();}};
+  let doc:ChronicleDocument|null=null;
+  try{doc=await fetchChronicle(id);}catch{status.textContent='The chronicle could not be read right now.';}
+  if(doc){show(doc);if(wanted)section.scrollIntoView({block:'start'});return;}
+  if(!(await ledger)||!chronicleEligible(summary as {ended?:boolean;endKind?:string;maxDepth?:number;maxLevel?:number}))return;
+  section.hidden=false;tell.hidden=false;
+  $('chronicle-lead').textContent=`${typeof summary.name==='string'?summary.name:'This hero'} died deep enough to deserve a story. The chronicler replays the recording and writes the tale from what was witnessed; it takes a little while and is kept with the replay.`;
+  if(wanted)section.scrollIntoView({block:'start'});
+  tell.onclick=async()=>{
+    tell.disabled=true;
+    const draft=chronicleDraftView(typeof summary.name==='string'?summary.name:undefined);
+    body.replaceChildren(draft.element);route(true);
+    try{show(await requestChronicle(id,{onStatus:text=>draft.status(text),onDraft:d=>draft.update(d)}));}
+    catch(error){const message=error instanceof Error?error.message:'The chronicler could not finish this tale.';draft.status(message);status.textContent=message;tell.disabled=false;}
+  };
 }

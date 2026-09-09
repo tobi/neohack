@@ -1,9 +1,17 @@
 /** Presentation-only evidence selection. Never used to choose game actions.
- * Feed full public replies in order, not raw inputs or observation deltas. */
-export const DIGEST_VERSION = 1;
-export const MAX_DIGEST_BYTES = 48000;
-export const MAX_EVENTS = 80;
-const POOL_LIMIT = 320, POOL_KEEP = 240;
+ * Feed full public replies in order, not raw inputs or observation deltas.
+ *
+ * The digest keeps almost everything the hero witnessed: every reply that
+ * carried a message, a vitals reversal, a place change, a notable action or
+ * the ending becomes a turn line. Only genuinely routine repetition is
+ * collapsed (identical consecutive messages are counted, not repeated) and the
+ * prompt budget is generous, so the story is written from the journal itself
+ * rather than from a handful of highlights. */
+export const DIGEST_VERSION = 2;
+/** Rendered transcript budget: about 70k tokens of markdown at ~3.5 chars/token. */
+export const MAX_PROMPT_CHARS = 245000;
+/** Retention memory for million-input transcripts: entries, not a history chain. */
+const POOL_LIMIT = 16000, POOL_KEEP = 12000;
 const clean = (value, limit = 700) =>
   typeof value === "string"
     ? value.replace(/[\u0000-\u0008\u000b-\u001f]/g, "").slice(0, limit)
@@ -12,7 +20,6 @@ const routine =
   /^(?:You (?:miss|hit|kill|destroy) (?:the|a|an) .{1,80}[.!]|You swap places with .{1,60}[.!]|You (?:see|hear) nothing special[.!]|You reached the selected square[.!])$/;
 const dramatic =
   /\b(?:prayer|pray|god|divine|trap|bear|axe|limb|arm|leg|explod\w*|explosion|amputat\w*|sever\w*|regrow\w*|grew back|restor\w*|resurrect\w*|petrif\w*|polymorph\w*|wish|genocid\w*|chok\w*|starv\w*|faint\w*|betray\w*|kitten|cat|dog|pet)\b/i;
-const bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
 function witnessedMessages(snapshot, first) {
   const passages = snapshot.events
     .filter((event) => event.type === "passage")
@@ -37,13 +44,13 @@ function witnessedMessages(snapshot, first) {
   const messages = [
     ...new Set(texts.map((text) => text?.trim()).filter(Boolean)),
   ];
-  if (messages.length <= 8) return messages;
+  if (messages.length <= 12) return messages;
   const chosen = new Set([0, messages.length - 1]);
   const order = messages
     .map((text, index) => ({ index, score: dramatic.test(text) ? 1 : 0 }))
     .sort((a, b) => b.score - a.score || a.index - b.index);
   for (const { index } of order) {
-    if (chosen.size >= 8) break;
+    if (chosen.size >= 12) break;
     chosen.add(index);
   }
   return [...chosen].sort((a, b) => a - b).map((index) => messages[index]);
@@ -74,6 +81,18 @@ export const isFullReply = (reply) => {
   );
 };
 
+/** Turn ids are citation coordinates: T<turn>, or T<turn>.<n> within a turn. */
+export const turnId = (turn) => "T" + turn;
+
+/** Rough transcript size of one entry; the final prompt is measured exactly. */
+const estimate = (beat) =>
+  24 +
+  (beat.messages ?? []).reduce((n, m) => n + m.length + 1, 0) +
+  (beat.action ? 24 : 0) +
+  (beat.changes ? 40 : 0) +
+  (beat.witnesses ? 60 : 0) +
+  (beat.ending ? 80 : 0);
+
 export class ChronicleDigest {
   constructor(identity = {}) {
     this.hero = Object.fromEntries(
@@ -82,12 +101,13 @@ export class ChronicleDigest {
         .map((k) => [k, clean(identity[k], 80)]),
     );
     this.pool = [];
-    this.recent = [];
     this.previous = null;
     this.session = null;
     this.count = 0;
     this.ignored = 0;
     this.repeated = 0;
+    this.collapsed = 0;
+    this.silent = 0;
     this.lastRevision = -1;
     this.frequencies = new Map();
     this.first = null;
@@ -118,7 +138,7 @@ export class ChronicleDigest {
       v = selectedVitals(o.vitals ?? {}),
       changes = {};
     const messages = witnessedMessages(s, !this.first);
-    const place = clean(o.location?.depthLabel, 60),
+    const place = clean(o.location?.depthLabel, 60)?.trim() || undefined,
       action = clean(s.outcome?.action, 50);
     let score = this.first ? 0 : 100;
     if (this.previous) {
@@ -181,20 +201,26 @@ export class ChronicleDigest {
         n = this.frequencies.get(key) ?? 0;
       if (!n) novel++;
       else this.repeated++;
-      if (this.frequencies.size >= 256 && !this.frequencies.has(key))
+      if (this.frequencies.size >= 4096 && !this.frequencies.has(key))
         this.frequencies.delete(this.frequencies.keys().next().value);
       this.frequencies.set(key, n + 1);
       if (dramatic.test(m)) score += Math.max(4, 28 - n * 8);
     }
     score += Math.min(20, novel * 4);
-    if (
+    const onlyRoutine =
       messages.length &&
       !Object.keys(changes).length &&
       !special.length &&
-      messages.every((m) => routine.test(m))
-    )
-      score = Math.min(score, 2);
+      messages.every((m) => routine.test(m));
+    if (onlyRoutine) score = Math.min(score, 2);
     if (["pray", "offer", "wish", "invoke"].includes(action)) score += 20;
+    const notableAction =
+      action &&
+      ![
+        "move", "wait", "search", "create", "look", "inventory", "observe",
+        "travel", "navigate",
+      ].includes(action) &&
+      (score > 2 || !onlyRoutine);
     const ending =
       s.ended && s.end
         ? {
@@ -206,12 +232,10 @@ export class ChronicleDigest {
         : undefined;
     if (ending) score = 1000;
     const beat = {
-      id: `e${this.count}`,
+      id: turnId(o.turn),
       turn: o.turn,
       place,
-      ...(action &&
-      score > 2 &&
-      !["move", "wait", "search", "create"].includes(action)
+      ...(notableAction
         ? {
             action,
             status: clean(s.outcome?.status, 30),
@@ -223,26 +247,41 @@ export class ChronicleDigest {
       ...(special.length ? { witnesses: special } : {}),
       ...(ending ? { ending } : {}),
     };
-    const previousEntry = this.recent.at(-1);
-    const entry = {
-      beat,
-      score,
-      order: this.count,
-      context: previousEntry
-        ? { beat: previousEntry.beat, order: previousEntry.order }
-        : undefined,
-    };
+    const entry = { beat, score, order: this.count, repeats: 0 };
+    if (!this.first) this.firstAction = action;
     this.first ??= entry;
     this.last = entry;
-    this.recent.push(entry);
-    if (this.recent.length > 3) this.recent.shift();
-    if (score > 2 || !this.pool.length) this.pool.push(entry);
-    // Bound selection memory even for million-input transcripts. Context is one beat,
-    // not a linked chain retaining the discarded run.
-    if (this.pool.length > POOL_LIMIT)
-      this.pool = this.pool
-        .sort((a, b) => b.score - a.score || b.order - a.order)
-        .slice(0, POOL_KEEP);
+    // Identical routine repetition ("You hit the jackal.") is counted on the
+    // previous entry rather than retold line by line.
+    const tail = this.pool.at(-1);
+    if (
+      onlyRoutine &&
+      tail &&
+      tail !== this.first &&
+      !tail.beat.ending &&
+      JSON.stringify(tail.beat.messages) === JSON.stringify(messages) &&
+      !beat.changes
+    ) {
+      tail.repeats++;
+      tail.through = o.turn;
+      this.collapsed++;
+      this.last = tail;
+      this.previous = { v, place };
+      return true;
+    }
+    const worthKeeping =
+      messages.length || Object.keys(changes).length || special.length || notableAction || ending || !this.pool.length;
+    if (worthKeeping) this.pool.push(entry);
+    else this.silent++;
+    if (this.pool.length > POOL_LIMIT) {
+      const keep = new Set(
+        [...this.pool]
+          .sort((a, b) => b.score - a.score || b.order - a.order)
+          .slice(0, POOL_KEEP),
+      );
+      keep.add(this.first);
+      this.pool = this.pool.filter((e) => keep.has(e));
+    }
     this.previous = { v, place };
     return true;
   }
@@ -251,45 +290,45 @@ export class ChronicleDigest {
       throw Error(
         "No full public replies found. Replay input-only logs with the pinned engine first.",
       );
-    const chosen = new Map();
-    const insert = (entry) => {
-      if (entry) chosen.set(entry.order, entry.beat);
-    };
-    insert(this.first);
-    insert(this.last);
-    const build = () => ({
+    const chosen = new Set([this.first, this.last]);
+    let size = estimate(this.first.beat) + estimate(this.last.beat);
+    for (const entry of [...this.pool].sort(
+      (a, b) => b.score - a.score || a.order - b.order,
+    )) {
+      if (chosen.has(entry)) continue;
+      const cost = estimate(entry.beat);
+      if (size + cost > MAX_PROMPT_CHARS) continue;
+      chosen.add(entry);
+      size += cost;
+    }
+    // One transcript line per retained reply, in order. Turn ids are the
+    // citation coordinates; a second event within the same turn is T12.2.
+    const perTurn = new Map(), events = [];
+    for (const entry of [...chosen].sort((a, b) => a.order - b.order)) {
+      const b = entry.beat, n = (perTurn.get(b.turn) ?? 0) + 1;
+      perTurn.set(b.turn, n);
+      events.push({
+        ...b,
+        id: n === 1 ? b.id : `${b.id}.${n}`,
+        ...(entry.repeats ? { repeats: entry.repeats, through: entry.through } : {}),
+      });
+    }
+    return {
       version: DIGEST_VERSION,
       hero: this.hero,
       coverage: {
         observedReplies: this.count,
         ignoredObservationsOrOldReceipts: this.ignored,
-        selectedEvents: chosen.size,
-        omittedReplies: this.count - chosen.size,
+        selectedEvents: events.length,
+        omittedReplies:
+          this.count - this.silent - [...chosen].reduce((n, e) => n + 1 + e.repeats, 0),
+        collapsedRoutineReplies: this.collapsed,
+        silentReplies: this.silent,
         repeatedMessages: this.repeated,
         complete: !!this.last.beat.ending,
-        startsAtCreation: ["new_game", "create"].includes(
-          this.first.beat.action,
-        ),
+        startsAtCreation: ["new_game", "create"].includes(this.firstAction),
       },
-      events: [...chosen.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .map(([, v]) => v),
-    });
-    // Reserve opening + actual ending before spending the rest of the prompt budget.
-    for (const entry of [...this.pool].sort(
-      (a, b) => b.score - a.score || a.order - b.order,
-    )) {
-      if (chosen.size >= MAX_EVENTS) break;
-      const additions = [entry.context, entry].filter(
-        (e) => e && !chosen.has(e.order),
-      );
-      for (const e of additions) insert(e);
-      if (bytes(build()) > MAX_DIGEST_BYTES)
-        for (const e of additions) chosen.delete(e.order);
-    }
-    const digest = build();
-    if (bytes(digest) > MAX_DIGEST_BYTES)
-      throw Error("Opening or ending exceeds the chronicle evidence budget");
-    return digest;
+      events,
+    };
   }
 }

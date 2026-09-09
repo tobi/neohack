@@ -1853,16 +1853,28 @@ pixel-nethack.in-game .rail-game-info { visibility: hidden; }
 /* Chronicle: the tale button on the death screen and the story inside the menu dialog. */
 .tell-tale { display:inline-flex;align-items:center;gap:8px;background:#e9cd8e;color:#17201c;border-color:#b79a5c; }
 .tell-tale svg { width:18px;height:18px; }
-#menu-content .chronicle { font:17px/1.65 Georgia,serif;color:#eee8d0; }
+#menu-content .chronicle { position:relative;max-width:62ch;font:17px/1.7 Georgia,"Times New Roman",serif;color:#eee8d0;text-rendering:optimizeLegibility; }
 #menu-content .chronicle-eyebrow { margin:0; }
-#menu-content .chronicle-title { font-size:1.9rem;line-height:1.1;margin:.3rem 0 1rem; }
-#menu-content .chronicle-paragraph { margin:1em 0;color:inherit; }
-.chronicle .lore-link { display:inline;min-height:0;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-decoration:underline dotted #a9bd90;text-underline-offset:4px;text-decoration-thickness:1px;cursor:pointer; }
-.chronicle .lore-link:hover,.chronicle .lore-link:focus-visible,.chronicle .lore-link[aria-expanded="true"] { color:#e9cd8e;text-decoration-style:solid; }
-.chronicle-lore { border:1px solid #53614b;background:#0d151a;padding:12px 16px;margin:1rem 0;font-size:15px; }
-.chronicle-lore-top { display:flex;justify-content:space-between;align-items:center;gap:12px; }
-.chronicle-lore h3 { margin:0;text-transform:capitalize;font-size:1.05rem; }
-.chronicle-lore p { margin:.6rem 0;color:#c9d0bc; }
+#menu-content .chronicle-title { font-size:1.8rem;line-height:1.15;margin:.4rem 0 1.2rem;text-wrap:balance; }
+#menu-content .chronicle-paragraph { margin:0 0 1.15em;color:inherit;text-wrap:pretty;hyphens:auto;-webkit-hyphens:auto; }
+#menu-content .chronicle-progress { font:13px/1.5 ui-monospace,monospace;color:#9baa94;margin-top:1rem;min-height:1.5em; }
+#menu-content .chronicle-writing::after { content:"▍";color:#b8cc9e;animation:chronicle-blink 1s steps(2,start) infinite;margin-left:2px; }
+@keyframes chronicle-blink { to { visibility:hidden; } }
+@media (prefers-reduced-motion: reduce) { #menu-content .chronicle-writing::after { animation:none; } }
+#menu-content .chronicle .lore-link { all:unset;display:inline;font:inherit;line-height:inherit;color:inherit;cursor:pointer;text-decoration:underline dotted #8a9a7e80;text-decoration-thickness:1px;text-underline-offset:3px;text-decoration-skip-ink:auto;-webkit-tap-highlight-color:transparent; }
+#menu-content .chronicle .lore-link:hover,#menu-content .chronicle .lore-link[aria-expanded="true"] { text-decoration-color:#d9cb91; }
+#menu-content .chronicle .lore-link:focus-visible { outline:2px solid #e4d18f;outline-offset:2px; }
+#menu-content .chronicle-lore { position:absolute;z-index:3;box-sizing:border-box;border:1px solid #67745a;background:#0d151a;color:#d9dfcc;padding:10px 14px 12px;font:15px/1.5 Georgia,"Times New Roman",serif;box-shadow:0 12px 32px #0009; }
+#menu-content .chronicle-lore-body { max-height:min(34vh,280px);overflow:auto;overscroll-behavior:contain; }
+#menu-content .chronicle-lore::before { content:"";position:absolute;left:var(--caret-x,20px);top:-7px;width:12px;height:12px;margin-left:-6px;background:#0d151a;border-left:1px solid #67745a;border-top:1px solid #67745a;transform:rotate(45deg); }
+#menu-content .chronicle-lore.above::before { top:auto;bottom:-7px;border:0;border-right:1px solid #67745a;border-bottom:1px solid #67745a; }
+#menu-content .chronicle-lore-top { display:flex;justify-content:space-between;align-items:baseline;gap:12px; }
+#menu-content .chronicle-lore h3 { margin:0;font:700 16px/1.3 Georgia,"Times New Roman",serif;text-transform:capitalize;color:#eee8d0; }
+#menu-content .chronicle-lore p { margin:.5rem 0 0;color:#d9dfcc; }
+#menu-content .chronicle-lore button { all:unset;cursor:pointer;color:#c9d6af;font:inherit; }
+#menu-content .chronicle-lore-close { font-size:20px;line-height:1;padding:2px 6px;margin:-2px -6px 0 0; }
+#menu-content .chronicle-lore-more { display:block;margin-top:.5rem;text-decoration:underline dotted;text-underline-offset:3px; }
+#menu-content .chronicle-lore-note { font-size:12px;margin-top:.6rem; }
 .chronicle-footer { font:13px/1.5 ui-monospace,monospace;color:#9baa94;margin-top:1.5rem;border-top:1px solid #34413d;padding-top:.8rem; }
 .chronicle-footer a { color:#b8cc9e; }
 .chronicle-footer .text-button { margin-top:6px; }

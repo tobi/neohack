@@ -21,7 +21,7 @@ test("CLI reuses exact evidence, invalidates changed input, and never retries a 
     `#!/usr/bin/env node
 const fs=require('node:fs');fs.appendFileSync(process.env.CHRONICLE_TEST_CALLS,'call\\n');
 if(process.env.CHRONICLE_TEST_FAIL){console.error('HTTP 503 overloaded');process.exit(1);}
-process.stdout.write(JSON.stringify({title:'A Short Attempt',paragraphs:[{text:'The adventurer arrived.',sources:['e1']},{text:'The attempt ended in a quit.',sources:['e2']}]}));`,
+process.stdout.write('# A Short Attempt\\n\\nThe adventurer arrived. [T1]\\n\\nThe attempt ended in a quit. [T1.2]\\n');`,
   );
   await chmod(fake, 0o700);
   const rows = [0, 1].map((i) => ({

@@ -228,19 +228,30 @@ page displays publishedCount and allows an explicit retry.
 `GET|POST /api/runs/:id/chronicle` serves a one-page comic retelling of a
 concluded public run, written by Muse Spark 1.3 through
 [Vercel AI Gateway](https://vercel.com/docs/ai-gateway). The death screen and
-the ledger's replay lightbox offer **Tell the tale** for runs that reached
+each run's page (`/replays/:id`, where every ledger Show replay link leads)
+offer **Tell the tale** for runs that reached
 dungeon level 3 and experience level 2 and ended in death (eligibility mirrors
 `examples/chronicle` and is checked against the ledger record first). Generation
 replays the published input archive with its exact pinned WASM engine inside the
 function, using the same module closure as the CLI (staged into
-`.generated/chronicle/`), then makes **one** paid model request. The validated
-story, its dotted encyclopedia segments and the glossary are cached as the
-public object `chronicles/<id>/story.json`; the ledger entry gains
-`chronicleAvailable`, which draws the scroll icon beside *Show replay*.
-Page views only read the cached object; nothing is regenerated on view. A
-`chronicles/<id>/pending.json` claim keeps concurrent requests from paying
-twice (later callers receive 202 and poll), and a failed generation releases the
-claim without retrying automatically. Failures log `chronicle_failed` with a
+`.generated/chronicle/`), then makes **one** paid model request with the
+markdown journal (up to about 70k tokens). The validated story, its dotted
+encyclopedia segments and the glossary are cached as the public object
+`chronicles/<id>/story.json`; the ledger entry gains `chronicleAvailable`,
+which draws the scroll icon beside *Show replay*. A `POST` with
+`Accept: application/x-ndjson` watches the work as it happens: one JSON object
+per line with replay progress (`{"status":"replaying","done":n,"total":m}`),
+`{"status":"writing"}`, the story text as the model writes it (`{"delta":…}`),
+`{"status":"storing"}` and finally the stored document (or
+`{"available":false,"error":…}`). The job is registered with `waitUntil` and
+finishes, validates and stores the tale even if the reader leaves; a plain
+`POST` waits and returns the document as before. Page views only read the
+cached object; nothing is regenerated on view. A `chronicles/<id>/pending.json`
+claim keeps concurrent requests from paying twice (later callers receive 202
+and poll), and a failed generation releases the claim without retrying
+automatically. The archive holds inputs only, so the messages the hero saw
+exist nowhere until the engine replays them; that replay (about 3–4 ms per
+input, chunks fetched in parallel) is the waiting time the stream reports. Failures log `chronicle_failed` with a
 stage and error kind only. The function is configured with a 300-second budget
 and bundles `public/runtime/wasm/**` so the current engine package replays
 without a network fetch; older pins are fetched from the site's own runtime

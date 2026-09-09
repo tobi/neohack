@@ -31,7 +31,7 @@ while (pending.length) {
 }
 // Minimal typings for the TypeScript service; the modules themselves are JS.
 const declarations = {
-  "digest.d.mts": `export const MAX_DIGEST_BYTES: number; export const MAX_EVENTS: number;
+  "digest.d.mts": `export const DIGEST_VERSION: number; export const MAX_PROMPT_CHARS: number;
 export function isFullReply(reply: unknown): boolean;
 export type Digest = { version: number; hero: Record<string, string>; coverage: Record<string, unknown>; events: any[] };
 export class ChronicleDigest { constructor(identity?: { name?: string; role?: string; race?: string }); hero: Record<string, string>; count: number; add(reply: unknown): boolean; finish(): Digest; }`,
@@ -39,6 +39,9 @@ export class ChronicleDigest { constructor(identity?: { name?: string; role?: st
 export const PROMPT_VERSION: string; export const MODEL: string; export const SYSTEM: string;
 export type Story = { title: string; paragraphs: { text: string; sources: string[]; segments?: { text: string; term?: string }[] }[] };
 export function prompt(digest: Digest): string;
+export function transcript(digest: Digest): string;
+export function transcriptLine(event: any): string;
+export function parseStoryMarkdown(text: string): { title: string; paragraphs: { text: string; sources: string[] }[] };
 export function validateStory(value: unknown, digest: Digest): Story;
 export function renderStory(story: Story, digest: Digest, model?: string, glossary?: Glossary): string;
 export type Glossary = Record<string, { name: string; lines: string[] }>;`,
@@ -52,11 +55,11 @@ export function annotateStory(story: Story, glossary: Glossary): { story: Story;
 export const GATEWAY_URL: string; export const MAX_OUTPUT_TOKENS: number; export const REQUEST_TIMEOUT_MS: number;
 export function evidenceHash(digest: Digest): string;
 export function parseStory(raw: unknown, digest: Digest): Story;
-export function gatewayStory(digest: Digest, options: { token: string; fetch?: typeof fetch; signal?: AbortSignal }): Promise<{ raw: unknown; usage?: unknown }>;
+export function gatewayStory(digest: Digest, options: { token: string; fetch?: typeof fetch; signal?: AbortSignal; onDelta?: (delta: string, text: string) => void }): Promise<{ raw: unknown; usage?: unknown }>;
 export type ChronicleDocument = { version: 1; model: string; promptVersion: string; evidenceHash: string; generatedAt: number; hero: Record<string, string>; coverage: Record<string, unknown>; usage?: unknown; story: Story; glossary: Glossary };
 export function chronicleDocument(input: { digest: Digest; story: Story; glossary?: Glossary; usage?: unknown; generatedAt?: number }): ChronicleDocument;`,
   "replay.d.mts": `import type { ChronicleDigest, Digest } from "./digest.mjs";
-export function collectReplay(url: string, collector: ChronicleDigest, options?: { runtime?: string | ((buildId: string) => Promise<string | undefined> | string | undefined); runtimeOrigin?: string; signal?: AbortSignal; lookup?: (lookup: (name: string) => Promise<any>) => Promise<void>; maxInputs?: number }): Promise<Digest>;`,
+export function collectReplay(url: string, collector: ChronicleDigest, options?: { runtime?: string | ((buildId: string) => Promise<string | undefined> | string | undefined); runtimeOrigin?: string; signal?: AbortSignal; lookup?: (lookup: (name: string) => Promise<any>) => Promise<void>; maxInputs?: number; onProgress?: (done: number, total: number) => void }): Promise<Digest>;`,
 };
 const { writeFile } = await import("node:fs/promises");
 for (const [name, text] of Object.entries(declarations))

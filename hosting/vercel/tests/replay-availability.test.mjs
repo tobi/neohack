@@ -25,6 +25,6 @@ test('ledger replay availability comes from public recordings and reaches outsid
  const row=await page.locator('#runs tr').first().boundingBox();assert.ok(row.height<65,'rows stay compact');
  await page.getByLabel('Show',{exact:false}).selectOption('recorded');
  assert.equal(await page.locator('#runs tr').count(),1);
- assert.equal(await page.getByRole('button',{name:'Show replay for Hero 101',exact:true}).count(),1);
+ assert.equal(await page.getByRole('link',{name:'Show replay for Hero 101',exact:true}).getAttribute('href'),new URL('/replays/run-101',url).href);
  assert.match(await page.locator('#leaders-description').textContent(),/adventures with replays/);
 });

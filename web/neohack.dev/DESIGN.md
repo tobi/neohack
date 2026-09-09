@@ -1120,17 +1120,29 @@ in isolated pinned WASM from static input archives.
 
 A dungeon chronicle is a one-page comic retelling of a public run that ended in
 death after reaching dungeon level 3 and experience level 2. The death screen
-offers **Tell the tale** once the recording is public; the ledger's replay
-lightbox offers the same, and rows with a written tale show a scroll icon beside
-Show replay. The server replays the archive, asks the model once, and caches the
-story publicly; opening a tale never regenerates it. Present the story in serif
-reading type with the hero's name as an eyebrow, and label it plainly as an AI
-retelling of the recorded journey, not the journal. Names the recording actually
-mentioned (monsters, items, gods, roles) are dotted lookups that open the pinned
-encyclopedia entry inline; words the model introduced are never linked, and the
-lore is reference text, not a claim about what the hero met. Ineligible runs show
-no tale controls; a failed generation reports a readable reason and offers a
-plain retry.
+offers **Tell the tale** once the recording is public. Every run's home is its
+own page, `/replays/<id>`, which leads with the chronicle: an existing tale is
+the first section above the player, and an eligible untold run is offered there
+and streams in as it is written. The ledger never opens a run in place: every
+Show replay is a link to that page, and rows with a written tale show a scroll
+icon beside it that deep-links to the story (`?view=chronicle`). Older
+`/dashboard?run=<id>[&view=chronicle]` addresses forward to the run's page.
+The server replays the archive, asks the model once, and caches the story
+publicly; opening a tale never regenerates it. While it is written, the page
+shows the work honestly: replay progress in moves, then the title and paragraphs
+appearing as the chronicler writes them, then the stored story with its lookups.
+An open story is always the page's address (`/replays/<id>?view=chronicle`)
+so the address bar is the share link. Present the story in serif reading type with
+the hero's name as an eyebrow, even leading (inline lookups must not change
+line height), comfortable paragraph spacing on phones, and label it plainly as
+an AI retelling of the recorded journey, not the journal. Names the recording
+actually mentioned (monsters, items, gods, roles) carry a quiet dotted underline
+that never competes with the text; a tap opens the pinned encyclopedia entry in
+a small popover anchored to that name (below it, or above when there is no
+room), closed by its ×, Escape or a tap elsewhere. Words the model introduced
+are never linked, and the lore is reference text, not a claim about what the
+hero met. Ineligible runs show no tale controls; a failed generation reports a
+readable reason and offers a plain retry.
 
 `/login` uses discoverable, user-verified passkeys and unique case-insensitive
 handles. Explain the browser's phone/QR option for cross-device use. Private run
