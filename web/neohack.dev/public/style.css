@@ -1907,10 +1907,14 @@ pixel-nethack.in-game .rail-game-info { visibility: hidden; }
 #surroundings-map { padding:4px; border:1px solid transparent; background:transparent; }
 #surroundings-map:hover, #surroundings-map:focus-visible { border-color:#aab98a; }
 #accessible-map { margin:0 0 12px; min-width:0; container-type:inline-size; flex-shrink:0; }
-#accessible-map pre { margin:0; padding:8px; overflow:auto; font:clamp(4px,1.78cqw,12px)/1.2 "JetBrains Mono",monospace; white-space:pre; }
+#accessible-map pre { margin:0; padding:8px; overflow:auto; font:clamp(4px,min(1.78cqw,1.4dvh),12px)/1.2 "JetBrains Mono",monospace; white-space:pre; }
 #accessible-map small { display:block; margin:4px 0; color:var(--muted); font-size:11px; }
-.rightbar:has(#accessible-map:not([hidden])) { display:flex; flex-direction:column; overflow:hidden; }
-.rightbar:has(#accessible-map:not([hidden])) #panel-body { min-height:0; overflow:auto; }
+.rightbar:has(#accessible-map:not([hidden])) { z-index:11; display:flex; flex-direction:column; overflow:hidden; width:min(680px,calc(100% - 24px)); top:12px; bottom:auto; height:min(600px,calc(100% - 24px)); }
+.rightbar:has(#accessible-map:not([hidden])) > #close-panel { position:absolute; top:8px; right:8px; margin:0; }
+.rightbar:has(#accessible-map:not([hidden])) .section-title { display:flex; align-items:center; gap:12px; min-height:36px; padding-right:40px; }
+.rightbar:has(#accessible-map:not([hidden])) #panel-heading { margin:0; }
+.rightbar:has(#accessible-map:not([hidden])) #panel-body > .subtle { margin:8px 0; font-size:12px; }
+.rightbar:has(#accessible-map:not([hidden])) #panel-body { min-height:0; overflow:auto !important; }
 .rightbar:has(#accessible-map:not([hidden])) .section-title { flex-shrink:0; margin-bottom:8px; }
 .nearby-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; padding:0; list-style:none; }
 .nearby-list .text-button { text-align:left; font-size:13px; padding:5px; width:100%; }

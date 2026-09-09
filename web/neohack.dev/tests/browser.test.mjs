@@ -4674,6 +4674,16 @@ test('Ctrl+K reaches app views, settings and guarded abandonment without losing 
   assert.equal(await page.locator('#map-text').isVisible(),true);
   const geometry=await page.evaluate(()=>({map:document.querySelector('#map-text').getBoundingClientRect().bottom,body:document.querySelector('#panel-body').getBoundingClientRect().top,lines:document.querySelector('#map-text').textContent.split('\n').length}));
   assert.ok(geometry.map<geometry.body);assert.equal(geometry.lines,21);
+  for(const [width,height] of [[1440,1050],[390,844],[740,390]]) {
+    await page.setViewportSize({width,height});
+    const boxes=await page.evaluate(()=>{
+      const panel=document.querySelector('.rightbar'), close=document.querySelector('#close-panel').getBoundingClientRect(), rect=panel.getBoundingClientRect();
+      return {overflow:panel.scrollHeight-panel.clientHeight,rightGap:rect.right-close.right,topGap:close.top-rect.top,width:rect.width,scroll:document.documentElement.scrollWidth};
+    });
+    assert.ok(boxes.overflow<=1,JSON.stringify(boxes));assert.ok(boxes.rightGap<=12 && boxes.topGap<=12,JSON.stringify(boxes));
+    assert.ok(boxes.scroll<=width);if(width===1440)assert.ok(boxes.width>=600);
+    await page.screenshot({path:root+'/test-results/surroundings-'+width+'.png'});
+  }
   await page.locator('#close-panel').click();
   await page.keyboard.press('Control+k');
   await query.fill('attack');await page.locator('#more-grid [data-action=attack]').click();
