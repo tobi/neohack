@@ -41,6 +41,8 @@ jobs:
       - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org --prefix lib/neonethack
       - run: node lib/neonethack/scripts/generate.ts --check
       - run: make -C lib/neonethack test
+      - name: Build TypeScript consumers before workshop checks
+        run: npm run --prefix lib/neonethack build
       - run: npm test --prefix examples/workshop
       - name: Pi tool binding and browser discovery (no model calls)
         run: node --test examples/agent-harness/pi-extension.test.mjs examples/pi-webmcp/run.test.mjs
