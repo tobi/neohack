@@ -332,6 +332,11 @@ by the pinned engine and semantic core. Chunk prefetch and bounded parallel
 runtime downloads reduce network waits; batching retains receipt/RNG verification
 and never skips a story incident by jumping to a checkpoint.
 
+Staging replaces the chronicle module directory on every build, including
+literal worker entrypoints with multiline/trailing-comma URL syntax. A fresh
+directory startup test and release validator guard against missing workers
+being masked by files left from an earlier local build.
+
 Each accepted generation logs one `chronicle_timing` record with its outcome,
 admission/publication time, nested replay counts and stage times, model time to
 first text and completion, validation, storage and total request duration.

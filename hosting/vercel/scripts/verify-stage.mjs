@@ -26,7 +26,8 @@ const offline = await readFile(resolve(root, "service-worker.js"), "utf8");
 if (offline.includes("const CONFIG = null")) throw Error("Offline inventory was not staged");
 if (!(await stat(resolve(root, "../.generated/protocol-recording.mjs"))).size)
   throw Error("Missing function-local input format validator");
-for (const module of ["examples/chronicle/replay.mjs", "examples/chronicle/generate.mjs", "lib/neonethack/dist/typescript/wasm.js"])
+for (const module of ["examples/chronicle/replay.mjs", "examples/chronicle/generate.mjs", "lib/neonethack/dist/typescript/wasm.js",
+  "lib/neonethack/wasm/core-worker.mjs", "lib/neonethack/wasm/engine-worker.mjs", "lib/neonethack/wasm/worker-port.mjs", "lib/neonethack/wasm/replay-evidence.mjs"])
   if (!(await stat(resolve(root, "../.generated/chronicle", module))).size)
     throw Error("Missing function-local chronicle module: " + module);
 const current = JSON.parse(
