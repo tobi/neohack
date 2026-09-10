@@ -21,10 +21,10 @@ of its semantics in each client:
 | `lib/neonethack/engine/` | Pinned NetHack source, game rules and headless integration. Supplies what the hero actually perceives and the engine's genuine input decisions. |
 | `lib/neonethack/src/` | Shared C semantic driver, public dispatch, perception, action/decision handling, sessions, journals, receipts and replay integrity. `explorer.*` and private headers are internal. |
 | `lib/neonethack/protocol/`, `include/neonethack.h`, `docs/PROTOCOL.md` | Public contract. `protocol/catalog.ts` generates method schemas, C dispatch metadata, TypeScript requests and MCP definitions; `protocol/response.ts` defines response schemas. Regenerate with Node and check drift. |
-| `lib/neonethack/cli/` | Native process entry points: public NDJSON requests/responses, stdio MCP and native Streamable HTTP MCP. These expose the semantic contract, not the engine's private input protocol. |
+| `lib/neonethack/cli/` | Native process entry point: public NDJSON requests/responses. These expose the semantic contract, not the engine's private input protocol. |
 | `lib/neonethack/typescript/` | Typed library clients and native/browser transports. Client conveniences preserve protocol meaning, costs, decisions and uncertainty. |
 | `lib/neonethack/wasm/` | The same C driver and engine in browser workers, with explicit storage ownership and durability guarantees. Worker plumbing does not own game rules. |
-| `lib/neonethack/mcp/`, `typescript/webmcp.ts` | MCP and browser WebMCP adapters. Named tools expose the same operations and perceived results. Compact presentations must preserve their meaning. |
+| `lib/neonethack/mcp/`, `typescript/webmcp.ts` | One shared TypeScript MCP service/agent adapter, used by browser WebMCP and the Bun stdio/HTTP CLI over the same C WASM engine. Transport code must not duplicate tool dispatch, navigation or presentation. |
 | `examples/` | Small public-API consumers and runnable integration examples. Keep sample clients correct and their command-coverage limits explicit. |
 | `web/neohack.dev/` | The developing web UX: character creation, dungeon map, local views, inventory, settings, accessible controls and agent interaction. Read its [AGENTS.md](web/neohack.dev/AGENTS.md) and [DESIGN.md](web/neohack.dev/DESIGN.md) before UX work. |
 | `hosting/vercel/` | Website/runtime delivery, durable cloud storage and supporting web services. Browser gameplay runs in WASM; hosting does not duplicate game rules or provide a separate HTTP gameplay engine. |
@@ -33,7 +33,7 @@ The flow is **client intent → named semantic operation → C driver → NetHac
 perceived observation, actual outcome and any standing decision → client**.
 The C library, typed library, NDJSON, MCP and WebMCP are surfaces of this contract,
 not different games. WebMCP in the pixel client shares the active game with the
-human-facing HUD. Do not restore the retired Bun gameplay server, old UI, generic
+human-facing HUD. Do not restore the retired native C MCP implementation, old Bun gameplay server, old UI, generic
 public `act` tool, raw-key escape hatch or JS semantic adapter.
 
 ## Documentation authority
@@ -55,12 +55,12 @@ Keep current guidance consistent across these documents:
   may offer a different, higher-level vocabulary, with explicit mappings to the
   low-level operations. Run check:tools and evolve it to verify operation coverage
   and meaning, rather than requiring identical high/low tool counts. WebMCP
-  and native stdio/HTTP MCP expose the navigation vocabulary generated from
+  and Bun stdio/HTTP MCP expose the navigation vocabulary generated from
   `protocol/agent.ts`. There is no MCP profile switch. Precise operations remain
   available through the low library, C API and NDJSON.
   Agent tools use plain names (`create`, `observe`, `inspect`, `eat`, `answer`),
   explicit `itemId` selectors and context-bound `value` answers. Generate syntax
-  in both adapters; never rename low operations as a side effect or teach sample
+  in the shared adapter; never rename low operations as a side effect or teach sample
   clients a different question contract. Inspect offers and question replies
   include executable adapter syntax without choosing an action for the player.
 - Prefer replacing an awkward method and updating its consumers over adding a

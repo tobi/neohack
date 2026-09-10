@@ -59,112 +59,72 @@ when explicit request IDs/revisions are needed. It returns structured errors
 rather than throwing `WorldError`; transport errors still reject. It never
 fills omitted parameters or retries.
 
-## Native MCP
+## Bun/WASM MCP
 
-MCP is implemented in C. `make mcp` builds it and installs `neohack-mcp` to
-`~/.local/bin` (requires pkg-config and libevent 2.1 development headers/libraries).
-The installed executable finds engine and data next to itself. From a build tree,
-or for a custom runtime, pass explicit paths:
+`make mcp` installs `bin/neohack-mcp` in the repository (override
+`MCP_PREFIX`). Bun runs the CLI; the actual game is the same C WASM used by
+WebMCP. `mcp/service.ts`, `mcp/agent.ts` and the shared Navigator own all
+schemas, tool execution, guards, named decisions, recovery and presentation.
+The browser registration and stdio/HTTP framing do not implement parallel rules.
+There is no native C MCP, profile switch or fallback gameplay server.
 
 ```sh
-lib/neonethack/build/native/neonethack-mcp \
-  /path/to/engine/playground/nethack \
-  /path/to/engine/playground /private/sessions
+./bin/neohack-mcp --sessions /private/new-wasm-sessions
+./bin/neohack-mcp --http 8080 --sessions /private/new-wasm-sessions
 ```
 
-The default transport is stdio: newline-delimited JSON-RPC initialization,
-`ping`, `tools/list` and `tools/call`. Stdout is protocol-only. There is no Node
-server adapter, JavaScript server launcher or bundled JavaScript runtime.
+Every surface returns identical tool names/descriptions/schemas and identical
+`structuredContent` plus a JSON text content block. `go`, `explore`,
+`descend`, `navigation` and `route` are available everywhere. Route
+planning remains perception-only C; ordinary failed route queries spend zero
+turns. Movement, searching, rest, door attempts and genuine decisions may cost
+turns. Navigation is bounded and stops for witnessed danger, changed conditions
+and questions. This replacement does not relax those stops or change pet, food,
+combat or identification rules.
 
-Native MCP and WebMCP share the navigation vocabulary generated from
-`protocol/agent.ts`: `create`, `observe`, `go`, `explore`,
-`descend`, `attack`, named actions and explicit decisions. `help` lists tools
-or gives one tool's schema. The adapter owns request IDs, action revisions and
-response reconstruction; the C driver still validates every semantic operation.
-Callers pass the short run token and the exact returned `decision.id` as
-`decisionId` for answers and cancellations. An old answer cannot resolve a newer
-question, even when the choices have the same names. See [WebMCP](WEBMCP.md)
-for shared decision, uncertainty and presentation semantics.
+### Concurrent games and durable storage
 
-Results are in `structuredContent`; older HTTP clients and WebMCP also receive
-a text `content` block. Structured
-rejections set `isError`; a blocked in-game attempt is not automatically a
-protocol error. Process failures return a textual `isError` explaining that
-execution may be uncertain. Tool listings omit the optional repeated output
-schema. MCP responses reconstruct perceived state and label compact omissions;
-`observe` returns the full observation. Low-level delta consumers can use
-`CompactObservationReader` from `neonethack/mcp`; agents do not merge deltas.
+Each run has a separate worker and `runs/<sessionId>/journal.sqlite` with
+an immutable runtime descriptor. SQLite WAL with synchronous FULL commits a
+request reservation before C receives input, then atomically records completion
+and cursor. Live turns never read/rewrite the historical input buffer. The same
+worker journal/resume/checkpoint code runs in the browser with IndexedDB.
 
-### Concurrent games and state directories
+Process leases prevent concurrent ownership of a disk journal; another process
+can acquire it after its owner exits. Failed worker operations remain uncertain;
+no second gameplay request is admitted until recovery. Restart the server and
+explicitly resume after a failed worker. The reserved exact input reconstructs
+against its original pin, and receipts stay available. Corruption fails closed.
+Runtime directories are content-addressed, atomically published and verified;
+new versions affect new games, never silently change existing pins.
 
-The C MCP process uses a libevent event loop and a dedicated C worker process
-for each active game. Each worker calls the public C API serially and owns its
-isolated NetHack engine process. Calls with the same `sessionId` queue in arrival
-order; different games can execute and replay concurrently. No C contexts are
-called concurrently within one process.
+Same-run calls capture the shared adapter revision when admitted and serialize;
+stale queued calls submit no engine input. Different runs have independent
+workers. `suspend` closes the game without quitting; `resume` is explicit.
+Pending answers/cancels always carry the exact returned decisionId. SIGTERM,
+SIGINT and stdin EOF stop admission and drain accepted work before shutdown;
+a 90-second shutdown deadline leaves durable reservations for recovery.
 
-Every `create` has a dedicated `SESSIONS/<sessionId>/` directory with its
-private playground, journals, receipts, semantic state and runtime pins. Only
-immutable engine cache entries are shared in the parent directory; their
-publication never replaces an existing entry. The C driver's exclusive leases
-still protect each game's mutable state.
-
-`suspend` releases the worker and engine before replying; its directory
-remains for explicit `resume`. Queued calls retain their original
-arguments and the shared adapter revision captured at admission. Native MCP does
-not track each HTTP client's last view. Closing and resuming a game does not affect
-other games, and no confirmation or decision answer is automatic. Workers are retained until close or server shutdown; close
-games that no longer need to stay loaded.
-
-A failed or timed-out worker and its engine are retired together. Other games
-remain available. Explicitly resume after a failure; use `recover` for the retained
-exact operation or `receipt` for a known operation ID. Neither repeats a navigation
-leg. A shared most-recent receipt may belong to another participant; inspect its
-identity. Creation has no retry ID, so never blindly resubmit it.
-A worker response is bounded to 8 MiB and an in-flight request has a 150-second
-transport timeout. SIGINT/SIGTERM stops accepting new requests, drains accepted
-work and closes the workers. Stdio EOF does the same.
+Recovery is shared per run, not per caller. A completely lost outer reply can
+lose its operation ID; another participant's latest receipt is not evidence of
+that lost action. Do not blindly resubmit create or a navigation leg. `--list`
+shows local run tokens for inspection; it does not select or advance a run.
 
 ### Streamable HTTP
 
-Add `--http PORT` to the same native executable:
+The loopback-only endpoint is `http://127.0.0.1:8080/mcp`. It supports the
+2025-03-26, 2025-06-18 and 2025-11-25 initialize/notification handshake and the
+2026-07-28 per-request metadata/discover interface. Explicit short sessionId
+arguments select games; no transport session header selects state. HTTP modern
+responses add only resultType/server metadata to the shared tool envelope.
+Host/Origin are checked, bodies are limited to 64 KiB (UTF-8), and malformed or
+duplicate-key requests are rejected before dispatch. The semantic input limit
+remains 4096 UTF-8 bytes. Notifications cannot invoke gameplay. Stdout contains
+only JSON-RPC; diagnostics go to stderr.
 
-```sh
-lib/neonethack/build/native/neonethack-mcp --http 8080 \
-  /path/to/engine/playground/nethack \
-  /path/to/engine/playground /private/sessions
-```
-
-The endpoint is `http://127.0.0.1:8080/mcp`, implementing
-[MCP 2026-07-28 Streamable HTTP](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http):
-one POST per request, JSON replies, per-request metadata and `server/discover`.
-This mode uses no HTTP initialization handshake, `Mcp-Session-Id`, GET stream or
-DELETE session. The server also accepts 2025-03-26, 2025-06-18 and 2025-11-25
-Streamable HTTP handshakes. Both HTTP forms return independent perceived
-snapshots. The 2026-07-28 envelope includes `resultType: "complete"` and
-server identity metadata. Game `sessionId` is still an explicit tool argument.
-
-```sh
-curl http://127.0.0.1:8080/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json, text/event-stream' \
-  -H 'MCP-Protocol-Version: 2026-07-28' \
-  -H 'Mcp-Method: server/discover' \
-  --data '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
-```
-
-In the 2026-07-28 mode, `tools/call` requires `Mcp-Name` matching `params.name`. Every request
-needs the protocol version and client capabilities in `params._meta`; these are
-MCP metadata, not extra fields in tool arguments. Headers are checked against the
-body before dispatch. Unsupported versions return error `-32022` listing supported
-versions; mismatched or missing headers return `-32020`.
-
-HTTP binds only to IPv4 loopback and validates Host and Origin. It is a local
-service with one trust domain: clients can access the store's games by ID. Remote
-authentication and per-user access control are not provided. HTTP bodies are
-limited to 64 KiB and headers to 16 KiB; the existing public semantic request
-limit remains 4096 UTF-8 bytes. Libevent supplies the HTTP parser, bounded framing
-and connection handling; there is no separate HTTP gameplay engine.
+HTTP disconnect does not cancel accepted work. Stdio cancellation can stop a
+navigation leg between actions; already accepted inputs are never undone. This
+local endpoint does not provide remote-user authentication. Keep it on loopback.
 
 ### Low and high APIs
 
@@ -209,7 +169,7 @@ The command verifies exact agreement within each vocabulary and explicit
 coverage of low operations by agent tools. It exits nonzero on missing, extra
 or duplicate tools, schema/annotation drift, dispatch mismatches or failed
 probes. It compares against the source catalogs, not a hardcoded count. It
-checks package low/high exports, WebMCP registration and dispatch, real native
+checks package low/high exports, WebMCP registration and dispatch, real Bun/WASM
 stdio/HTTP discovery and the bundled workshop module loader. CI runs the same
 command. `--http URL` substitutes an existing MCP endpoint; `--web URL` additionally
 checks actual page registration in sandboxed Chromium (set `CHROMIUM` if needed).

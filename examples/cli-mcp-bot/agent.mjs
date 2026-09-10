@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // agent.mjs — LLM-driven NetHack player.
 //
-// Plays the neonethack C engine through the native neonethack MCP HTTP server
+// Plays the neonethack C engine through the Bun/WASM neohack MCP HTTP server
 // (~/.local/bin/neohack-mcp --http) with a Vercel AI SDK model behind any
 // OpenAI-compatible endpoint.
 //
@@ -38,8 +38,6 @@ if (existsSync(envFile)) {
 // ---- configuration ----
 const ROOT = process.env.NEONETHACK_ROOT ?? resolve(BOT_DIR, '../..');
 const LIB = join(ROOT, 'lib/neonethack');
-const ENGINE = process.env.NEONETHACK_ENGINE ?? join(LIB, 'engine/playground/nethack');
-const DATA = process.env.NEONETHACK_DATA ?? join(LIB, 'engine/playground');
 const SESSIONS = process.env.NEONETHACK_SESSIONS ?? join(BOT_DIR, 'sessions');
 const CONTINUE_SESSION = process.argv.slice(2).some(arg => arg === '-c' || arg === '--continue');
 const budgetArg = process.argv.slice(2).find(arg => /^\d+$/.test(arg));
@@ -162,7 +160,7 @@ function assessExplorationProgress(observation, tool, decision) {
 
 // ---- MCP HTTP 2026-07-28 -------------------------------------------------
 // @ai-sdk/mcp 2.0.41 negotiates server/discover and modern stateless HTTP.
-const MCP_BIN = process.env.NEONETHACK_MCP ?? join(homedir(), '.local/bin/neohack-mcp');
+const MCP_BIN = process.env.NEONETHACK_MCP ?? join(LIB, '../../bin/neohack-mcp');
 const MCP_HTTP_PORT = parseInt(process.env.NEONETHACK_MCP_HTTP_PORT ?? '18765', 10);
 const externalMcpUrl = process.env.NEONETHACK_MCP_HTTP_URL;
 const MCP_HTTP_URL = externalMcpUrl ?? `http://127.0.0.1:${MCP_HTTP_PORT}/mcp`;
@@ -171,7 +169,7 @@ let mcpServerError = '';
 if (!externalMcpUrl) {
   if (!existsSync(MCP_BIN)) throw new Error(`MCP executable not found: ${MCP_BIN}`);
   log(`starting MCP HTTP target: ${MCP_BIN} --http ${MCP_HTTP_PORT}`);
-  mcpServer = spawn(MCP_BIN, ['--http', String(MCP_HTTP_PORT), ENGINE, DATA, SESSIONS], {
+  mcpServer = spawn(MCP_BIN, ['--http', String(MCP_HTTP_PORT), '--sessions', SESSIONS], {
     cwd: LIB,
     stdio: ['ignore', 'ignore', 'pipe'],
   });

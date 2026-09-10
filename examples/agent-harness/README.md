@@ -17,7 +17,7 @@ From the repository root:
 node examples/agent-harness/run-pi.mjs --minutes 60
 ```
 
-This builds native MCP and the TypeScript reader, installs local dependencies,
+This builds Bun/WASM MCP and the TypeScript reader, installs local dependencies,
 creates one fresh game, and starts the installed Pi CLI with `vllm/current`.
 Pi uses its existing model configuration (including the context limit).
 Built-in tools, discovered extensions, skills, prompt templates and context
@@ -28,8 +28,9 @@ available to the model. This is tool isolation, not an OS sandbox.
 Use `--seed 217`, `--model vllm/current`, `--minutes 60`, or
 `--output /absolute/new/directory` to choose the run. Default output is a new
 `~/neohack-pi-...` directory. An existing output directory is rejected.
-`--library` selects another built source checkout. Build prerequisites are the
-same as native library development; `build.log` retains failures.
+`--library` selects another source checkout. Building requires Bun, Node, the
+native development prerequisites and Emscripten; see the library's
+[build instructions](../../lib/neonethack/README.md). `build.log` retains failures.
 
 The foreground command stops on Pi completion, terminal state, unresolved
 execution or its deadline. Ctrl-C stops both Pi and MCP and preserves evidence.
@@ -102,7 +103,7 @@ buffer and cannot establish a fresh bump. The default client decoder unwraps
 complete replies and rejects unreconstructed deltas.
 
 [native-integration.test.mjs](native-integration.test.mjs) is an executable
-example of bridge initialization, a disposable native run, the shared compact
+example of bridge initialization, a disposable Bun/WASM run, the shared compact
 reader, guarded dispatch, and exact receipt recovery. Its in-memory reservation
 lookup is a test fixture; a production transport must recover the mapping from
 the durable reservation-linked journal after a process restart.
@@ -149,11 +150,11 @@ not a cloud persistence or multi-host locking implementation.
 ## Verification
 
 The portable suite uses disposable public-shape fixtures and subprocesses. To
-include the real native MCP test, build the library and run:
+include the real Bun/WASM MCP test, build the library and run:
 
 ```sh
-make -C lib/neonethack
 npm ci --prefix lib/neonethack
+make -C lib/neonethack wasm
 npm run --prefix lib/neonethack build
 NEONETHACK_MCP_TEST_ROOT="$PWD/lib/neonethack" npm test --prefix examples/agent-harness
 ```
@@ -171,7 +172,7 @@ fix belongs to its separate BB repository, not this harness.
 ## Discovery usability check
 
 `node examples/agent-harness/discovery-check.mjs --out /tmp/mcp-discovery` runs
-an opt-in, bounded fresh Pi model exercise against a disposable local native MCP.
+an opt-in, bounded fresh Pi model exercise against a disposable local Bun/WASM MCP.
 It needs the built engine and a configured Pi (`vllm/current` by default). The model receives
 only a plain-language task, live discovery and returned replies; no tool-name
 cheat sheet or argument repair. At most nine tool calls and two minutes, no automatic retries,

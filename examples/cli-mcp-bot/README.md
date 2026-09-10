@@ -1,8 +1,8 @@
-# cli-mcp-bot — an LLM plays NetHack through native MCP HTTP
+# cli-mcp-bot — an LLM plays NetHack through Bun/WASM MCP HTTP
 
 An autonomous bot that plays NetHack using the neohack C engine directly.
-A Vercel AI SDK agent drives the installed native MCP HTTP target
-(`~/.local/bin/neohack-mcp --http`) — no browser or stdio bridge involved.
+A Vercel AI SDK agent drives the installed Bun/WASM MCP HTTP target
+(`./bin/neohack-mcp --http`) — no browser or stdio bridge involved.
 
 ```
 ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
@@ -16,11 +16,11 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
 
 ## Setup
 
-1. Build and install the C MCP server with `make mcp` from the repository root.
-   That puts `neohack-mcp` on `~/.local/bin`. The bot starts it as:
+1. Install Bun and Emscripten, then build the shared WASM MCP server with `make mcp` from the repository root.
+   That puts `neohack-mcp` in the repository’s `bin/` directory. The bot starts it as:
 
    ```sh
-   ~/.local/bin/neohack-mcp --http 18765 ENGINE DATA SESSIONS
+   ./bin/neohack-mcp --http 18765 --sessions SESSIONS
    ```
 
    Override `NEONETHACK_MCP`, `NEONETHACK_MCP_HTTP_PORT`, or point
@@ -49,7 +49,7 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
 
 | Path | Purpose |
 | --- | --- |
-| `agent.mjs` | AI driver: native MCP HTTP client, advisor augmentation, continuous conversation |
+| `agent.mjs` | AI driver: Bun/WASM MCP HTTP client, advisor augmentation, continuous conversation |
 | `advisor.mjs` | Standalone heuristic decision tree (run: `node advisor.mjs state/last-obs.json`) |
 | `retro.mjs` | Post-session LLM self-review; improves doctrine + advisor, commits |
 | `system-prompt.md` | Committed default doctrine (seed for the state dir) |

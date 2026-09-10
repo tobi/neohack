@@ -1,4 +1,4 @@
-import {AgentClient, tools} from '../mcp/agent.js';
+import {McpService, tools} from '../mcp/service.js';
 import type {Transport} from './client.js';
 
 /** Structural types for document.modelContext and early navigator builds. */
@@ -21,7 +21,7 @@ export async function registerWebMcp(
     (globalThis.navigator as (Navigator & {modelContext?:WebMcpContext})|undefined)?.modelContext,
 ):Promise<WebMcpRegistration> {
   if(!context?.registerTool)return {supported:false,toolCount:0,dispose(){}};
-  const agent=new AgentClient(transport),controller=new AbortController(),registered:string[]=[],cleanups:(()=>void)[]=[];
+  const agent=new McpService(transport),controller=new AbortController(),registered:string[]=[],cleanups:(()=>void)[]=[];
   const dispose=()=>{controller.abort();for(const cleanup of cleanups.splice(0))cleanup();for(const name of registered.splice(0))context.unregisterTool?.(name);};
   try {
     for(const tool of tools){
@@ -36,8 +36,7 @@ export async function registerWebMcp(
           controller.signal.addEventListener('abort',abort,{once:true});
           options?.signal?.addEventListener('abort',abort,{once:true});
           try {
-            const response=await agent.call(tool.name,input,{signal:callController.signal});
-            return {isError:!!response.error,structuredContent:response,content:[{type:"text",text:JSON.stringify(response)}]};
+            return await agent.call(tool.name,input,{signal:callController.signal});
           } finally {
             controller.signal.removeEventListener('abort',abort);
             options?.signal?.removeEventListener('abort',abort);

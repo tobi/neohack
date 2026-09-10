@@ -1,5 +1,4 @@
 # Changelog
-
 - Every active local run backs up automatically, including old local-recovery bookmarks. No enable-sync button or permanent local-only mode.
 
 - Online saves recover into independent browser backup streams, preserving old copies. Continuous play syncs within 30 seconds; long adventure histories and temporary ledger failures no longer block new run publication.
@@ -7,6 +6,15 @@
 Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
+
+- Replaced the native C MCP server with a Bun launcher using the same TypeScript
+  service, agent adapter and C WASM engine as WebMCP. Stdio and HTTP share
+  navigation, decisions, schemas and result presentation.
+- `make mcp` installs `bin/neohack-mcp` with its companion runtime. Runs use
+  append-only SQLite journals, short tokens and verified runtime pins; existing
+  native stores are left untouched.
+- Added transport/WebMCP reply parity, disk-failure/crash recovery and independent
+  worker tests; removed the duplicate C MCP implementation and libevent bundle.
 
 - Website and WebMCP heroes use generated names, with a reroll button. Operator
   display-name corrections persist in the ledger and replay without rewriting

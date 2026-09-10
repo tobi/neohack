@@ -17,7 +17,7 @@ const root=resolve(import.meta.dirname,'../../lib/neonethack'),client=new Client
 const transcript=[],trace=[],token=randomUUID();let created=0,attempted=0,ended=false,ready,child,timer,server,failed;
 const objective='Start one new wizard adventure, read its current scene, inspect the square you stand on, begin a prayer and explicitly decline it, then release the engine while retaining the adventure. Do not take other actions. Stop when the engine has been released. Use only the discovered tools and returned information.';
 try{
-  await client.connect(new StdioClientTransport({command:join(root,'build/native/neonethack-mcp'),args:[join(root,'engine/playground/nethack'),join(root,'engine/playground'),join(work,'sessions')],stderr:'pipe'}));
+  await client.connect(new StdioClientTransport({command:join(root,'dist/mcp/cli.js'),args:['--sessions',join(work,'sessions')],stderr:'pipe'}));
   const tools=(await client.listTools()).tools;
   await writeFile(join(out,'discovery.json'),JSON.stringify({tools,instructions:client.getInstructions()}));
   server=createServer(async(req,res)=>{

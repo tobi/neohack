@@ -112,17 +112,12 @@ The preview builder requires a private npm package and records
 `publicationApproved: false`. Registry publication needs a separate release
 workflow.
 
-## Local single-file MCP build
+## Bun/WASM MCP installation
 
-`make bundle` is a separate Linux/musl build using Podman. It produces
-`build/bundle/neohack-mcp`; see the [single-file setup](QUICKSTART.md#single-file-linux-mcp).
-It embeds only the allowlisted static data, the stripped engine, project/NetHack
-notices and dependency licenses. Runtime bytes and downloaded Lua sources stay
-in ignored build outputs or the container, never in the source tree.
-
-This local installation target does not publish a release or replace the checked
-preview archive workflow above. Any distributed binary must accompany matching
-project/engine source and required notices, including the Lua and static library
-sources/notices where their licenses require them. Embedded notices are extracted
-alongside the runtime. The build recipe uses Alpine 3.23 packages; updating those
-packages changes the runtime content hash and does not upgrade existing game pins.
+`make mcp` builds WASM and TypeScript and installs a Bun launcher plus its
+companion runtime directory. `make bundle` and the C MCP executable are
+retired. The npm archive includes the CLI and exact WASM runtime; its bin entry
+is tested from an independent installed consumer. Native archives contain only
+the C library, NDJSON CLI and native engine/data. Bun is a separate prerequisite,
+not a vendored binary. Keep matching source and WASM dependency notices with any
+distribution; the checked preview/archive-consumer audit still applies.

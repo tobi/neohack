@@ -14,8 +14,8 @@ if(process.env.NEONETHACK_MCP_TEST_ROOT){
   test('native bridge + snapshot client + composed dispatcher preserve exact one-action ownership', {timeout:30000}, async t=>{
     const root=process.env.NEONETHACK_MCP_TEST_ROOT;
     const dir=await mkdtemp(join(tmpdir(),'neohack-composed-native-'));
-    const bridge=createBridge({command:join(root,'build/native/neonethack-mcp'),
-      args:[join(root,'engine/playground/nethack'),join(root,'engine/playground'),join(dir,'sessions')],
+    const bridge=createBridge({command:join(root,'dist/mcp/cli.js'),
+      args:['--sessions',join(dir,'sessions')],
       journalPath:join(dir,'bridge.jsonl')});
     t.after(async()=>{await bridge.close();await rm(dir,{recursive:true,force:true});});
     let sequence=0;

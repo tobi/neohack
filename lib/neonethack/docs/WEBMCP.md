@@ -1,6 +1,6 @@
 # WebMCP
 
-`neonethack/webmcp` registers the same navigation tools as native stdio/HTTP
+`neonethack/webmcp` registers the same navigation tools as Bun/WASM stdio/HTTP
 MCP. Names, descriptions and schemas are generated from `protocol/agent.ts`,
 with explicit mappings to the low semantic catalog. Use `go` for destinations,
 `explore` and `descend` for bounded navigation legs, and `attack` for a
@@ -40,7 +40,7 @@ choices or submitting input, even if the new prompt has the same kind or labels.
 Closing/resuming the same pending question preserves its ID; a later question
 gets a different ID. Invalid or extra arguments
 are rejected before dispatch. A stale revision requires observation and a new
-judgment, not an automatic retry. Native MCP captures the shared run adapter
+judgment, not an automatic retry. The shared MCP adapter captures the shared run adapter
 revision when a call arrives; it does not track each HTTP client’s last view.
 HTTP client metadata does not establish ownership or decision authority.
 Decision identity remains explicit across connections and participants.
@@ -96,7 +96,7 @@ inspect the visible game/adventure list before creating another life.
 ## Verification
 
 Run `npm run --prefix lib/neonethack check:tools` from the repository root to
-check navigation catalog agreement across native stdio/HTTP MCP and WebMCP,
+check navigation catalog agreement across Bun/WASM stdio/HTTP MCP and WebMCP,
 and explicit coverage of low operations through JavaScript low/high.low and the
 webscript loader. Host policy can restrict execution without
 changing discovery; the workshop owns creation and restricts access to its run.

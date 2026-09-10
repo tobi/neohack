@@ -19,7 +19,7 @@ const {values} = parseArgs({options: {
   output: {type:'string'}, help: {type:'boolean'},
 }});
 if (values.help) {
-  console.log('node examples/agent-harness/run-pi.mjs [--minutes 60] [--seed 217] [--model vllm/current] [--output NEW_DIRECTORY] [--library LIBRARY_DIRECTORY]\nBuilds native MCP, starts one fresh game, and runs Pi with only its MCP tools. Logs, saves and Pi transcript are retained. Stops at death, uncertainty, Pi completion or deadline.');
+  console.log('node examples/agent-harness/run-pi.mjs [--minutes 60] [--seed 217] [--model vllm/current] [--output NEW_DIRECTORY] [--library LIBRARY_DIRECTORY]\nBuilds Bun/WASM MCP, starts one fresh game, and runs Pi with only its MCP tools. Logs, saves and Pi transcript are retained. Stops at death, uncertainty, Pi completion or deadline.');
   process.exit(0);
 }
 const minutes = Number(values.minutes), seed = Number(values.seed);
@@ -30,14 +30,14 @@ fs.mkdirSync(dir, {recursive:false});
 const buildLog = fs.openSync(path.join(dir,'build.log'), 'wx');
 try {
   execFileSync('npm', ['ci','--prefix',here], {stdio:['ignore',buildLog,buildLog]});
-  execFileSync('make', ['-C',root,'native'], {stdio:['ignore',buildLog,buildLog]});
+  execFileSync('make', ['-C',root,'wasm'], {stdio:['ignore',buildLog,buildLog]});
   execFileSync('npm', ['ci','--prefix',root], {stdio:['ignore',buildLog,buildLog]});
   execFileSync('npm', ['run','--prefix',root,'build'], {stdio:['ignore',buildLog,buildLog]});
 } finally { fs.closeSync(buildLog); }
 const {createOperationValidators} = await import('./operations.mjs');
 const {CompactObservationReader} = await import(pathToFileURL(path.join(root,'dist/mcp/compact.js')).href);
-const bridge = createBridge({command:path.join(root,'build/native/neonethack-mcp'),
-  args:[path.join(root,'engine/playground/nethack'),path.join(root,'engine/playground'),path.join(dir,'sessions')],
+const bridge = createBridge({command:path.join(root,'dist/mcp/cli.js'),
+  args:['--sessions',path.join(dir,'sessions')],
   journalPath:path.join(dir,'mcp.jsonl'), timeoutMs:30000});
 let id=0, child, server, timer, killTimer, busy=false, stopped=false, harness;
 const records=[];

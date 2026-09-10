@@ -4,6 +4,7 @@ import { worker, type WorkerPort } from "../wasm/worker-port.mjs";
 
 export type WasmStorage =
   | { kind: "memory" }
+  | { kind: "filesystem"; path: string; sessionId: string }
   | { kind: "journal"; name: string; uploadUrl?:string; uploadToken?:string; archiveConfigUrl?:string }
   | { kind: "indexeddb"; name: string; replicaUrl?: string; replicaBranches?: boolean; replicaRestore?: boolean; replicaSession?: string };
 export interface WasmOptions {

@@ -8,7 +8,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/file.h>
-EM_JS(int, nnh_wasm_durable, (void), { return globalThis.__nnhHost.persistence === 'indexeddb' ? 1 : 0; });
+EM_JS(int, nnh_wasm_durable, (void), { return globalThis.__nnhHost.persistence === 'filesystem' ? 2 : globalThis.__nnhHost.persistence === 'indexeddb' ? 1 : 0; });
 EM_ASYNC_JS(int, nnh_sync_store, (void), {
     try { await globalThis.__nnhHost.sync(); return 0; }
     catch (error) { globalThis.__nnhHost.diagnostic(String(error)); return -1; }

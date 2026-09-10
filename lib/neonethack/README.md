@@ -17,13 +17,8 @@ source, browser and installed-preview paths.
 For the playing loop, read [How an agent plays](docs/AGENT_PLAY.md).
 
 WebMCP and stdio MCP return [self-contained compact perceived frames](docs/PROTOCOL.md#mcp-observation-presentation).
-The [native C MCP CLI](docs/TYPESCRIPT.md#streamable-http) also supports concurrent
-game processes and `--http PORT` for MCP 2026-07-28 and 2025 Streamable HTTP, using the same
-tool schemas and independent observation snapshots.
-The native build includes a [C MCP server](docs/QUICKSTART.md#native-stdio-mcp-no-node-runtime),
-`neonethack-mcp ENGINE DATA SESSIONS`, with no JavaScript runtime requirement.
-`make bundle` also builds a [single-file Linux executable](docs/QUICKSTART.md#single-file-linux-mcp)
-with the engine, data and static dependencies included: `neohack-mcp [--http PORT] [SESSIONS]`.
+The [Bun/WASM MCP CLI](docs/TYPESCRIPT.md#bunwasm-mcp) shares WebMCP’s exact tool executor, navigation and presentation.
+It supports stdio and `--http PORT`; each run has an independent WASM worker and durable append-only SQLite journal. The retired C MCP executable and static bundle are removed.
 
 Try the [live pixel client](https://neohack.dev) or follow the
 [agent-browser/WebMCP walkthrough](docs/AGENT_BROWSER.md) without a local build.
@@ -63,16 +58,16 @@ blocks new operations until uncertainty is addressed.
 
 ## Build native
 
-Requirements: C99 compiler, CMake ≥3.20, pkg-config, libevent ≥2.1 development files, Make, Ninja (or CMake's Unix Makefiles
+Requirements: C99 compiler, CMake ≥3.20, pkg-config, Make, Ninja (or CMake's Unix Makefiles
 generator), `flock` (util-linux), Lua 5.4 headers/static library, ncurses and UUID
-development files, plus libevent ≥2.1 development files for native MCP.
+development files. Bun 1.3.14 or newer and Emscripten 6.0.9 are needed for MCP builds.
 The tested native build platform is Linux.
 The library alone has no Lua or Node dependency; these are engine/tooling needs.
 
 ```sh
 # From this directory:
-make                         # C library, public CLI, stdio MCP, native engine/data
-make mcp                     # same, then install the C MCP server to ~/.local
+make                         # C library, public NDJSON CLI, native engine/data
+make mcp                     # build WASM + TS; install Bun MCP to repository bin/
 make test                    # actual C/engine integration
 npm ci                       # Node ≥22.18, only for TS/MCP tooling
 npm test                     # typecheck + real-engine protocol/client tests
@@ -93,14 +88,12 @@ cmake --build build/native --target native
 cmake --install build/native --prefix /your/prefix
 ```
 
-Installation includes the C library/header, CLI, C MCP server, CMake/pkg-config
+Installation includes the C library/header, NDJSON CLI, CMake/pkg-config
 metadata, schemas, engine at `libexec/neonethack/engine`, static data at
-`share/neonethack/data`, and NetHack/Lua notices. `make mcp` installs that layout
-to `~/.local` (override `MCP_PREFIX`) and adds a `neohack-mcp` alias. The installed
-MCP executable finds engine and data next to itself; pass explicit
-`ENGINE DATA SESSIONS` for a custom runtime. Use
-`-DNNH_INSTALL_ENGINE=OFF -DBUILD_TESTING=OFF` and build the default target for a
-library-only installation without Lua/engine tooling.
+`share/neonethack/data`, and NetHack/Lua notices. `make mcp` separately installs
+`bin/neohack-mcp` plus `libexec/neohack-mcp/` under the repository root. Set
+`MCP_PREFIX="$HOME/.local"` for a user installation. Keep those directories
+together when relocating; Bun is the only runtime prerequisite.
 
 New sessions copy only allowlisted static data, never saves, bones or logs.
 Builds do not replace per-session executable/data pins or reinstall over a
@@ -116,7 +109,7 @@ builds do not require JavaScript.
   `neonethack/high` adds Hero and script conveniences. The Node default export
   `Nethack` supplies native engine paths; browser transports are explicit.
   Browser-facing modules have no Node or Bun imports.
-- **MCP/WebMCP:** a generated navigation vocabulary through native C stdio/HTTP
+- **MCP/WebMCP:** a generated navigation vocabulary through Bun/WASM stdio/HTTP
   or the browser adapter, with complete low-operation coverage, exact receipts
   and explicitly bound questions. See the [short play guide](docs/AGENT_PLAY.md).
   Compact MCP replies label omitted local action detail and clear-terrain events;

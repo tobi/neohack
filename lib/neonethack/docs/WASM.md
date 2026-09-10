@@ -189,3 +189,11 @@ separately select the recorded content-addressed C driver, engine and data packa
 The worker reports that pinned package's build identity, and loads its exact
 compiler outputs. The web client uses this separation when resuming published
 runs so network fixes reach existing saves without upgrading their engine.
+
+## Local MCP disk journals
+
+The Bun MCP launcher uses the same core worker with filesystem journal storage.
+Its SQLite implementation supplies the same reserve/commit/range/checkpoint
+interface as IndexedDB; it adds no game semantics. A process lease and FULL WAL
+transactions protect inputs, and discovery reports filesystem/fsync/process-lease.
+Only this Bun storage mode imports bun:sqlite; browser workers stay browser-safe.

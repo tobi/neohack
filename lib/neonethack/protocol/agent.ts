@@ -6,7 +6,7 @@ const object=(properties:Record<string,Schema>,required=Object.keys(properties))
 const itemId:Schema={type:'string',minLength:1,maxLength:64,description:'Exact opaque item id from inventory, here.items or the standing question.'};
 const quantity:Schema={type:'integer',minimum:1,maximum:2147483647,description:'Explicit stack count; requires itemId.'};
 const itemValue=object({itemId,quantity},['itemId']);
-// Generated into both adapters: question syntax is presentation, not game logic.
+// Generated for the shared adapter: question syntax is presentation, not game logic.
 export const agentAnswers:Record<string,{field:string;schema:Schema;instruction:string}>={
   confirmation:{field:'confirm',schema:{type:'boolean'},instruction:'true accepts; false declines. Choose explicitly.'},
   choice:{field:'choose',schema:{type:'array',minItems:1,maxItems:1024,uniqueItems:true,items:{oneOf:[{type:'integer',minimum:0,maximum:2147483647},{type:'string',minLength:1,maxLength:127}]}},instruction:'An array of returned option names or IDs. Select only the choices you intend.'},

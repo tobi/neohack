@@ -92,5 +92,8 @@
     "ajv": "8.20.0",
     "playwright-core": "1.63.0",
     "@modelcontextprotocol/sdk": "1.30.0"
+  },
+  "bin": {
+    "neohack-mcp": "./dist/mcp/cli.js"
   }
 }

@@ -379,8 +379,8 @@ if (process.env.NEONETHACK_MCP_TEST_ROOT) {
   test('native MCP: mixed formats, real decision, old receipt and exact recovery', { timeout: 30000 }, async t => {
     const root = process.env.NEONETHACK_MCP_TEST_ROOT;
     const runDir = await mkdtemp(join(tmpdir(), 'neohack-client-native-'));
-    const runtime = spawn(join(root, 'build/native/neonethack-mcp'), [
-      join(root, 'engine/playground/nethack'), join(root, 'engine/playground'), join(runDir, 'sessions'),
+    const runtime = spawn(join(root, 'dist/mcp/cli.js'), [
+      '--sessions', join(runDir, 'sessions'),
     ], { stdio: ['pipe', 'pipe', 'pipe'] });
     const closed = once(runtime, 'exit');
     let stderr = '';

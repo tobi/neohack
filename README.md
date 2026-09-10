@@ -40,7 +40,7 @@ See the [changelog](CHANGELOG.md) for recent improvements to the playing experie
 
 ```sh
 make -C lib/neonethack
-make mcp                     # C MCP server to ~/.local/bin/neohack-mcp
+make mcp                     # Bun + WASM MCP to ./bin/neohack-mcp
 make -C lib/neonethack test
 npm ci --ignore-scripts --registry=https://registry.npmjs.org --prefix lib/neonethack
 npm test --prefix lib/neonethack

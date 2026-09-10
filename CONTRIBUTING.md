@@ -41,6 +41,8 @@ From the repository root, with the prerequisites in the library README:
 npm ci --ignore-scripts --registry=https://registry.npmjs.org --prefix lib/neonethack
 node lib/neonethack/scripts/generate.ts --check
 make -C lib/neonethack test
+# MCP tests need Bun and the compiled WASM package.
+make -C lib/neonethack wasm
 npm test --prefix lib/neonethack
 npm run --prefix lib/neonethack test:install
 # Activate Emscripten 6.0.9, or set EMSDK to its installed SDK root.

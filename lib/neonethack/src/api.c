@@ -124,9 +124,9 @@ nnh_status nnh_dispatch(nnh_context *x, const char *json, size_t length, nnh_res
         {
             extern int nnh_wasm_durable(void);
             int durable = nnh_wasm_durable();
-            mj_key(&b, "persistence"); mj_strv(&b, durable ? "indexeddb" : "memory");
-            mj_key(&b, "durability"); mj_strv(&b, durable ? "indexeddb-transaction" : "none");
-            mj_key(&b, "ownership"); mj_strv(&b, durable ? "origin-web-lock" : "isolated-worker");
+            mj_key(&b, "persistence"); mj_strv(&b, durable == 2 ? "filesystem" : durable ? "indexeddb" : "memory");
+            mj_key(&b, "durability"); mj_strv(&b, durable == 2 ? "fsync" : durable ? "indexeddb-transaction" : "none");
+            mj_key(&b, "ownership"); mj_strv(&b, durable == 2 ? "process-lease" : durable ? "origin-web-lock" : "isolated-worker");
             mj_key(&b, "resume"); mj_strv(&b, "same-package");
         }
 #else
