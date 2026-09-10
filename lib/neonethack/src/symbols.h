@@ -35,6 +35,7 @@
 #define nnh_resolve_cell nnh_private_resolve_cell
 #define nnh_known_route nnh_private_known_route
 #define nnh_known_paths nnh_private_known_paths
+#define nnh_known_block nnh_private_known_block
 #define nnh_emit_basis nnh_private_emit_basis
 #define nnh_emit_gate nnh_private_emit_gate
 #define nnh_emit_cell_actions nnh_private_emit_cell_actions

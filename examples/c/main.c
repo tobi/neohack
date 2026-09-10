@@ -6,7 +6,11 @@ int main(int argc, char **argv)
     nnh_context *worlds = NULL;
     nnh_result *result = NULL;
     nnh_config config = {sizeof config, NULL, NULL, NULL};
-    nnh_identity hero = {"C explorer", "valkyrie", "dwarf", "female", "lawful", 1, 42, NULL};
+    nnh_identity hero = {
+        .name = "C explorer", .role = "valkyrie", .race = "dwarf",
+        .gender = "female", .align = "lawful", .has_seed = 1, .seed = 42,
+        .harness_name = "C example"
+    };
     nnh_guard guard = {"first-wait", 0};
     char session[65];
     int status = 1;
