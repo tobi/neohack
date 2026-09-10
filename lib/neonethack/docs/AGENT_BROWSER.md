@@ -113,14 +113,15 @@ Item references remain opaque. Choice answers accept returned readable
 names or IDs; an ambiguous name returns candidates. Use `help` with a tool’s
 `name` for its schema. An answer can produce another question.
 
-## Recover and return
+## Check current state and return
 
-After a lost input reply, **do not invoke the action again**. `recover({sessionId})`
-recovers the adapter’s retained uncertain input or latest receipt, never a whole
-navigation leg. `receipt({sessionId,operationId})` reads a known historical receipt
-without rewinding the world. Observe before choosing another action. If a page
-restart lost the adapter’s uncertain-operation context, do not assume a new
-adapter can reconstruct it. Missing receipts remain uncertainty.
+After a lost input reply, **do not invoke the action again**. Call `observe` to
+read current state and check any retained uncertain receipt without resending
+input. If verification fails, stop and follow the resume instruction. Normal
+navigation stops need no recovery call. `receipt({sessionId,operationId})` nests
+historical evidence under `receipt`; its world is not current and its question is
+not active. A page restart can lose adapter-side correlation; a new adapter must
+not guess which earlier operation the caller missed.
 
 For slow commands use agent-browser’s `--detach`, retain its invocation ID and
 retrieve it with `webmcp result INVOCATION_ID`. That browser handle differs from

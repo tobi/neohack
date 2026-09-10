@@ -593,11 +593,14 @@ neighborhood matrix, without consuming a turn or requiring an input guard:
 {"name":"observe","arguments":{"sessionId":"YOUR_SESSION_ID"}}
 ```
 
-`receipt` returns the full historical input receipt, including all original
-events and neighborhood offers; it does not update current state. A completed
-`recover` also returns the full historical receipt. Do not treat historical offers
-as current or use presentation equality to infer whether an input ran.
-Uncertain input must be recovered through `recover`, never submitted as a new action.
+MCP `receipt` returns a historical document nested under `receipt`, including the
+original observation and events. It has no top-level world or standing question,
+and historical questions have no executable reply suggestions. The low protocol's
+`session.receipt` remains the exact original response.
+After uncertainty, MCP `observe` checks the retained exact receipt and then returns
+current state. It never resends input; missing verification keeps input blocked
+with a resume instruction. Normal navigation stops require no recovery call.
+There is no MCP `recover` tool. Do not infer execution from presentation equality.
 
 At the low level, item selector strings are perceived readable names; opaque
 references use `{"item":{"id":"ground-20"}}`. MCP instead takes

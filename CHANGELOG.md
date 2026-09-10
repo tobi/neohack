@@ -7,6 +7,10 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Removed the confusing MCP `recover` tool and recovery instructions after normal
+  navigation stops. `observe` checks uncertain receipts without replaying input
+  and returns current state. Diagnostic receipts are nested historical documents
+  so old positions and questions cannot masquerade as the current world.
 - Replaced the native C MCP server with a Bun launcher using the same TypeScript
   service, agent adapter and C WASM engine as WebMCP. Stdio and HTTP share
   navigation, decisions, schemas and result presentation.

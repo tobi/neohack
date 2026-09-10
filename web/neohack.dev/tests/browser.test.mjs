@@ -1578,7 +1578,7 @@ test(
     );
     const { methods } = await import("../../../lib/neonethack/dist/mcp/agent-data.js");
     const tools=methods.map(m=>({name:m.name,description:m.description,inputSchema:m.schema}));
-    const snapshotPart=({summary,operationId,historical,navigation,creatures,requestId,presentation,reply,cancel,...frame})=>{
+    const snapshotPart=({summary,operationId,historical,navigation,creatures,requestId,presentation,reply,cancel,verification,next,...frame})=>{
       const {neighborhood,...observation}=frame.observation;
       return {...frame,observation,events:frame.events.filter(e=>!(e.type==='saw'&&e.kind==='terrain'&&(e.mark==='\\u0000'||e.mark==='\u0000')))};
     };
@@ -1651,7 +1651,7 @@ test(
     state = (await call("wait", waitArgs)).structuredContent;
     const next = (await call("wait", args("web-next"))).structuredContent;
     assert.deepEqual(
-      snapshotPart((await call("receipt",{sessionId:state.sessionId,operationId:state.operationId})).structuredContent),
+      snapshotPart((await call("receipt",{sessionId:state.sessionId,operationId:state.operationId})).structuredContent.receipt),
       snapshotPart(state),
       "exact receipt retry",
     );
@@ -1676,23 +1676,33 @@ test(
     await page.evaluate(async () => {
       const { WasmTransport } = await import("/runtime/typescript/wasm.js");
       const original = WasmTransport.prototype.send;
+      let lose=true;
+      globalThis.__verificationInputs=0;
       WasmTransport.prototype.send = async function (request) {
+        if(request.method.startsWith('game.')||request.method.startsWith('decision.'))globalThis.__verificationInputs++;
         const response = await original.call(this, request);
-        if (request.method === "game.wait") {
-          WasmTransport.prototype.send = original;
+        if (request.method === "game.wait" && lose) {
+          lose=false;
           throw Error("Test WebMCP lost receipt after committed input");
         }
         return response;
       };
     });
     const uncertain = args("web-lost");
-    assert.equal((await call("wait", uncertain)).isError, true);
+    const lost=await call("wait", uncertain);
+    assert.equal(lost.isError, true);
     await page.locator("#recovery").waitFor({ state: "visible" });
+    const oldReceipt=await call('receipt',{sessionId:state.sessionId,operationId:next.operationId});
+    assert.equal(oldReceipt.isError,false);assert.equal(oldReceipt.structuredContent.observation,undefined);
+    assert.equal(await page.evaluate(()=>document.querySelector('pixel-nethack').current.pending.params.requestId),lost.structuredContent.operationId,
+      'an unrelated receipt query cannot overwrite or clear the pending gameplay request');
     const wrong = await call("wait", args("web-wrong-retry"));
     assert.equal(wrong.isError, true);
     assert.equal(wrong.structuredContent.error.code,"uncertainExecution");
-    const recovered = await call("recover",{sessionId:state.sessionId});
+    const recovered = await call("observe",{sessionId:state.sessionId});
     assert.equal(recovered.isError, false);
+    assert.equal(recovered.structuredContent.verification.status, 'settled');
+    assert.equal(await page.evaluate(()=>globalThis.__verificationInputs),1,'verification does not resend the input');
     assert.equal(
       recovered.structuredContent.observation.turn,
       state.observation.turn + 1,
@@ -2839,7 +2849,7 @@ test("idle WebMCP discovery and closed adventures release storage for another ta
   await ready(peer);
   assert.equal((await agentSnapshot(peer)).sessionId, sid);
   assert.deepEqual((await agentSnapshot(peer)).decision, warning.structuredContent.decision);
-  assert.deepEqual((await agentSnapshot(peer)).observation, fullWarning.structuredContent.observation);
+  assert.deepEqual((await agentSnapshot(peer)).observation, fullWarning.structuredContent.receipt.observation);
   assert.deepEqual(errors, []);
 });
 

@@ -52,12 +52,24 @@ name returns the matching candidates under the same standing decision; select
 one by ID. An unknown name returns the available choices. Neither clarification
 submits engine input. Item selections continue to use opaque item references.
 
-`recover` resolves a retained uncertain input or reads the most recent completed
-input receipt if the reply was lost outside the adapter. The latter is marked
-`historical: true` and cannot rewind current state. It never resumes a navigation
-leg. `receipt({sessionId, operationId})` retrieves a specified historical receipt.
-If other inputs occurred since a lost reply, the most recent receipt may belong
-to those inputs; use its operation ID and revision to identify it.
+Normal navigation stops need no recovery call. Read the returned scene and choose
+the next action. There is no `recover` tool.
+
+After an error or lost reply, call `observe({sessionId})`. It looks up any retained
+uncertain operation by its exact receipt ID, then reads a fresh current scene.
+It never resends gameplay or continues a navigation leg. A verified completion is
+reported in `verification` with its operation ID and outcome; current position,
+revision and standing question remain at the top level. An unavailable or mismatched
+receipt leaves input blocked and provides a `resume` instruction. A dead worker or
+storage fault may require reopening the transport first. Repeated observation does
+not manufacture missing consent or clear an unverified request.
+
+`receipt({sessionId, operationId})` is a diagnostic query. Its historical snapshot
+is nested under `receipt`, with no top-level world or decision, and no executable
+answer/cancel suggestions for old questions. The low-level exact receipt is unchanged.
+If an outer bridge loses the entire reply, the adapter may not know which reply
+the caller missed. `observe` returns current state instead of guessing the latest
+historical operation. Retain bridge invocation IDs for exact correlation.
 
 A signal aborted before submission prevents input. Aborting after submission
 cannot undo an engine action: the transport still settles the original receipt.

@@ -26,7 +26,6 @@ export interface NavigationResult {
   why?: RouteWhy;
   hint?: string;
   lastOperationId?: string;
-  recover?: string;
 }
 /** A failed substep does not undo earlier inputs in the same navigation call. */
 export class NavigationError extends Error {
@@ -53,8 +52,7 @@ export class Navigator {
     let accountedTurn=this.game.observation.turn;
     const result=(reason:NavigationResult['reason'], extra: Pick<NavigationResult,'why'|'hint'> = {}):NavigationResult=>{
       const lastOperationId = (actionsTaken > 0 && reason !== 'arrived' && reason !== 'ended') ? this.game.state.requestId ?? undefined : undefined;
-      const recover = lastOperationId ? 'Call recover; do not resubmit this navigation leg.' : undefined;
-      return {reason,actionsTaken,turnsElapsed,snapshot:this.game.state,...extra,...(lastOperationId?{lastOperationId}:{}),...(recover?{recover}:{})};
+      return {reason,actionsTaken,turnsElapsed,snapshot:this.game.state,...extra,...(lastOperationId?{lastOperationId}:{})};
     };
     try {
       if(this.game.state.ended) return result('ended');
@@ -95,8 +93,7 @@ export class Navigator {
     let accountedTurn=this.game.observation.turn;
     const result = (reason:NavigationResult['reason'], extra: Pick<NavigationResult,'why'|'hint'> = {}):NavigationResult => {
       const lastOperationId = (actionsTaken > 0 && reason !== 'arrived' && reason !== 'ended') ? this.game.state.requestId ?? undefined : undefined;
-      const recover = lastOperationId ? 'Call recover; do not resubmit this navigation leg.' : undefined;
-      return {reason,actionsTaken,turnsElapsed,snapshot:this.game.state,...extra,...(lastOperationId?{lastOperationId}:{}),...(recover?{recover}:{})};
+      return {reason,actionsTaken,turnsElapsed,snapshot:this.game.state,...extra,...(lastOperationId?{lastOperationId}:{})};
     };
     const gate = ():NavigationResult['reason']|undefined => this.game.state.ended ? 'ended' :
       this.game.decision ? 'decision' : options.signal?.aborted ? 'aborted' : undefined;

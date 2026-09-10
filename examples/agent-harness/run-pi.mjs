@@ -70,7 +70,7 @@ try {
   const operations=createOperationValidators({sessionId});
   harness=createAgentHarness({runId,sessionId,client,records:()=>records,operations});
   await harness.observe({deliberate:true});
-  const excluded=new Set(['create','resume','suspend','recover','receipt']);
+  const excluded=new Set(['create','resume','suspend','receipt']);
   const tools=catalog.filter(t=>!excluded.has(t.name) && (t.annotations?.readOnlyHint || operations.has(t.name))).map(t=>{
     const inputSchema=structuredClone(t.inputSchema);delete inputSchema.properties?.sessionId;
     if(inputSchema.required)inputSchema.required=inputSchema.required.filter(k=>k!=='sessionId');

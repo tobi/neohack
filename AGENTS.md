@@ -105,6 +105,10 @@ interaction and visual decisions, and update DESIGN.md when those decisions chan
 - MCP may own request IDs, revision tracking and response reconstruction; the
   engine still enforces exact receipts and stale-input checks. Require explicit
   run tokens, and never treat an uncertain response as permission to act again.
+- MCP `observe` returns current state and may verify a retained uncertain receipt
+  using read-only queries. It never resends gameplay. Missing verification keeps
+  input blocked. Historical MCP receipts are nested documents, not live worlds
+  or executable decisions; normal navigation stops need no recovery call.
 - Decision answers and cancellations carry the exact returned decision ID across
   every interface. Adapters must not substitute a newer standing question, even
   when its kind, labels or available answers match the earlier question.

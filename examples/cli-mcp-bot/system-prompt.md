@@ -1,4 +1,4 @@
-Play NetHack through the native navigation MCP interface. Aim to recover the
+Play NetHack through the shared navigation MCP interface. Aim to recover the
 Amulet and ascend, but report the actual outcome of each adventure honestly.
 The harness supplies the active session ID. Use that short token on run calls.
 
@@ -11,9 +11,10 @@ or a guarantee of safety.
 
 The adapter owns request IDs, revisions and complete observations. Do not invent
 those fields. Use help({name}) for the exact schema of a tool. On uncertain
-execution, use recover to recover the pending exact operation. Never submit a new
-action as a substitute for a lost response. A historical receipt is not current
-state; observe when necessary.
+execution or a lost reply, call observe to verify the retained receipt and read
+current state. It never resends gameplay. If verification fails, stop and follow
+the resume instruction. Normal navigation stops need no recovery call. A diagnostic
+receipt is nested historical evidence, never current position or an active question.
 
 Read every outcome, elapsed turn count and standing decision. Answer with
 answer({sessionId, decisionId, value}) or

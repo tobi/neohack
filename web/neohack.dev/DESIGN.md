@@ -517,6 +517,14 @@ the view. Serialize engine access with human input, retain uncertain requests,
 and retain current-runtime integrity checks. Never auto-answer warnings or repeat
 uncertain input with a new ID.
 
+There is no MCP `recover` tool. `observe` checks a retained uncertain operation's
+exact receipt with read-only requests and then returns current state. The browser
+clears its matching pending metadata only after that receipt and a healthy current
+scene are verified. An unrelated receipt cannot clear uncertainty. Historical
+receipts are nested documents with no top-level world or executable old question;
+they never replace the visible current scene. Failed verification keeps input
+blocked and directs the caller to resume, reopening the transport if needed.
+
 WebMCP creation and control set a permanent `webmcpAutomated` run-metadata flag.
 Human takeover or later script control never clears that provenance. The `create`
 tool accepts optional `harness_name` and `model_name` labels (at most 120 UTF-8 bytes),

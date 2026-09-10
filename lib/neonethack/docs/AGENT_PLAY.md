@@ -47,14 +47,16 @@ uses perceived routes. Its `force:true` option attempts only adjacent ordinary
 movement; deliberate force attack is the separate `attack` tool.
 If there is no knownWalking path, `navigation.reason` is `noRoute` and `why` is
 `targetOccupied`, `targetUnknown`, `closedDoor` or `disconnected`, with a `hint`
-for the next explicit tool. Zero-action stops did not run input. After a partial
-leg, `recover` and `lastOperationId` mean call recover; do not resubmit the leg.
+for the next explicit tool. Zero-action stops did not run input. Confirmed partial
+legs need no recovery ritual: read the returned scene and choose what to do next.
 
-After an uncertain response, use `recover({sessionId})` for the retained exact
-input or `receipt({sessionId,operationId})` for a known historical result. Never
-repeat a new action blindly. Recovery is shared per run: a completely lost reply
-followed by another participant's input may leave the earlier operation ID
-unavailable. Historical receipts are not current observations.
+After an error or lost response, call `observe({sessionId})`. It checks any retained
+uncertain receipt without resending input, then returns the current scene and
+standing question. If the receipt cannot be verified, stop and follow the explicit
+resume instruction. Never repeat an action or navigation leg blindly. `receipt`
+is a diagnostic historical document nested under `receipt`; it is not your current
+position. There is no `recover` tool. A completely lost outer reply may require
+the bridge's invocation ID to identify the exact operation.
 
 Start with the [live browser walkthrough](AGENT_BROWSER.md) or
 [native/typed-library setup](QUICKSTART.md). The typed library retains precise

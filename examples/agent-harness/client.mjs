@@ -163,6 +163,8 @@ export function createSnapshotClient({ runDir, sessionId, send, recoverExact,
         if (raw?.error || raw?.isError || raw?.result?.isError)
           throw fail('REPLY_ERROR', 'The request returned an error.');
         response = clone(await decodeReply(raw));
+        if (response?.kind === 'receipt' && response.historical === true && object(response.receipt))
+          response = { ...response.receipt, historical: true };
         if (!object(response)) throw fail('INVALID_REPLY', 'Missing semantic reply.');
         if (response.version !== 1) throw fail('INVALID_REPLY', 'Unsupported semantic response version.');
         if (response.error) throw fail('REPLY_ERROR', 'The semantic reply returned an error.');

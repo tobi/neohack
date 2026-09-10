@@ -269,8 +269,9 @@ console.log(leg.reason, leg.actionsTaken, leg.snapshot.outcome);
 
 `go({to:{x,y}})` plans and attempts a known route on the current level.
 A `noRoute` result includes `why` (`targetOccupied`, `targetUnknown`, `closedDoor`
-or `disconnected`) and a `hint` for the next explicit tool. After a partial leg,
-`recover` and `lastOperationId` mean call recover; do not resubmit the navigation.
+or `disconnected`) and a `hint` for the next explicit tool. `lastOperationId` names
+the last confirmed input; it does not request recovery. A normal partial leg
+already includes its final confirmed scene for deciding what to do next.
 `explore()` selects the nearest reachable unvisited frontier for one leg. If none
 is reachable, it approaches a remembered closed door not known locked and makes
 one explicit open attempt, then stops. It does not pick locks, kick or repeat
@@ -288,7 +289,9 @@ is answered, blocked action repeated, or uncertain operation retried.
 If a later substep fails, `NavigationError.result` retains the confirmed actions,
 turns and last confirmed snapshot; its `cause` retains the underlying error.
 An uncertain failed input may have executed beyond that snapshot. Recover the
-retained exact input through the transport receipt/request recovery path (`recover` in MCP); never restart the navigation call as recovery.
+retained exact input through the SDK's receipt/request recovery path. In MCP,
+`observe` verifies its receipt and reads current state without resending gameplay;
+unavailable verification keeps input blocked. Never restart navigation as recovery.
 
 Route and frontier semantics live in C. This executor only submits the named
 operations with their observed revision and returns the actual final snapshot.

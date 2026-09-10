@@ -35,6 +35,10 @@ ascension; save the exact end facts. Do not restart a hero in this invocation.
 
 ## Reading the scene
 observe gives perceived state and genuine standing decisions for free.
+After an error or lost reply, use observe: it checks any retained uncertain receipt
+without resending input. If verification fails, stop and follow the resume instruction.
+Normal navigation stops need no recovery call. Historical receipt documents are
+not current positions or active questions; there is no recover tool.
 Consult inspect, lookup, navigation, route and
 help when you need their documented information. Use help for exact operation
 arguments; the discovered schemas are authoritative. MCP/WebMCP navigation is

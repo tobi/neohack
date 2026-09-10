@@ -36,8 +36,8 @@ export function present(response:Response, extra:Record<string,unknown>={}, comp
   else if(isSnapshot(response)) summary=`${response.outcome.action}: ${response.outcome.status}; ${response.outcome.turnsElapsed} turns elapsed.${response.decision ? ` Answer the ${response.decision.kind} decision: ${response.decision.about}` : ''}`;
   else if('kind' in response) summary=response.kind==='lore' ? (response.found?'Encyclopedia lore; reference text, not an observation.':'No encyclopedia entry found.') : response.kind==='route' ? `Known walking route: ${response.distance===null?`none known${'why' in response && response.why?` (${response.why})`:''}`:`${response.distance} steps`}.` : response.kind==='navigation' ? `${response.frontiers.length} reachable unvisited frontiers; ${response.waysDown.length} remembered downward stairs.` : 'Perceived attempts for this square.';
   if(extra.navigation) {
-    const leg=extra.navigation as {reason:string;why?:string;hint?:string;recover?:string;actionsTaken:number;turnsElapsed:number};
-    summary=`Navigation: ${leg.reason}${leg.why?` (${leg.why})`:''}; ${leg.actionsTaken} actions, ${leg.turnsElapsed} turns elapsed.${leg.hint?` ${leg.hint}`:''}${leg.recover?` ${leg.recover}`:''}`;
+    const leg=extra.navigation as {reason:string;why?:string;hint?:string;actionsTaken:number;turnsElapsed:number};
+    summary=`Navigation: ${leg.reason}${leg.why?` (${leg.why})`:''}; ${leg.actionsTaken} actions, ${leg.turnsElapsed} turns elapsed.${leg.hint?` ${leg.hint}`:''}`;
   }
   // Terminal facts lead even when a navigation leg or error supplies the detail.
   // A disconnected close ends the session connection, but the run can resume.
@@ -96,7 +96,49 @@ export class AgentClient {
     }});
   }
   private adopt(r:Response) {
-    if(isSnapshot(r)) {this.games.set(r.sessionId,new Game(this.api,r,()=>globalThis.crypto.randomUUID()));if(!uncertain(r))this.creationUncertain=false;}
+    if(isSnapshot(r) && r.revision >= (this.games.get(r.sessionId)?.state.revision ?? -1)) {this.games.set(r.sessionId,new Game(this.api,r,()=>globalThis.crypto.randomUUID()));if(!uncertain(r))this.creationUncertain=false;}
+  }
+  private verificationHint(sid:string|undefined,response:Response):Record<string,unknown> {
+    if(!sid||!this.pending.has(sid))return {};
+    const message='The input is uncertain. Call observe to verify its exact receipt and read current state; do not resend gameplay.';
+    return {error:('error' in response&&response.error)||{code:'uncertainExecution',message},summary:message,
+      next:{tool:'observe',arguments:{sessionId:sid}}};
+  }
+  /** Resolve only a proven completed receipt, never resend gameplay. Always
+   * obtain a fresh scene AFTER the historical lookup; another participant may
+   * have acted in between. A missing receipt keeps admission closed. */
+  private async observe(sid:string,resume=false):Promise<Record<string,unknown>> {
+    let current:Response|undefined;
+    if(resume){
+      current=await this.api.transport.send({version:1,method:'session.resume',params:{sessionId:sid}});
+      if(!isSnapshot(current)||uncertain(current))return present(current);
+    }
+    const pending=this.pending.get(sid);
+    const operationId=pending && 'requestId' in pending.params ? pending.params.requestId : undefined;
+    let receipt:Snapshot|undefined;
+    if(operationId){
+      try{
+        const response=await this.api.transport.send({version:1,method:'session.receipt',params:{sessionId:sid,requestId:operationId}});
+        if(isSnapshot(response)&&response.sessionId===sid&&response.requestId===operationId&&!uncertain(response))receipt=response;
+      }catch{/* An unavailable receipt cannot authorize more input. */}
+    }
+    if(!current||pending)current=await this.api.transport.send({version:1,method:'session.observe',params:{sessionId:sid}});
+    this.adopt(current);
+    if(!pending)return present(current);
+    const neighborhood=isSnapshot(current)?current.observation.neighborhood:undefined;
+    const settled=receipt && isSnapshot(current) && !uncertain(current) && current.revision>=receipt.revision &&
+      [current.storage,current.recording].every(d=>!d||d.status==='ok') &&
+      (!neighborhood || (neighborhood.status==='available'
+        ? !['recoveryRequired','unavailable'].includes(neighborhood.inputGate.state)
+        : neighborhood.reason!=='recoveryRequired'));
+    if(settled&&receipt){
+      this.pending.delete(sid);
+      return present(current,{verification:{status:'settled',operationId,outcome:receipt.outcome,...(receipt.error?{error:receipt.error}:{})},
+        summary:'Current scene. The previous uncertain input has a verified receipt; no action was resent. Read verification.outcome for its result.'});
+    }
+    const message='Current state does not verify the previous input. No new action is allowed. Reopen the transport if necessary and resume this same session; do not repeat the action or navigation leg.';
+    return present(current,{verification:{status:'unresolved',operationId},error:{code:'uncertainExecution',message},summary:message,
+      next:{tool:'resume',arguments:{sessionId:sid}}});
   }
   async call(name:string,args:Record<string,unknown>={},options:{signal?:AbortSignal}={}):Promise<Record<string,unknown>> {
     const entry=methods.find(m=>m.name===name);
@@ -118,33 +160,26 @@ export class AgentClient {
       }
       const game=sid?this.games.get(sid):undefined;
       if(entry.method==='session.create' && this.creationUncertain) throw Error('Creation is uncertain. Observe or resume the existing run before creating another.');
-      const safe=['session.create','session.resume','session.observe','agent.receipt','agent.retry'].includes(entry.method);
+      const safe=['session.create','session.resume','session.observe','agent.receipt'].includes(entry.method);
       if(!safe && !game) throw Error('Observe or resume this session first.');
-      if(!safe && sid && this.pending.has(sid)) throw Error('An input is uncertain. Use recover for that exact pending operation, or inspect its receipt; do not submit a new action.');
+      if(!safe && sid && this.pending.has(sid)) throw Error('An input is uncertain. Call observe to verify its receipt and read the current scene; do not submit a new action.');
       if(!safe && game && game.state.revision!==revision) return {version:1,sessionId:sid,summary:'State changed while this call was queued. Observe before acting.',error:{code:'staleRevision',message:'State changed while this call was queued. Observe before acting.'}};
-      if(entry.method==='agent.retry') {
-        const request=sid?this.pending.get(sid):undefined;
-        if(!request) {
-          const operationId=sid?this.last.get(sid):undefined;
-          if(!operationId)throw Error('No recent input is retained. Use receipt with an operationId to inspect historical results.');
-          const response=await this.api.request('session.receipt',{sessionId:sid!,requestId:operationId});
-          return present(response,{historical:true});
-        }
-        const response=await this.api.transport.send(request);
-        if(!uncertain(response))this.pending.delete(sid!);
-        this.adopt(response);return present(response);
-      }
+      if(entry.method==='session.observe'||entry.method==='session.resume')return this.observe(sid!,entry.method==='session.resume');
       if(entry.method==='agent.receipt') {
         const response=await this.api.request('session.receipt',{sessionId:sid!,requestId:input.operationId as string});
-        // Historical receipts never replace the agent's current observation.
-        return present(response,{historical:true});
+        // History is deliberately NOT a live snapshot at the top level. Old
+        // questions carry evidence, never executable answer/cancel suggestions.
+        const receipt=present(response,{historical:true});delete receipt.reply;delete receipt.cancel;
+        return {version:1,kind:'receipt',historical:true,sessionId:sid,operationId:input.operationId,
+          summary:'Historical receipt only. This is not the current world or an active question. Use observe for current state.',
+          ...('error' in response && response.error?{error:response.error}:{}),receipt};
       }
       try {
         if(entry.method==='agent.go' || entry.method==='agent.explore' || entry.method==='agent.descend') {
           const navigator=new Navigator(game!);
           const legOptions={maxActions:input.maxActions as number|undefined,signal:options.signal};
           const leg=entry.method==='agent.go' ? await navigator.go({...legOptions,to:input.to as {x:number;y:number},force:input.force as boolean|undefined}) : entry.method==='agent.explore' ? await navigator.explore({...legOptions,maxFrontiers:input.maxFrontiers as number|undefined}) : await navigator.descend(legOptions);
-          this.adopt(leg.snapshot);return present(leg.snapshot,{navigation:{reason:leg.reason,actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,...(leg.why?{why:leg.why,hint:leg.hint}:{}),...(leg.lastOperationId?{lastOperationId:leg.lastOperationId}:{}),...(leg.recover?{recover:leg.recover}:{})}},true);
+          this.adopt(leg.snapshot);return present(leg.snapshot,{navigation:{reason:leg.reason,actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,...(leg.hint?{hint:leg.hint}:{}),...(leg.why?{why:leg.why}:{}),...(leg.lastOperationId?{lastOperationId:leg.lastOperationId}:{})},...this.verificationHint(sid,leg.snapshot)},true);
         }
         let method=entry.method, params:Record<string,unknown>={...input};
         if('itemId' in params){params.item=itemSelector(params);delete params.itemId;delete params.quantity;}
@@ -196,16 +231,16 @@ export class AgentClient {
         const response=await this.api.transport.send({version:1,method,params} as Request);
         this.adopt(response);
         if(method==='session.close' && !('error' in response))this.games.delete(sid!);
-        return present(response,{},method!=='session.observe');
+        return present(response,this.verificationHint(sid,response),true);
       } catch(error) {
         if(error instanceof NavigationError){
           const leg=error.result,cause=error.cause;
           const pending=sid?this.pending.get(sid):undefined;
-          const lastOperationId=sid?this.last.get(sid):undefined;
+          const lastOperationId=sid&&leg.actionsTaken>0?this.last.get(sid):undefined;
           const original=cause instanceof WorldError && 'error' in cause.response?cause.response.error:undefined;
           const message=`Navigation stopped after ${leg.actionsTaken} actions and ${leg.turnsElapsed} turns. Substep error: ${cause instanceof Error?cause.message:String(cause)}`;
           this.adopt(leg.snapshot);
-          const result=present(leg.snapshot,{navigation:{reason:'error',actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,observation:pending?'lastConfirmed':'current',...(lastOperationId?{lastOperationId}:{}),recover:'Call recover; do not resubmit this navigation leg.'},error:{code:original?.code??(pending?'uncertainExecution':'agentError'),message}},true);
+          const result=present(leg.snapshot,{navigation:{reason:'error',actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,observation:pending?'lastConfirmed':'current',...(lastOperationId?{lastOperationId}:{}),hint:'Call observe before choosing another action; do not blindly repeat this navigation leg.'},error:{code:original?.code??(pending?'uncertainExecution':'agentError'),message},next:{tool:'observe',arguments:{sessionId:sid}}},true);
           delete result.operationId;
           if(pending && 'requestId' in pending.params)result.operationId=pending.params.requestId;
           const presentation=result.presentation as Record<string,unknown>;
@@ -224,8 +259,8 @@ export class AgentClient {
     try{return await run;}
     catch(error) {
       const pending=sid?this.pending.get(sid):undefined;
-      const message=error instanceof Error?error.message:String(error);
-      return {version:1,...(sid?{sessionId:sid}:{}),summary:message,error:{code:pending?'uncertainExecution':'agentError',message},...(pending && 'requestId' in pending.params?{operationId:pending.params.requestId}:{})};
+      const message=(error instanceof Error?error.message:String(error))+(pending?' Call observe to verify the previous input and read current state. Do not resend the action.':'');
+      return {version:1,...(sid?{sessionId:sid}:{}),summary:message,error:{code:pending?'uncertainExecution':'agentError',message},...(pending?{next:{tool:'observe',arguments:{sessionId:sid}}}:{}),...(pending && 'requestId' in pending.params?{operationId:pending.params.requestId}:{})};
     }
   }
 }

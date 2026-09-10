@@ -577,7 +577,7 @@ class PixelNethack extends HTMLElement {
         let save = this.saves.find((s) => s.id === params.sessionId);
         await this.connectRuntime(typeof params.sessionId === "string" ? params.sessionId : undefined, request.method === 'session.create');
         save = this.saves.find((s) => s.id === params.sessionId);
-        if ("requestId" in params && save?.pending) {
+        if ((request.method.startsWith('game.') || request.method.startsWith('decision.')) && "requestId" in params && save?.pending) {
           // Object property order is immaterial; retain every argument and value.
           const canonical = (value: unknown): string => {
             if (Array.isArray(value))
@@ -637,7 +637,7 @@ class PixelNethack extends HTMLElement {
                 : response;
             if (
               "requestId" in params &&
-              !response.error &&
+              (!response.error || request.method === 'session.receipt') &&
               response.outcome.status !== "unknown"
             ) {
               // A receipt from a different active session may also be old.
@@ -647,9 +647,26 @@ class PixelNethack extends HTMLElement {
               });
               if (
                 this.runtime.client.isSnapshot(observed) &&
-                observed.revision > latest.revision
+                (observed.revision > latest.revision || request.method === 'session.receipt' && observed.revision === latest.revision)
               )
                 latest = observed;
+            }
+            // A read of the exact uncertain receipt can settle display metadata,
+            // but only alongside a current, healthy scene. Never resend gameplay
+            // or let an unrelated historical receipt clear the pending intent.
+            const neighborhood=latest.observation.neighborhood;
+            if (request.method === 'session.receipt' && save.pending &&
+                'requestId' in save.pending.params && save.pending.params.requestId === params.requestId &&
+                response.requestId === params.requestId && response.outcome.status !== 'unknown' &&
+                !['incompleteRequest','recoveryRequired','metadataUnavailable','inputHistoryError'].includes(response.error?.code ?? '') &&
+                latest.revision >= response.revision &&
+                [latest.storage,latest.recording].every(d=>!d||d.status==='ok') &&
+                (!neighborhood || (neighborhood.status==='available'
+                  ? !['recoveryRequired','unavailable'].includes(neighborhood.inputGate.state)
+                  : neighborhood.reason!=='recoveryRequired'))) {
+              const pending=save.pending;
+              save.pending=undefined;
+              try { this.persist(save); } catch(error) {save.pending=pending;throw error;}
             }
             // session.close retires the engine; its terminal transport frame
             // does not mean the saved hero died or quit. Keep adventure status.
@@ -803,7 +820,7 @@ class PixelNethack extends HTMLElement {
           // This permits a deliberate same-ID check after abrupt page loss.
           const params = request.params;
           const record =
-            "requestId" in params
+            (request.method.startsWith('game.') || request.method.startsWith('decision.')) && "requestId" in params
               ? this.saves.find((s) => s.id === params.sessionId)
               : undefined;
           if (record) {
