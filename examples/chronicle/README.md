@@ -26,8 +26,9 @@ web tools. It does not load the project's instructions or personal context.
 `--provider gateway` instead uses Vercel AI Gateway's `meta/muse-spark-1.3` with
 `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` supplied through the environment.
 No credential goes into the evidence, prompt or browser page. Requests have a
-90-second timeout, and errors do not trigger automatic paid retries. The gateway
-path caps output at 2,200 tokens, including reasoning; the CLI path is limited to
+90-second CLI timeout or a 180-second gateway timeout, and errors do not trigger
+automatic paid retries. The gateway path caps output at 2,400 tokens, including
+reasoning; the CLI path is limited to
 one model step and validates the resulting story length afterward.
 Repeating a command with the same output directory, evidence, model and prompt
 reuses its validated story without calling the model. Changed evidence invalidates
@@ -70,11 +71,16 @@ its lowest-scored lines and says so in the coverage note. A typical short run
 Replay mode verifies the static manifest and immutable input chunk checksums,
 then reconstructs **every** input in an isolated WASM worker. It deliberately
 does not jump through checkpoints, which would skip the incidents being told.
-It uses only the archive's exact runtime package, cached from neohack.dev with
-verified hashes and retained license notices. `--runtime /path/to/dist/wasm` uses
+It uses the archive's exact compiled core, engine and data, cached from neohack.dev
+with verified hashes and retained license notices. Current host workers process
+128 inputs per batch, verifying each full receipt and available RNG boundary
+before returning compact narration evidence. Maps and inventory never cross
+back to the collector. Selection and the resulting model prompt remain the same
+as collecting full replies individually. `--runtime /path/to/dist/wasm` uses
 an already downloaded matching package. A mismatched pin or corrupt recording
-fails; there is no fresh-engine fallback. Only a chunk and current response are
-held. Reconstruction can take time for a long run, but never blocks a live game.
+fails; there is no fresh-engine fallback. Memory holds a bounded prefetch window,
+the current decoded chunk and at most 128 compact evidence records. The worker
+does not retain a second input-history copy. Reconstruction never blocks a live game.
 
 Full-reply mode accepts public snapshots, `{request,response}` captures and MCP
 `structuredContent`. It requires one run in chronological revision order. Raw
@@ -105,10 +111,21 @@ usage varies; the gateway's returned usage is saved in `story.json`. Character
 limits are not exact token counts. The CLI caches by evidence, model and prompt.
 
 Where the time goes: the public archive stores **inputs only**, so the messages
-the hero saw exist nowhere until the pinned engine replays them. Chunks are
-fetched several at a time; the engine itself then takes about 3–4 ms per input,
-so a 400-input run replays in a couple of seconds and an 8,000-input run in
-about half a minute. The model's answer streams back as it is written.
+must be reconstructed by the pinned engine and semantic core. Compacted chunks
+are fetched ahead; uncached runtime assets download six at a time with every
+checksum checked. A 2026-09-10 local comparison on one published 4,364-input run
+measured about 24.8 seconds before and 19.8 seconds with evidence batching, with
+an identical model-input hash. This is one original-pin comparison, not a general
+speed guarantee. A CPU profile still attributed most replay work to the pinned
+semantic core; batching does not skip that work or upgrade the run's binary.
+Model latency is separate and its answer continues to stream as it is written.
+
+`collectReplay(..., {onTiming})` reports manifest/setup, time waiting for decoded
+inputs, verified replay, digest, lore and teardown, plus input/chunk/batch counts.
+Download-wait time includes decoding and only the wait visible after prefetch;
+it is not the sum of network request durations. Hosting logs these alongside
+admission, publication, model first-text/completion, validation and storage time.
+The operational log contains counts and durations, never journal text or URLs.
 
 The website shares this code: `hosting/vercel/src/chronicle.ts` stages
 `digest.mjs`, `prompt.mjs`, `lore.mjs`, `generate.mjs` and `replay.mjs` into

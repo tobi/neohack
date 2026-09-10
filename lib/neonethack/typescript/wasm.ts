@@ -26,6 +26,11 @@ export interface WasmOptions {
   /** Remote replication is asynchronous; local durability remains awaited. */
   onReplicaStatus?: (status: { state: "queued" | "pending" | "saved" | "retrying" | "error"; message: string; branch?: string; sessions?: string[] }) => void;
 }
+/** Private, verified archive evidence; entries are not full gameplay snapshots. */
+export interface ReplayEvidenceBatch {
+  format: 'neohack.replay-evidence'; version: 1;
+  from: number; count: number; entries: unknown[];
+}
 /** The worker boundary is private. All gameplay uses the same C ABI as native. */
 export class WasmTransport implements Transport {
   private readonly worker: WorkerPort;
@@ -123,6 +128,8 @@ export class WasmTransport implements Transport {
   /** Input archives use the exact package in isolated memory; no live store or uploads. */
   playback(record: unknown): Promise<Response> { return this.ordered('playback',{record}); }
   playbackBatch(records: unknown[]): Promise<Response> { return this.ordered('playbackBatch',{records}); }
+  /** Up to 128 recorded inputs, retaining each verified boundary's narration. */
+  playbackEvidence(records: unknown[]): Promise<ReplayEvidenceBatch> { return this.ordered('playbackEvidence',{records}); }
   /** Archive-verification evidence, separate from the gameplay observation. */
   integrity():Promise<unknown[]>{return this.ordered('integrity',{});}
   checkpoint(index?:number): Promise<unknown> { return this.ordered('checkpoint',{index}); }

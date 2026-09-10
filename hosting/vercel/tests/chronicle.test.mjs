@@ -67,6 +67,7 @@ const markdownTale = (digest, title) =>
   `# ${title}\n\n${digest.hero.name} was a Valkyrie with a little dog who thought about praying. [${digest.events[0].id}]\n\nThe end came quietly. [${digest.events.at(-1).id}]\n`;
 
 test("a chronicle is generated once per eligible dead hero, cached publicly and flagged in the ledger", { timeout: 120000 }, async (t) => {
+  const info=t.mock.method(console,'info',()=>{});
   const store = new MemoryStorage(), calls = [];
   const model = async (digest) => {
     calls.push(digest);
@@ -129,6 +130,14 @@ test("a chronicle is generated once per eligible dead hero, cached publicly and 
   const listed = stats.best.find((x) => x.id === id);
   assert.equal(listed.chronicleAvailable, true);
   assert.equal(stats.best.find((x) => x.id === other).chronicleAvailable, false);
+  const timings=info.mock.calls.map(c=>JSON.parse(c.arguments[0])).filter(x=>x.event==='chronicle_timing');
+  assert.equal(timings.length,1,'cached/ineligible requests do not report another generation');
+  const timing=timings[0];assert.equal(timing.outcome,'completed');assert.equal(timing.stage,'store');
+  assert.equal(timing.replay.mode,'batch-evidence');assert.equal(timing.replay.completedInputs,archive.count);
+  assert.equal(timing.replay.batches,1);assert.equal(timing.replay.chunks,1);
+  for(const key of ['admissionMs','archiveMs','modelMs','validationMs','storeMs','totalMs'])assert.ok(Number.isFinite(timing[key])&&timing[key]>=0,key);
+  assert.ok(timing.totalMs>=timing.modelMs);
+  assert.doesNotMatch(JSON.stringify(timings),/Edda|chronicleRun|Bearer|prompt|token|https?:/);
 });
 
 test("ledger links lead to each run's page, which shows the tale with anchored encyclopedia popovers or tells a new one as it is written", { timeout: 180000 }, async (t) => {
@@ -243,6 +252,7 @@ test("ledger links lead to each run's page, which shows the tale with anchored e
 });
 
 test("a model failure releases the claim, is never retried automatically and leaves no story", { timeout: 120000 }, async (t) => {
+  const info=t.mock.method(console,'info',()=>{});
   const store = new MemoryStorage();
   let attempts = 0;
   const model = async () => { attempts++; throw Error("Story model request failed (503); not retried automatically."); };
@@ -266,6 +276,9 @@ test("a model failure releases the claim, is never retried automatically and lea
   assert.equal(attempts, 2);
   const stats = await (await fetch(new URL("/api/stats", url))).json();
   assert.equal(stats.best.find((x) => x.id === id).chronicleAvailable, false);
+  const timings=info.mock.calls.map(c=>JSON.parse(c.arguments[0])).filter(x=>x.event==='chronicle_timing');
+  assert.equal(timings.length,2);
+  assert.ok(timings.every(x=>x.outcome==='failed'&&x.stage==='model'&&x.modelMs>=0&&x.replay.completedInputs===5));
 });
 
 test("without a model credential the endpoint refuses before replaying anything", async (t) => {
@@ -284,6 +297,7 @@ test("without a model credential the endpoint refuses before replaying anything"
 });
 
 test("a watcher receives replay progress, the story as it is written and the stored document; a watcher who leaves does not stop the work", { timeout: 120000 }, async (t) => {
+  const info=t.mock.method(console,'info',()=>{});
   const store = new MemoryStorage(), calls = [];
   const model = async (digest, { onDelta }) => {
     calls.push(digest);
@@ -346,4 +360,7 @@ test("a watcher receives replay progress, the story as it is written and the sto
 
   const plain = await fetch(new URL("/api/runs/chronicleRun0012/chronicle", url), { method: "POST", headers: { accept: "application/x-ndjson" } });
   assert.equal(plain.status, 409, "refusals stay ordinary JSON responses even for stream readers");
+  const timings=info.mock.calls.map(c=>JSON.parse(c.arguments[0])).filter(x=>x.event==='chronicle_timing');
+  assert.equal(timings.length,2);
+  assert.ok(timings.every(x=>x.outcome==='completed'&&x.modelFirstTextMs>0&&x.modelFirstTextMs<x.modelMs));
 });

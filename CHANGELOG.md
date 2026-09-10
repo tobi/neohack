@@ -8,6 +8,11 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Chronicles batch verified replay inputs and return compact narration evidence,
+  retaining the same story material with less worker traffic. Cold runtime assets
+  download in bounded parallel groups; generation logs now separate replay,
+  model first-text/completion, and storage time.
+
 - WebMCP runs retain their automation flag and optional harness/model names across
   reloads and control handoffs. The ledger badge shows that attribution.
 - Agent actions play back at a readable pace while execution works ahead. Long

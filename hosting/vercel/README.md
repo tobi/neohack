@@ -302,8 +302,11 @@ each run's page (`/replays/:id`, where every ledger Show replay link leads)
 offer **Tell the tale** for runs that reached
 dungeon level 3 and experience level 2 and ended in death (eligibility mirrors
 `examples/chronicle` and is checked against the ledger record first). Generation
-replays the published input archive with its exact pinned WASM engine inside the
-function, using the same module closure as the CLI (staged into
+replays the published input archive with its exact pinned WASM core, engine and
+data inside the function. Current host workers process batches of up to 128
+inputs and return each verified boundary's compact narration evidence, preserving
+the collector's exact model input. This uses the same module closure as the CLI
+(including worker entrypoints, staged into
 `.generated/chronicle/`), then makes **one** paid model request with the
 markdown journal (up to about 70k tokens). The validated story, its dotted
 encyclopedia segments and the glossary are cached as the public object
@@ -324,10 +327,21 @@ reads it under a revision-specific query so the first view after completion
 sees the story. A `chronicles/<id>/pending.json`
 claim keeps concurrent requests from paying twice (later callers receive 202
 and poll), and a failed generation releases the claim without retrying
-automatically. The archive holds inputs only, so the messages the hero saw
-exist nowhere until the engine replays them; that replay (about 3–4 ms per
-input, chunks fetched in parallel) is the waiting time the stream reports. Failures log `chronicle_failed` with a
-stage and error kind only. The function is configured with a 300-second budget
+automatically. The archive holds inputs only, so the messages must be reconstructed
+by the pinned engine and semantic core. Chunk prefetch and bounded parallel
+runtime downloads reduce network waits; batching retains receipt/RNG verification
+and never skips a story incident by jumping to a checkpoint.
+
+Each accepted generation logs one `chronicle_timing` record with its outcome,
+admission/publication time, nested replay counts and stage times, model time to
+first text and completion, validation, storage and total request duration.
+`downloadWaitMs` includes chunk decoding and the wait remaining after prefetch;
+`replayMs` includes verified worker execution and transfer, not pure engine CPU.
+`modelFirstTextMs` is absent when no text delta arrived. Failed stages still emit
+their elapsed time. No prompt, run capability, journal, story text or credential
+is logged. Cache hits do not report another generation. Failures also log
+`chronicle_failed` with a stage and error kind only.
+The function is configured with a 300-second budget
 and bundles `public/runtime/wasm/**` so the current engine package replays
 without a network fetch; older pins are fetched from the site's own runtime
 directory into `/tmp`.

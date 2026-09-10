@@ -25,6 +25,10 @@ while (pending.length) {
     const spec = match[1] ?? match[2];
     pending.push(resolve(dirname(file), spec));
   }
+  // Worker entrypoints are module dependencies too. Keep current host plumbing
+  // together; the original compiled engine/core/data are loaded by exact pin.
+  for (const match of source.matchAll(/new URL\(\s*["'](\.{1,2}\/[^"']+\.mjs)["']\s*,\s*import\.meta\.url\s*\)/g))
+    pending.push(resolve(dirname(file), match[1]));
   const destination = resolve(target, rel);
   await mkdir(dirname(destination), { recursive: true });
   await cp(file, destination);
@@ -34,7 +38,7 @@ const declarations = {
   "digest.d.mts": `export const DIGEST_VERSION: number; export const MAX_PROMPT_CHARS: number;
 export function isFullReply(reply: unknown): boolean;
 export type Digest = { version: number; hero: Record<string, string>; coverage: Record<string, unknown>; events: any[] };
-export class ChronicleDigest { constructor(identity?: { name?: string; role?: string; race?: string }); hero: Record<string, string>; count: number; add(reply: unknown): boolean; finish(): Digest; }`,
+export class ChronicleDigest { constructor(identity?: { name?: string; role?: string; race?: string }); hero: Record<string, string>; count: number; add(reply: unknown): boolean; addEvidence(reply: unknown): boolean; finish(): Digest; }`,
   "prompt.d.mts": `import type { Digest } from "./digest.mjs";
 export const PROMPT_VERSION: string; export const MODEL: string; export const SYSTEM: string;
 export type Story = { title: string; paragraphs: { text: string; sources: string[]; segments?: { text: string; term?: string }[] }[] };
@@ -59,7 +63,8 @@ export function gatewayStory(digest: Digest, options: { token: string; fetch?: t
 export type ChronicleDocument = { version: 1; model: string; promptVersion: string; evidenceHash: string; generatedAt: number; hero: Record<string, string>; coverage: Record<string, unknown>; usage?: unknown; story: Story; glossary: Glossary };
 export function chronicleDocument(input: { digest: Digest; story: Story; glossary?: Glossary; usage?: unknown; generatedAt?: number }): ChronicleDocument;`,
   "replay.d.mts": `import type { ChronicleDigest, Digest } from "./digest.mjs";
-export function collectReplay(url: string, collector: ChronicleDigest, options?: { runtime?: string | ((buildId: string) => Promise<string | undefined> | string | undefined); runtimeOrigin?: string; signal?: AbortSignal; lookup?: (lookup: (name: string) => Promise<any>) => Promise<void>; maxInputs?: number; onProgress?: (done: number, total: number) => void }): Promise<Digest>;`,
+export type ReplayTiming = { mode: 'batch-evidence'; inputs: number; completedInputs: number; chunks: number; compressedBytes: number; batches: number; manifestMs: number; runtimeMs: number; downloadWaitMs: number; replayMs: number; digestMs: number; loreMs: number; closeMs: number; totalMs: number };
+export function collectReplay(url: string, collector: ChronicleDigest, options?: { runtime?: string | ((buildId: string) => Promise<string | undefined> | string | undefined); runtimeOrigin?: string; signal?: AbortSignal; lookup?: (lookup: (name: string) => Promise<any>) => Promise<void>; maxInputs?: number; onProgress?: (done: number, total: number) => void; onTiming?: (timing: ReplayTiming) => void }): Promise<Digest>;`,
 };
 const { writeFile } = await import("node:fs/promises");
 for (const [name, text] of Object.entries(declarations))

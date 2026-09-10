@@ -73,6 +73,17 @@ record each observation. See [the format and recovery contract](CLOUD_SAVES.md).
 The transport's archive playback/checkpoint methods operate in isolated memory,
 using the exact package. They are not gameplay tools or a way to modify a live run.
 
+`playbackBatch(records)` verifies up to 128 ordered inputs and returns the last
+scene. `playbackEvidence(records)` instead returns a private
+`neohack.replay-evidence` batch with each boundary's narration, self-state and
+initial apparent companions. It requires recorded receipt digests and checks
+available RNG witnesses before projecting any response. A corrupt boundary
+stops the batch before subsequent input; failed batches return no evidence.
+This evidence omits maps and inventory and is not a full gameplay snapshot.
+The chronicler uses current host workers with the recorded core/engine/data;
+their exact package hashes and receipt equality remain mandatory. Archive
+references let the worker avoid retaining a second copy of the input history.
+
 An optional `registerUpload(sessionId, signal)` transport callback establishes a
 host's upload prerequisite once per run and transport. It runs outside gameplay
 dispatch and local transactions, receives cancellation on close, and is bounded

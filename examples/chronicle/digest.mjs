@@ -113,6 +113,16 @@ export class ChronicleDigest {
     this.first = null;
     this.last = null;
   }
+  /** The batch worker verifies full receipts before projecting this evidence.
+   * It is intentionally a separate format, never passed off as a full scene. */
+  addEvidence(evidence) {
+    if (evidence?.rejected === true) { this.ignored++; return false; }
+    const o = evidence?.observation;
+    if (!o || !Array.isArray(o.companions)) throw Error('Invalid replay evidence');
+    return this.add({ ...evidence, version: 1, observation: {
+      ...o, world: o.companions.map(appearance => ({ occupant: { kind: 'ally', appearance } })),
+    } });
+  }
   add(reply) {
     // SDK/MCP captures may wrap a full snapshot. Never accept arbitrary script notes.
     const s = reply?.structuredContent ?? reply?.response ?? reply;

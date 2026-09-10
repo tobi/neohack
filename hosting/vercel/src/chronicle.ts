@@ -26,7 +26,7 @@ import { manifestUrl, publishManifest } from "./protocol-replays.ts";
 import { failureKind } from "./observability.ts";
 import type { Run } from "./board.ts";
 import { ChronicleDigest, type Digest } from "../.generated/chronicle/examples/chronicle/digest.mjs";
-import { collectReplay } from "../.generated/chronicle/examples/chronicle/replay.mjs";
+import { collectReplay, type ReplayTiming } from "../.generated/chronicle/examples/chronicle/replay.mjs";
 import { buildGlossary } from "../.generated/chronicle/examples/chronicle/lore.mjs";
 import type { Glossary } from "../.generated/chronicle/examples/chronicle/prompt.mjs";
 import {
@@ -91,22 +91,28 @@ export type ChronicleEvent =
   | { available: true; [key: string]: unknown }
   | { available: false; error: string };
 type Watcher = (event: ChronicleEvent) => void;
-type Progress = { stage: Stage; watch: Watcher };
+type Timings = { admissionMs: number; archiveMs?: number; replay?: ReplayTiming;
+  modelMs?: number; modelFirstTextMs?: number; validationMs?: number; storeMs?: number };
+type Progress = { stage: Stage; watch: Watcher; timing: Timings };
 
 async function generate(request: Request, id: string, run: Run, progress: Progress): Promise<ChronicleDocument> {
-  const archive = await read("input-runs/" + id + ".json");
-  if (!archive || archive.complete !== true || !(archive.count > 0))
-    throw new Ineligible("The recorded journey has not finished uploading; the tale can be told once the recording is complete.");
+  const archiveStarted = performance.now();
+  let source: string;
+  try {
+    const archive = await read("input-runs/" + id + ".json");
+    if (!archive || archive.complete !== true || !(archive.count > 0))
+      throw new Ineligible("The recorded journey has not finished uploading; the tale can be told once the recording is complete.");
+    source = manifestUrl(await publishManifest(id), request);
+  } finally { progress.timing.archiveMs = performance.now() - archiveStarted; }
   progress.stage = "replay";
-  const immutable = await publishManifest(id),
-    source = manifestUrl(immutable, request),
-    collector = new ChronicleDigest({ name: run.name, role: run.role });
+  const collector = new ChronicleDigest({ name: run.name, role: run.role });
   let glossary: Glossary = {};
   let last = 0;
   const digest = await collectReplay(source, collector, {
     runtime: localRuntime,
     runtimeOrigin: new URL("/", request.url).href,
     maxInputs: MAX_REPLAY_INPUTS,
+    onTiming: timing => { progress.timing.replay = timing; },
     onProgress: (done, total) => {
       const now = Date.now();
       if (done === total || done === 0 || now - last > 400) {
@@ -120,12 +126,20 @@ async function generate(request: Request, id: string, run: Run, progress: Progre
   });
   progress.stage = "model";
   progress.watch({ status: "writing" });
-  const onDelta = (delta: string) => progress.watch({ delta });
+  const modelStarted = performance.now();
+  const onDelta = (delta: string) => {
+    progress.timing.modelFirstTextMs ??= performance.now() - modelStarted;
+    progress.watch({ delta });
+  };
   const model = storyModelContext.getStore();
-  const { raw, usage } = model
-    ? await model(digest, { onDelta })
-    : await gatewayStory(digest, { token: gatewayToken(request), onDelta });
-  return chronicleDocument({ digest, story: parseStory(raw, digest), glossary, usage });
+  let generated: { raw: unknown; usage?: unknown };
+  try {
+    generated = model ? await model(digest, { onDelta })
+      : await gatewayStory(digest, { token: gatewayToken(request), onDelta });
+  } finally { progress.timing.modelMs = performance.now() - modelStarted; }
+  const validating = performance.now();
+  try { return chronicleDocument({ digest, story: parseStory(generated.raw, digest), glossary, usage: generated.usage }); }
+  finally { progress.timing.validationMs = performance.now() - validating; }
 }
 
 class Ineligible extends Error {}
@@ -133,6 +147,7 @@ class Ineligible extends Error {}
 const wantsStream = (request: Request) => (request.headers.get("accept") ?? "").includes("application/x-ndjson");
 
 export async function chronicle(request: Request, id: string) {
+  const started = performance.now();
   if (!RUN_ID.test(id)) return json({ error: "not found" }, 404);
   if (!["GET", "POST"].includes(request.method)) return json({ error: "method not allowed" }, 405);
   if (!publicReplayConfigured()) return json({ error: "Public replay store is not configured" }, 503);
@@ -160,13 +175,16 @@ export async function chronicle(request: Request, id: string) {
   }
   const claim = (await store.read(pendingPath(id)))?.etag;
   const watchers = new Set<Watcher>();
-  const progress: Progress = { stage: "archive", watch: (event) => watchers.forEach((w) => w(event)) };
+  const progress: Progress = { stage: "archive", watch: (event) => watchers.forEach((w) => w(event)),
+    timing: { admissionMs: performance.now() - started } };
   // The whole job, independent of any reader. It resolves with the final
   // event and never rejects; the platform keeps the function alive for it.
   const work: Promise<{ status: number; body: ChronicleEvent }> = (async () => {
+    let completed = false, storeStarted: number | undefined;
     try {
       const document = await generate(request, id, run!, progress);
       progress.stage = "store";
+      storeStarted = performance.now();
       progress.watch({ status: "storing" });
       try {
         await store.write(storyPath(id), document);
@@ -176,6 +194,7 @@ export async function chronicle(request: Request, id: string) {
       const stored = await store.read(storyPath(id));
       await store.write(pendingPath(id), { startedAt: now, finishedAt: Date.now() }, claim).catch(() => {});
       await markChronicled(id);
+      completed = true;
       return { status: 200, body: { available: true as const, ...((stored?.value ?? document) as object) } };
     } catch (error) {
       // The released claim records only the stage and an upstream HTTP status:
@@ -185,6 +204,13 @@ export async function chronicle(request: Request, id: string) {
       if (error instanceof Ineligible) return { status: 409, body: { available: false as const, error: error.message } };
       console.warn(JSON.stringify({ event: "chronicle_failed", stage: progress.stage, kind: failureKind(error), ...(status ? { status } : {}) }));
       return { status: 502, body: { available: false as const, error: "The chronicler could not finish this tale. Nothing was charged twice; try again in a little while." } };
+    } finally {
+      if (storeStarted !== undefined) progress.timing.storeMs = performance.now() - storeStarted;
+      // Exactly one bounded operational record per generation. No run/vault
+      // capability, prompt, journal, story text or credential enters the log.
+      console.info(JSON.stringify({ event: 'chronicle_timing', outcome: completed ? 'completed' : 'failed',
+        stage: progress.stage, ...progress.timing, totalMs: performance.now() - started },
+        (_key, value) => typeof value === 'number' ? Math.round(value * 10) / 10 : value));
     }
   })();
   const finished = work.then((result) => {

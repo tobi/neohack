@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { ChronicleDigest, MAX_PROMPT_CHARS } from "./digest.mjs";
 import { prompt, transcript, validateStory, renderStory } from "./prompt.mjs";
 import { fixture } from "../../lib/neonethack/tests/native-fixture.mjs";
+import { replayEvidence } from "../../lib/neonethack/wasm/replay-evidence.mjs";
 
 const reply = (revision, messages = [], extra = {}) => ({
   version: 1,
@@ -31,6 +32,31 @@ const reply = (revision, messages = [], extra = {}) => ({
     ...messages.map((text) => ({ type: "heard", text })),
     ...(extra.events ?? []),
   ],
+});
+
+test("batch evidence preserves companions, passages, life saving and the exact ending", () => {
+  const first = reply(0, ["Welcome."]);
+  first.observation.world = [{ occupant: { kind: "ally", appearance: "kitten" } }];
+  const frames = [first,
+    reply(1, ["You feel much better."], { events: [
+      { type: "passage", text: "A remembered warning.\nBeware the depths." },
+      { type: "lifeSaved", cause: "a blessed amulet" },
+    ] }),
+    reply(2, ["The kitten explodes!"], { ended: true,
+      end: { kind: "death", cause: "a gas spore explosion", turn: 3, score: 8 } }),
+  ];
+  const full = new ChronicleDigest(), projected = new ChronicleDigest();
+  frames.forEach((frame, index) => {
+    full.add(frame);
+    projected.addEvidence(replayEvidence(frame, index));
+  });
+  assert.deepEqual(projected.finish(), full.finish());
+  const text = JSON.stringify(projected.finish());
+  assert.match(text, /apparentCompanions/);
+  assert.match(text, /lifeSaved/);
+  assert.match(text, /A remembered warning/);
+  assert.match(text, /gas spore explosion/);
+  assert.doesNotMatch(text, /private-item|must not leak/);
 });
 
 test("rolling narration is not repeated as a new incident; a genuinely repeated heard event is retained", () => {
