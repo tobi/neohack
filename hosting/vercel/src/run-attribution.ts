@@ -8,6 +8,7 @@ export type RunAttribution = {
 };
 export function attributionName(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
+  // oxlint-disable-next-line no-control-regex -- Reject or strip control characters at this text boundary.
   return value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120) || undefined;
 }
 export function preserveAttribution<T extends RunAttribution>(old: T | undefined, next: T, acceptProgress = true): T {

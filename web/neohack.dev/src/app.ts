@@ -25,7 +25,6 @@ import type {
 } from "/runtime/typescript/client.js";
 import type {
   ActionOffer,
-  CellActions,
   Decision,
   ItemRef,
 } from "neonethack/types";
@@ -1443,8 +1442,7 @@ class PixelNethack extends HTMLElement {
     if (state) {
       this.introMovement.stop();
       clearInterval(this.introAuto);
-      const o = state.observation,
-        v = o.vitals;
+      const o = state.observation;
       this.dataset.turn = String(o.turn);
       this.dataset.sessionId = state.sessionId;
       showRunUrl(state.sessionId, this.vault);

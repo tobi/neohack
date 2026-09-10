@@ -23,14 +23,6 @@ export const slotLabels: Record<EquipmentSlot, string> = {
   ball: "Attached ball",
   chain: "Attached chain",
 };
-const ready: EquipmentSlot[] = [
-  "weapon",
-  "offhand",
-  "alternateWeapon",
-  "quiver",
-  "ball",
-  "chain",
-];
 export function equipmentDescription(item: ItemRef) {
   return item.equipmentSlots?.length
     ? item.equipmentSlots.map((slot) => slotLabels[slot]).join(" · ")

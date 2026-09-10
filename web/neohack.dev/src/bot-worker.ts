@@ -38,6 +38,7 @@ self.onmessage = async (event: MessageEvent) => {
     if(!path) throw Error(`Module not found: ${name}`);
     if(modules.has(path)) return modules.get(path)!.exports;
     const module = {exports:{}}; modules.set(path,module);
+    // oxlint-disable-next-line no-new-func -- Execute the user's compiled workshop module inside its dedicated worker.
     new Function('require','module','exports',files[path]+`\n//# sourceURL=bot/${path}`)((n:string)=>requireModule(n,path),module,module.exports);
     return module.exports;
   }

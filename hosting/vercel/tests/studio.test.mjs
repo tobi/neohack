@@ -3,7 +3,6 @@ import { setDefaultResultOrder } from 'node:dns';
 setDefaultResultOrder('ipv4first');
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {resolve} from 'node:path';
 import { createTestHarness } from './server.mjs';
 import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
 async function fixture(t,{insecure=false}={}){
@@ -64,7 +63,6 @@ await page.locator('#replay').getByLabel('Playback speed',{exact:true}).selectOp
 await page.locator('#replay').getByRole('button',{name:'Play replay',exact:true}).click();
 await page.waitForFunction(count=>document.querySelector('#replay').index===count-1,runs[0].count);
 assert.deepEqual(await page.evaluate(()=>window.replayPositions),Array.from({length:runs[0].count-1},(_,i)=>i+1),'20x reconstructs every recorded input in order');
-const publicLink=runs[0].replayUrl;
 
  const visitor=await page.context().browser().newPage();await visitor.goto(url+'/replays/'+runs[0].id);
  await visitor.waitForFunction(()=>document.querySelector('neohack-world')?.snapshot);
@@ -75,7 +73,7 @@ const publicLink=runs[0].replayUrl;
 });
 test('sandbox blocks network access and Stop terminates an infinite loop', {timeout:120000},async t=>{
  const {page,url,errors}=await fixture(t);await page.goto(url+'/bots?example=curious-imp');await page.waitForSelector('.cm-content');
- await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(`export default {name:\"Test bot\",async initialize({log}) { try { await fetch('/api/account'); log('NETWORK OPEN'); } catch { log('NETWORK BLOCKED'); } while (true) {} }}`);
+ await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(`export default {name:"Test bot",async initialize({log}) { try { await fetch('/api/account'); log('NETWORK OPEN'); } catch { log('NETWORK BLOCKED'); } while (true) {} }}`);
  await page.locator('#test').click();await page.waitForFunction(()=>document.querySelector('#output').textContent.includes('NETWORK BLOCKED'),{},{timeout:90000}).catch(async e=>{throw Error((await page.locator('#status[role=status]').textContent())+'\n'+errors.join('\n'),{cause:e});});
  await page.locator('#stop').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled);
  assert.match(await page.locator('#status[role=status]').textContent(),/Stopped by you/);assert.equal(await page.locator('iframe').count(),0);
@@ -132,7 +130,7 @@ test('IDE defaults, random project persistence, in-place top-rail login and resi
 
 test('test runner enforces its fixed 1000-call budget', {timeout:60000},async t=>{
  const {page,url}=await fixture(t);await page.goto(url+'/bots?example=curious-imp');await page.waitForSelector('.cm-content');
- await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText('export default {name:\"Test bot\",initialize({hero,game}) { hero.addEventListener("turn", async()=>{ for(let i=0;i<1001;i++) await game.observe(); }); }}');
+ await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText('export default {name:"Test bot",initialize({hero,game}) { hero.addEventListener("turn", async()=>{ for(let i=0;i<1001;i++) await game.observe(); }); }}');
  await page.locator('#test').click();await page.waitForFunction(()=>!document.querySelector('#test').disabled,{},{timeout:50000});
  assert.equal(await page.locator('#status[role=status]').textContent(),'Test budget reached (1000 calls).');
 });
@@ -147,7 +145,7 @@ test('hero API has real TypeScript completions, documentation, diagnostics and m
  assert.match(await page.locator('.cm-content').innerText(),/direction.northWest/);
  await replace(prefix+'entities.');await page.keyboard.press('Control+Space');
  await page.getByRole('option',{name:'Balrog',exact:true}).waitFor();await page.keyboard.press('Escape');
- await replace(prefix+'defineBot({name:\"Test bot\",initialize({hero}) { hero.');await page.keyboard.press('Control+Space');
+ await replace(prefix+'defineBot({name:"Test bot",initialize({hero}) { hero.');await page.keyboard.press('Control+Space');
  await page.getByRole('option',{name:'senseClosest',exact:true}).waitFor();await page.getByRole('option',{name:'senseClosest',exact:true}).click();await page.keyboard.press('Escape');
  await replace(prefix+'defineBot(async ({game}) => { const hero = new Hero(game); hero.go(123); }});');
  await page.waitForSelector('.cm-lintRange-error');

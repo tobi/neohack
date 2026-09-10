@@ -19,7 +19,6 @@ import { generateText, stepCountIs, dynamicTool, jsonSchema } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createMCPClient } from '@ai-sdk/mcp';
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync } from 'fs';
-import { homedir } from 'os';
 import { dirname, resolve, join } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync, spawn } from 'child_process';
@@ -75,7 +74,7 @@ let mcpServer = null;
 const LOCK_DIR = join(STATE_DIR, 'agent.lock');
 try {
   mkdirSync(LOCK_DIR);
-} catch (e) {
+} catch {
   let owner = 'unknown';
   try { owner = readFileSync(join(LOCK_DIR, 'pid'), 'utf8').trim(); } catch {}
   let live = false;
@@ -356,7 +355,6 @@ if (Array.isArray(messages) && messages.length) {
   messages = [{ role: 'user', content: initialPrompt }];
   log('fresh conversation');
 }
-function resetConversation() { saveJson(CONV_F, []); }
 
 let totalSteps = 0;
 const tokenTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, noCache: 0, turns: 0, cacheMisses: 0, cacheUnreported: 0 };

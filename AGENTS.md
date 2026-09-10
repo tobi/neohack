@@ -168,3 +168,19 @@ pass. Native C calls must not change the host's signal handlers.
   [distribution guidance](lib/neonethack/docs/DISTRIBUTION.md).
 - Do not push or change visibility without an explicit request. Passing local
   tests does not imply permission to commit.
+
+## JavaScript/TypeScript quality
+
+Run root `bun run lint` and `bun run test:coverage` for authored JS/TS changes.
+Prefer small functions with explicit data flow, typed boundaries and direct error
+handling. Remove unused code; do not add speculative wrappers, catch-and-ignore
+fallbacks, unrequested compatibility layers or casts/suppressions to hide errors.
+Keep deliberate sanitization and isolated code execution narrowly documented.
+Review every automated fix for mutation, asynchronous and teardown semantics.
+
+Add meaningful unit assertions for success and failure boundaries, including
+cancellation, stale state and ownership when relevant. Use controlled clocks or
+barriers instead of arbitrary sleeps for ordering. Keep actual engine/browser
+scenarios for integration guarantees; the root coverage report measures only its
+explicit source list. Follow CONTRIBUTING.md for the coverage ratchet; do not
+lower thresholds or exclude hard-to-test code to make a build green.

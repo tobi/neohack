@@ -43,6 +43,7 @@ export async function scriptArtifacts(uid: string, id: string, body: any) {
     typeof body.name !== "string" ||
     !body.name.trim() ||
     body.name.length > 60 ||
+    // oxlint-disable-next-line no-control-regex -- Reject or strip control characters at this text boundary.
     /[\u0000-\u001f\u007f]/.test(body.name)
   )
     return json({ error: "Invalid script batch" }, 400);

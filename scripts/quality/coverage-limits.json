@@ -1,0 +1,44 @@
+{
+  "lib/neonethack/wasm/checkpoint-codec.mjs": {
+    "lines": 100,
+    "statements": 100,
+    "functions": 100,
+    "branches": 95
+  },
+  "lib/neonethack/wasm/protocol-reader.mjs": {
+    "lines": 85,
+    "statements": 85,
+    "functions": 85,
+    "branches": 87
+  },
+  "lib/neonethack/wasm/protocol-recording.mjs": {
+    "lines": 84,
+    "statements": 84,
+    "functions": 83,
+    "branches": 79
+  },
+  "lib/neonethack/wasm/protocol-uploader.mjs": {
+    "lines": 97,
+    "statements": 97,
+    "functions": 100,
+    "branches": 76
+  },
+  "lib/neonethack/wasm/replica-uploader.mjs": {
+    "lines": 87,
+    "statements": 87,
+    "functions": 75,
+    "branches": 77
+  },
+  "web/neohack.dev/src/fuzzy-match.ts": {
+    "lines": 100,
+    "statements": 100,
+    "functions": 100,
+    "branches": 100
+  },
+  "web/neohack.dev/src/presentation-queue.ts": {
+    "lines": 100,
+    "statements": 100,
+    "functions": 100,
+    "branches": 100
+  }
+}

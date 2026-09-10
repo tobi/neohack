@@ -1,0 +1,13 @@
+{
+  "name": "neohack-quality",
+  "private": true,
+  "scripts": {
+    "lint": "oxlint --deny-warnings --report-unused-disable-directives-severity error",
+    "test:unit": "node --test lib/neonethack/tests/replica-uploader.test.mjs lib/neonethack/tests/wasm/protocol-format.test.mjs lib/neonethack/tests/wasm/checkpoint-codec.test.mjs web/neohack.dev/tests/fuzzy-match.test.mjs web/neohack.dev/tests/presentation-queue.test.mjs scripts/quality/gates.test.mjs lib/neonethack/tests/wasm/protocol-uploader.test.mjs",
+    "test:coverage": "c8 npm run test:unit && node scripts/quality/check-coverage.mjs"
+  },
+  "devDependencies": {
+    "oxlint": "1.81.0",
+    "c8": "12.0.0"
+  }
+}

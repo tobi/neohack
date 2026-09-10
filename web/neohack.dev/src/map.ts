@@ -74,19 +74,6 @@ function torch(c: CanvasRenderingContext2D, x: number, y: number) {
   rect(c, "#f0bb68", x + 6, y, 4, 8);
   rect(c, "#ffe0a0", x + 7, y + 3, 2, 4);
 }
-function stairs(
-  c: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  up: boolean,
-) {
-  rect(c, "#1e2828", x + 2, y + 2, 12, 12);
-  for (let i = 0; i < 4; i++) {
-    const w = up ? 10 - i * 2 : 4 + i * 2;
-    rect(c, "#90927b", x + 8 - w / 2, y + 3 + i * 3, w, 1);
-    rect(c, "#566154", x + 8 - w / 2, y + 4 + i * 3, w, 1);
-  }
-}
 function glyph(
   c: CanvasRenderingContext2D,
   mark: string,
@@ -693,7 +680,7 @@ export class DungeonMap {
       .filter(
         (text) =>
           !(
-            /^You swap places with /.test(text) &&
+            text.startsWith('You swap places with ') &&
             after.outcome.positionChanged &&
             before.observation.world.some(
               (c) =>

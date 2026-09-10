@@ -14,6 +14,7 @@ export const MAX_PROMPT_CHARS = 245000;
 const POOL_LIMIT = 16000, POOL_KEEP = 12000;
 const clean = (value, limit = 700) =>
   typeof value === "string"
+    // oxlint-disable-next-line no-control-regex -- Reject or strip control characters at this text boundary.
     ? value.replace(/[\u0000-\u0008\u000b-\u001f]/g, "").slice(0, limit)
     : undefined;
 const routine =

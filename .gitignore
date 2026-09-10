@@ -36,3 +36,6 @@ hosting/vercel/.runtime-cache/
 # Local Bun/WASM MCP installation
 /bin/
 /libexec/
+
+# Local unit coverage reports and V8 counters
+/coverage/

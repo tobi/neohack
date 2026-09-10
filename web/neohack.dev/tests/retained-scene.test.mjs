@@ -60,7 +60,7 @@ test("cave atlas preserves pre-rewrite pixels across seeds, cache reuse and evic
     };
     const render = (seed) => {
       ctx.clearRect(0, 0, 160, 96);
-      art.renderTerrain(ctx, world, { ...options, seed });
+      globalThis.art.renderTerrain(ctx, world, { ...options, seed });
       return Array.from(ctx.getImageData(0, 0, 160, 96).data);
     };
     const first = render(314159),
@@ -74,7 +74,7 @@ test("cave atlas preserves pre-rewrite pixels across seeds, cache reuse and evic
     }));
     c.width = 1280;
     c.height = 448;
-    art.renderTerrain(ctx, many, {
+    globalThis.art.renderTerrain(ctx, many, {
       ...options,
       seed: 314159,
       originX: 0,
@@ -108,8 +108,8 @@ test("retained chunks preserve whole-scene masonry, cutaways, doors and torch fr
     };
     const surface = document.createElement("canvas");
     document.body.append(surface);
-    const scene = new art.RetainedScene(surface),
-      terrain = new art.TerrainScene(document);
+    const scene = new globalThis.art.RetainedScene(surface),
+      terrain = new globalThis.art.TerrainScene(document);
     const world = [];
     for (let y = 1; y < 16; y++)
       for (let x = 1; x < 32; x++)
@@ -135,7 +135,7 @@ test("retained chunks preserve whole-scene masonry, cutaways, doors and torch fr
         const reference = document.createElement("canvas");
         reference.width = 640;
         reference.height = 384;
-        art.renderTerrain(reference.getContext("2d"), world, {
+        globalThis.art.renderTerrain(reference.getContext("2d"), world, {
           ...options,
           originX: -4,
           originY: -4,
@@ -210,7 +210,7 @@ test("camera transforms and sprite playback run without raster work; live hit te
     };
     const surface = document.createElement("canvas");
     document.body.append(surface);
-    const scene = new art.RetainedScene(surface);
+    const scene = new globalThis.art.RetainedScene(surface);
     scene.moveCamera(10, 20, 2);
     const spec = {
       key: "actor:test",

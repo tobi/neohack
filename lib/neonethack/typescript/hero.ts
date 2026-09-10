@@ -24,6 +24,7 @@ export interface BotBuilder extends BotDefinition {
 }
 /** Define once at the top of a script, then register bot.on("turn", ...). */
 export function defineBot(bot: Omit<BotDefinition, 'initialize'> & Partial<Pick<BotDefinition, 'initialize'>>): BotBuilder {
+  // oxlint-disable-next-line no-control-regex -- Reject or strip control characters at this text boundary.
   if (!bot || typeof bot.name !== 'string' || !bot.name.trim() || bot.name.length > 60 || /[\u0000-\u001f\u007f]/.test(bot.name))
     throw Error('A bot needs a name of 1–60 characters without control characters.');
   if (bot.initialize !== undefined && typeof bot.initialize !== 'function') throw Error('Bot initialize must be a function.');
@@ -245,7 +246,7 @@ export class Hero {
         if (next === fingerprint) continue;
         fingerprint = next;
         await this.publish(frame, previous); previous = frame;
-        if (pending.size) { await Promise.allSettled([...pending]); throw Error('Await every game query in observation listeners.'); }
+        if (pending.size) { await Promise.allSettled(pending); throw Error('Await every game query in observation listeners.'); }
       }
     };
     const finish = async (reason: StopReason): Promise<BotResult> => {
@@ -255,7 +256,7 @@ export class Hero {
     };
     try {
       if(setup){const revision=this.scriptRevision;const result=await setup(this);if(revision===this.scriptRevision)await this.applyEventResult(result);}
-      if (pending.size) { await Promise.allSettled([...pending]); throw Error('Await every game query in initialize.'); }
+      if (pending.size) { await Promise.allSettled(pending); throw Error('Await every game query in initialize.'); }
       while (true) {
         if(this.scriptState===null)return Object.freeze({reason:'yielded',snapshot:this.snapshot});
         await drain();
@@ -265,7 +266,7 @@ export class Hero {
           const control=this.controlQueue.shift()!;
           try {const revision=this.scriptRevision;const result=await control.callback();if(revision===this.scriptRevision)await this.applyEventResult(result);control.resolve(true);}
           catch(error){control.reject(error);throw error;}
-          if(pending.size){await Promise.allSettled([...pending]);throw Error('Await every game operation in control callbacks.');}
+          if(pending.size){await Promise.allSettled(pending);throw Error('Await every game operation in control callbacks.');}
           await drain();phase='turn';
         }
         if(this.scriptState===null)return Object.freeze({reason:'yielded',snapshot:this.snapshot});
@@ -282,7 +283,7 @@ export class Hero {
             select: ids => ids.length ? this.game.answer(review.id, {kind:'choice', choose:[...ids]}, options) : this.game.cancel(review.id, options),
             cancel: () => this.game.cancel(review.id, options),
           }, () => this.snapshot.revision === revision && !this.stopped);
-          if (pending.size) { await Promise.allSettled([...pending]); throw Error('Await every game operation in beforeLoot.'); }
+          if (pending.size) { await Promise.allSettled(pending); throw Error('Await every game operation in beforeLoot.'); }
           if (this.snapshot.revision !== revision || this.stopped || this.game.pendingRequest || this.game.state.outcome.status === 'unknown' || [this.snapshot.storage,this.snapshot.recording].some(d=>d && d.status!=='ok')) continue;
         }
         if(this.scriptState===null)return Object.freeze({reason:'yielded',snapshot:this.snapshot});
@@ -290,14 +291,14 @@ export class Hero {
         const revision = this.snapshot.revision;
         phase = 'turn';
         await this.listeners.emit(this, 'turn', { snapshot: this.snapshot });
-        if (pending.size) { await Promise.allSettled([...pending]); throw Error('Await every game operation in the turn listener.'); }
+        if (pending.size) { await Promise.allSettled(pending); throw Error('Await every game operation in the turn listener.'); }
         await drain();
         if(this.scriptState===null)return Object.freeze({reason:'yielded',snapshot:this.snapshot});
         if (this.snapshot.revision === revision && !this.stopped && !this.ended && !this.game.pendingRequest && ![this.snapshot.storage, this.snapshot.recording].some(d => d && d.status !== 'ok'))
           return await finish(this.decision ? 'decision' : 'idle');
       }
     } catch (error) {
-      await Promise.allSettled([...pending]);
+      await Promise.allSettled(pending);
       phase = 'notify';
       await drain();
       await this.listeners.emit(this, 'error', { snapshot: this.snapshot, error });

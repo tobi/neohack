@@ -92,3 +92,41 @@ When changing the pinned engine, update its dated change notes and run the
 where it preserves the actual perceived facts and input boundaries. Removing
 a runtime hook requires native/WASM behavioral evidence; successful symbol
 wrapping alone does not prove timezone, startup or replay equivalence.
+
+## Lint and unit coverage
+
+From the repository root, run:
+
+```sh
+bun install --frozen-lockfile
+bun run lint
+bun run test:coverage
+```
+
+Oxlint checks authored JavaScript and TypeScript, including tests and examples.
+Correctness errors, unused bindings, debugger/eval, unsafe dynamic functions,
+async promise executors, focused tests, loose equality and TypeScript suppression comments fail
+CI. Callback parameters may be omitted from checks; object-rest exclusions are
+intentional. Collection snapshots and explicit array allocation remain allowed:
+removing them mechanically can change mutation semantics. Do not apply autofixes
+without reviewing and testing the resulting code.
+
+Use a single-line suppression with a concrete explanation only when the code
+requires it (for example rejecting control characters, or the isolated workshop
+module loader). Unused suppressions fail. Do not suppress a file, weaken a rule,
+rename dead code with an underscore, or lower coverage just to pass CI.
+
+The fast unit suite requires no engine build, browser, credentials or network.
+Its initial measured scope is the replay codec/reader/uploader, replica uploader,
+fuzzy search and presentation queue. It is **not repository-wide coverage** and
+does not measure C/WASM execution or code inside browser/worker subprocesses.
+Keep the existing native, WASM, browser and hosting suites; unit percentages
+cannot replace them.
+
+Reports are in `coverage/unit/index.html` and `coverage/unit/lcov.info`.
+`.c8rc.json` includes unexecuted sources; per-file minimums are ratcheted in
+`scripts/quality/coverage-limits.json`. Add a source to the include list and its
+unit tests to `test:unit` when extending this measured scope. Set its floor from
+reviewed results; cover failure, cancellation and ownership boundaries before
+chasing a percentage. A missing report entry fails rather than silently passing.
+Never count a skipped integration scenario as unit coverage.

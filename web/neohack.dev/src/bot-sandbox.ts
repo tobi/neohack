@@ -1,5 +1,5 @@
 // Raw bundled code is data here. It never executes in the account document.
-// @ts-ignore Bun's text import is resolved during the ordered build.
+// @ts-expect-error Bun's text import is resolved during the ordered build.
 import workerSource from '../public/build/bot-worker.js' with {type:'text'};
 let started=false;
 window.addEventListener('message',event=>{

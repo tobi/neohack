@@ -58,7 +58,7 @@ async function refresh() {
       const bar=element("div","");bar.className="bar";const fill=element("i","");fill.style.width=(100*role.count/Math.max(1,data.totals.runs))+"%";bar.append(fill);node.append(label,bar);return node;
     }));
     $("#freshness").textContent="Updated "+new Date(data.generatedAt).toLocaleString()+". Refreshes every minute.";
-  } catch(error) {
+  } catch {
     $("#freshness").textContent=data ? "Showing the last successfully loaded ledger." : "Ledger could not be loaded.";
     $("#ledger-error").hidden=false;
     $("#ledger-error").textContent="Online storage is unavailable. The ledger cannot be read right now; this is not a report of zero adventures. Try Refresh shortly.";

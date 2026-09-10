@@ -74,7 +74,7 @@ export function createTestHarness({ store = new MemoryStorage(), wrap = (fn) => 
       if ((await stat(file)).isDirectory()) file = resolve(file, "index.html");
       const headers = {};
       for (const rule of config.headers) {
-        let pattern = rule.source
+        const pattern = rule.source
           .replace(":build([a-f0-9]{64})", "([a-f0-9]{64})")
           .replace(":path*", "(.*)");
         if (new RegExp("^" + pattern + "$").test(url.pathname))
@@ -102,7 +102,7 @@ export function createTestHarness({ store = new MemoryStorage(), wrap = (fn) => 
         );
       res.writeHead(200, headers);
       res.end(body);
-    } catch (error) {
+    } catch {
       res.writeHead(404);
       res.end("Not found");
     }

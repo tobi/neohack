@@ -4,11 +4,12 @@ import {PresentationQueue} from '../src/presentation-queue.ts';
 const frame=(revision,sessionId='one')=>({sessionId,revision});
 
 test('completed actions queue independently, remain ordered and accelerate after thirty',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
  const shown=[],q=new PresentationQueue((f,ms,paint)=>shown.push({revision:f.revision,ms,paint}));t.after(()=>q.close());
  q.reset(frame(0));
  for(let i=1;i<=60;i++)await q.push(frame(i));
  assert.equal(q.current.revision,0);assert.equal(q.pending,60);assert.equal(q.duration,90);
- await new Promise(resolve=>setTimeout(resolve,210));
+ t.mock.timers.tick(180);
  assert.ok(shown.length>1&&shown.length<60);
  assert.ok(shown.slice(1).every(f=>f.ms<180));
  q.flush();assert.deepEqual(shown.map(f=>f.revision),Array.from({length:61},(_,i)=>i));
@@ -31,4 +32,25 @@ test('instant presentation never delays inputs, historical revisions and other r
  q.reset(frame(0));await q.push(frame(1));await q.push(frame(0));assert.equal(q.pending,0);
  await q.push(frame(0,'two'));assert.equal(q.current.sessionId,'two');
  assert.deepEqual(shown,[['one',0],['one',1],['two',0]]);q.close();
+});
+
+test('closed queues ignore input and a session reset releases blocked producers without leaking frames',async()=>{
+ const shown=[],q=new PresentationQueue(f=>shown.push(f));
+ q.reset(frame(0));
+ for(let i=1;i<=120;i++)await q.push(frame(i));
+ const blocked=q.push(frame(121));
+ q.reset(frame(0,'two'));await blocked;
+ assert.equal(q.pending,0);assert.equal(q.current.sessionId,'two');
+ q.close();await q.push(frame(1,'two'));assert.equal(q.current,null);
+ assert.equal(shown.at(-1).sessionId,'two');
+});
+
+test('reduced motion enabled during playback flushes every receipt and paints only the final frame',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ let instant=false;const shown=[];
+ const q=new PresentationQueue((f,ms,paint)=>shown.push({revision:f.revision,ms,paint}),()=>instant);
+ t.after(()=>q.close());q.reset(frame(0));await q.push(frame(1));await q.push(frame(2));
+ instant=true;t.mock.timers.tick(180);
+ assert.deepEqual(shown.map(f=>f.revision),[0,1,2]);
+ assert.equal(shown[1].paint,false);assert.equal(shown[2].paint,true);assert.equal(q.pending,0);
 });

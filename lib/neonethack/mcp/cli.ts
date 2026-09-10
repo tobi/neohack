@@ -33,7 +33,7 @@ let shutdown:Promise<void>|undefined;
 function stop(){return shutdown??=(async()=>{
   stopping=true;process.stdin.pause();server?.close();
   const deadline=setTimeout(()=>{console.error('Shutdown deadline exceeded; reserved inputs remain recoverable.');process.exit(1);},90000);
-  await Promise.allSettled([...jobs]);await runtime.close();server?.closeAllConnections();clearTimeout(deadline);
+  await Promise.allSettled(jobs);await runtime.close();server?.closeAllConnections();clearTimeout(deadline);
   process.exit(0);
 })();}
 process.on('SIGTERM',()=>void stop());process.on('SIGINT',()=>void stop());

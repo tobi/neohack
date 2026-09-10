@@ -7,6 +7,10 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Added repository-wide Oxlint checks and a separate, measured unit-test coverage
+  gate for replay storage and presentation helpers. CI and deployment reject
+  unsafe code, focused tests, stale suppressions and per-file coverage regressions.
+
 - Queued WebMCP playback no longer shows a recovery warning for an action still
   awaiting its reply. Genuine unresolved results keep their saved request and
   block further input until verified.

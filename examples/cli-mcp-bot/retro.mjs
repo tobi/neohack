@@ -7,25 +7,13 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { readFileSync, writeFileSync, appendFileSync, existsSync, copyFileSync, unlinkSync, mkdirSync } from 'fs';
 import { execFileSync } from 'child_process';
 
-import { dirname, join as joinPath, resolve } from 'path';
+import { dirname, join as joinPath } from 'path';
 import { fileURLToPath } from 'url';
 const BOT_DIR = dirname(fileURLToPath(import.meta.url));
-const ROOT = process.env.NEONETHACK_ROOT ?? resolve(BOT_DIR, '../..');
 const AIDIR = process.env.NEONETHACK_BOT_STATE ?? joinPath(BOT_DIR, 'state');
 const LOG = `${AIDIR}/logs/retro.log`;
-const BOT_REL = process.env.NEONETHACK_BOT_REL ?? 'examples/cli-mcp-bot';
 
 if (!existsSync(`${AIDIR}/logs`)) mkdirSync(`${AIDIR}/logs`, { recursive: true });
-function log(msg) {
-  const line = `[${new Date().toISOString()}] ${msg}`;
-  console.log(line);
-  appendFileSync(LOG, line + '\n');
-}
-function git(args) {
-  try { return execFileSync('git', ['-C', ROOT, ...args], { encoding: 'utf8' }); } catch { return ''; }
-}
-function sh(cmd) { try { return execFileSync('bash', ['-c', cmd], { encoding: 'utf8', timeout: 15000 }); } catch { return ''; } }
-
 // ---- gather session evidence ----
 const logText = existsSync(`${AIDIR}/ai-agent.log`) ? readFileSync(`${AIDIR}/logs/agent.log`, 'utf8') : '';
 const lines = logText.split('\n').filter(l => l.includes('op#'));
@@ -42,7 +30,6 @@ for (const l of lines) {
 const deathCauses = existsSync(`${AIDIR}/state/last-death.json`) ? readFileSync(`${AIDIR}/state/last-death.json`, 'utf8') : '(none recorded)';
 const tail = lines.slice(-40).join('\n');
 const advisorLines = logText.split('\n').filter(l => l.includes('advisor:')).slice(-20).join('\n');
-const lastRun = existsSync(`${AIDIR}/state/last-run.json`) ? readFileSync(`${AIDIR}/state/last-run.json`, 'utf8') : '{}';
 
 // session summary written by the agent on exit if available
 const stats = {

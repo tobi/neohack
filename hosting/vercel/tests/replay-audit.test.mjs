@@ -120,7 +120,6 @@ test('already economical frame playlists incur no replacement Blob writes or dup
   const manifest = { version: 1, count: 6, chunks: ['chunks/a.json', 'chunks/b.json', 'chunks/c.json'] };
   for (const p of manifest.chunks) await cdn.write(prefix + p, { frames: [frame, frame] });
   await cdn.write(prefix + 'manifest.json', manifest);
-  const prior = await cdn.read(prefix + 'manifest.json');
   const checked = await inspectFrames(manifest, async p => (await cdn.read(prefix + p)).value);
   assert.equal(checked.packingChunks, 4);
   let downloads = 0; const read = cdn.read.bind(cdn);

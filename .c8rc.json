@@ -1,0 +1,25 @@
+{
+  "all": true,
+  "include": [
+    "lib/neonethack/wasm/replica-uploader.mjs",
+    "lib/neonethack/wasm/protocol-recording.mjs",
+    "lib/neonethack/wasm/checkpoint-codec.mjs",
+    "lib/neonethack/wasm/protocol-reader.mjs",
+    "lib/neonethack/wasm/protocol-uploader.mjs",
+    "web/neohack.dev/src/fuzzy-match.ts",
+    "web/neohack.dev/src/presentation-queue.ts"
+  ],
+  "reporter": [
+    "text",
+    "html",
+    "lcov",
+    "json-summary"
+  ],
+  "reports-dir": "coverage/unit",
+  "check-coverage": true,
+  "per-file": true,
+  "lines": 84,
+  "statements": 84,
+  "branches": 75,
+  "functions": 75
+}

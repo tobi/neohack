@@ -397,6 +397,7 @@ export class Accounts {
           return json({ error: "Run control must be bot or interactive" }, 400);
         if (
           body.control === "bot" &&
+          // oxlint-disable-next-line no-control-regex -- Reject or strip control characters at this text boundary.
           (!body.name.trim() || /[\u0000-\u001f\u007f]/.test(body.name))
         )
           return json({ error: "Invalid bot name" }, 400);

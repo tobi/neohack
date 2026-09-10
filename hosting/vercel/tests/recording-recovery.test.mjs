@@ -3,7 +3,7 @@ import {test} from 'node:test';import assert from 'node:assert/strict';
 import {createTestHarness} from './server.mjs';import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
 test('published frame outbox survives reload and exact uploads recover from a lost acknowledgement',{timeout:120000},async t=>{
  const server=createTestHarness();const {url}=await server.listen();const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(async()=>{await browser.close();await server.close();});const page=await browser.newPage();
- let blocked=true,lost=false,uploaded=[],attempts=0;
+ let blocked=true,lost=false,attempts=0;const uploaded=[];
  await page.route('**/api/runs/*/replay',async route=>{
   if(route.request().method()!=='PUT')return route.continue();
   attempts++;

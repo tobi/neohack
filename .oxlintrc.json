@@ -1,0 +1,91 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "no-debugger": "error",
+    "no-eval": "error",
+    "no-new-func": "error",
+    "no-async-promise-executor": "error",
+    "no-constant-binary-expression": "error",
+    "no-unused-vars": [
+      "error",
+      {
+        "args": "none",
+        "ignoreRestSiblings": true,
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    "no-unused-expressions": [
+      "error",
+      {
+        "allowShortCircuit": true,
+        "allowTernary": true
+      }
+    ],
+    "unicorn/no-useless-spread": "off",
+    "unicorn/no-new-array": "off",
+    "eqeqeq": [
+      "error",
+      "smart"
+    ],
+    "no-var": "error",
+    "prefer-const": [
+      "error",
+      {
+        "destructuring": "all",
+        "ignoreReadBeforeAssign": true
+      }
+    ],
+    "no-throw-literal": "error",
+    "typescript/ban-ts-comment": "error",
+    "no-undef": "error",
+    "no-restricted-properties": [
+      "error",
+      {
+        "object": "test",
+        "property": "only",
+        "message": "Focused tests must not reach CI; run a test-name pattern locally."
+      },
+      {
+        "object": "it",
+        "property": "only",
+        "message": "Focused tests must not reach CI; run a test-name pattern locally."
+      },
+      {
+        "object": "describe",
+        "property": "only",
+        "message": "Focused tests must not reach CI; run a test-name pattern locally."
+      }
+    ]
+  },
+  "ignorePatterns": [
+    "emsdk/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "lib/neonethack/engine/**",
+    "hosting/vercel/.generated/**",
+    "hosting/vercel/public/**",
+    "hosting/vercel/.vercel/**",
+    "libexec/**"
+  ],
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "overrides": [
+    {
+      "files": [
+        "web/neohack.dev/server.ts",
+        "web/neohack.dev/scripts/*.ts",
+        "examples/pi-webmcp/run.mjs"
+      ],
+      "globals": {
+        "Bun": "readonly"
+      }
+    }
+  ]
+}

@@ -61,7 +61,7 @@ test("compressed input publication is append-only, exactly acknowledged and enti
       ),
     );
   };
-  let response = await put(0, [record(0), record(1)]);
+  const response = await put(0, [record(0), record(1)]);
   assert.equal(response.status, 200);
   const ack = await response.json();
   assert.equal(ack.through, 2);

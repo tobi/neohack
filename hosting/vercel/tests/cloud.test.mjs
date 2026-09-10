@@ -1,12 +1,11 @@
+import { resolve } from 'node:path';
 import {createBlockRun} from './published-block-fixture.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolve } from 'node:path';
 import { createTestHarness } from './server.mjs';
 import { chromium } from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
 
 async function fixture(t) {
-  const root = resolve(import.meta.dirname, '..');
   const server = createTestHarness();
   let browser;
   t.after(async()=>{try {await browser?.close();} finally {await server.close();}});

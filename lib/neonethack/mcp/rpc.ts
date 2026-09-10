@@ -9,7 +9,7 @@ export function parseFrame(bytes:Uint8Array){
   let source:string,value:unknown;
   try{source=new TextDecoder('utf-8',{fatal:true}).decode(bytes);value=JSON.parse(source);}catch{throw new RpcError(-32700,'Invalid UTF-8 JSON');}
   const stack:Array<{keys:Set<string>;key:boolean}|null>=[];
-  const tokens=source.match(/"(?:\\.|[^"\\])*"|[{}\[\]:,]|[^\s{}\[\]:,]+/g)??[];
+  const tokens=source.match(/"(?:\\.|[^"\\])*"|[{}[\]:,]|[^\s{}[\]:,]+/g)??[];
   for(const token of tokens){
     if(token==='{')stack.push({keys:new Set(),key:true});else if(token==='[')stack.push(null);
     else if(token==='}'||token===']')stack.pop();

@@ -1237,8 +1237,7 @@ test(
           cell.y >= 5,
       );
       if (!cell) throw Error("No remembered floor");
-      const map = app.map,
-        canvas = document.querySelector("#dungeon");
+      const map = app.map;
       const sample = async () => [
         ...(await window.sceneScreenPixels(map))
           .getContext("2d")
@@ -2044,7 +2043,7 @@ test(
     assert.ok(
       state.events.some(
         (event) =>
-          event.type === "heard" && /^You swap places with /.test(event.text),
+          event.type === "heard" && event.text.startsWith('You swap places with '),
       ),
       "real pet-swap narration required",
     );

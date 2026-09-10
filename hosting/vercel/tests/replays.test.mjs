@@ -33,7 +33,7 @@ test('real cloud run reconstructs public scenes, embeds after death and forwards
   await page.evaluate(async()=>{const a=document.querySelector('pixel-nethack');for(let i=0;i<28;i++)await a.run(()=>a.game.wait());await a.publicRecorder.flush();});
   const state=await page.evaluate(()=>document.querySelector('pixel-nethack').snapshot);
   const endpoint=new URL('/api/runs/'+state.sessionId+'/replay',url);
-  let response=await fetch(endpoint,{redirect:'manual'});assert.equal(response.status,302);
+  const response=await fetch(endpoint,{redirect:'manual'});assert.equal(response.status,302);
   assert.equal(response.headers.get('access-control-allow-origin'),'*');
   const manifestURL=new URL(response.headers.get('location'),endpoint);
   const manifest=await (await fetch(manifestURL)).json();

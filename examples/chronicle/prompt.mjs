@@ -100,7 +100,7 @@ export function parseStoryMarkdown(text) {
     .map((p) => p.replace(/\s*\n\s*/g, " ").trim())
     .filter(Boolean)
     .map((p) => {
-      const cites = [...p.matchAll(/\[([^\[\]]*\bT\d+[^\[\]]*)\]/g)];
+      const cites = [...p.matchAll(/\[([^[\]]*\bT\d+[^[\]]*)\]/g)];
       const sources = cites.flatMap((m) => m[1].match(/T\d+(?:\.\d+)?/g) ?? []);
       const body = cites.reduce((t, m) => t.replace(m[0], ""), p).replace(/\s{2,}/g, " ").trim();
       return { text: body, sources };

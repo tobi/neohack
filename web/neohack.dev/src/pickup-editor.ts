@@ -6,6 +6,7 @@ export const pickupDefaults = (): AutomaticPickup => ({enabled:true, itemTypes:[
 const names: Record<typeof pickupTypes[number], string> = {gold:"Gold", food:"Food", potions:"Potions", scrolls:"Scrolls", weapons:"Weapons", armor:"Armor", rings:"Rings", amulets:"Amulets", tools:"Tools", spellbooks:"Spellbooks", wands:"Wands", gems:"Gems", rocks:"Rocks & statues", balls:"Iron balls", chains:"Chains"};
 
 const patternError = "Use up to 16 nonblank patterns per list, each at most 64 UTF-8 bytes without control characters.";
+// oxlint-disable-next-line no-control-regex -- Reject or strip control characters at this text boundary.
 const validPatterns = (patterns:unknown):boolean => patterns === undefined || (Array.isArray(patterns) && patterns.length <= 16 && patterns.every(v => typeof v === "string" && !!v.trim() && new TextEncoder().encode(v).length <= 64 && !/[\u0000-\u001f\u007f]/.test(v)));
 
 export function validPickup(value: unknown): value is AutomaticPickup {

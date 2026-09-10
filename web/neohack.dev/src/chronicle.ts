@@ -45,7 +45,7 @@ export function draftFromMarkdown(text: string, complete = false): ChronicleDraf
   const heading = lines.shift() ?? "";
   const title = heading.replace(/^#+\s*/, "").replace(/^\*\*|\*\*$/g, "").trim();
   const paragraphs = lines.join("\n").split(/\n\s*\n/).map((p) =>
-    p.replace(/\s*\n\s*/g, " ").replace(/\s*\[[^\[\]]*$/, "").replace(/\[[^\[\]]*\bT\d+[^\[\]]*\]/g, "").replace(/\s{2,}/g, " ").trim(),
+    p.replace(/\s*\n\s*/g, " ").replace(/\s*\[[^[\]]*$/, "").replace(/\[[^[\]]*\bT\d+[^[\]]*\]/g, "").replace(/\s{2,}/g, " ").trim(),
   ).filter(Boolean);
   return { title, paragraphs, complete };
 }

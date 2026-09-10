@@ -14,7 +14,6 @@ test('public playback fetches only static files, begins early and preserves immu
  await store.write('replays/'+id+'.json',{frames:refs,revision:frames.at(-1).revision,role:'valkyrie',seed:7});
  const reads=[];const read=store.read.bind(store);store.read=async path=>{reads.push(path);return read(path);};
  const server=createTestHarness({store});const{url}=await server.listen();t.after(()=>server.close());
- const endpoint=new URL('/api/runs/'+id+'/replay',url);
  const publicStore=publicStoreFor(store);
  const publish=()=>storageContext.run(store,()=>publicReplayContext.run(publicStore,()=>publishReplay(id)));
  await publish();reads.length=0;

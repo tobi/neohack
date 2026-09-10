@@ -306,6 +306,7 @@ $('test').onclick=()=>void (async()=>{
       if(data.log!==undefined){if(++logs<=500)log(String(data.log).slice(0,2000));return;}
       if(data.done||data.failure){void stop(data.failure?String(data.failure):'Script finished.');return;}
       if(data.ready) {
+        // oxlint-disable-next-line no-control-regex -- Reject or strip control characters at this text boundary.
         if(ready || typeof data.ready.name !== 'string' || !data.ready.name.trim() || data.ready.name.length>60 || /[\u0000-\u001f\u007f]/.test(data.ready.name)) { void stop('Invalid bot definition.'); return; }
         ready=true;
         const source={version:1 as const,entrypoint:'main.js' as const,files:sourceFiles,compiledFiles:compiled,compiler:{name:'typescript' as const,version:ts.version},...(data.ready.autoloot===undefined?{}:{autoloot:data.ready.autoloot})};
