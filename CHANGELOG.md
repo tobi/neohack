@@ -7,6 +7,10 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Queued WebMCP playback no longer shows a recovery warning for an action still
+  awaiting its reply. Genuine unresolved results keep their saved request and
+  block further input until verified.
+
 - Removed the confusing MCP `recover` tool and recovery instructions after normal
   navigation stops. `observe` checks uncertain receipts without replaying input
   and returns current state. Diagnostic receipts are nested historical documents

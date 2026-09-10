@@ -1351,6 +1351,10 @@ class PixelNethack extends HTMLElement {
 
   }
   private controls() {
+    // Pending intent is written before input and remains present while its reply
+    // is in flight. Playback may render then; only a settled unresolved call
+    // needs intervention. Update here even when queued playback skips render().
+    this.show("#recovery", !this.busy && this.uncertain());
     if (this.actionPicker) this.actionPicker.element.disabled = this.busy || this.yielding || this.uncertain();
     (this.$('.close-dialog') as HTMLButtonElement).disabled = !!this.actionPicker?.action &&
       (this.busy || this.yielding || this.uncertain() || !this.game?.decision?.cancellable);
@@ -1428,7 +1432,6 @@ class PixelNethack extends HTMLElement {
     this.show(".hero-hud", !!state);
     this.show("#character-stats", !!state);
     this.show("#accessible-map", !!state);
-    this.show("#recovery", this.uncertain());
     this.show(
       "#continue-adventure",
       this.saves.some((s) => !s.ended),

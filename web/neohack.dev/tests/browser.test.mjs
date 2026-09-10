@@ -4841,6 +4841,76 @@ test('WebMCP attribution persists while natural presentation trails durable agen
  assert.deepEqual(errors,[]);
 });
 
+test('paced WebMCP distinguishes a waiting reply from a lost action result', {timeout:45000}, async t=>{
+ const {page,errors}=await fixture(t,{webmcp:true});const {call}=await nativeWebMcp(page,t);
+ const created=(await call('create',{role:'valkyrie',seed:9})).structuredContent;
+ const sid={sessionId:created.sessionId};
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ for(let i=0;i<20;i++){
+  const question=await call('pray',sid);assert.equal(question.isError,false);
+  assert.equal((await call('cancel',{...sid,decisionId:question.structuredContent.decision.id})).isError,false);
+ }
+ assert.ok(Number(await page.locator('pixel-nethack').getAttribute('data-presentation-pending'))>2);
+ await page.evaluate(async()=>{
+  const {WasmTransport}=await import('/runtime/typescript/wasm.js'),send=WasmTransport.prototype.send;
+  globalThis.replyProbe={calls:0,held:false,release:null};
+  WasmTransport.prototype.send=async function(request){
+   const response=await send.call(this,request);
+   if(request.method==='game.search'){
+    const p=globalThis.replyProbe,app=document.querySelector('pixel-nethack');
+    p.calls++;p.request=request;p.response=response;p.before=app.displaySnapshot.revision;p.held=true;
+    await new Promise(resolve=>p.release=resolve);p.held=false;
+    if(p.calls===2)throw Error('Test: committed search reply lost');
+   }
+   return response;
+  };
+ });
+ let invocation;
+ try {
+  invocation=call('search',{...sid,turns:1});void invocation.catch(()=>{});
+  // The actual worker has completed its durable input. Let the presentation
+  // timer render a queued frame while its original reply is still in flight.
+  await page.waitForFunction(()=>{
+   const app=document.querySelector('pixel-nethack'),p=globalThis.replyProbe;
+   return p.held&&app.busy&&app.current.pending&&app.displaySnapshot.revision>p.before;
+  });
+  const waiting=await page.evaluate(()=>{
+   const app=document.querySelector('pixel-nethack'),p=globalThis.replyProbe;
+   const saved=JSON.parse(localStorage.getItem(app.indexKey+':'+app.current.id));
+   return {notice:!document.querySelector('#recovery').hidden,calls:p.calls,
+    pending:saved.pending.params.requestId,accepted:p.response.requestId,elapsed:p.response.outcome.turnsElapsed,
+    outcome:p.response.outcome,error:p.response.error,decision:p.response.decision};
+  });
+  assert.equal(waiting.pending,waiting.accepted,'retain the original request before its reply is delivered');
+  assert.equal(waiting.outcome.status,'completed',JSON.stringify(waiting));assert.equal(waiting.error,undefined);assert.equal(waiting.calls,1);
+  assert.equal(waiting.notice,false,'an animated frame must not label a normally waiting reply uncertain');
+  await page.evaluate(()=>globalThis.replyProbe.release());
+  const completed=await invocation;invocation=null;assert.equal(completed.isError,false);
+  assert.equal(await page.locator('#recovery').isVisible(),false);
+  assert.equal(await page.evaluate(()=>document.querySelector('pixel-nethack').current.pending),undefined);
+  // A later genuinely lost reply still stops input and surfaces the warning.
+  invocation=call('search',{...sid,turns:1});void invocation.catch(()=>{});
+  await page.waitForFunction(()=>globalThis.replyProbe.calls===2&&globalThis.replyProbe.held);
+  assert.equal(await page.locator('#recovery').isVisible(),false);
+  await page.evaluate(()=>globalThis.replyProbe.release());
+  const lost=await invocation;invocation=null;assert.equal(lost.isError,true);
+  await page.locator('#recovery').waitFor({state:'visible'});
+  assert.equal(await page.getByRole('button',{name:'Search',exact:true}).isDisabled(),true);
+  assert.equal((await call('search',{...sid,turns:1})).isError,true);
+  const verified=await call('observe',sid);assert.equal(verified.isError,false);
+  assert.equal(verified.structuredContent.verification.status,'settled');
+  const accepted=await page.evaluate(()=>globalThis.replyProbe.response);
+  assert.equal(verified.structuredContent.observation.turn,accepted.observation.turn);
+  assert.deepEqual(verified.structuredContent.verification.outcome,accepted.outcome);
+  assert.equal(await page.evaluate(()=>globalThis.replyProbe.calls),2,'verification never repeats gameplay');
+  await page.locator('#recovery').waitFor({state:'hidden'});
+  assert.deepEqual(errors,[]);
+ } finally {
+  await page.evaluate(()=>globalThis.replyProbe.release?.());
+  await invocation?.catch(()=>{});
+ }
+});
+
 test('WebMCP walking shows each completed step at a readable pace without delaying the agent', {timeout:45000}, async t=>{
  const {page,errors}=await fixture(t,{webmcp:true});const {call}=await nativeWebMcp(page,t);
  let state=(await call('create',{name:'Walking observer',role:'valkyrie',seed:9})).structuredContent;

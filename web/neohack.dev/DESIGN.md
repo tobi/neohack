@@ -517,6 +517,12 @@ the view. Serialize engine access with human input, retain uncertain requests,
 and retain current-runtime integrity checks. Never auto-answer warnings or repeat
 uncertain input with a new ID.
 
+A retained request during a running action is normal pre-input durability, not
+an uncertain result. Presentation ticks must not show the recovery notice while
+that action is busy. Refresh the notice when the action settles, even if the
+display queue is still catching up. A lost or unresolved reply still blocks input
+and shows the notice; animation never clears the retained request.
+
 There is no MCP `recover` tool. `observe` checks a retained uncertain operation's
 exact receipt with read-only requests and then returns current state. The browser
 clears its matching pending metadata only after that receipt and a healthy current
