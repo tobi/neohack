@@ -1285,7 +1285,9 @@ Named bot provenance: `defineBot` requires an executable name and accepts typed
 engine operation. Signed-in workshop tests save the captured original and compiled
 files before allowing bot input. Account history distinguishes automated runs from
 interactive sessions and offers private source viewing/download next to replay.
-The saved project label is independent of the bot definition's name. Source is
+The generated hero name is independent of both the saved project label and the
+bot definition's name. The definition name still identifies script notes and
+private source history; it cannot replace the public hero name. Source is
 browser-reported and immutable for that recording; anonymous tests are temporary.
 
 Automatic pickup accepts editable Loot patterns and Ignore patterns, one literal substring per line. Matching uses perceived names without case sensitivity; ignore and leave rules take precedence. The same typed settings are available at bot construction and persist with sessions and recorded bot source.
@@ -1414,10 +1416,14 @@ notices, pet swaps and other one-to-three-line entries remain inline, regardless
 of trailing blank lines or viewport wrapping. Opening-story auto-display uses the
 same threshold; a full scroll preserves its original text and paragraph breaks.
 
-New-character forms suggest a random, editable adventurer name with an explicit
-reroll button. Suggestions use browser randomness independently of the world
-seed. The chosen name is stored with the run and never regenerated on resume.
-Workshop runs omit an explicit name and use the engine's existing name generator.
+New-character forms show a generated adventurer name with an explicit reroll
+button, without a text-entry field. Website WebMCP and workshop creation use the
+same generator; caller-supplied hero names cannot override it. Generation uses
+browser randomness independently of the world seed, and resume retains the name.
+Public metadata accepts only the generated vocabulary, with a stable per-run
+replacement for arbitrary submissions. Operator name corrections persist across
+later syncs and apply to replay/story presentation, never to recorded inputs,
+receipts, checkpoints or engine pins. The standalone engine naming API is unchanged.
 
 The ledger offers playback after successful public publication. Explicit archive
 audits can withdraw the link for missing or invalid recordings; stale metadata

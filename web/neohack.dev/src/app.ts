@@ -9,7 +9,7 @@ import { encyclopedia, loreButton } from './encyclopedia';
 import './component';
 import { PublicReplayRecorder,InputReplayRecorder, embedCode, replayLink } from './public-replay';
 import { chronicleEligible, chronicleIcon, chronicleLink, chronicleView, chronicleDraftView, requestChronicle, type ChronicleDocument } from './chronicle';
-import { adventurerName } from './adventurer-names';
+import { adventurerName } from './adventurer-names.mjs';
 import { renderCharacterSheet, equipmentDescription } from './character-sheet';
 import { actionIcon } from "./action-icons";
 import { accountApi, RunRecorder } from './account-client';
@@ -572,6 +572,7 @@ class PixelNethack extends HTMLElement {
     this.webMcpDispatch = true;
     try { await this.run(async () => {
       try {
+        request = {...request, params:{...request.params}} as Request;
         const params = request.params as Record<string, unknown>;
         let save = this.saves.find((s) => s.id === params.sessionId);
         await this.connectRuntime(typeof params.sessionId === "string" ? params.sessionId : undefined, request.method === 'session.create');
@@ -602,6 +603,7 @@ class PixelNethack extends HTMLElement {
               "This session has an uncertain request. Check only its exact original requestId and payload first.",
             );
         }
+        if (request.method === 'session.create') params.name = adventurerName();
         response = await this.api!.transport.send(request);
         if (this.runtime.client.isSnapshot(response)) {
           if (!save && !response.error) {
@@ -1415,7 +1417,7 @@ class PixelNethack extends HTMLElement {
       this.saves.some((s) => !s.ended),
     );
     const previousRun = this.saves.find(save => !save.ended);
-    this.$("#continue-adventure").innerHTML = "Continue previous run" + (previousRun ? `<small>${escape(previousRun.name)} · Turn ${previousRun.turn}</small>` : "");
+    this.$("#continue-adventure").innerHTML = "Continue previous run" + (previousRun ? `<small>${escape(previousRun.name)} · Turn ${escape(previousRun.turn)}</small>` : "");
     this.classList.toggle("in-game", !!state);
     this.$("neohack-rail").toggleAttribute("welcome", !state);
     if (state) {
@@ -1516,7 +1518,7 @@ class PixelNethack extends HTMLElement {
       this.show("#ended", state.ended);
       if (state.ended && this.$('#ended').dataset.session !== state.sessionId) {
         const ended=this.$('#ended');ended.dataset.session=state.sessionId;
-        ended.innerHTML = '<strong>This chapter has ended.</strong><p>'+escape(state.end?.cause ?? state.end?.kind ?? 'Your adventure is over.')+' · Turn '+o.turn+'. Your journal is still here. Start another chapter from Your adventures.</p><div id="death-replay"></div><div class="replay-sharing"><button id="death-copy-embed">Copy embed</button><button id="death-copy-link">Copy replay link</button><a id="death-replay-link">Open replay ↗</a><button id="death-tell-tale" class="tell-tale" hidden>'+chronicleIcon()+'<span>Tell the tale</span></button></div><p id="death-share-status" role="status">Loading the recorded journey…</p><textarea id="death-share-code" readonly hidden aria-label="Share replay"></textarea>';
+        ended.innerHTML = '<strong>This chapter has ended.</strong><p>'+escape(state.end?.cause ?? state.end?.kind ?? 'Your adventure is over.')+' · Turn '+escape(String(o.turn))+'. Your journal is still here. Start another chapter from Your adventures.</p><div id="death-replay"></div><div class="replay-sharing"><button id="death-copy-embed">Copy embed</button><button id="death-copy-link">Copy replay link</button><a id="death-replay-link">Open replay ↗</a><button id="death-tell-tale" class="tell-tale" hidden>'+chronicleIcon()+'<span>Tell the tale</span></button></div><p id="death-share-status" role="status">Loading the recorded journey…</p><textarea id="death-share-code" readonly hidden aria-label="Share replay"></textarea>';
         const id=state.sessionId;
         const viewer=document.createElement('neohack-world');viewer.setAttribute('controls','');viewer.setAttribute('autoplay','');viewer.setAttribute('speed','4');
         this.$('#death-replay').append(viewer);
@@ -1679,7 +1681,9 @@ class PixelNethack extends HTMLElement {
       for (const entry of [...this.journal].reverse()) {
         const p = document.createElement("p");
         p.className = "journal-entry";
-        p.innerHTML = `<small>TURN ${entry.turn}${entry.lastTurn !== entry.turn ? `–${entry.lastTurn}` : ""}</small>`;
+        const turn = document.createElement("small");
+        turn.textContent = `TURN ${entry.turn}${entry.lastTurn !== entry.turn ? `–${entry.lastTurn}` : ""}`;
+        p.append(turn);
         this.appendJournalContent(p, entry);
         body.append(p);
       }
@@ -2127,13 +2131,14 @@ class PixelNethack extends HTMLElement {
     this.querySelector<HTMLDialogElement>("#menu")!.close();
   }
   private newAdventure() {
+    let name = adventurerName();
     this.openMenu(
-      `<h2 id="menu-title">Every story needs an adventurer.</h2><p class="subtle">Choose a starting path. The rest is up to you.</p><form id="create-form"><div class="create-fields"><label class="field-label" for="adventurer-name">YOUR NAME</label><div class="adventurer-name-field"><input id="adventurer-name" name="name" required maxlength="24" autocomplete="off" placeholder="What should we call you?" value="${adventurerName()}"><button type="button" id="generate-adventurer-name" title="Suggest another name" aria-label="Generate another adventurer name">↻</button></div><fieldset class="class-picker"><legend>YOUR STARTING PATH · ${roles.length} CLASSES</legend>${roles.map((r, i) => `<label class="role-card"><input type="radio" name="role" value="${r.id}" ${i === 0 ? "checked" : ""}><img src="/art/${r.art}.png" alt=""><span><strong>${r.title}${i === 0 ? "<small>FIRST ADVENTURE PICK</small>" : ""}</strong><span>${r.description}</span></span></label>`).join("")}</fieldset><details class="seed-details"><summary>Choose a world seed (optional)</summary><label for="world-seed">A number for a repeatable starting world</label><input id="world-seed" name="seed" type="number" min="0" max="4294967295" step="1" placeholder="Surprise me"></details><p class="save-explanation">Progress is saved on this browser and address. Clearing site data deletes it. Each life is an adventure of its own.</p></div><footer class="create-footer"><button data-operation class="primary" type="submit">Enter the dungeon →</button></footer></form>`,
+      `<h2 id="menu-title">Every story needs an adventurer.</h2><p class="subtle">Choose a starting path. The rest is up to you.</p><form id="create-form"><div class="create-fields"><span class="field-label" id="adventurer-name-label">YOUR NAME</span><div class="adventurer-name-field"><output id="adventurer-name" aria-labelledby="adventurer-name-label">${name}</output><button type="button" id="generate-adventurer-name" title="Suggest another name" aria-label="Generate another adventurer name">↻</button></div><fieldset class="class-picker"><legend>YOUR STARTING PATH · ${roles.length} CLASSES</legend>${roles.map((r, i) => `<label class="role-card"><input type="radio" name="role" value="${r.id}" ${i === 0 ? "checked" : ""}><img src="/art/${r.art}.png" alt=""><span><strong>${r.title}${i === 0 ? "<small>FIRST ADVENTURE PICK</small>" : ""}</strong><span>${r.description}</span></span></label>`).join("")}</fieldset><details class="seed-details"><summary>Choose a world seed (optional)</summary><label for="world-seed">A number for a repeatable starting world</label><input id="world-seed" name="seed" type="number" min="0" max="4294967295" step="1" placeholder="Surprise me"></details><p class="save-explanation">Progress is saved on this browser and address. Clearing site data deletes it. Each life is an adventure of its own.</p></div><footer class="create-footer"><button data-operation class="primary" type="submit">Enter the dungeon →</button></footer></form>`,
     );
     const form = this.querySelector<HTMLFormElement>("#create-form")!;
     this.$("#generate-adventurer-name").onclick = () => {
-      const input=this.querySelector<HTMLInputElement>("#adventurer-name")!;
-      input.value=adventurerName(input.value);input.setCustomValidity("");input.focus();input.select();
+      name = adventurerName(name);
+      this.$('#adventurer-name').textContent = name;
     };
     const preferences = loadPickupPreferences();
     const pickup = pickupEditor(preferences.settings, preferences.rememberable);
@@ -2146,17 +2151,7 @@ class PixelNethack extends HTMLElement {
     form.onsubmit = (e) => {
       e.preventDefault();
       if (!form.reportValidity() || this.busy || !this.metadataHealthy) return;
-      const data = new FormData(form),
-        name = String(data.get("name")).trim();
-      if (!name) {
-        this.querySelector<HTMLInputElement>(
-          "#adventurer-name",
-        )!.setCustomValidity("Choose a name for your adventurer.");
-        this.querySelector<HTMLInputElement>(
-          "#adventurer-name",
-        )!.reportValidity();
-        return;
-      }
+      const data = new FormData(form);
       const role = roles.find((r) => r.id === data.get("role"))!;
       const inputSeed = String(data.get("seed")).trim();
       const seed = inputSeed
@@ -2197,8 +2192,6 @@ class PixelNethack extends HTMLElement {
         this.$("#dungeon").focus();
       }, { name, role: role.id });
     };
-    this.querySelector<HTMLInputElement>("#adventurer-name")!.oninput = (e) =>
-      (e.target as HTMLInputElement).setCustomValidity("");
   }
   private openLocalCopy(id:string) {
     const url=new URL(location.href);url.hash=new URLSearchParams({run:id,vault:this.vault,local:"1"}).toString();

@@ -50,6 +50,7 @@ function inputManifest(id: string, doc: any) {
     role: doc.role,
     seed: doc.seed,
     complete: doc.complete,
+    ...(doc.nameOverride ? {nameOverride:doc.nameOverride} : {}),
   };
 }
 export async function publishManifest(id: string) {

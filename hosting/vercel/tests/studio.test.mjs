@@ -95,11 +95,11 @@ test('a foreign origin embeds the single module without runtime or artwork reque
 test('signed-in human play associates static inputs without sharing account data', {timeout:60000},async t=>{
  const {page,url,browser}=await fixture(t);await register(page,url,'HumanAuthor');await page.goto(url);
  await page.waitForFunction(()=>!document.querySelector('#new-adventure').disabled);
- await page.getByRole('button',{name:'Begin your adventure',exact:true}).click();await page.getByLabel('YOUR NAME',{exact:true}).fill('Human run');await page.locator('input[name=role][value=valkyrie]').check();await page.getByRole('button',{name:'Enter the dungeon →',exact:true}).click();
+ await page.getByRole('button',{name:'Begin your adventure',exact:true}).click();await page.locator('input[name=role][value=valkyrie]').check();await page.getByRole('button',{name:'Enter the dungeon →',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation&&document.querySelector('pixel-nethack').getAttribute('aria-busy')==='false');
  await page.evaluate(async()=>{const app=document.querySelector('pixel-nethack');await app.run(()=>app.game.search());});
  await page.evaluate(async()=>document.querySelector('pixel-nethack').publicRecorder.flush());
- const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));assert.equal(runs.length,1);assert.ok(runs[0].count>=2);assert.equal(runs[0].name,'Human run');assert.equal(runs[0].control,'interactive');assert.equal(runs[0].automated,false);
+ const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));assert.equal(runs.length,1);assert.ok(runs[0].count>=2);assert.match(runs[0].name,/^[A-Z][a-z]+ [A-Z][a-z]+$/);assert.equal(runs[0].control,'interactive');assert.equal(runs[0].automated,false);
  const other=await browser.newPage();await register(other,url,'OtherAuthor');
  assert.equal(await other.evaluate(async id=>(await fetch('/api/account/runs/'+id+'/frames')).status,runs[0].id),404);
 });
@@ -177,7 +177,7 @@ test('hero API has real TypeScript completions, documentation, diagnostics and m
  await page.screenshot({path:'/tmp/neohack-hero-workshop.png',fullPage:true});
 });
 
-test('automated history retains exact source, construction autoloot and executable name', {timeout:90000}, async t=>{
+test('automated history retains exact source and executable name while the public hero name stays generated', {timeout:90000}, async t=>{
  const {page,url,browser}=await fixture(t);await register(page,url,'SourceAuthor');
  await page.goto(url+'/bots?example=curious-imp');await page.waitForSelector('.cm-content');
  const replace=async code=>{await page.locator('.cm-content').click();await page.keyboard.press('Control+a');await page.keyboard.insertText(code);};
@@ -200,6 +200,7 @@ export default defineBot({name:'Archive imp',autoloot:{enabled:true,itemTypes:['
  const runs=await page.evaluate(()=>fetch('/api/account/runs').then(r=>r.json()));
  assert.equal(runs.length,1);const run=runs[0];assert.equal(run.name,'Archive imp');assert.equal(run.automated,true);assert.equal(run.control,'bot');
  const saved=await page.evaluate(id=>fetch(`/api/account/runs/${id}/source`).then(r=>r.json()),run.id);
+ const publicRun=await page.evaluate(async id=>{const deadline=Date.now()+10000;while(Date.now()<deadline){const value=await fetch('/api/runs/'+id).then(r=>r.json());if(value.name)return value;await new Promise(r=>setTimeout(r,100));}throw Error('Public metadata not published');},run.id);assert.match(publicRun.name,/^[A-Z][a-z]+ [A-Z][a-z]+$/);assert.notEqual(publicRun.name,'Archive imp');
  const source=JSON.parse(saved.artifact);assert.equal(source.files['main.js'],main);assert.equal(source.files['strategy.js'],helper);
  assert.match(source.compiledFiles['main.js'],/require\("neonethack"\)/);assert.equal(source.compiler.name,'typescript');assert.equal(source.entrypoint,'main.js');
  assert.deepEqual(source.autoloot,{enabled:true,itemTypes:['gold'],arrows:false,leaveCorpses:true,leaveKnownCursed:true,lootPatterns:['ration'],ignorePatterns:['corpse']});

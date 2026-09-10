@@ -96,5 +96,16 @@ test("real Blob SDK bypasses cached reads and sends create-only / matching-ETag 
   writes.intercept({ method: "GET", path: "/api/blob?url=replays%2Frun%2Funtold.json" })
     .reply(404, { error: { code: "not_found", message: "missing" } });
   assert.equal(await publicReplayStorage().read("replays/run/untold.json"), null);
+  // Maintenance uses current bytes and the strong management token, even if
+  // content compression gives the CDN a different weak ETag.
+  writes.intercept({method:'GET',path:'/api/blob?url=story.json'})
+    .reply(200,{...reply,url:'https://fixture.public.blob.vercel-storage.com/story.json',etag:'"strong"',uploadedAt:new Date().toISOString()});
+  publicCdn.intercept({method:'GET',path:'/story.json?v=strong'})
+    .reply(200,'{"title":"Current"}',{headers:{etag:'W/"strong"','content-type':'application/json'}});
+  const current=await publicReplayStorage(true).read('story.json');
+  assert.deepEqual(current,{value:{title:'Current'},etag:'"strong"'});
+  writes.intercept({method:'PUT',path:'/api/blob/?pathname=story.json',headers:headers=>headers['x-if-match']==='"strong"'})
+    .reply(200,reply);
+  await publicReplayStorage(true).write('story.json',{title:'Corrected'},current.etag);
   agent.assertNoPendingInterceptors();
 });

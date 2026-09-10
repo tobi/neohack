@@ -398,3 +398,15 @@ Public replays have shareable pages at `/replays/{run-id}`. The rewrite serves
 `/replay-config.json`. An optional public ledger lookup supplies run totals and
 the last-recorded date, and never gates playback. Account input recordings link
 to the same page; older private frame recordings still require publication.
+
+Public run names use the website's generated vocabulary. Arbitrary metadata
+submissions receive a stable generated name; client-supplied `nameOverride`
+fields are discarded. For authorized corrections to existing entries,
+`src/run-name-maintenance.ts` exports `renamePublicRun(id, expectedName, name)`.
+Back up the run/head, public manifest, story and affected index before invoking
+it with operator storage credentials. It checks the expected name, keeps the
+correction across later syncs, republishes presentation metadata and corrects an
+existing story without another model call. Inputs, receipt hashes, checkpoints,
+pins and scores are unchanged. Retry the same correction after an interrupted
+projection; never edit immutable input files to rename a character. Strong Blob
+management ETags are used for story edits, rather than weak CDN response ETags.

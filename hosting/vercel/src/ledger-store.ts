@@ -49,7 +49,8 @@ function records(runs: PublicRun[], metric: "level" | "depth") {
 function progress(old: Run | undefined, run: Run): Run {
   const peak = (a: number | undefined, b: number | undefined) =>
     knownScore(a) || knownScore(b) ? Math.max(knownScore(a) ? a : 0, knownScore(b) ? b : 0) : undefined;
-  return { ...run, maxLevel: peak(old?.maxLevel, run.maxLevel), maxDepth: peak(old?.maxDepth, run.maxDepth) };
+  const nameOverride = old?.nameOverride ?? run.nameOverride;
+  return { ...run, ...(nameOverride ? {nameOverride, name:nameOverride.name} : {}), maxLevel: peak(old?.maxLevel, run.maxLevel), maxDepth: peak(old?.maxDepth, run.maxDepth) };
 }
 function summarize(shard: Shard, now = Date.now()) {
   const entries = Object.values(shard.entries),
@@ -102,6 +103,9 @@ async function indexEntries(shard: number, entries: Entry[]) {
         const state = replay && replay.version > (prior?.replay?.version ?? 0) ? replay : prior?.replay;
         const available = state?.available ?? (recorded || prior?.recorded || false);
         const attributed = preserveAttribution(prior?.run, progress(prior?.run, run), newer(prior?.run, run));
+        // A delayed metadata projection must not undo an operator correction.
+        const correction = run.nameOverride ?? prior?.run.nameOverride;
+        if (correction) Object.assign(attributed, {nameOverride:correction, name:correction.name});
         if (
           JSON.stringify(prior?.run) !== JSON.stringify(attributed) ||
           available !== prior?.recorded || state?.version !== prior?.replay?.version ||
@@ -187,6 +191,20 @@ export async function saveLedgerRun(run: Run) {
   // A private input head alone does not prove that public publication succeeded.
   // markRecorded persists publication even when it precedes the metadata write.
   return writeRun(run);
+}
+/** Explicit operator maintenance; not exposed through an HTTP upload. */
+export async function renameLedgerRun(id: string, original: string, name: string) {
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id) || !/^[A-Za-z][A-Za-z ]{0,63}$/.test(name)) throw Error('Invalid name correction');
+  await initialize();
+  const prior = await ledgerRun(id);
+  if (!prior) throw Error('Run not found');
+  const current = await update<{run:Run},Run>('ledger/runs/' + id + '.json', () => ({run:prior}), doc => {
+    if (doc.run.name !== original && !(doc.run.name === name && doc.run.nameOverride?.original === original)) throw Error('Run name changed; review before renaming');
+    doc.run = {...doc.run, name, nameOverride:{original,name}};
+    return doc.run;
+  });
+  await indexRun(current);
+  return current;
 }
 export async function markRecorded(id: string) {
   await initialize();

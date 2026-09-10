@@ -8,6 +8,12 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- Website and WebMCP heroes use generated names, with a reroll button. Operator
+  display-name corrections persist in the ledger and replay without rewriting
+  recorded actions, receipts or saved engine pins.
+- Hardened journal and chronicle text rendering, restricted story links to web
+  URLs, and added browser coverage for hostile account, item and script text.
+
 - Chronicles batch verified replay inputs and return compact narration evidence,
   retaining the same story material with less worker traffic. Cold runtime assets
   download in bounded parallel groups; generation logs now separate replay,

@@ -279,7 +279,7 @@ test("plain HTTP remote origins explain secure access before starting WASM", asy
 });
 async function create(page, role = "valkyrie", seed = 42, keepStory = false) {
   await page.getByRole("button", { name: "Begin your adventure" }).click();
-  await page.getByLabel("YOUR NAME", { exact: true }).fill("Ada");
+
   await page.locator(`input[name=role][value=${role}]`).check();
   await page
     .getByText("Choose a world seed (optional)", { exact: true })
@@ -328,9 +328,9 @@ test(
   { timeout: 30000 },
   async (t) => {
     const { page, errors } = await fixture(t);
-    await page.getByRole("button", { name: "Begin your adventure" }).click();
-    const name = page.getByLabel("YOUR NAME", { exact: true });
-    await name.fill("");
+    await create(page);
+    await page.evaluate(()=>document.querySelector("pixel-nethack").openEncyclopedia());
+    const name = page.locator("#lore-query");
     await name.focus();
     await page.keyboard.down("h");
     await page.keyboard.down("h");
@@ -341,7 +341,6 @@ test(
       "text fields retain native key repetition",
     );
     await page.keyboard.press("Escape");
-    await create(page);
     const first = await snapshot(page),
       run = openRun(first);
     assert.ok(run.length >= 3, "real perceived room provides a straight run");
@@ -1616,7 +1615,7 @@ test(
     assert.deepEqual(full.observation, humanBeforeQuery.observation, 'explicit observation returns the entire shared HUD scene');
     assert.deepEqual(full.decision, humanBeforeQuery.decision);
     assert.equal(full.revision, humanBeforeQuery.revision);
-    assert.equal(await page.locator("#hero-name").textContent(), "Mira");
+    assert.match(await page.locator("#hero-name").textContent(), /^[A-Z][a-z]+ [A-Z][a-z]+$/);
     assert.equal(
       await page.locator(".map-viewport").evaluate((el) => el.clientHeight),
       1050 - (await page.locator('neohack-rail').boundingBox()).height,
@@ -2509,6 +2508,8 @@ test('hero names stay clear of the level label at phone and desktop widths', asy
   for (const name of ['Browser Container', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcde']) {
     const created = await call("create", { name, role: 'valkyrie', seed: 4 });
     assert.equal(created.isError, false);
+    // Existing saved names may still be long; creation itself is generated-only.
+    await page.evaluate(name=>{const app=document.querySelector("pixel-nethack");app.current.name=name;app.render();},name);
     for (const width of [320, 390, 800, 1440]) {
       await page.setViewportSize({ width, height: 844 });
       const label = await page.locator('#hero-name').boundingBox();
@@ -2674,7 +2675,7 @@ test("dungeon loading scene covers creation and previous-run resume without extr
   });
   await delayEntry();
   await page.getByRole("button", { name: "Begin your adventure" }).click();
-  const chosenName = await page.getByLabel("YOUR NAME", {exact:true}).inputValue();
+  const chosenName = await page.getByLabel("YOUR NAME", {exact:true}).textContent();
   await page.getByRole("button", { name: "Enter the dungeon" }).click();
   await page.waitForFunction(() => typeof globalThis.releaseEntry === "function");
   const loading = page.locator("#dungeon-loading");
@@ -2731,13 +2732,14 @@ test("typing and choosing a class in a menu cannot answer a standing direction",
   await page.getByLabel("Game menu", { exact: true }).click();
   await page.getByRole("button", { name: "Your adventures", exact: true }).click();
   await page.getByRole("button", { name: "Start a new adventure", exact: true }).click();
-  const name = page.getByLabel("YOUR NAME", { exact: true });
-  await name.fill("");
+  await page.getByText("Choose a world seed (optional)",{exact:true}).click();
+  const name = page.getByLabel("A number for a repeatable starting world");
+  await name.fill("123");
   await name.pressSequentially("hjkl yubn");
   await page.locator("input[name=role]").first().focus();
   await page.keyboard.press("ArrowDown");
   await ready(page);
-  assert.equal(await name.inputValue(), "hjkl yubn");
+  assert.equal(await name.inputValue(), "123");
   assert.deepEqual(await snapshot(page), standing, "menu input must not answer or cancel the engine decision");
   await page.getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.locator('[data-target-direction="north"]').focus();
@@ -3716,14 +3718,16 @@ test('journal scrolls require four non-empty source lines, not trailing blanks o
   assert.equal((await snapshot(page)).revision,before.revision);
 });
 
-test('new adventures suggest rerollable names and retain the chosen name across resume', async t=>{
+test('new adventures enforce rerollable generated names and retain the chosen name across resume', async t=>{
   const {page}=await fixture(t);
   await page.getByRole('button',{name:'Begin your adventure'}).click();
   const input=page.getByLabel('YOUR NAME',{exact:true});
-  const first=await input.inputValue();
+  const first=await input.textContent();
+  assert.equal(await page.locator("input[name=name]").count(),0);
   assert.match(first,/^[A-Z][a-z]+ [A-Z][a-z]+$/);assert.ok(first.length<=24);
   await page.getByRole('button',{name:'Generate another adventurer name',exact:true}).click();
-  const chosen=await input.inputValue();assert.notEqual(chosen,first);
+  const chosen=await input.textContent();assert.notEqual(chosen,first);
+  await page.evaluate(()=>{const input=document.createElement("input");input.name="name";input.value="Injected Hero";input.type="hidden";document.querySelector("#create-form").append(input);});
   await page.getByRole('button',{name:'Enter the dungeon →'}).click();
   await page.waitForFunction(()=>!!document.querySelector('pixel-nethack').snapshot);await ready(page);
   assert.equal(await page.locator('#hero-name').textContent(),chosen);
@@ -4851,5 +4855,46 @@ test('WebMCP walking shows each completed step at a readable pace without delayi
  assert.ok(shown.slice(1).every((f,i)=>f.time-shown[i].time>=120),'ordinary playback is visibly paced');
  assert.equal(await page.locator('#turn-pill').textContent(),'TURN '+state.observation.turn);
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:`${root}/test-results/webmcp-walking-mobile.png`});
+ assert.deepEqual(errors,[]);
+});
+
+test('text surfaces render markup literally across journals, item labels, menus and stories',async t=>{
+ const {page,errors}=await fixture(t);await create(page);
+ const attack='<img data-injected src=x onerror="window.__injected=true"> & " </textarea><svg data-injected onload="window.__injected=true">';
+ await page.evaluate(text=>{
+  const app=document.querySelector('pixel-nethack');
+  app.journal=[{text,turn:text,lastTurn:text,count:2}];app.panel='journal';app.renderPanel();app.showPanel();
+ },attack);
+ assert.ok((await page.locator('.journal-entry').textContent()).includes(attack));
+ assert.ok((await page.locator('.journal-entry small').first().textContent()).includes(attack));
+ await page.evaluate(text=>{
+  const app=document.querySelector('pixel-nethack'),frame=structuredClone(app.game.state);
+  const item=frame.observation.inventory[0];item.label=text;item.equipmentSlots=['weapon'];
+  app.game.current=frame;app.render();app.itemDetails(item);
+ },attack);
+ assert.ok((await page.locator('#character-stats').textContent()).includes(attack));
+ assert.ok((await page.locator('#menu-title').textContent()).includes(attack));
+ await page.evaluate(text=>document.querySelector('pixel-nethack').openEncyclopedia(text),attack);
+ assert.equal(await page.locator('#lore-query').inputValue(),attack);
+ await page.evaluate(async text=>{
+  const {chronicleView,chronicleDraftView}=await import('/build/chronicle.js');
+  const doc={hero:{name:text},model:text,coverage:{selectedEvents:text},story:{title:text,paragraphs:[{text,sources:[],segments:[{text,term:'term'}]}]},glossary:{term:{name:text,lines:[text]}}};
+  const host=document.createElement('div');host.id='text-audit';host.append(chronicleView(doc,{replayHref:'javascript:window.__injected=true'}));
+  const draft=chronicleDraftView(text);draft.update({title:text,paragraphs:[text],complete:false});host.append(draft.element);document.body.append(host);
+  host.querySelector('.chronicle-term').click();
+ },attack);
+ assert.ok((await page.locator('#text-audit').textContent()).includes(attack));
+ assert.equal(await page.locator('#text-audit a').count(),0,'active URL schemes are not emitted');
+ assert.equal(await page.locator('[data-injected]').count(),0,'no text was parsed into elements');
+ assert.equal(await page.evaluate(()=>window.__injected),undefined);
+ assert.deepEqual(errors,[]);
+});
+
+test('website WebMCP creation ignores arbitrary hero names and retains its generated name',async t=>{
+ const {page,errors}=await fixture(t,{webmcp:true});const {call}=await nativeWebMcp(page,t);
+ const result=await call('create',{name:'Custom Name',role:'valkyrie',race:'human',gender:'female',align:'lawful',seed:9});
+ assert.ok(!result.error,JSON.stringify(result.error));await ready(page);
+ const name=await page.locator('#hero-name').textContent();assert.notEqual(name,'Custom Name');assert.match(name,/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+ const metadata=await page.evaluate(()=>document.querySelector('pixel-nethack').current.name);assert.equal(metadata,name);
  assert.deepEqual(errors,[]);
 });

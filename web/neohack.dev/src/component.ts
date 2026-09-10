@@ -1,4 +1,5 @@
 import { replayIdentity } from './replay-links';
+import { displayText, type NameCorrection } from './public-names.mjs';
 import { scrollbarStyles } from './scrollbars.mjs';
 import { DungeonMap, loadArt } from './map';
 import { DungeonSound } from './sound';
@@ -21,6 +22,7 @@ export class NeohackWorld extends HTMLElement {
   private sourceMessage?: string;
   private sourcePending = false;
   private sourceTotal?: number;
+  private nameOverride?: NameCorrection;
   private audio?: DungeonSound;
   private map?: DungeonMap;
   private frame: Snapshot | null = null;
@@ -119,6 +121,7 @@ export class NeohackWorld extends HTMLElement {
         return replayDocument(response);
       };
       let page=await get(url), offset=0;
+      this.nameOverride = page.nameOverride;
       if(controller.signal.aborted)return;
       this.dispatchEvent(new CustomEvent('replaymetadata',{detail:{id:identity?.id,role:page.role,count:page.count,partial:page.partial,complete:page.complete,summary:page.summary}}));
       if(page.role)this.setAttribute('role',String(page.role));
@@ -191,9 +194,10 @@ export class NeohackWorld extends HTMLElement {
     this.map?.update(o ?? null, heroArt(this.getAttribute('role') ?? 'valkyrie'), this.getAttribute('seed') ?? '0', this.frame);
     this.canvas.setAttribute('aria-label', this.frame?.ended && this.frame.end?.kind === 'death' && o?.you ? 'NetHack world. A tombstone marks your final position.' : 'NetHack world');
     this.status.textContent = this.sourceMessage ?? (o ? `${o.location.depthLabel} · Level ${o.vitals.level ?? '?'} · HP ${o.vitals.health ?? '?'}/${o.vitals.maxHealth ?? '?'} · Turn ${o.turn}` : 'A world, waiting for a story.');
-    this.text.textContent = o ? `${o.heard.join('\n')}\n${JSON.stringify(o, null, 2)}` : 'No observation supplied.';
+    this.text.textContent = displayText(o ? `${o.heard.join('\n')}\n${JSON.stringify(o, null, 2)}` : 'No observation supplied.', this.nameOverride);
   }
   loadReplay(frames: Snapshot[]) {
+    this.nameOverride = undefined;
     void this.inputPlayback?.close();this.inputPlayback=undefined;
     if(!Array.isArray(frames) || frames.length > 100000 || frames.some(f=>!f || typeof f!=='object' || !isSnapshot(f) || !Array.isArray(f.observation.world) || f.observation.world.length>10000)) throw Error('Invalid replay');
     this.root.querySelector<HTMLAnchorElement>('#replay-page')!.href=new URL('/',import.meta.url).href;

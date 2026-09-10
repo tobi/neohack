@@ -64,6 +64,11 @@ build emits `/scrollbars.css` for page shells; shadow-root components embed the
 same style. Do not add per-panel scrollbar skins or JavaScript scrolling widgets.
 Retain the system's scrollbar colors and sizing in forced-colors mode.
 
+Render entered/stored strings using Lit text/property bindings or `textContent`.
+Keep raw strings in protocol/storage; escape at HTML output and validate URL
+schemes separately. See [text rendering review](TEXT_SAFETY.md) for the input
+surfaces and regression coverage. Never interpolate user text into icon markup.
+
 ## Web performance
 
 Design for low CPU use and responsive interaction, including long games and

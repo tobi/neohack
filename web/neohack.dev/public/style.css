@@ -1678,7 +1678,7 @@ pixel-nethack.in-game .rail-game-info { visibility: hidden; }
 .notices:has(#ended:not([hidden]) neohack-world) { top:84px;width:min(880px,calc(100% - 32px));max-height:calc(100% - 100px);pointer-events:auto; }
 
 .adventurer-name-field { display: flex; align-items: stretch; gap: 8px; }
-.adventurer-name-field input { flex: 1; min-width: 0; width: 0; }
+.adventurer-name-field output { flex: 1; min-width: 0; padding: 10px 0; font-size: 20px; color: var(--ink); }
 .adventurer-name-field button { flex: 0 0 48px; min-height: 48px; padding: 8px; font-size: 24px; }
 
 /* Keep the phone's perceived scene clear of the surrounding UI. */

@@ -37,7 +37,7 @@ export async function writeReplayBytes(path:string,bytes:Uint8Array) {
  }
 }
 // A separate PUBLIC store. Never fall back to the private save-store token.
-export function publicReplayStorage(): Storage {
+export function publicReplayStorage(fresh = false): Storage {
  const injected=publicReplayContext.getStore();if(injected)return injected;
  if(!publicReplayConfigured())throw Error('Public replay store is not configured');
  const token=process.env.PUBLIC_REPLAY_BLOB_READ_WRITE_TOKEN!;
@@ -52,6 +52,15 @@ export function publicReplayStorage(): Storage {
   async read(path){
    const decode=async(result:Awaited<ReturnType<typeof get>>)=>{if(!result)return null;if(result.statusCode!==200||!result.stream||!result.blob.etag)throw Error('Cannot read public replay');return {value:await new Response(result.stream).json(),etag:result.blob.etag};};
    const missing=(e:unknown)=>{if(e instanceof BlobNotFoundError)return null;throw e;};
+   // Operator edits need both current bytes and the management API's strong
+   // CAS token; the CDN can return a weak, compressed-representation ETag.
+   if(fresh){
+    const meta=await head(path,{token}).catch(missing);if(!meta?.etag)return null;
+    const url=new URL(meta.url);url.searchParams.set('v',meta.etag.replace(/"/g,''));
+    const doc=await decode(await get(url.href,{access:'public',token}).catch(missing));
+    if(!doc)throw Error('Public object disappeared during read');
+    return {...doc,etag:meta.etag};
+   }
    const cached=await get(path,{access:'public',token,useCache:false}).catch(missing);
    if(cached)return decode(cached);
    const meta=await head(path,{token}).catch(missing);

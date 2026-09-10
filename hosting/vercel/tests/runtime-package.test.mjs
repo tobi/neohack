@@ -53,7 +53,7 @@ test('hosted packages reuse verified compiler bytes and new current preserves bo
   const ready=()=>page.waitForFunction(()=>document.querySelector('pixel-nethack').getAttribute('aria-busy')==='false');
   async function create(){
     await page.getByRole('button',{name:'Begin your adventure',exact:true}).click();
-    await page.getByLabel('YOUR NAME',{exact:true}).fill('Package');
+
     await page.getByRole('button',{name:'Enter the dungeon'}).click();
     await page.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.observation.turn===1);await ready();
   }

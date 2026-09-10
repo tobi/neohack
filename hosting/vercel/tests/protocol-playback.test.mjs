@@ -40,7 +40,7 @@ test(
     await page
       .getByRole("button", { name: "Begin your adventure", exact: true })
       .click();
-    await page.getByLabel("YOUR NAME", { exact: true }).fill("Input Chronicle");
+
     await page.locator("input[name=role][value=valkyrie]").check();
     await page
       .getByText("Choose a world seed (optional)", { exact: true })
@@ -376,9 +376,7 @@ test(
     await page
       .getByRole("button", { name: "Begin your adventure", exact: true })
       .click();
-    await page
-      .getByLabel("YOUR NAME", { exact: true })
-      .fill("Offline Traveler");
+
     await page
       .getByRole("button", { name: "Enter the dungeon →", exact: true })
       .click();

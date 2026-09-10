@@ -9,6 +9,7 @@ import { EditorView, basicSetup } from 'codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import ts from 'typescript';
 import { roles } from './characters';
+import { adventurerName } from './adventurer-names.mjs';
 import { loadRuntime, runtimePackage } from './runtime-loader';
 import { accountApi } from './account-client';
 import { ScriptRecorder } from './script-recording';
@@ -282,10 +283,10 @@ $('test').onclick=()=>void (async()=>{
       }};
     const api=await wasm.createWasm(recordingOptions);
     run.api=api;if(run.cancelled){await api.close();return;}
-    const game=await api.create({...chosen.identity,seed});
+    const name=adventurerName(), game=await api.create({...chosen.identity,seed,name});
     if(run.cancelled){await api.close();return;}
     const world=$('bot-world') as NeohackWorld;world.setAttribute('role',chosen.id);world.setAttribute('seed',String(seed));world.snapshot=game.state;
-    metadata={id:game.id,name:'Workshop',role:chosen.id,seed,buildId:pkg.buildId,control:'bot',automated:true,recording:'inputs',turn:game.observation.turn,ended:false};
+    metadata={id:game.id,name,role:chosen.id,seed,buildId:pkg.buildId,control:'bot',automated:true,recording:'inputs',turn:game.observation.turn,ended:false};
     const remember=(frame:import('neonethack/types').Snapshot)=>{metadata.turn=frame.observation.turn;metadata.ended=frame.ended;metadata.heroLevel=Number(frame.observation.vitals.level)||1;metadata.depthLabel=frame.observation.location.depthLabel;queueCloud([metadata],vault);};
     let ready=false, started=false;
     let calls=0, busy=false, logs=0, halted=false;
@@ -307,7 +308,6 @@ $('test').onclick=()=>void (async()=>{
       if(data.ready) {
         if(ready || typeof data.ready.name !== 'string' || !data.ready.name.trim() || data.ready.name.length>60 || /[\u0000-\u001f\u007f]/.test(data.ready.name)) { void stop('Invalid bot definition.'); return; }
         ready=true;
-        metadata.name=data.ready.name;
         const source={version:1 as const,entrypoint:'main.js' as const,files:sourceFiles,compiledFiles:compiled,compiler:{name:'typescript' as const,version:ts.version},...(data.ready.autoloot===undefined?{}:{autoloot:data.ready.autoloot})};
         try{
           run.recorder=await ScriptRecorder.create({id:game.id,owner:accountId,name:data.ready.name,role:chosen.id,seed,buildId:pkg.buildId,source,storeName,vault},async()=>{

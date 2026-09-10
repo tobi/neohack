@@ -73,7 +73,7 @@ test("a chronicle is generated once per eligible dead hero, cached publicly and 
     calls.push(digest);
     const ids = digest.events.map((e) => e.id), last = ids.at(-1);
     return { raw: JSON.stringify({ title: "The Valkyrie Who Considered Praying", paragraphs: [
-      { text: "Edda Chronicle arrived as a Valkyrie with a little dog and, for a moment, thought about praying.", sources: [ids[0]] },
+      { text: "Alara Ashbrook arrived as a Valkyrie with a little dog and, for a moment, thought about praying.", sources: [ids[0]] },
       { text: "Then she simply ended the attempt.", sources: [last] },
     ] }), usage: { total_tokens: 12 } };
   };
@@ -81,11 +81,11 @@ test("a chronicle is generated once per eligible dead hero, cached publicly and 
   const { url } = await server.listen();
   t.after(() => server.close());
   const id = "chronicleRun0001", other = "chronicleRun0002", living = "chronicleRun0003";
-  const archive = await recordArchive(id, "Edda Chronicle");
-  await seed(store, id, archive, { name: "Edda Chronicle" });
+  const archive = await recordArchive(id, "Alara Ashbrook");
+  await seed(store, id, archive, { name: "Alara Ashbrook" });
   const post = (runs) => fetch(new URL("/api/runs", url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runs }) });
   await post([
-    { id, name: "Edda Chronicle", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: CHRONICLE_MIN_DEPTH, maxLevel: CHRONICLE_MIN_LEVEL, heroLevel: CHRONICLE_MIN_LEVEL },
+    { id, name: "Alara Ashbrook", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: CHRONICLE_MIN_DEPTH, maxLevel: CHRONICLE_MIN_LEVEL, heroLevel: CHRONICLE_MIN_LEVEL },
     { id: other, name: "Shallow", role: "wizard", turn: 40, ended: true, endKind: "death", maxDepth: CHRONICLE_MIN_DEPTH - 1, maxLevel: 5 },
     { id: living, name: "Alive", role: "ranger", turn: 900, ended: false, maxDepth: 9, maxLevel: 9 },
   ]);
@@ -108,7 +108,7 @@ test("a chronicle is generated once per eligible dead hero, cached publicly and 
   const doc = await r.json();
   assert.equal(doc.available, true);
   assert.equal(doc.story.title, "The Valkyrie Who Considered Praying");
-  assert.equal(doc.hero.name, "Edda Chronicle");
+  assert.equal(doc.hero.name, "Alara Ashbrook");
   assert.equal(doc.coverage.complete, true, "the replay reached the recorded ending");
   assert.ok(doc.story.paragraphs[0].segments.some((s) => s.term === "valkyrie"), "witnessed names get glossary segments");
   assert.ok(doc.glossary.valkyrie?.lines.length, "glossary entries come from the pinned encyclopedia");
@@ -161,10 +161,10 @@ test("ledger links lead to each run's page, which shows the tale with anchored e
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM ?? "/usr/bin/chromium", headless: true, chromiumSandbox: true });
   t.after(async () => { await browser.close(); await server.close(); });
   const told = "chronicleRun0006", fresh = "chronicleRun0007";
-  for (const [id, name] of [[told, "Told Already"], [fresh, "Fresh Hero"]]) await seed(store, id, await recordArchive(id, name), { name });
+  for (const [id, name] of [[told, "Bririn Bramble"], [fresh, "Coren Cinder"]]) await seed(store, id, await recordArchive(id, name), { name });
   await fetch(new URL("/api/runs", url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runs: [
-    { id: told, name: "Told Already", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 5, maxLevel: 4 },
-    { id: fresh, name: "Fresh Hero", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 3, maxLevel: 2 },
+    { id: told, name: "Bririn Bramble", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 5, maxLevel: 4 },
+    { id: fresh, name: "Coren Cinder", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 3, maxLevel: 2 },
   ] }) });
   await fetch(new URL("/api/runs/" + told + "/chronicle", url), { method: "POST" });
   assert.equal(calls.length, 1);
@@ -173,15 +173,15 @@ test("ledger links lead to each run's page, which shows the tale with anchored e
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(new URL("/dashboard", url).href);
   await page.waitForSelector("#runs tr");
-  const toldRow = page.locator("#runs tr", { hasText: "Told Already" }), freshRow = page.locator("#runs tr", { hasText: "Fresh Hero" });
+  const toldRow = page.locator("#runs tr", { hasText: "Bririn Bramble" }), freshRow = page.locator("#runs tr", { hasText: "Coren Cinder" });
   // Ledger rows link to each run's own page; the scroll icon deep-links to its story.
-  assert.equal(await toldRow.getByRole("link", { name: "Show replay for Told Already" }).getAttribute("href"), new URL("/replays/" + told, url).href);
+  assert.equal(await toldRow.getByRole("link", { name: "Show replay for Bririn Bramble" }).getAttribute("href"), new URL("/replays/" + told, url).href);
   assert.equal(await freshRow.locator(".run-chronicle").count(), 0, "no icon before a tale exists");
-  assert.equal(await toldRow.getByRole("link", { name: "Read the chronicle of Told Already" }).getAttribute("href"), new URL("/replays/" + told + "?view=chronicle", url).href);
-  await toldRow.getByRole("link", { name: "Read the chronicle of Told Already" }).click();
+  assert.equal(await toldRow.getByRole("link", { name: "Read the chronicle of Bririn Bramble" }).getAttribute("href"), new URL("/replays/" + told + "?view=chronicle", url).href);
+  await toldRow.getByRole("link", { name: "Read the chronicle of Bririn Bramble" }).click();
   await page.waitForURL((u) => u.pathname === "/replays/" + told && u.searchParams.get("view") === "chronicle");
   await page.waitForSelector("#chronicle-section:not([hidden]) .chronicle:not(.chronicle-draft)");
-  assert.equal(await page.locator("#chronicle-section .chronicle-title").textContent(), "Tale Told Already");
+  assert.equal(await page.locator("#chronicle-section .chronicle-title").textContent(), "Tale Bririn Bramble");
   const term = page.locator("#chronicle-section .lore-link", { hasText: "Valkyrie" });
   assert.ok(await term.count(), "witnessed names are dotted lookups");
   await term.first().click();
@@ -197,43 +197,43 @@ test("ledger links lead to each run's page, which shows the tale with anchored e
   // is offered and streams in as it is written.
   await page.goto(new URL("/dashboard", url).href);
   await page.waitForSelector("#runs tr");
-  await freshRow.getByRole("link", { name: "Show replay for Fresh Hero" }).click();
+  await freshRow.getByRole("link", { name: "Show replay for Coren Cinder" }).click();
   await page.waitForURL((u) => u.pathname === "/replays/" + fresh);
   await page.waitForSelector("#chronicle-section:not([hidden]) #tell-tale:not([hidden])");
   await page.locator("#chronicle-section #tell-tale").click();
   await page.waitForSelector("#chronicle-section .chronicle-draft", { timeout: 60000 });
   await page.waitForSelector("#chronicle-section .chronicle-draft .chronicle-paragraph", { timeout: 60000 });
   const draft = await page.locator("#chronicle-section .chronicle-draft").textContent();
-  assert.match(draft, /Tale Fresh Hero.*Fresh Hero was a Valkyrie with a/s, "the title and first words appear while the chronicler is still writing");
+  assert.match(draft, /Tale Coren Cinder.*Coren Cinder was a Valkyrie with a/s, "the title and first words appear while the chronicler is still writing");
   assert.ok(!/\[T\d/.test(draft), "citations never show in the draft");
   assert.ok(await page.locator("#chronicle-section .chronicle-writing").count(), "the open paragraph shows a writing mark");
   assert.equal(await page.evaluate(() => new URL(location.href).searchParams.get("view")), "chronicle", "telling the tale claims the story route");
   release();
   await page.waitForSelector("#chronicle-section .chronicle:not(.chronicle-draft)", { timeout: 60000 });
   assert.equal(calls.length, 2, "the page asked the chronicler once");
-  assert.equal(await page.locator("#chronicle-section .chronicle-title").textContent(), "Tale Fresh Hero");
+  assert.equal(await page.locator("#chronicle-section .chronicle-title").textContent(), "Tale Coren Cinder");
   await page.goto(new URL("/dashboard", url).href);
   await page.waitForSelector("#runs tr");
-  await freshRow.getByRole("link", { name: "Read the chronicle of Fresh Hero" }).waitFor();
+  await freshRow.getByRole("link", { name: "Read the chronicle of Coren Cinder" }).waitFor();
 
   // Older shared ledger links land on the run's page with the story open.
   await page.goto(new URL("/dashboard?run=" + told + "&view=chronicle", url).href);
   await page.waitForURL((u) => u.pathname === "/replays/" + told && u.searchParams.get("view") === "chronicle");
   await page.waitForSelector("#chronicle-section .chronicle:not(.chronicle-draft)");
-  assert.equal(await page.locator("#chronicle-section .chronicle-title").textContent(), "Tale Told Already");
+  assert.equal(await page.locator("#chronicle-section .chronicle-title").textContent(), "Tale Bririn Bramble");
   await page.goto(new URL("/dashboard?run=" + told, url).href);
   await page.waitForURL((u) => u.pathname === "/replays/" + told && !u.searchParams.has("view"));
   assert.equal(calls.length, 2, "views never regenerate");
 
   // The replay page leads with the chronicle and can tell a new one inline.
   const third = "chronicleRun0008";
-  await seed(store, third, await recordArchive(third, "Page Hero"), { name: "Page Hero" });
+  await seed(store, third, await recordArchive(third, "Elen Fairwind"), { name: "Elen Fairwind" });
   await fetch(new URL("/api/runs", url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runs: [
-    { id: third, name: "Page Hero", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 3, maxLevel: 2 },
+    { id: third, name: "Elen Fairwind", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 3, maxLevel: 2 },
   ] }) });
   await page.goto(new URL("/replays/" + told, url).href);
   await page.waitForSelector("#chronicle-section:not([hidden]) .chronicle:not(.chronicle-draft)");
-  assert.equal(await page.locator("#chronicle-section .chronicle-title").textContent(), "Tale Told Already");
+  assert.equal(await page.locator("#chronicle-section .chronicle-title").textContent(), "Tale Bririn Bramble");
   assert.ok(await page.locator("#chronicle-section #tell-tale").isHidden(), "an existing tale is shown, not offered again");
   assert.equal(await page.evaluate(() => new URL(location.href).searchParams.get("view")), "chronicle", "the story is the page's route");
   assert.ok((await page.evaluate(() => document.querySelector("#chronicle-section").getBoundingClientRect().top < document.querySelector("#replay").getBoundingClientRect().top)), "the story sits above the player");
@@ -244,7 +244,7 @@ test("ledger links lead to each run's page, which shows the tale with anchored e
   await page.waitForSelector("#chronicle-section .chronicle-draft");
   await page.waitForSelector("#chronicle-section .chronicle:not(.chronicle-draft)", { timeout: 60000 });
   assert.equal(calls.length, 3, "the replay page asked the chronicler once");
-  assert.equal(await page.locator("#chronicle-section .chronicle-title").textContent(), "Tale Page Hero");
+  assert.equal(await page.locator("#chronicle-section .chronicle-title").textContent(), "Tale Elen Fairwind");
   await page.goto(new URL("/replays/" + third + "?view=chronicle", url).href);
   await page.waitForSelector("#chronicle-section .chronicle:not(.chronicle-draft)");
   assert.equal(calls.length, 3, "the shared story link reads the stored tale");
@@ -314,10 +314,10 @@ test("a watcher receives replay progress, the story as it is written and the sto
   const { url } = await server.listen();
   t.after(() => server.close());
   const watched = "chronicleRun0010", abandoned = "chronicleRun0011";
-  for (const [id, name] of [[watched, "Watched"], [abandoned, "Abandoned"]]) await seed(store, id, await recordArchive(id, name), { name });
+  for (const [id, name] of [[watched, "Fenric Fernwood"], [abandoned, "Isara Flint"]]) await seed(store, id, await recordArchive(id, name), { name });
   await fetch(new URL("/api/runs", url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runs: [
-    { id: watched, name: "Watched", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 4, maxLevel: 3 },
-    { id: abandoned, name: "Abandoned", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 4, maxLevel: 3 },
+    { id: watched, name: "Fenric Fernwood", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 4, maxLevel: 3 },
+    { id: abandoned, name: "Isara Flint", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 4, maxLevel: 3 },
   ] }) });
   const post = (id) => fetch(new URL("/api/runs/" + id + "/chronicle", url), { method: "POST", headers: { accept: "application/x-ndjson" } });
 
@@ -337,10 +337,10 @@ test("a watcher receives replay progress, the story as it is written and the sto
   assert.equal(replays.at(-1).done, replays.at(-1).total, "progress reaches the end of the archive");
   assert.ok(replays.at(-1).total >= 5);
   const text = events.filter((e) => e.delta !== undefined).map((e) => e.delta).join("");
-  assert.ok(text.startsWith("# Streamed Watched"), "deltas are the model's markdown, in order");
+  assert.ok(text.startsWith("# Streamed Fenric Fernwood"), "deltas are the model's markdown, in order");
   const final = events.at(-1);
   assert.equal(final.available, true);
-  assert.equal(final.story.title, "Streamed Watched");
+  assert.equal(final.story.title, "Streamed Fenric Fernwood");
   assert.deepEqual(final.story.paragraphs.map((p) => p.sources.length), [1, 1]);
   assert.ok(final.story.paragraphs.every((p) => !/\[T\d/.test(p.text)), "citations are parsed out of the prose");
   assert.equal(calls.length, 1);
@@ -351,7 +351,7 @@ test("a watcher receives replay progress, the story as it is written and the sto
   for (let i = 0; i < 100 && !publicStoreFor(store).docs.has("chronicles/" + abandoned + "/story.json"); i++) await new Promise((res) => setTimeout(res, 50));
   const stored = publicStoreFor(store).docs.get("chronicles/" + abandoned + "/story.json");
   assert.ok(stored, "the job finished and stored the tale without its reader");
-  assert.equal(stored.value.story.title, "Streamed Abandoned");
+  assert.equal(stored.value.story.title, "Streamed Isara Flint");
   assert.equal(calls.length, 2, "no second model call for the abandoned reader");
   r = await fetch(new URL("/api/runs/" + abandoned + "/chronicle", url));
   assert.equal(r.status, 200);
@@ -363,4 +363,26 @@ test("a watcher receives replay progress, the story as it is written and the sto
   const timings=info.mock.calls.map(c=>JSON.parse(c.arguments[0])).filter(x=>x.event==='chronicle_timing');
   assert.equal(timings.length,2);
   assert.ok(timings.every(x=>x.outcome==='completed'&&x.modelFirstTextMs>0&&x.modelFirstTextMs<x.modelMs));
+});
+
+test('renamed public replay renders the correction while exact WASM snapshots and input bytes remain original',async t=>{
+ const {chromium}=await import('../../../web/neohack.dev/node_modules/playwright-core/index.mjs');
+ const {renamePublicRun}=await import('../src/run-name-maintenance.ts');
+ const store=new MemoryStorage(),id='chronicleRun0099',original='Alara Ashbrook';
+ const server=createTestHarness({store}),{url}=await server.listen();t.after(()=>server.close());
+ const archive=await recordArchive(id,original);await seed(store,id,archive,{name:original});
+ await fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({runs:[{id,name:original,role:'valkyrie',turn:1,ended:true,endKind:'quit'}]})});
+ await storageContext.run(store,()=>publicReplayContext.run(publicStoreFor(store),()=>renamePublicRun(id,original,'Nick Johnson')));
+ const bytes=(await publicStoreFor(store).read('replays/'+id+'/'+archive.chunk.path)).value;assert.deepEqual(Buffer.from(bytes),archive.bytes);
+ const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());
+ const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(String(e)));
+ await page.goto(new URL('/replays/'+id,url).href);await page.waitForFunction(()=>!!document.querySelector('#replay').snapshot);
+ const before=await page.evaluate(()=>document.querySelector('#replay').snapshot);
+ assert.ok(JSON.stringify(before).includes(original),'original verified receipt still carries the engine name');
+ const display=await page.locator('#replay pre').textContent();assert.ok(display.includes('Nick Johnson'));assert.ok(!display.includes(original));
+ await page.evaluate(()=>document.querySelector('#replay').seek(4));
+ assert.equal(await page.evaluate(()=>document.querySelector('#replay').snapshot.ended),true);
+ await page.evaluate(()=>document.querySelector('#replay').seek(0));
+ assert.deepEqual(await page.evaluate(()=>document.querySelector('#replay').snapshot),before,'seeking preserves the exact original snapshot');
+ assert.deepEqual(errors,[]);
 });

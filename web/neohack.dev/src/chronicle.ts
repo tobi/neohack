@@ -277,10 +277,12 @@ export function chronicleView(doc: ChronicleDocument, options: { replayHref?: st
   const about = document.createElement("p");
   about.textContent = `An AI retelling (${doc.model}) of the recorded journey, written once from ${doc.coverage?.selectedEvents ?? "the"} witnessed moments${doc.coverage?.complete === false ? "; the recording is incomplete" : ""}. It is a story, not the journal.`;
   footer.append(about);
-  if (options.replayHref) {
+  let replayUrl: URL | undefined;
+  try { if(options.replayHref) replayUrl = new URL(options.replayHref, location.href); } catch { /* No invalid link. */ }
+  if (replayUrl && ['http:', 'https:'].includes(replayUrl.protocol) && !replayUrl.username && !replayUrl.password) {
     const p = document.createElement("p");
     const a = document.createElement("a");
-    a.href = options.replayHref;
+    a.href = replayUrl.href;
     a.textContent = "Watch the replay ↗";
     a.target = "_blank";
     a.rel = "noopener";

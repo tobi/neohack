@@ -22,7 +22,7 @@ test('real cloud run reconstructs public scenes, embeds after death and forwards
   await page.goto(String(url));
   await page.waitForFunction(()=>!document.querySelector('#new-adventure').disabled);
   await page.getByRole('button',{name:'Begin your adventure',exact:true}).click();
-  await page.getByLabel('YOUR NAME',{exact:true}).fill('Replay Ada');
+
   await page.locator('input[name=role][value=valkyrie]').check();
   await page.getByText('Choose a world seed (optional)',{exact:true}).click();
   await page.getByLabel('A number for a repeatable starting world').fill('9');

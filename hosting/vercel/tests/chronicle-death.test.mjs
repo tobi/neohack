@@ -11,7 +11,7 @@ async function chokeToDeath(page, seed) {
   await page.goto(page.url());
   await page.waitForFunction(() => !document.querySelector("#new-adventure").disabled);
   await page.getByRole("button", { name: "Begin your adventure", exact: true }).click();
-  await page.getByLabel("YOUR NAME", { exact: true }).fill("Glutton Chronicle");
+
   await page.locator("input[name=role][value=tourist]").check();
   await page.getByText("Choose a world seed (optional)", { exact: true }).click();
   await page.getByLabel("A number for a repeatable starting world").fill(String(seed));
@@ -86,7 +86,7 @@ test("a shallow death offers no tale", { timeout: 180000 }, async (t) => {
   await page.goto(url.href);
   await page.waitForFunction(() => !document.querySelector("#new-adventure").disabled);
   await page.getByRole("button", { name: "Begin your adventure", exact: true }).click();
-  await page.getByLabel("YOUR NAME", { exact: true }).fill("Shallow");
+
   await page.locator("input[name=role][value=tourist]").check();
   await page.getByText("Choose a world seed (optional)", { exact: true }).click();
   await page.getByLabel("A number for a repeatable starting world").fill("4386");

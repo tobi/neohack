@@ -25,6 +25,7 @@ import { ledgerRun, markChronicled } from "./ledger-store.ts";
 import { manifestUrl, publishManifest } from "./protocol-replays.ts";
 import { failureKind } from "./observability.ts";
 import type { Run } from "./board.ts";
+import { displayDocument } from '../.generated/public-names.mjs';
 import { ChronicleDigest, type Digest } from "../.generated/chronicle/examples/chronicle/digest.mjs";
 import { collectReplay, type ReplayTiming } from "../.generated/chronicle/examples/chronicle/replay.mjs";
 import { buildGlossary } from "../.generated/chronicle/examples/chronicle/lore.mjs";
@@ -108,7 +109,7 @@ async function generate(request: Request, id: string, run: Run, progress: Progre
   const collector = new ChronicleDigest({ name: run.name, role: run.role });
   let glossary: Glossary = {};
   let last = 0;
-  const digest = await collectReplay(source, collector, {
+  const digest = displayDocument(await collectReplay(source, collector, {
     runtime: localRuntime,
     runtimeOrigin: new URL("/", request.url).href,
     maxInputs: MAX_REPLAY_INPUTS,
@@ -123,7 +124,7 @@ async function generate(request: Request, id: string, run: Run, progress: Progre
     lookup: async (lookup) => {
       glossary = await buildGlossary(lookup, collector.finish());
     },
-  });
+  }), run.nameOverride);
   progress.stage = "model";
   progress.watch({ status: "writing" });
   const modelStarted = performance.now();
@@ -153,7 +154,10 @@ export async function chronicle(request: Request, id: string) {
   if (!publicReplayConfigured()) return json({ error: "Public replay store is not configured" }, 503);
   const store = publicReplayStorage();
   const existing = await store.read(storyPath(id));
-  if (existing) return json({ available: true, ...existing.value }, 200, "public, max-age=300");
+  if (existing) {
+    const run = await ledgerRun(id);
+    return json({ available: true, ...displayDocument(existing.value, run?.nameOverride) }, 200, "public, max-age=300");
+  }
   const run = await ledgerRun(id),
     eligibility = chronicleEligibility(run);
   if (request.method === "GET")

@@ -18,7 +18,7 @@ async function create(page, url) {
   await page.goto(url);
   await page.waitForFunction(() => !document.querySelector('#new-adventure').disabled);
   await page.getByRole('button', { name: 'Begin your adventure', exact: true }).click();
-  await page.getByLabel('YOUR NAME', { exact: true }).fill('Bookmark');
+
   await page.locator('input[name=role][value=valkyrie]').check();
   // A repeatable start where Search can legitimately refuse a spotted monster.
   // Storage tests use Wait below: their input must actually spend a turn.
@@ -177,7 +177,7 @@ test('ledger ranks all runs, preserves progress, keeps diagnostics private and r
   await page.goto(url+'/dashboard');
   assert.equal(new URL(page.url()).pathname, '/dashboard');
   await page.waitForFunction(()=>document.querySelector('#runs').children.length===100);
-  assert.ok((await page.locator('#runs tr').first().textContent()).includes(winner.name));
+  assert.ok((await page.locator('#runs tr').first().textContent()).includes(stats.best[0].name));
   assert.equal(await page.locator('#runs img').count(),0);
   assert.equal(await page.locator('#errors, #dungeon-health, #error-summary').count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);

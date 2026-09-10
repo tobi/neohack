@@ -216,3 +216,11 @@ revocable private link. Failed publication retains the private recording and its
 reserved public ID; Update public replay retries without creating another copy.
 Later private recording commits survive public delivery failures and show the
 last published frame count until publication catches up.
+
+## Public name corrections
+
+A replay manifest can carry an operator-owned `nameOverride` with its original
+and display name. The component applies it to visible transcript text. Its
+`snapshot` property, frame events, replay input records and exact receipt hashes
+remain unchanged; a display correction never changes verified engine history.
+Loading a different source clears the correction.

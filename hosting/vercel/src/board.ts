@@ -5,6 +5,7 @@ import {
   saveLedgerRun,
 } from "./ledger-store.ts";
 import { attributionName } from './run-attribution.ts';
+import { publicName } from '../.generated/adventurer-names.mjs';
 
 const RUN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const CONTROLS = new Set(["manual", "webmcp", "bot", "script", "playground"]);
@@ -12,6 +13,8 @@ const CONTROLS = new Set(["manual", "webmcp", "bot", "script", "playground"]);
 export type Run = {
   id: string;
   name: string;
+  /** Operator-owned presentation correction; never accepted from uploads. */
+  nameOverride?: { original: string; name: string };
   role: string;
   actualClass?: string;
   randomClass?: boolean;
@@ -67,7 +70,7 @@ export function sanitizeRun(
   const control = str(raw.control, 16);
   return {
     id: raw.id,
-    name: str(raw.name, 64) ?? "Adventurer",
+    name: publicName(raw.id, raw.name),
     role: str(raw.role, 32) ?? "valkyrie",
     actualClass: str(raw.actualClass, 32) ?? str(raw.role, 32),
     randomClass: flag(raw.randomClass),
