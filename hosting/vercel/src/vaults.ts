@@ -1,4 +1,5 @@
 import { read, update, immutable } from "./storage.ts";
+import { preserveAttribution } from './run-attribution.ts';
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HASH = /^[a-f0-9]{64}$/;
@@ -84,11 +85,8 @@ if(query.get('manifest')==='1')return json({version:1,revision:doc.revision,file
         for(const value of data) {
           if(!value || typeof value.id!=="string")continue;
           const old:any=values.get(value.id);
-          if(!old || ((!old.ended || value.ended) && (value.turn??0)>=(old.turn??0))) {
-            // A former owner's manual snapshot must not erase WebMCP use.
-            values.set(value.id,old?.control==='webmcp' && value.control==='manual'
-              ? {...value,control:'webmcp',automated:true} : value);
-          }
+          const newer = !old || ((!old.ended || value.ended) && (value.turn??0)>=(old.turn??0));
+          values.set(value.id, preserveAttribution(old, value, newer));
         }
         doc.values=[...values.values()];
       },

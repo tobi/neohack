@@ -237,7 +237,7 @@ nnh_status nnh_session_create(nnh_context *x, const nnh_identity *i, nnh_result 
     mj_Buf b; start(&b, "session.create", NULL, NULL);
     if (i) {
 #define ID(name) if (i->name) { mj_key(&b, #name); mj_strv(&b, i->name); }
-        ID(name) ID(role) ID(race) ID(gender) ID(align)
+        ID(name) ID(role) ID(race) ID(gender) ID(align) ID(harness_name) ID(model_name)
 #undef ID
         if (i->has_seed) { mj_key(&b, "seed"); mj_intv(&b, i->seed); }
         if (i->automatic_pickup) put_pickup(&b, i->automatic_pickup);

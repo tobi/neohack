@@ -34,3 +34,6 @@ button:focus-visible,select:focus-visible,summary:focus-visible,a:focus-visible{
 .run-chronicle svg { width: 20px; height: 20px; }
 .run-chronicle:hover, .run-chronicle:focus-visible { color: #e9cd8e; border-color: #8a9a7a; }
 @media (max-width: 700px) { .run-chronicle { width: 44px; min-height: 44px; } }
+/* Claimed harness/model labels are plain native tooltips, never markup. */
+.webmcp-badge { display:inline-flex; vertical-align:middle; margin-inline-start:6px; color:var(--sage, #b7c895); cursor:help; }
+.webmcp-badge:focus-visible { outline:1px solid currentColor; outline-offset:3px; }

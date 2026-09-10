@@ -16,6 +16,14 @@ function renderRuns() {
   const runs=candidates.filter(run=>filter==="all" || filter==="recorded" || filter==="living" && !run.ended || filter==="ended" && run.ended || filter==="ascended" && run.endKind==="ascended");
   $("#runs").replaceChildren(...runs.map(run=>{
     const row=document.createElement("tr"), name=element("td",run.name);
+    if (run.webmcpAutomated === true || run.control === 'webmcp') {
+      const badge = element('span', '');
+      badge.className = 'webmcp-badge';
+      const label = ['WebMCP automated', run.harness_name && 'Harness: '+run.harness_name, run.model_name && 'Model: '+run.model_name].filter(Boolean).join(' · ');
+      badge.title = label; badge.setAttribute('aria-label', label); badge.tabIndex = 0;
+      badge.innerHTML = '<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M9 2h2v3h5v3h2v7h-2v3H4v-3H2V8h2V5h5zm-3 5v9h8V7zm1 2h2v3H7zm4 0h2v3h-2zm-4 5h6v1H7z" fill="currentColor"/></svg>';
+      name.append(badge);
+    }
     name.append(element("small",run.role));row.append(name);
     for(const value of [run.maxLevel || "—",format(run.turn),run.depthLabel || "—",run.ended ? run.endKind || "Ended" : "Adventuring"]) row.append(element("td",value));
     const playback=element('td','');playback.className='replay-cell';

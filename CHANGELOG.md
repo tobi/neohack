@@ -8,6 +8,12 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- WebMCP runs retain their automation flag and optional harness/model names across
+  reloads and control handoffs. The ledger badge shows that attribution.
+- Agent actions play back at a readable pace while execution works ahead. Long
+  queues accelerate; Go live catches up without taking a game turn. Human input
+  catches up before selecting a target or answering a question.
+
 - Nearby actions (stairs, containers, doors) sit above Search and always show
   their hotkeys. Open container and Open door glow like a hungry Eat cue.
 - `go`/`explore`/`descend` now say why there is no known path: occupied, unknown,

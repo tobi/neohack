@@ -42,6 +42,8 @@ function add(name: string, description: string, schema: Schema, tool: string, ex
 add("protocol.describe", "Read the protocol version, method schemas and backend guarantees. Does not start an engine or open a session.", object({}), "", { readOnly: true, idempotent: true });
 add("session.create", "Create a game; omitted fields are generated compatibly by the engine. Retain sessionId. Creation has no retry ID: do not resubmit after an uncertain reply. A seed alone is not a full world identity.", object({
   name: text(31), seed: integer(-Number.MAX_SAFE_INTEGER),
+  harness_name: { ...text(120), description: 'Optional caller-supplied harness label for run attribution; no effect on game rules.' },
+  model_name: { ...text(120), description: 'Optional caller-supplied model label for run attribution; not a verified model identity.' },
   role: enumeration("archeologist", "barbarian", "caveman", "healer", "knight", "monk", "priest", "rogue", "ranger", "samurai", "tourist", "valkyrie", "wizard"),
   race: enumeration("human", "elf", "dwarf", "gnome", "orc"), gender: enumeration("male", "female"), align: enumeration("lawful", "neutral", "chaotic"),
   automaticPickup,

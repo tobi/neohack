@@ -45,6 +45,7 @@ typedef struct {
     int has_seed;
     int64_t seed;
     const nnh_automatic_pickup *automatic_pickup; /* NULL: off, gold + arrow filters */
+    const char *harness_name, *model_name; /* optional caller attribution, no world effect */
 } nnh_identity;
 
 typedef enum {

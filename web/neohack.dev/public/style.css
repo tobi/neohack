@@ -1929,3 +1929,5 @@ pixel-nethack.in-game .rail-game-info { visibility: hidden; }
 #recent-messages[hidden] { display:none; }
 #recent-messages p:only-child { opacity:1; }
 .action-grid kbd, .side-nav kbd { display:inline; }
+#watch-live { font:inherit; font-size:11px; min-height:24px; padding:2px 6px; color:var(--sage, #b7c895); white-space:nowrap; }
+@media (pointer:coarse) { #watch-live { min-height:44px; } }

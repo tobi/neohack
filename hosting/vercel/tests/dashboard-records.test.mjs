@@ -142,3 +142,17 @@ test('empty, unknown and coincident chart values stay usable; replay needs an ex
  await page.waitForFunction(()=>document.querySelector('#selected-run strong')?.textContent==='B');
  assert.deepEqual(selected,['same2']);assert.deepEqual(errors,[]);
 });
+
+test('ledger WebMCP badge exposes escaped harness and model attribution',async t=>{
+ const store=new MemoryStorage();
+ const entry=run('attributed',{name:'Agent hero',webmcpAutomated:true,automated:true,control:'script',harness_name:'Pi <browser>',model_name:'Muse & Spark'});
+ await store.write('board/index.json',{runs:[entry],errors:[]});
+ const server=createTestHarness({store}),{url}=await server.listen();t.after(()=>server.close());
+ const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());
+ const page=await browser.newPage();await page.goto(new URL('/dashboard',url).href);
+ const badge=page.locator('#runs .webmcp-badge');await badge.waitFor();
+ assert.equal(await badge.getAttribute('title'),'WebMCP automated · Harness: Pi <browser> · Model: Muse & Spark');
+ assert.equal(await badge.getAttribute('aria-label'),await badge.getAttribute('title'));
+ assert.equal(await badge.locator('browser').count(),0);await badge.focus();assert.equal(await badge.evaluate(e=>document.activeElement===e),true);
+ await page.screenshot({path:resolve(import.meta.dirname,'../../../web/neohack.dev/test-results/webmcp-badge.png')});
+});

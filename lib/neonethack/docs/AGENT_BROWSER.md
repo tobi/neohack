@@ -38,7 +38,7 @@ only the identity fields you want to choose.
 ```sh
 PLAY_DIR=$(mktemp -d)
 agent-browser --json webmcp invoke create \
-  --params '{"seed":42,"role":"valkyrie"}' > "$PLAY_DIR/create.json"
+  --params '{"seed":42,"role":"valkyrie","harness_name":"agent-browser"}' > "$PLAY_DIR/create.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/create.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/create.json" > "$PLAY_DIR/frame.json"
 GAME_ID=$(jq -er '.sessionId' "$PLAY_DIR/frame.json")

@@ -47,6 +47,9 @@ export type CloudAdventure = {
   score?: number;
   control?: PlayControl;
   automated?: boolean;
+  webmcpAutomated?: boolean;
+  harness_name?: string;
+  model_name?: string;
 };
 
 export function playerId() {

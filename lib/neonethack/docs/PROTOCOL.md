@@ -20,6 +20,11 @@ The exact supported methods and their descriptions are in
 These artifacts and C validation data are generated together by
 `node scripts/generate.ts`; CI must reject stale generated files.
 
+Optional `harness_name` and `model_name` creation labels (up to 120 UTF-8 bytes)
+carry caller-supplied run attribution. They do not affect the world, identify an
+authenticated model, or become perceived game facts. Browser adventure metadata
+and input recordings retain them; the WebMCP `create` tool exposes the same fields.
+
 `session.create` accepts `{}`: C selects a random seed and generates a hero name,
 and the engine selects a compatible role, race, gender and alignment. Supplied
 fields remain explicit choices. An omitted name is derived from the seed using

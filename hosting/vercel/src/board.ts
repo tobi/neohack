@@ -4,6 +4,7 @@ import {
   ledgerRuns,
   saveLedgerRun,
 } from "./ledger-store.ts";
+import { attributionName } from './run-attribution.ts';
 
 const RUN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const CONTROLS = new Set(["manual", "webmcp", "bot", "script", "playground"]);
@@ -30,6 +31,9 @@ export type Run = {
   score?: number;
   control?: string;
   automated?: boolean;
+  webmcpAutomated?: boolean;
+  harness_name?: string;
+  model_name?: string;
   buildId?: string;
   updatedAt: number;
 };
@@ -83,7 +87,10 @@ export function sanitizeRun(
     score: num(raw.score),
     control: control && CONTROLS.has(control) ? control : undefined,
     automated:
-      flag(raw.automated) ?? (control ? control !== "manual" : undefined),
+      raw.webmcpAutomated === true || control === 'webmcp' ? true : flag(raw.automated) ?? (control ? control !== "manual" : undefined),
+    webmcpAutomated: raw.webmcpAutomated === true || control === 'webmcp' || undefined,
+    harness_name: attributionName(raw.harness_name),
+    model_name: attributionName(raw.model_name),
     buildId: str(raw.buildId, 64),
     updatedAt: now,
   };

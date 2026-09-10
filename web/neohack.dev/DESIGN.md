@@ -502,8 +502,28 @@ available, using the same names, descriptions and JSON schemas as stdio MCP. Sha
 tool definitions so future catalog additions cannot drift. MCP/WebMCP expose the navigation agent vocabulary; the adapter owns operation
 IDs, observed revisions and response reconstruction. Explicit short run tokens,
 perceived targets and deliberate decision answers pass through the public
-persistent WASM transport. Synchronize the visible game after agent actions;
-serialize access with human input, retain uncertain requests, and retain current-runtime integrity checks. Never auto-answer warnings or repeat uncertain input with a new ID.
+persistent WASM transport. Keep the durable live state authoritative while a
+presentation-only queue shows completed agent actions in order at about 180 ms
+per action. Above 30 waiting actions, accelerate movement and playback together;
+cap the queue at 120 snapshots, applying producer backpressure only at that cap.
+Do not invent intermediate positions for counted commands, teleports or level
+changes. Reduced motion and hidden pages settle immediately, retaining journal
+receipts. A small “actions ahead · Go live” control catches up without game input.
+The first pointer or keyboard action while behind only catches up; it never
+targets an old tile or answers a newly arrived question. Show map, stats and journal from
+the same displayed snapshot. Present interactive decisions and item controls only
+at the current live boundary. `snapshot` remains live; `displaySnapshot` describes
+the view. Serialize engine access with human input, retain uncertain requests,
+and retain current-runtime integrity checks. Never auto-answer warnings or repeat
+uncertain input with a new ID.
+
+WebMCP creation and control set a permanent `webmcpAutomated` run-metadata flag.
+Human takeover or later script control never clears that provenance. The `create`
+tool accepts optional `harness_name` and `model_name` labels (at most 120 UTF-8 bytes),
+stored with the local adventure and cloud directory/ledger. They are self-reported
+attribution, not authenticated model identity or engine facts. The ledger shows
+a small WebMCP badge with those labels in its accessible name and tooltip. Delayed
+metadata may enrich attribution but cannot roll back run progress or erase labels.
 Unsupported browsers keep the human game fully functional; do not claim a JavaScript
 shim is native WebMCP. Document capability detection and test the browser registration
 contract plus actual engine calls.

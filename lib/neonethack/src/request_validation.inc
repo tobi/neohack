@@ -143,7 +143,7 @@ validate_request(const char *args, const char *tool, const char **why)
     static const char *const route[] = { "tool", "sessionId", "expectedRevision", "to", NULL };
     static const char *const actions[] = { "tool", "sessionId", "expectedRevision", "target", NULL };
     static const char *const common[] = { "tool", "sessionId", "requestId", NULL };
-    static const char *const create[] = { "tool", "sessionId", "requestId", "seed", "name", "role", "race", "gender", "align", "automaticPickup", NULL };
+    static const char *const create[] = { "tool", "sessionId", "requestId", "seed", "name", "role", "race", "gender", "align", "automaticPickup", "harness_name", "model_name", NULL };
     static const char *const act[] = { "tool", "sessionId", "requestId", "expectedRevision", "action", "turns", "direction", "target", "item", "replyTo", "confirm", "choose", "text", "position", "cancel", "automaticPickup", "slot", "mode", "noPickup", NULL };
     static const char *const answer[] = { "item", "target", "confirm", "choose", "text", "position", "cancel", NULL };
     const char *const *fields;
@@ -167,7 +167,11 @@ validate_request(const char *args, const char *tool, const char **why)
     if (!strcmp(tool,"lookup") && (!mj_find(args,"name",&v) || !request_string(v,1,255,NULL)))
         REQUEST_BAD("invalidArgument", "lookup needs a name of 1..255 bytes without control characters");
     if (is_create) {
+        static const char *const attribution[] = { "harness_name", "model_name", NULL };
         static const char *const identity[] = { "name", "role", "race", "gender", "align", NULL };
+        for (i = 0; attribution[i]; i++)
+            if (mj_find(args, attribution[i], &v) && !request_string(v, 1, 120, NULL))
+                REQUEST_BAD("badIdentity", "attribution labels must be strings of 1..120 bytes without control characters");
         for (i = 0; identity[i]; i++)
             if (mj_find(args, identity[i], &v) && !request_string(v, 1, 31, NULL))
                 REQUEST_BAD("badIdentity", "identity fields must be named strings of 1..31 bytes without control characters");

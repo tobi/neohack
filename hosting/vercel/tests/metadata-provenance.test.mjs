@@ -18,7 +18,7 @@ test('directory and ledger retain WebMCP use across delayed manual metadata with
   };
   const read=async()=>({directory:(await(await fetch(endpoint)).json())[0],ledger:await(await fetch(new URL('/api/runs/'+id,url))).json()});
   await publish(base);assert.equal((await read()).ledger.control,'manual');
-  const agent={...base,control:'webmcp',automated:true};await publish(agent);
+  const agent={...base,control:'webmcp',automated:true,webmcpAutomated:true,harness_name:'Pi',model_name:'Muse Spark'};await publish(agent);
   const before=await read();assert.equal(before.directory.control,'webmcp');assert.equal(before.ledger.control,'webmcp');
   // The old snapshot was captured before the new owner published its same-turn update.
   await publish(base);const after=await read();
@@ -83,4 +83,26 @@ test('equal-timestamp delayed indexing agrees with the authoritative WebMCP reco
    assert.equal(run.id,id);assert.equal(run.turn,7);assert.equal(run.buildId,'a'.repeat(64));
   }
  }finally{release();await old;await server.close()}
+});
+
+test('late attribution enriches directory, ledger and summaries without rolling progress back', async () => {
+ const server=createTestHarness(),{url}=await server.listen();
+ try {
+  const endpoint=new URL('/api/vaults/'+crypto.randomUUID()+'/adventures',url),id='late-attribution';
+  const publish=async run=>{
+   assert.equal((await fetch(endpoint,{method:'PUT',body:JSON.stringify([run])})).status,204);
+   assert.equal((await fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({runs:[run]})})).status,200);
+  };
+  const live={id,name:'Hero',role:'wizard',turn:20,ended:true,control:'manual',automated:false};
+  await publish(live);
+  await publish({...live,turn:1,ended:false,control:'webmcp',harness_name:'Pi',model_name:'Muse\nSpark'});
+  await publish({...live,turn:21,control:'script',webmcpAutomated:false,harness_name:'Replacement',model_name:'Replacement'});
+  const directory=(await(await fetch(endpoint)).json())[0],ledger=await(await fetch(new URL('/api/runs/'+id,url))).json();
+  const stats=await(await fetch(new URL('/api/stats',url))).json();
+  for(const r of [directory,ledger,stats.best.find(r=>r.id===id),stats.recent.find(r=>r.id===id)]) {
+   assert.equal(r.turn,21);assert.equal(r.ended,true);assert.equal(r.control,'script');
+   assert.equal(r.webmcpAutomated,true);assert.equal(r.automated,true);
+   assert.equal(r.harness_name,'Pi');assert.equal(r.model_name,'MuseSpark');
+  }
+ } finally {await server.close()}
 });

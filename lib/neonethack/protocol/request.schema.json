@@ -49,6 +49,22 @@
               "minimum": -9007199254740991,
               "maximum": 9007199254740991
             },
+            "harness_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "x-maxBytes": 120,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Optional caller-supplied harness label for run attribution; no effect on game rules."
+            },
+            "model_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "x-maxBytes": 120,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+              "description": "Optional caller-supplied model label for run attribution; not a verified model identity."
+            },
             "role": {
               "type": "string",
               "enum": [

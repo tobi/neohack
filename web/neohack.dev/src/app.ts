@@ -1,4 +1,5 @@
 import {claimTabStore} from './tab-lease';
+import { PresentationQueue } from './presentation-queue';
 import {readAdventures,writeAdventure,changedAdventure,type Adventure} from './adventure-index';
 import { appendReceipt, journalScroll, renderJournalEntry, type JournalEntry } from './journal';
 import "./journal-preview";
@@ -103,11 +104,33 @@ class PixelNethack extends HTMLElement {
   private warmed: Promise<void> | null = null;
   private webMcp: WebMcpRegistration | null = null;
   private game: Game | null = null;
+  private webMcpDispatch = false;
+  private presentation = new PresentationQueue<Snapshot>((frame, duration, paint) => {
+    const before = this.displayed;
+    this.displayed = frame;
+    this.recordJournal(frame);
+    if (!paint || !this.isConnected || !this.map) return;
+    this.map.presentationDuration = duration;
+    this.render();
+    if (before?.sessionId === frame.sessionId) this.map.showMessages(before, frame);
+  }, () => document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches);
+  private displayed: Snapshot | null = null;
+  private get watchingBehind() { return this.presentation.pending > 0; }
+  private catchUp() {
+    this.presentation.flush();
+    this.displayed = this.game?.state ?? null;
+    this.map.presentationDuration = 0;
+    this.render();
+  }
   private busy = false;
   private inspectionVersion=0;
   private keyDraft = "";
   private commandOpen = false;
   private commandPointerDown = (e: PointerEvent) => {
+    if (this.watchingBehind) {
+      // The old scene cannot supply a current tile/item target. First tap goes live.
+      this.catchUp(); e.preventDefault(); e.stopImmediatePropagation(); return;
+    }
     if (this.commandOpen && !this.querySelector("#keyboard-prefix")?.contains(e.target as Node)) this.clearKeyPrefix();
   };
   private navigationNotice="";
@@ -130,7 +153,14 @@ class PixelNethack extends HTMLElement {
   private menuReturn: HTMLElement | null = null;
   private menuBack: (() => void) | null = null;
   private actionPicker: {element: ActionMenu; game: Game | null; revision: number; action?: string; decisionId?: string; returning?: boolean} | null = null;
-  private keyHandler = (e: KeyboardEvent) => this.key(e);
+  private keyHandler = (e: KeyboardEvent) => {
+    const target = e.composedPath()[0];
+    const gameKey = target instanceof HTMLElement && (this.contains(target) || target === document.body) &&
+      !target.closest('input,textarea,select,[contenteditable="true"]') &&
+      (!(e.ctrlKey || e.metaKey || e.altKey) || e.key.toLowerCase() === 'k');
+    if (this.watchingBehind && gameKey && !e.defaultPrevented) { this.catchUp(); e.preventDefault(); e.stopImmediatePropagation(); return; }
+    this.key(e);
+  };
   private keyUpHandler = (e: KeyboardEvent) => {
     this.movement.release(`key:${e.code || e.key}`);
     this.introMovement.release(`key:${e.code || e.key}`);
@@ -211,6 +241,7 @@ class PixelNethack extends HTMLElement {
   }
   private visibilityChanged = () => {
     if (document.hidden) {
+      this.presentation.flush();
       this.stopMovement();
       if (this.portalEntering) {
         this.portalEntering = false;
@@ -284,6 +315,8 @@ class PixelNethack extends HTMLElement {
   get snapshot(): Snapshot | null {
     return this.game?.state ?? null;
   }
+  /** Presentation can trail the durable live snapshot while an agent works ahead. */
+  get displaySnapshot(): Snapshot | null { return this.displayed; }
 
   private hudLayout?: ResizeObserver;
   connectedCallback() {
@@ -346,7 +379,7 @@ class PixelNethack extends HTMLElement {
           <div id="character-stats" class="character-stats" hidden></div>
         </section>
         <div class="world-hud">
-          <div class="location-hud"><span id="location-heading"></span><span id="turn-pill"></span><span id="cloud-status" role="status"></span></div>
+          <div class="location-hud"><span id="location-heading"></span><span id="turn-pill"></span><button id="watch-live" hidden title="Catch up before taking control">Go live</button><span id="cloud-status" role="status"></span></div>
 
         </div>
         <div class="notices"><div class="notice error" id="error" role="alert" hidden></div>
@@ -532,17 +565,12 @@ class PixelNethack extends HTMLElement {
         "sessionId" in request.params && request.params.sessionId === this.game.id &&
         this.api.low.tools.some(tool => tool.name === request.method.replaceAll(".", "_") && tool.annotations.readOnlyHint))
       return this.api.transport.send(request);
-    this.inputSource = "webmcp";
-    if (this.current) {
-      this.current.control = "webmcp";
-      this.current.automated = true;
-    }
     this.stopMovement();
     this.closePanel();
-    const before = this.uncertain() ? null : this.game?.state;
     let response: Response | undefined;
     let failure: unknown;
-    await this.run(async () => {
+    this.webMcpDispatch = true;
+    try { await this.run(async () => {
       try {
         const params = request.params as Record<string, unknown>;
         let save = this.saves.find((s) => s.id === params.sessionId);
@@ -588,10 +616,17 @@ class PixelNethack extends HTMLElement {
               ...(typeof params.seed === "number" ? { seed: params.seed } : {}),
               turn: response.observation.turn,
               ended: response.ended,
+              control: 'webmcp', automated: true, webmcpAutomated: true,
+              ...(typeof params.harness_name === 'string' ? { harness_name: params.harness_name } : {}),
+              ...(typeof params.model_name === 'string' ? { model_name: params.model_name } : {}),
             };
             this.saves.unshift(save);
           }
           if (save) {
+            this.inputSource = 'webmcp';
+            save.control = 'webmcp';
+            save.webmcpAutomated = true;
+            save.automated = true;
             const previous =
               this.game?.id === response.sessionId ? this.game.state : null;
             let latest =
@@ -652,18 +687,11 @@ class PixelNethack extends HTMLElement {
         failure = error;
         throw error;
       }
-    });
+    }); } finally { this.webMcpDispatch = false; }
     const entryError = response && "error" in response ? response.error : undefined;
     if ((request.method === "session.create" || request.method === "session.resume") && (failure || entryError)) reportError(failure ?? entryError?.code,this.runtimeBuildId,{kind:request.method === "session.create" ? "create" : "resume",local:!!requestedRun()?.local});
     if (failure) throw failure;
     if (!response) throw Error("Tool was not submitted.");
-    if (
-      before &&
-      this.game &&
-      before.sessionId === this.game.id &&
-      !this.uncertain()
-    )
-      this.map.showMessages(before, this.game.state);
     return response;
   }
   private assertConnected() {
@@ -847,6 +875,7 @@ class PixelNethack extends HTMLElement {
     } finally { this.yielding = false; }
   }
   disconnectedCallback() {
+    this.presentation.close();
     this.removeEventListener("pointerdown", this.commandPointerDown, true);
     this.navigationAbort?.abort();
     this.publicRecorder?.close();
@@ -1140,6 +1169,7 @@ class PixelNethack extends HTMLElement {
   private playable() {
     return (
       !!this.game &&
+      !this.watchingBehind &&
       !this.busy &&
       !this.yielding &&
       !this.game.decision &&
@@ -1156,6 +1186,7 @@ class PixelNethack extends HTMLElement {
   private entryStage = "preparation";
   private run(action: () => Promise<unknown>, entry?: { name: string; role: string; resume?: boolean; sessionId?:string }) {
     if (this.busy || this.yielding) return Promise.resolve();
+    if (!this.webMcpDispatch && this.watchingBehind) this.catchUp();
     const result = this.performRun(action,entry);
     this.settled = result.catch(() => {});
     return result;
@@ -1216,13 +1247,25 @@ class PixelNethack extends HTMLElement {
         }
       }
       if (entry && loading.open) loading.close();
-      this.busy = false;
       if (!this.game?.decision) this.map.context = null;
-      this.render();
+      if (this.webMcpDispatch && this.game && !this.uncertain()) {
+        await this.presentation.push(this.game.state);
+      } else {
+        this.presentation.flush();
+        this.displayed = this.game?.state ?? null;
+        this.presentation.reset(this.displayed, false);
+        this.map.presentationDuration = 110;
+      }
+      // Keep the existing input reservation if a full display queue applies
+      // backpressure; another caller must not enter the unfinished operation.
+      this.busy = false;
+      if (this.watchingBehind) {
+        this.renderPresentationStatus(); this.renderGround(); this.renderDecision(); this.controls();
+      } else this.render();
       const openingPassage=this.journal.find(journalScroll);
       if (completed && entry && !entry.resume && this.game && !this.game.decision && openingPassage)
         this.openJournalScroll(openingPassage);
-      if (completed && before && game === this.game && !this.uncertain())
+      if (completed && before && game === this.game && !this.uncertain() && !this.webMcpDispatch)
         this.map.showMessages(before, this.game!.state);
       if (completed && before && game === this.game && this.playable()) {
         const witness = this.game!.state.events.find(
@@ -1274,7 +1317,8 @@ class PixelNethack extends HTMLElement {
     save.endKind = end?.kind ?? save.endKind;
     if (typeof end?.score === "number") save.score = end.score;
     save.control = control;
-    save.automated = control !== "manual";
+    save.webmcpAutomated ||= control === 'webmcp';
+    save.automated = save.webmcpAutomated || control !== "manual";
   }
   private persist(save = this.current) {
     if (!this.metadataHealthy)
@@ -1334,8 +1378,25 @@ class PixelNethack extends HTMLElement {
     this.setAttribute("aria-busy", String(this.busy));
     this.renderStairs();
   }
+  private recordJournal(state: Snapshot) {
+    const o = state.observation;
+    const key = JSON.stringify([state.sessionId, state.revision, o.turn, o.heard]);
+    if (key === this.lastFrame) return;
+    appendReceipt(this.journal, state, this.lastFrame ? actionMessages(state) : o.heard);
+    this.lastFrame = key;
+  }
+  private renderPresentationStatus() {
+    this.dataset.presentationPending = String(this.presentation.pending);
+    this.dataset.liveRevision = String(this.game?.state.revision ?? '');
+    const live = this.$('#watch-live');
+    live.hidden = !this.watchingBehind;
+    live.textContent = `${this.presentation.pending} actions ahead · Go live`;
+    live.onclick = () => this.catchUp();
+  }
   private render() {
-    const state = this.game?.state;
+    if (!this.webMcpDispatch && !this.watchingBehind) this.displayed = this.game?.state ?? null;
+    const state = this.game ? this.displayed ?? this.game.state : undefined;
+    this.renderPresentationStatus();
     this.renderGround();
     this.show("#welcome-copy", !state);
     this.show("#welcome-actions", !state);
@@ -1399,18 +1460,7 @@ class PixelNethack extends HTMLElement {
             ? "Save needs recovery · input paused"
             : `Saved in this browser · turn ${o.turn}`,
       );
-      const frameKey = JSON.stringify([
-        state.sessionId,
-        state.revision,
-        o.turn,
-        o.heard,
-      ]);
-      if (frameKey !== this.lastFrame) {
-        // Use the complete receipt, including blank text-window lines. The
-        // observation's heard list is only a rolling ten-line preview.
-        appendReceipt(this.journal, state, this.lastFrame ? actionMessages(state) : o.heard);
-        this.lastFrame = frameKey;
-      }
+      this.recordJournal(state);
       this.text(
         "#latest-message",
         actionMessages(state).at(-1) ??
@@ -1529,6 +1579,7 @@ class PixelNethack extends HTMLElement {
     this.controls();
   }
   private renderPanel() {
+    if (this.watchingBehind) { this.closePanel(); return; }
     this.querySelectorAll<HTMLElement>("[data-view]").forEach((b) => {
       b.classList.toggle("active", b.dataset.view === this.panel);
       b.setAttribute("aria-pressed", String(b.dataset.view === this.panel));
@@ -1705,6 +1756,7 @@ class PixelNethack extends HTMLElement {
     this.show("#contextual-stairs", !!host.childElementCount);
   }
   private renderGround() {
+    if (this.watchingBehind) { this.show('#ground-loot', false); return; }
     const game = this.game,
       o = game?.observation;
     const items =
@@ -2512,6 +2564,12 @@ class PixelNethack extends HTMLElement {
   }
 
   private renderDecision() {
+    if (this.watchingBehind) {
+      this.querySelector<HTMLDialogElement>('#decision')?.close();
+      this.querySelector('#direction-target')?.remove();
+      this.decisionIdentity = '';
+      return;
+    }
     const d = this.game?.decision,
       dialog = this.querySelector<HTMLDialogElement>("#decision")!;
     if (this.renderActionChoices(d)) return;

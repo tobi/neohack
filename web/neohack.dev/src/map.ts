@@ -188,6 +188,8 @@ export function actionMessages(snapshot: Snapshot): string[] {
 }
 
 export class DungeonMap {
+  /** Display pacing only; never changes game turns or schedules input. */
+  presentationDuration = 110;
   readonly deathTraces = new DeathTraces();
   private perceptionSession?: string;
   route: { x: number; y: number }[] = [];
@@ -537,7 +539,7 @@ export class DungeonMap {
         const shift = this.travel(now);
         this.travelFrom = { x: shift.x + dx * 16, y: shift.y + dy * 16 };
         this.travelStarted = now;
-        this.cameraDuration = this.reducedMotion.matches ? 0 : 110;
+        this.cameraDuration = this.reducedMotion.matches ? 0 : this.presentationDuration;
         // Consecutive steps share a gait phase instead of restarting frame zero.
         if (now >= this.walkUntil) this.walkStarted = now;
         this.walkUntil = now + 600;
@@ -616,7 +618,7 @@ export class DungeonMap {
   private travel(now: number) {
     const remaining = this.reducedMotion.matches
       ? 0
-      : Math.max(0, 1 - (now - this.travelStarted) / 110);
+      : Math.max(0, 1 - (now - this.travelStarted) / Math.max(1, this.presentationDuration));
     if (remaining === 0) return { x: 0, y: 0 };
     return {
       x: Math.round(this.travelFrom.x * remaining),
@@ -1230,14 +1232,14 @@ export class DungeonMap {
                 { right: 0, up: 1, left: 2, down: 3 }[facing] * 6
               : 0,
           frames: motion && !dead && image ? 6 : 1,
-          period: walking ? 100 : 167,
+          period: walking ? Math.min(100, Math.max(16, this.presentationDuration)) : 167,
           phase: walking ? now - this.walkStarted : now % 1002,
           from:
             shift.x || shift.y
               ? {
                   x: you.x * 16 - 8 - shift.x,
                   y: you.y * 16 - 32 - shift.y,
-                  duration: Math.max(0, 110 - (now - this.travelStarted)),
+                  duration: Math.max(0, this.presentationDuration - (now - this.travelStarted)),
                 }
               : undefined,
         },

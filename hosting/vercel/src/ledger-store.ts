@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { read, update, storage, type Storage } from "./storage.ts";
 import type { Run } from "./board.ts";
+import { preserveAttribution } from './run-attribution.ts';
 import { publicReplayStorage } from "./public-replay-store.ts";
 const SHARDS = 32;
 const DAY = 86_400_000;
@@ -100,19 +101,15 @@ async function indexEntries(shard: number, entries: Entry[]) {
         const prior = doc.entries[run.id];
         const state = replay && replay.version > (prior?.replay?.version ?? 0) ? replay : prior?.replay;
         const available = state?.available ?? (recorded || prior?.recorded || false);
+        const attributed = preserveAttribution(prior?.run, progress(prior?.run, run), newer(prior?.run, run));
         if (
-          (newer(prior?.run, run) &&
-            JSON.stringify(prior?.run) !== JSON.stringify(run)) ||
+          JSON.stringify(prior?.run) !== JSON.stringify(attributed) ||
           available !== prior?.recorded || state?.version !== prior?.replay?.version ||
           (chronicled && !prior?.chronicled)
         ) {
           doc.entries[run.id] = {
             // Indexing may arrive after a newer write with the same timestamp.
-            run: newer(prior?.run, run)
-              ? prior?.run.control === "webmcp" && run.control === "manual"
-                ? { ...progress(prior?.run, run), control: "webmcp", automated: true }
-                : progress(prior?.run, run)
-              : prior!.run,
+            run: attributed,
             recorded: available,
             ...(state ? { replay: state } : {}),
             ...(chronicled || prior?.chronicled ? { chronicled: true } : {}),
@@ -135,14 +132,7 @@ async function writeRun(run: Run, recorded = false) {
     "ledger/runs/" + run.id + ".json",
     () => ({ run: original }),
     (doc) => {
-      if (newer(doc.run, run))
-        doc.run = {
-          ...progress(doc.run, run),
-          // Match the client's sticky WebMCP attribution across owner handoff.
-          ...(doc.run?.control === "webmcp" && run.control === "manual"
-            ? { control: "webmcp", automated: true }
-            : {}),
-        };
+      doc.run = preserveAttribution(doc.run, progress(doc.run, run), newer(doc.run, run));
       return doc.run!;
     },
   );

@@ -161,6 +161,16 @@ See [Runtime Logs](https://vercel.com/docs/logs/runtime),
 [structured logging](https://vercel.com/kb/guide/add-structured-application-logs-to-vercel-functions)
 and [Observability](https://vercel.com/docs/observability).
 
+### Run attribution
+
+Run metadata permanently records `webmcpAutomated` when WebMCP participates in
+creation/control, alongside optional caller-supplied `harness_name` and `model_name`
+(creation fields allow 120 UTF-8 bytes each). These labels are attribution, not verified identity.
+Directory, authoritative ledger records, shards and summaries retain this evidence
+across human/script takeover and delayed metadata. Late attribution may enrich a
+record without replacing its newer turn, ending or runtime pin. The ledger badge
+uses text-only labels in its tooltip; no private account/vault data is added.
+
 ### Direct public replay delivery
 
 Public replay playback makes **no dynamic function requests**. The static

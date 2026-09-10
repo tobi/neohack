@@ -4775,3 +4775,81 @@ test('journal preview is newest first, responsive and animates only new entries 
   assert.match(await page.locator('.journal-entry').first().textContent(),/Newest layout sample/);
   assert.equal((await snapshot(page)).revision,before.revision);assert.deepEqual(errors,[]);
 });
+
+test('WebMCP attribution persists while natural presentation trails durable agent input', {timeout:90000}, async t=>{
+ const {page,errors}=await fixture(t,{webmcp:true});
+ const {call}=await nativeWebMcp(page,t);
+ const create=await call('create',{name:'Paced observer',role:'valkyrie',seed:9,harness_name:'Pi Browser',model_name:'Muse Spark'});
+ assert.equal(create.isError,false,JSON.stringify(create.structuredContent));
+ const sessionId=create.structuredContent.sessionId;
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ await page.evaluate(()=>{
+  const host=document.querySelector('pixel-nethack');globalThis.shownRevisions=[];
+  new MutationObserver(()=>globalThis.shownRevisions.push(Number(host.dataset.revision))).observe(host,{attributes:true,attributeFilter:['data-revision']});
+ });
+ // Real prompt/cancel boundaries build a backlog without depending on safe terrain.
+ // The game still checks each exact decision id; no inputs are fabricated.
+ let state=create.structuredContent;
+ for(let i=0;i<20;i++){
+  const asked=await call('pray',{sessionId});assert.equal(asked.isError,false);
+  state=(await call('cancel',{sessionId,decisionId:asked.structuredContent.decision.id})).structuredContent;
+  assert.ok(!state.error,JSON.stringify(state.error));
+ }
+ const queued=await page.evaluate(()=>{const x=document.querySelector('pixel-nethack');return {pending:+x.dataset.presentationPending,live:x.snapshot.revision,shown:x.displaySnapshot.revision,turn:x.displaySnapshot.observation.turn,text:document.querySelector('#turn-pill').textContent,revisions:globalThis.shownRevisions};});
+ assert.equal(queued.live,state.revision);assert.ok(queued.pending>0,JSON.stringify(queued));assert.ok(queued.shown<queued.live);
+ assert.equal(queued.text,'TURN '+queued.turn);
+ assert.ok(queued.revisions.every((r,i,a)=>!i||r>=a[i-1]),'presentation never rolls backward');
+ // Read-only calls see the latest state without flushing or stealing the view.
+ const observed=(await call('observe',{sessionId})).structuredContent;
+ assert.equal(observed.revision,state.revision);
+ assert.ok(Number(await page.locator('pixel-nethack').getAttribute('data-presentation-pending'))>0);
+ await page.screenshot({path:`${root}/test-results/webmcp-paced.png`});
+ const quit=(await call('quit',{sessionId})).structuredContent;
+ assert.equal(quit.decision.kind,'confirmation');
+ await page.keyboard.press('Escape');
+ assert.equal((await snapshot(page)).decision.id,quit.decision.id,'catch-up key never cancels a newer unseen question');
+ assert.equal((await snapshot(page)).revision,quit.revision);
+ state=(await call('cancel',{sessionId,decisionId:quit.decision.id})).structuredContent;
+ // Pointer takeover catches up, without submitting a stale tile/item intent.
+ if(Number(await page.locator('pixel-nethack').getAttribute('data-presentation-pending')))await page.locator('#watch-live').click();
+ await page.waitForFunction(()=>document.querySelector('pixel-nethack').dataset.presentationPending==='0');
+ assert.equal((await snapshot(page)).revision,state.revision);
+ assert.equal(await page.evaluate(()=>document.querySelector('pixel-nethack').displaySnapshot.revision),state.revision);
+ const saved=await page.evaluate(id=>Object.keys(localStorage).filter(k=>k.endsWith(':adventures:'+id)).map(k=>JSON.parse(localStorage[k]))[0],sessionId);
+ assert.equal(saved.webmcpAutomated,true);assert.equal(saved.harness_name,'Pi Browser');assert.equal(saved.model_name,'Muse Spark');
+ await page.reload();await ready(page);
+ await page.waitForFunction(id=>document.querySelector('pixel-nethack').snapshot?.sessionId===id,sessionId);
+ const resumed=await snapshot(page);assert.equal(resumed.revision,state.revision);
+ await page.keyboard.press('s');await ready(page);
+ assert.ok((await snapshot(page)).revision>resumed.revision,'human play continues from the live restored state');
+ const retained=await page.evaluate(id=>Object.keys(localStorage).filter(k=>k.endsWith(':adventures:'+id)).map(k=>JSON.parse(localStorage[k]))[0],sessionId);
+ assert.equal(retained.webmcpAutomated,true);assert.equal(retained.harness_name,'Pi Browser');assert.equal(retained.model_name,'Muse Spark');
+ assert.deepEqual(errors,[]);
+});
+
+test('WebMCP walking shows each completed step at a readable pace without delaying the agent', {timeout:45000}, async t=>{
+ const {page,errors}=await fixture(t,{webmcp:true});const {call}=await nativeWebMcp(page,t);
+ let state=(await call('create',{name:'Walking observer',role:'valkyrie',seed:9})).structuredContent;
+ const sessionId=state.sessionId,initialRevision=state.revision,positions=[state.observation.you];
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ await page.evaluate(()=>{
+  globalThis.walkingFrames=[];const host=document.querySelector('pixel-nethack');
+  new MutationObserver(()=>{const s=host.displaySnapshot;if(s)globalThis.walkingFrames.push({revision:s.revision,turn:s.observation.turn,you:s.observation.you,time:performance.now()});}).observe(host,{attributes:true,attributeFilter:['data-revision']});
+ });
+ for(let i=0;i<8;i++){
+  const you=state.observation.you;
+  const to=state.observation.world.find(c=>Math.abs(c.x-you.x)+Math.abs(c.y-you.y)===1&&c.terrain.type==='floor'&&!c.occupant);
+  assert.ok(to,'known adjacent floor');
+  const result=await call('go',{sessionId,to:{x:to.x,y:to.y},force:true});
+  assert.equal(result.isError,false,JSON.stringify(result.structuredContent));state=result.structuredContent;
+  assert.equal(state.outcome.positionChanged,true);positions.push(state.observation.you);
+ }
+ assert.ok(Number(await page.locator('pixel-nethack').getAttribute('data-presentation-pending'))>0,'agent finishes before visible playback');
+ await page.waitForFunction(()=>document.querySelector('pixel-nethack').dataset.presentationPending==='0');
+ const shown=await page.evaluate(revision=>globalThis.walkingFrames.filter((f,i,a)=>f.revision>revision&&(!i||f.revision!==a[i-1].revision)),initialRevision);
+ assert.deepEqual(shown.map(f=>f.you),positions.slice(1),'no completed walking step is skipped');
+ assert.ok(shown.slice(1).every((f,i)=>f.time-shown[i].time>=120),'ordinary playback is visibly paced');
+ assert.equal(await page.locator('#turn-pill').textContent(),'TURN '+state.observation.turn);
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:`${root}/test-results/webmcp-walking-mobile.png`});
+ assert.deepEqual(errors,[]);
+});
