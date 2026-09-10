@@ -52,8 +52,11 @@ test(
   "the exploration examples execute unchanged JavaScript and have distinct policies",
   { timeout: 90000 },
   async (t) => {
-    const imp = await runProject("curious-imp", { seed: 7, calls: 2000 });
-    const mapper = await runProject("cartographer", { seed: 7, calls: 2000 });
+    const dir = await mkdtemp(join(tmpdir(), "exploration-policy-test-"));
+    t.after(() => rm(dir, { recursive: true, force: true }));
+    const impTrace = join(dir, "imp.jsonl"), mapperTrace = join(dir, "mapper.jsonl");
+    const imp = await runProject("curious-imp", { seed: 7, calls: 2000, trace: impTrace });
+    const mapper = await runProject("cartographer", { seed: 7, calls: 2000, trace: mapperTrace });
     const fighter = await runProject("steady-fighter", { seed: 7, calls: 2000 });
     for (const result of [imp, mapper, fighter]) {
       assert.equal(result.reason, "stopped", result.error);
@@ -74,10 +77,17 @@ test(
       1,
       "cartographer stays on its starting level",
     );
-    assert.ok(
-      mapper.uniqueSquares > imp.uniqueSquares,
-      "mapper covers more of one level",
-    );
+    // Compare the same floor; the imp's total also includes its later levels.
+    const startingSquares = async (path) => {
+      const frames = (await readFile(path, "utf8")).trim().split("\n").map(JSON.parse);
+      const level = frames[0].initial.observation.location.id;
+      return new Set(frames.map(frame => (frame.initial ?? frame.response)?.observation)
+        .filter(o => o?.location.id === level && o.you)
+        .map(o => `${o.you.x},${o.you.y}`)).size;
+    };
+    const impFirstLevel = await startingSquares(impTrace), mapperFirstLevel = await startingSquares(mapperTrace);
+    t.diagnostic(JSON.stringify({ impFirstLevel, mapperFirstLevel }));
+    assert.ok(mapperFirstLevel > impFirstLevel, "mapper covers more of the starting level");
     assert.ok(
       fighter.maxDepth >= 3,
       "fighter should progress through real encounters",
