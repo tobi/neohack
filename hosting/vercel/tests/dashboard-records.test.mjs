@@ -5,10 +5,16 @@ import {resolve} from 'node:path';
 import {chromium} from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
 import {MemoryStorage, createTestHarness} from './server.mjs';
 import {storageContext} from '../src/storage.ts';
-import {ledgerStats, ledgerRun, saveLedgerRun} from '../src/ledger-store.ts';
+import {ledgerStats, ledgerRun, saveLedgerRun, rebuildLedgerSummaries} from '../src/ledger-store.ts';
 import {sanitizeRun} from '../src/board.ts';
 const DAY=86400000, now=Date.UTC(2026,8,8,18), today=Date.UTC(2026,8,8);
 const run=(id,overrides={})=>({id,name:'Hero '+id,role:'wizard',actualClass:'wizard',turn:100,maxLevel:2,maxDepth:1,ended:false,updatedAt:now,...overrides});
+// Rankings and records count only runs with a public recording. Published
+// predecessor records bootstrap as unrecorded until their replay state is indexed.
+async function recorded(store,ids){
+ for(const id of ids)await store.write('ledger/replays/'+id+'.json',{version:1,available:true,checkedAt:0,reason:'published'});
+ await storageContext.run(store,()=>rebuildLedgerSummaries());
+}
 const source=()=>[
  ...Array.from({length:250},(_,i)=>run('recent-'+String(i).padStart(3,'0'),{turn:i+1,updatedAt:now-i*1000,role:i%2?'wizard':'ranger',actualClass:i%2?'wizard':'ranger'})),
  run('today-depth',{name:'Deep Delver',turn:730,maxLevel:3,maxDepth:14,updatedAt:today}),
@@ -22,6 +28,7 @@ const source=()=>[
 
 test('recent 200 are latest distinct runs; UTC records cover the entire ledger, not the plot or all-time leaders',async t=>{
  t.mock.method(Date,'now',()=>now);const store=new MemoryStorage(),original={runs:source(),errors:[]};await store.write('board/index.json',original);
+ await recorded(store,source().map(r=>r.id));
  await storageContext.run(store,async()=>{
   const data=await ledgerStats();
   assert.equal(data.recent.length,200);assert.equal(new Set(data.recent.map(r=>r.id)).size,200);
@@ -49,6 +56,7 @@ test('accepted updates retain maximum depth and level; invalid/missing scores do
   await saveLedgerRun(run('peak',{turn:101,maxLevel:2,maxDepth:1}));
   const record=await ledgerRun('peak');assert.equal(record.maxLevel,9);assert.equal(record.maxDepth,16);
   await saveLedgerRun(run('unknown',{maxLevel:undefined,maxDepth:undefined}));
+  await recorded(store,['peak','unknown']);
   const stats=await ledgerStats();assert.equal(stats.records.today.level.length,1);assert.equal(stats.records.today.depth.length,1);
   for(const value of [0,-1,1.5,Infinity,'6']){
    const clean=sanitizeRun({...run('invalid'),maxLevel:value,maxDepth:value},now);assert.equal(clean.maxLevel,undefined);assert.equal(clean.maxDepth,undefined);
@@ -59,7 +67,7 @@ test('accepted updates retain maximum depth and level; invalid/missing scores do
 test('old derived summaries refresh from their partitions once and never change run records',async t=>{
  t.mock.method(Date,'now',()=>now);const store=new MemoryStorage();
  await storageContext.run(store,async()=>{
-  await saveLedgerRun(run('kept',{maxDepth:8}));const before=await store.read('ledger/runs/kept.json');
+  await saveLedgerRun(run('kept',{maxDepth:8}));await recorded(store,['kept']);const before=await store.read('ledger/runs/kept.json');
   for(const path of await store.list('ledger/summaries/')){
    const doc=await store.read(path);delete doc.value.format;delete doc.value.recent;delete doc.value.daily;await store.write(path,doc.value,doc.etag);
   }
@@ -87,7 +95,7 @@ test('dashboard plot, class filtering, keyboard selection, metric switch and rec
  const store=new MemoryStorage();
  const classes=['archeologist','barbarian','caveman','healer','knight','monk','priest','ranger','rogue','samurai','tourist','valkyrie','wizard'];
  const varied=source().map((r,i)=>r.id.startsWith('recent-')?{...r,turn:(i+1)*(1+i%19),maxLevel:1+i%7,maxDepth:1+i%11,role:classes[i%13],actualClass:classes[i%13]}:r);
- await store.write('board/index.json',{runs:varied,errors:[]});
+ await store.write('board/index.json',{runs:varied,errors:[]});await recorded(store,varied.map(r=>r.id));
  const server=createTestHarness({store}),{url}=await server.listen();
  const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});
  t.after(async()=>{await browser.close();await server.close()});
@@ -146,7 +154,7 @@ test('empty, unknown and coincident chart values stay usable; replay needs an ex
 test('ledger WebMCP badge exposes escaped harness and model attribution',async t=>{
  const store=new MemoryStorage();
  const entry=run('attributed',{name:'Agent hero',webmcpAutomated:true,automated:true,control:'script',harness_name:'Pi <browser>',model_name:'Muse & Spark'});
- await store.write('board/index.json',{runs:[entry],errors:[]});
+ await store.write('board/index.json',{runs:[entry],errors:[]});await recorded(store,[entry.id]);
  const server=createTestHarness({store}),{url}=await server.listen();t.after(()=>server.close());
  const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());
  const page=await browser.newPage();await page.goto(new URL('/dashboard',url).href);

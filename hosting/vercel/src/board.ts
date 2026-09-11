@@ -3,12 +3,21 @@ import {
   ledgerRun,
   ledgerRuns,
   saveLedgerRun,
+  vaultOwner,
 } from "./ledger-store.ts";
+import { read } from "./storage.ts";
 import { attributionName } from './run-attribution.ts';
 import { publicName } from '../.generated/adventurer-names.mjs';
 
 const RUN_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const VAULT = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CONTROLS = new Set(["manual", "webmcp", "bot", "script", "playground"]);
+// Hosting never simulates the game, but it can refuse what the engine cannot
+// produce. Impossible values reject the whole upload; unknown ones stay omitted.
+const MAX_HERO_LEVEL = 30; // engine MAXULEV
+const MAX_DEPTH = 512; // engine MAXDUNGEON * MAXLEVEL
+const MAX_TURN = 10_000_000; // plausibility bound; the engine itself ends play at 1e9
+const END_KINDS = new Set(["death", "quit", "disconnected", "ascended", "escaped", "engineError", "unknown"]);
 
 export type Run = {
   id: string;
@@ -63,10 +72,22 @@ export function sanitizeRun(
     typeof raw !== "object" ||
     !Number.isSafeInteger(raw.turn) ||
     Number(raw.turn) < 0 ||
-    Number(raw.turn) > 1e9
+    Number(raw.turn) > MAX_TURN
   )
     return null;
   if (typeof raw.id !== "string" || !RUN_ID.test(raw.id)) return null;
+  const heroLevel = positiveInteger(raw.heroLevel),
+    maxLevel = positiveInteger(raw.maxLevel),
+    maxDepth = positiveInteger(raw.maxDepth),
+    endKind = str(raw.endKind, 32);
+  if (
+    (heroLevel ?? 0) > MAX_HERO_LEVEL ||
+    (maxLevel ?? 0) > MAX_HERO_LEVEL ||
+    (maxDepth ?? 0) > MAX_DEPTH ||
+    (heroLevel !== undefined && maxLevel !== undefined && heroLevel > maxLevel) ||
+    (endKind !== undefined && !END_KINDS.has(endKind))
+  )
+    return null;
   const control = str(raw.control, 16);
   return {
     id: raw.id,
@@ -78,15 +99,15 @@ export function sanitizeRun(
     seedSpecified: flag(raw.seedSpecified),
     turn: num(raw.turn) ?? 0,
     ended: Boolean(raw.ended),
-    heroLevel: positiveInteger(raw.heroLevel),
-    maxLevel: positiveInteger(raw.maxLevel),
-    maxDepth: positiveInteger(raw.maxDepth),
+    heroLevel,
+    maxLevel,
+    maxDepth,
     depthLabel: str(raw.depthLabel, 64),
     gold: num(raw.gold),
     kills: num(raw.kills),
     experience: num(raw.experience),
     gotAmulet: flag(raw.gotAmulet),
-    endKind: str(raw.endKind, 32),
+    endKind,
     score: num(raw.score),
     control: control && CONTROLS.has(control) ? control : undefined,
     automated:
@@ -174,13 +195,23 @@ export async function board(request: Request) {
   }
   if (!Array.isArray(body.runs) || body.runs.length > 50)
     return json({ error: "invalid runs" }, 400);
-  let stored = 0;
+  // The vault capability that registered a run is the only authority allowed to
+  // publish its ledger metadata. Registration happens through the private
+  // adventure directory; the first publication binds the run to that vault.
+  if (typeof body.vault !== "string" || !VAULT.test(body.vault))
+    return json({ error: "missing vault" }, 400);
+  const registered = new Set<string>(
+    ((await read("vaults/" + body.vault + "/adventures.json"))?.values ?? [])
+      .map((value: any) => value?.id)
+      .filter((id: unknown) => typeof id === "string"),
+  );
+  const owner = vaultOwner(body.vault);
+  let stored = 0, refused = 0;
   for (const raw of body.runs) {
     const run = sanitizeRun(raw, now);
-    if (run) {
-      await saveLedgerRun(run);
-      stored++;
-    }
+    if (!run) { refused++; continue; }
+    if (registered.has(run.id) && (await saveLedgerRun(run, owner))) stored++;
+    else refused++;
   }
-  return json({ stored });
+  return json({ stored, refused });
 }

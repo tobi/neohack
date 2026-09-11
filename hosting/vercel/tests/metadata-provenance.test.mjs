@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createTestHarness} from './server.mjs';
+import {vaultOwner} from '../src/ledger-store.ts';
 
 test('directory and ledger retain WebMCP use across delayed manual metadata without changing other fields',async()=>{
  const server=createTestHarness(),{url}=await server.listen();
@@ -9,12 +10,12 @@ test('directory and ledger retain WebMCP use across delayed manual metadata with
   const endpoint=new URL('/api/vaults/'+vault+'/adventures',url);
   const base={id,vaultId:vault,accountId:'fixture-owner',buildId:pin,recording:'inputs',name:'Hero',role:'valkyrie',turn:7,ended:false,control:'manual',automated:false,maxLevel:1};
   const headKey='input-runs/'+id+'.json',accountKey='accounts/fixture-owner/runs/'+id+'.json';
-  await server.store.write(headKey,{owner:'fixed-upload-authority',buildId:pin,count:4,accountId:'fixture-owner'});
+  await server.store.write(headKey,{owner:vaultOwner(vault),buildId:pin,count:4,accountId:'fixture-owner'});
   await server.store.write(accountKey,{inputRun:id,run:{id,buildId:pin}});
   const head=await server.store.read(headKey),account=await server.store.read(accountKey);
   const publish=async run=>{
    assert.equal((await fetch(endpoint,{method:'PUT',body:JSON.stringify([run])})).status,204);
-   assert.equal((await fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({runs:[run]})})).status,200);
+   assert.equal((await fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({vault,runs:[run]})})).status,200);
   };
   const read=async()=>({directory:(await(await fetch(endpoint)).json())[0],ledger:await(await fetch(new URL('/api/runs/'+id,url))).json()});
   await publish(base);assert.equal((await read()).ledger.control,'manual');
@@ -39,17 +40,17 @@ test('directory and ledger retain WebMCP use across delayed manual metadata with
 test('mixed script, bot and playground control labels keep existing replacement behavior',async()=>{
  const server=createTestHarness(),{url}=await server.listen();
  try {
-  const endpoint=new URL('/api/vaults/'+crypto.randomUUID()+'/adventures',url);
+  const vault=crypto.randomUUID(),endpoint=new URL('/api/vaults/'+vault+'/adventures',url);
   for(const [from,to] of [['webmcp','script'],['webmcp','bot'],['webmcp','playground'],['script','manual'],['bot','manual'],['playground','manual']]){
    const id=from+'-'+to;
    for(const control of [from,to]){
     const run={id,name:'Hero',role:'valkyrie',turn:1,ended:false,control,automated:control!=='manual'};
     assert.equal((await fetch(endpoint,{method:'PUT',body:JSON.stringify([run])})).status,204);
-    assert.equal((await fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({runs:[run]})})).status,200);
+    assert.equal((await fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({vault,runs:[run]})})).status,200);
    }
    const directory=(await(await fetch(endpoint)).json()).find(r=>r.id===id),ledger=await(await fetch(new URL('/api/runs/'+id,url))).json();
    const stats=await(await fetch(new URL('/api/stats',url))).json();
-   for(const run of [directory,ledger,stats.best.find(run=>run.id===id)]){assert.equal(run.control,to);assert.equal(run.automated,to!=='manual')}
+   for(const run of [directory,ledger,stats.recent.find(run=>run.id===id)]){assert.equal(run.control,to);assert.equal(run.automated,to!=='manual')}
   }
  }finally{await server.close()}
 });
@@ -69,16 +70,18 @@ test('equal-timestamp delayed indexing agrees with the authoritative WebMCP reco
  };
  let old;
  try {
-  const publish=control=>fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({runs:[{id,name:'Hero',role:'valkyrie',turn:7,ended:false,control,automated:control!=='manual',buildId:'a'.repeat(64)}]})});
+  const vault=crypto.randomUUID();
+  await fetch(new URL('/api/vaults/'+vault+'/adventures',url),{method:'PUT',body:JSON.stringify([{id}])});
+  const publish=control=>fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({vault,runs:[{id,name:'Hero',role:'valkyrie',turn:7,ended:false,control,automated:control!=='manual',buildId:'a'.repeat(64)}]})});
   old=publish('manual');await paused;
   assert.equal((await publish('webmcp')).status,200);
   release();assert.equal((await old).status,200);
   const record=await(await fetch(new URL('/api/runs/'+id,url))).json();
   const stats=await(await fetch(new URL('/api/stats',url))).json();
   const shard=[...server.store.docs.entries()].filter(([path])=>path.startsWith('ledger/shards/')).map(([,doc])=>doc.value.entries[id]?.run).find(Boolean);
-  t.diagnostic(JSON.stringify({updatedAt:record.updatedAt,record:record.control,shard:shard.control,summary:stats.best.find(run=>run.id===id).control}));
+  t.diagnostic(JSON.stringify({updatedAt:record.updatedAt,record:record.control,shard:shard.control,summary:stats.recent.find(run=>run.id===id).control}));
   assert.equal(record.updatedAt,1788840000000);
-  for(const run of [record,shard,stats.best.find(run=>run.id===id)]){
+  for(const run of [record,shard,stats.recent.find(run=>run.id===id)]){
    assert.equal(run.control,'webmcp');assert.equal(run.automated,true);
    assert.equal(run.id,id);assert.equal(run.turn,7);assert.equal(run.buildId,'a'.repeat(64));
   }
@@ -88,10 +91,10 @@ test('equal-timestamp delayed indexing agrees with the authoritative WebMCP reco
 test('late attribution enriches directory, ledger and summaries without rolling progress back', async () => {
  const server=createTestHarness(),{url}=await server.listen();
  try {
-  const endpoint=new URL('/api/vaults/'+crypto.randomUUID()+'/adventures',url),id='late-attribution';
+  const vault=crypto.randomUUID(),endpoint=new URL('/api/vaults/'+vault+'/adventures',url),id='late-attribution';
   const publish=async run=>{
    assert.equal((await fetch(endpoint,{method:'PUT',body:JSON.stringify([run])})).status,204);
-   assert.equal((await fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({runs:[run]})})).status,200);
+   assert.equal((await fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({vault,runs:[run]})})).status,200);
   };
   const live={id,name:'Hero',role:'wizard',turn:20,ended:true,control:'manual',automated:false};
   await publish(live);
@@ -99,7 +102,7 @@ test('late attribution enriches directory, ledger and summaries without rolling 
   await publish({...live,turn:21,control:'script',webmcpAutomated:false,harness_name:'Replacement',model_name:'Replacement'});
   const directory=(await(await fetch(endpoint)).json())[0],ledger=await(await fetch(new URL('/api/runs/'+id,url))).json();
   const stats=await(await fetch(new URL('/api/stats',url))).json();
-  for(const r of [directory,ledger,stats.best.find(r=>r.id===id),stats.recent.find(r=>r.id===id)]) {
+  for(const r of [directory,ledger,stats.recent.find(r=>r.id===id)]) {
    assert.equal(r.turn,21);assert.equal(r.ended,true);assert.equal(r.control,'script');
    assert.equal(r.webmcpAutomated,true);assert.equal(r.automated,true);
    assert.equal(r.harness_name,'Pi');assert.equal(r.model_name,'MuseSpark');
