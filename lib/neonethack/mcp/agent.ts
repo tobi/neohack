@@ -1,3 +1,4 @@
+import {actionMessages,attemptsFor,nearbyContext,stateSummary,orderedReply} from './reply-context.js';
 import {Game, Neonethack, Navigator, NavigationError, WorldError, type Transport} from '../typescript/client.js';
 import type {Request, Response, Snapshot} from '../typescript/types.js';
 import {methods, tools, instructions, answers} from './agent-data.js';
@@ -37,8 +38,8 @@ export function present(response:Response, extra:Record<string,unknown>={}, comp
   else if(isSnapshot(response)) summary=`${response.outcome.action}: ${response.outcome.status}; ${response.outcome.turnsElapsed} turns elapsed.${response.decision ? ` Answer the ${response.decision.kind} decision: ${response.decision.about}` : ''}`;
   else if('kind' in response) summary=response.kind==='lore' ? (response.found?'Encyclopedia lore; reference text, not an observation.':'No encyclopedia entry found.') : response.kind==='route' ? `Known walking route: ${response.distance===null?`none known${'why' in response && response.why?` (${response.why})`:''}`:`${response.distance} steps`}.` : response.kind==='navigation' ? `${response.frontiers.length} reachable unvisited frontiers; ${response.waysDown.length} remembered downward stairs.` : 'Perceived attempts for this square.';
   if(extra.navigation) {
-    const leg=extra.navigation as {reason:string;why?:string;hint?:string;actionsTaken:number;turnsElapsed:number};
-    summary=`Navigation: ${leg.reason}${leg.why?` (${leg.why})`:''}; ${leg.actionsTaken} actions, ${leg.turnsElapsed} turns elapsed.${leg.hint?` ${leg.hint}`:''}`;
+    const leg=extra.navigation as {reason:string;why?:string;hint?:string;stop?:{kind:string};actionsTaken:number;turnsElapsed:number};
+    summary=`Navigation: ${leg.reason}${leg.why?` (${leg.why})`:leg.stop?` (${leg.stop.kind})`:''}; ${leg.actionsTaken} actions, ${leg.turnsElapsed} turns elapsed.${leg.hint?` ${leg.hint}`:''}`;
   }
   // Terminal facts lead even when a navigation leg or error supplies the detail.
   // A disconnected close ends the session connection, but the run can resume.
@@ -50,13 +51,7 @@ export function present(response:Response, extra:Record<string,unknown>={}, comp
   if(result.decision)Object.assign(result,questionReply(r.sessionId,result.decision as Record<string,unknown>));
   // Inspect offers executable adapter syntax beside the unchanged low facts.
   // These are attempts, including needsSelection, never recommended actions.
-  if('cell' in response)result.attempts=response.cell.actions.flatMap(offer=>{
-    if(!('arguments' in offer))return [];
-    const tool=offer.method==='game.move'?'go':methods.find(m=>m.method===offer.method)?.name;
-    if(!tool)return [];
-    const args=offer.method==='game.move'?{to:{x:response.cell.x,y:response.cell.y},force:true}:offer.arguments;
-    return [{tool,arguments:{sessionId:response.sessionId,...args},availability:offer.availability,cost:offer.cost}];
-  });
+  if('cell' in response)result.attempts=attemptsFor(response.cell,response.sessionId);
   if(extra.navigation && !extra.error)delete result.error;
   if((extra.navigation as {actionsTaken?:number}|undefined)?.actionsTaken===0){
     delete result.operationId;
@@ -70,7 +65,13 @@ export function present(response:Response, extra:Record<string,unknown>={}, comp
     result.observation=observation;result.events=retained;
     result.presentation={kind:'compact',omitted:['observation.neighborhood'],omittedClearTerrainEvents:events.length-retained.length,fullObservation:'observe',attempts:'inspect',...(result.operationId?{fullInputReceipt:'receipt'}:{})};
   }
-  return result;
+  if(isSnapshot(response)) {
+    result.state=stateSummary(response);
+    result.messages=extra.messages??((extra.navigation as {actionsTaken?:number}|undefined)?.actionsTaken===0?[]:actionMessages(response));
+    result.messageScope=extra.messageScope??(extra.historical?'historical':'action');
+    if(result.messageScope==='observation'||result.messageScope==='none')result.events=[];
+  }
+  return orderedReply(result);
 }
 /** Per-agent observation/revision and uncertainty state, separate from the live
  * human Game. Never refresh silently before an input based on an older view. */
@@ -105,6 +106,28 @@ export class AgentClient {
     return {error:('error' in response&&response.error)||{code:'uncertainExecution',message},summary:message,
       next:{tool:'observe',arguments:{sessionId:sid}}};
   }
+  private async reply(frame:Response,extra:Record<string,unknown>={},compact=true):Promise<Record<string,unknown>> {
+    const result=present(frame,extra,compact);
+    if(!isSnapshot(frame)||frame.ended||uncertain(frame)||this.pending.has(frame.sessionId))return orderedReply(result);
+    const context:Record<string,unknown>={revision:frame.revision,nearby:nearbyContext(frame)};
+    result.context=context;
+    if(frame.decision){context.status='decision';return orderedReply(result);}
+    try {
+      const query=await this.api.transport.send({version:1,method:'session.navigation',params:{sessionId:frame.sessionId,expectedRevision:frame.revision}});
+      if('kind' in query&&query.kind==='navigation'&&!('error' in query)&&query.sessionId===frame.sessionId&&query.basis.revision===frame.revision&&query.basis.levelId===frame.observation.location.id) {
+        context.status='available';context.frontiers=query.frontiers;context.waysDown=query.waysDown;context.doors=query.doors;
+      } else {
+        context.status='unavailable';context.reason='error' in query&&query.error&&typeof query.error==='object'&&'code' in query.error?query.error.code:'unexpectedResponse';
+      }
+    } catch {context.status='unavailable';context.reason='queryUnavailable';}
+    return orderedReply(result);
+  }
+  private async invalidInput(frame:Snapshot,code:string,message:string,details:Record<string,unknown>={}) {
+    const result=await this.reply(frame,{summary:message,error:{code,message,...details},inputSubmitted:false,messages:[],messageScope:'none'});
+    delete result.outcome;delete result.operationId;result.events=[];
+    if(result.presentation)delete (result.presentation as Record<string,unknown>).fullInputReceipt;
+    return orderedReply(result);
+  }
   /** Resolve only a proven completed receipt, never resend gameplay. Always
    * obtain a fresh scene AFTER the historical lookup; another participant may
    * have acted in between. A missing receipt keeps admission closed. */
@@ -112,7 +135,7 @@ export class AgentClient {
     let current:Response|undefined;
     if(resume){
       current=await this.api.transport.send({version:1,method:'session.resume',params:{sessionId:sid}});
-      if(!isSnapshot(current)||uncertain(current))return present(current);
+      if(!isSnapshot(current)||uncertain(current))return present(current,{messages:[],messageScope:'observation'});
     }
     const pending=this.pending.get(sid);
     const operationId=pending && 'requestId' in pending.params ? pending.params.requestId : undefined;
@@ -125,7 +148,7 @@ export class AgentClient {
     }
     if(!current||pending)current=await this.api.transport.send({version:1,method:'session.observe',params:{sessionId:sid}});
     this.adopt(current);
-    if(!pending)return present(current);
+    if(!pending)return this.reply(current,{messages:[],messageScope:'observation'},false);
     const neighborhood=isSnapshot(current)?current.observation.neighborhood:undefined;
     const settled=receipt && isSnapshot(current) && !uncertain(current) && current.revision>=receipt.revision &&
       [current.storage,current.recording].every(d=>!d||d.status==='ok') &&
@@ -134,18 +157,18 @@ export class AgentClient {
         : neighborhood.reason!=='recoveryRequired'));
     if(settled&&receipt){
       this.pending.delete(sid);
-      return present(current,{verification:{status:'settled',operationId,outcome:receipt.outcome,...(receipt.error?{error:receipt.error}:{})},
-        summary:'Current scene. The previous uncertain input has a verified receipt; no action was resent. Read verification.outcome for its result.'});
+      return this.reply(current,{messages:[],messageScope:'observation',verification:{status:'settled',operationId,outcome:receipt.outcome,...(receipt.error?{error:receipt.error}:{})},
+        summary:'Current scene. The previous uncertain input has a verified receipt; no action was resent. Read verification.outcome for its result.'},false);
     }
     const message='Current state does not verify the previous input. No new action is allowed. Reopen the transport if necessary and resume this same session; do not repeat the action or navigation leg.';
-    return present(current,{verification:{status:'unresolved',operationId},error:{code:'uncertainExecution',message},summary:message,
+    return present(current,{messages:[],messageScope:'observation',verification:{status:'unresolved',operationId},error:{code:'uncertainExecution',message},summary:message,
       next:{tool:'resume',arguments:{sessionId:sid}}});
   }
   async call(name:string,args:Record<string,unknown>={},options:{signal?:AbortSignal}={}):Promise<Record<string,unknown>> {
     const entry=methods.find(m=>m.name===name);
     if(!entry || !valid(args,entry.schema as unknown as Schema)){
-      const message=entry?`Invalid arguments for ${name}; no operation was sent. Call help with {name:"${name}"} for the schema. Item actions take itemId; answer takes decisionId and value.`:'Unknown tool; no operation was sent. Call help with {} to list tool names.';
-      return {version:1,error:{code:'invalidParams',message},summary:message};
+      const message=entry?`Invalid arguments for ${name}; no operation was sent. Use the included tool schema. Item actions take itemId; answer takes decisionId and value.`:'Unknown tool; no operation was sent. Call help with {} to list tool names.';
+      return {version:1,inputSubmitted:false,error:{code:entry?'invalidParams':'unknownTool',message},summary:message,...(entry?{tool:tools.find(t=>t.name===name)}:{tools:tools.map(({name,description})=>({name,description}))})};
     }
     const input=structuredClone(args), sid=typeof input.sessionId==='string'?input.sessionId:undefined;
     const revision=sid?this.games.get(sid)?.state.revision:undefined;
@@ -175,12 +198,15 @@ export class AgentClient {
           summary:'Historical receipt only. This is not the current world or an active question. Use observe for current state.',
           ...('error' in response && response.error?{error:response.error}:{}),receipt};
       }
+      const messages:ReturnType<typeof actionMessages>=[];
       try {
         if(entry.method==='agent.go' || entry.method==='agent.explore' || entry.method==='agent.descend') {
+          const to=input.to as {x:number;y:number}|undefined, you=game!.observation.you;
+          if(input.force&&to&&(!you||Math.max(Math.abs(to.x-you.x),Math.abs(to.y-you.y))!==1))return this.invalidInput(game!.state,'notAdjacent','A direct attempt requires an adjacent square. Omit force for navigation; no input submitted.',{target:to,position:you});
           const navigator=new Navigator(game!);
-          const legOptions={maxActions:input.maxActions as number|undefined,signal:options.signal};
+          const legOptions={maxActions:input.maxActions as number|undefined,signal:options.signal,onStep:(frame:Snapshot)=>messages.push(...actionMessages(frame))};
           const leg=entry.method==='agent.go' ? await navigator.go({...legOptions,to:input.to as {x:number;y:number},force:input.force as boolean|undefined}) : entry.method==='agent.explore' ? await navigator.explore({...legOptions,maxFrontiers:input.maxFrontiers as number|undefined}) : await navigator.descend(legOptions);
-          this.adopt(leg.snapshot);return present(leg.snapshot,{navigation:{reason:leg.reason,actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,...(leg.hint?{hint:leg.hint}:{}),...(leg.why?{why:leg.why}:{}),...(leg.lastOperationId?{lastOperationId:leg.lastOperationId}:{})},...this.verificationHint(sid,leg.snapshot)},true);
+          this.adopt(leg.snapshot);return this.reply(leg.snapshot,{messages,messageScope:'navigation',navigation:{reason:leg.reason,actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,...(leg.stop?{stop:leg.stop}:{}),...(leg.hint?{hint:leg.hint}:{}),...(leg.why?{why:leg.why}:{}),...(leg.lastOperationId?{lastOperationId:leg.lastOperationId}:{})},...this.verificationHint(sid,leg.snapshot)},true);
         }
         let method=entry.method, params:Record<string,unknown>={...input};
         if('itemId' in params){params.item=itemSelector(params);delete params.itemId;delete params.quantity;}
@@ -188,12 +214,14 @@ export class AgentClient {
           let point=input.target as {x:number;y:number};
           if(typeof input.target==='string') {
             const cell=game!.observation.world.find(c=>c.occupant && c.occupant.kind!=='self' && creatureId(game!.state,c.x,c.y)===input.target);
-            if(!cell)throw Error('Stale or foreign creature reference. Observe and select a current creature or adjacent square.');
+            if(!cell)return this.invalidInput(game!.state,'staleTarget','That creature reference is not in this observed revision; no input submitted.',{target:input.target});
             point={x:cell.x,y:cell.y};
           }
+          const you=game!.observation.you;
+          if(!you||Math.max(Math.abs(point.x-you.x),Math.abs(point.y-you.y))!==1)return this.invalidInput(game!.state,'notAdjacent','Choose an adjacent square for an attack; no input submitted.',{target:point,position:you});
           const query=await game!.actions(point,{expectedRevision:revision});
           const move=query.cell.actions.find(a=>a.method==='game.move');
-          if(query.cell.movement.relation!=='adjacent'||!move?.arguments||!('direction' in move.arguments))throw Error('Choose an adjacent square for an attack.');
+          if(query.cell.movement.relation!=='adjacent'||!move?.arguments||!('direction' in move.arguments))return this.invalidInput(game!.state,'notAdjacent','Choose an adjacent square for an attack; no input submitted.',{target:point,position:game!.observation.you});
           method='game.attack';params={sessionId:sid,direction:move.arguments.direction};
         }
         if(method.startsWith('decision.') && input.decisionId!==game!.decision?.id) return {
@@ -232,7 +260,7 @@ export class AgentClient {
         const response=await this.api.transport.send({version:1,method,params} as Request);
         this.adopt(response);
         if(method==='session.close' && !('error' in response))this.games.delete(sid!);
-        return present(response,this.verificationHint(sid,response),true);
+        return this.reply(response,{...this.verificationHint(sid,response),...(entry.readOnly?{messages:[],messageScope:'observation'}:{})},true);
       } catch(error) {
         if(error instanceof NavigationError){
           const leg=error.result,cause=error.cause;
@@ -241,12 +269,12 @@ export class AgentClient {
           const original=cause instanceof WorldError && 'error' in cause.response?cause.response.error:undefined;
           const message=`Navigation stopped after ${leg.actionsTaken} actions and ${leg.turnsElapsed} turns. Substep error: ${cause instanceof Error?cause.message:String(cause)}`;
           this.adopt(leg.snapshot);
-          const result=present(leg.snapshot,{navigation:{reason:'error',actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,observation:pending?'lastConfirmed':'current',...(lastOperationId?{lastOperationId}:{}),hint:'Call observe before choosing another action; do not blindly repeat this navigation leg.'},error:{code:original?.code??(pending?'uncertainExecution':'agentError'),message},next:{tool:'observe',arguments:{sessionId:sid}}},true);
+          const result=present(leg.snapshot,{messages,messageScope:'navigation',navigation:{reason:'error',actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,observation:pending?'lastConfirmed':'current',...(lastOperationId?{lastOperationId}:{}),hint:'Call observe before choosing another action; do not blindly repeat this navigation leg.'},error:{code:original?.code??(pending?'uncertainExecution':'agentError'),message},next:{tool:'observe',arguments:{sessionId:sid}}},true);
           delete result.operationId;
           if(pending && 'requestId' in pending.params)result.operationId=pending.params.requestId;
           const presentation=result.presentation as Record<string,unknown>;
           if(result.operationId)presentation.fullInputReceipt='receipt';else delete presentation.fullInputReceipt;
-          return result;
+          return orderedReply(result);
         }
         if(entry.method==='session.create' && !(error instanceof WorldError)) {
           this.creationUncertain=true;

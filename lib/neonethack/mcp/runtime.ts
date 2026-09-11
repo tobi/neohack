@@ -7,6 +7,7 @@ import type {Request,Response} from '../typescript/types.js';
 const sha=(bytes:Uint8Array|string)=>createHash('sha256').update(bytes).digest('hex');
 const idPattern=/^[A-Za-z0-9_-]{16}$/;
 const hashPattern=/^[a-f0-9]{64}$/;
+class SessionNotFound extends Error {}
 async function durable(path:string,bytes:Uint8Array|string){const f=await open(path,'wx',0o600);try{await f.writeFile(bytes);await f.sync();}finally{await f.close();}}
 async function syncDir(path:string){const f=await open(path,'r');try{await f.sync();}finally{await f.close();}}
 /** One worker/SQLite journal per run. Every worker executes the shipped C WASM;
@@ -68,13 +69,18 @@ export class McpRuntime {
     if(!this.workers.has(id)){
       if(request.method!=='session.resume')return {version:1,error:{code:'sessionNotLoaded',message:'Resume this session before querying or acting.'}} as Response;
       const pending=(async()=>{
-        const saved=JSON.parse(await readFile(join(this.sessionsPath,'runs',id!,'runtime.json'),'utf8'));
+        let raw:string;
+        try {raw=await readFile(join(this.sessionsPath,'runs',id!,'runtime.json'),'utf8');}
+        catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')throw new SessionNotFound('No saved run with this token exists in this session store.');throw error;}
+        const saved=JSON.parse(raw);
         if(saved.version!==1||!hashPattern.test(saved.buildId))throw Error('Invalid stored runtime pin');
         return this.start(id!,saved.buildId);
       })();this.workers.set(id,pending);
       pending.catch(()=>{if(this.workers.get(id!)===pending)this.workers.delete(id!);});
     }
-    const worker=await this.workers.get(id)!;
+    let worker:WasmTransport;
+    try {worker=await this.workers.get(id)!;}
+    catch(error){if(error instanceof SessionNotFound)return {version:1,error:{code:'sessionNotFound',message:error.message}} as Response;throw error;}
     const response=await worker.send(request);
     if(request.method==='session.close'&&!('error' in response)){
       await worker.close();this.workers.delete(id);

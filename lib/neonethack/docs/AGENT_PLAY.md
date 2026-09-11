@@ -25,6 +25,15 @@ The example ID is a placeholder; copy yours from inventory or the floor view.
 Readable names are not item IDs. `inspect` returns `attempts` with tool/argument
 syntax; eligibility does not guarantee safety or success.
 
+Replies already include `state` (position, level and vitals), fresh `messages`,
+and `context` from free perceived-state queries. Nearby cells contain executable
+`attempts`; known frontiers, doors and downward stairs are included when available.
+You do not need an observe–inspect–navigation ritual after each successful action.
+`context.status: unavailable` affects enrichment only; the action's outcome and
+receipt remain authoritative. Message turns identify the response boundary, not
+individual internal turns of a counted action. Observation returns no fresh
+messages; `observation.heard` is recent history and may repeat.
+
 A question arrives as `decision`, accompanied by `reply.arguments` and
 `reply.valueSchema`. Copy those bound arguments and supply your chosen `value`:
 
@@ -50,7 +59,12 @@ If there is no knownWalking path, `navigation.reason` is `noRoute` and `why` is
 for the next explicit tool. Zero-action stops did not run input. Confirmed partial
 legs need no recovery ritual: read the returned scene and choose what to do next.
 
-After an error or lost response, call `observe({sessionId})`. It checks any retained
+`navigation.stop.kind` identifies a witnessed health, hunger, condition, level,
+creature or position change. An occupied square does not imply a hostile creature.
+Rejected arguments marked `inputSubmitted:false` include the schema or current
+context needed to correct them; they need no recovery.
+
+After an uncertain error or lost response, call `observe({sessionId})`. It checks any retained
 uncertain receipt without resending input, then returns the current scene and
 standing question. If the receipt cannot be verified, stop and follow the explicit
 resume instruction. Never repeat an action or navigation leg blindly. `receipt`

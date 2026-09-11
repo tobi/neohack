@@ -7,6 +7,10 @@ Player-facing updates to [neohack.dev](https://neohack.dev).
 
 ## Unreleased
 
+- MCP replies include fresh messages, current state and automatic free nearby/navigation
+  context. Navigation explains witnessed stop causes, exploration considers C-approved
+  diagonal probes, and invalid targets return actionable errors without submitting input.
+
 - Added repository-wide Oxlint checks and a separate, measured unit-test coverage
   gate for replay storage and presentation helpers. CI and deployment reject
   unsafe code, focused tests, stale suppressions and per-file coverage regressions.

@@ -1,28 +1,50 @@
 import {WorldError, type Game} from './client.js';
-import type {Compass,RouteWhy,Snapshot} from './types.js';
+import type {CellActions,Compass,RouteWhy,Snapshot} from './types.js';
 export interface NavigationOptions { maxActions?: number; signal?: AbortSignal; onStep?: (snapshot: Snapshot) => void; stopOnNewCreatures?: boolean }
 export interface ExploreOptions extends NavigationOptions { maxFrontiers?: number }
 const routeHints: Record<RouteWhy, string> = {
-  targetOccupied: 'Attack the occupant if adjacent; go does not fight.',
+  targetOccupied: 'The square is occupied. Inspect its occupant; an adjacent go with force:true attempts ordinary movement, not force attack.',
   targetUnknown: 'Inspect or step adjacent; knownWalking does not guess unmapped tiles.',
   closedDoor: 'Open the door, or explore toward it. go does not open doors.',
   disconnected: 'No reachable unvisited frontier or closed door. Search, or walk to a remembered edge and step into the dark.',
 };
-const CARDINAL = [[0,-1],[1,0],[0,1],[-1,0]] as const;
-function unknownNeighbor(game:Game,x:number,y:number):Point|undefined {
+const NEIGHBORS = [[0,-1],[1,0],[0,1],[-1,0],[1,-1],[1,1],[-1,1],[-1,-1]] as const;
+function unknownNeighbors(game:Game,x:number,y:number):Point[] {
+  const result:Point[]=[];
   const known=new Map(game.observation.world.map(cell=>[`${cell.x},${cell.y}`,cell]));
-  for (const [dx,dy] of CARDINAL) {
+  for (const [dx,dy] of NEIGHBORS) {
     const nx=x+dx, ny=y+dy;
     if (nx<1||nx>79||ny<0||ny>20) continue;
     const cell=known.get(`${nx},${ny}`);
-    if (!cell || cell.terrain.type==='unknown' || cell.terrain.type==='dark') return {x:nx,y:ny};
+    if (!cell || cell.terrain.type==='unknown' || cell.terrain.type==='dark') result.push({x:nx,y:ny});
   }
+  return result;
+}
+/** Exploration policy uses C restrictions; direct go(force) remains an attempt. */
+function probeOffer(cell:CellActions) {
+  if(cell.movement.relation!=='adjacent'||cell.movement.knownRestriction||cell.movement.requiresSqueeze||cell.hazards?.length||cell.occupant||!['unknown','step'].includes(cell.movement.intent??'unknown'))return;
+  const offer=cell.actions.find(a=>a.method==='game.move');
+  if(offer?.arguments)return offer;
+}
+async function perceivedProbe(game:Game):Promise<Point|undefined> {
+  const you=game.observation.you;
+  if(!you)return;
+  for(const point of unknownNeighbors(game,you.x,you.y)) {
+    const query=await game.actions(point,{expectedRevision:game.state.revision});
+    if(probeOffer(query.cell))return point;
+  }
+}
+export interface NavigationStop {
+  kind: 'healthLost' | 'hungerChanged' | 'conditionChanged' | 'levelChanged' | 'creaturePerceived' | 'positionUnchanged' | 'staleRevision';
+  before?: unknown;
+  after?: unknown;
 }
 export interface NavigationResult {
   reason: 'arrived' | 'attempted' | 'stepLimit' | 'decision' | 'interrupted' | 'changed' | 'noRoute' | 'ended' | 'aborted' | 'error';
   actionsTaken: number;
   turnsElapsed: number;
   snapshot: Snapshot;
+  stop?: NavigationStop;
   why?: RouteWhy;
   hint?: string;
   lastOperationId?: string;
@@ -50,7 +72,7 @@ export class Navigator {
     this.running=true;
     let actionsTaken=0, turnsElapsed=0;
     let accountedTurn=this.game.observation.turn;
-    const result=(reason:NavigationResult['reason'], extra: Pick<NavigationResult,'why'|'hint'> = {}):NavigationResult=>{
+    const result=(reason:NavigationResult['reason'], extra: Pick<NavigationResult,'why'|'hint'|'stop'> = {}):NavigationResult=>{
       const lastOperationId = (actionsTaken > 0 && reason !== 'arrived' && reason !== 'ended') ? this.game.state.requestId ?? undefined : undefined;
       return {reason,actionsTaken,turnsElapsed,snapshot:this.game.state,...extra,...(lastOperationId?{lastOperationId}:{})};
     };
@@ -91,7 +113,7 @@ export class Navigator {
     this.running = true;
     let actionsTaken = 0, turnsElapsed = 0;
     let accountedTurn=this.game.observation.turn;
-    const result = (reason:NavigationResult['reason'], extra: Pick<NavigationResult,'why'|'hint'> = {}):NavigationResult => {
+    const result = (reason:NavigationResult['reason'], extra: Pick<NavigationResult,'why'|'hint'|'stop'> = {}):NavigationResult => {
       const lastOperationId = (actionsTaken > 0 && reason !== 'arrived' && reason !== 'ended') ? this.game.state.requestId ?? undefined : undefined;
       return {reason,actionsTaken,turnsElapsed,snapshot:this.game.state,...extra,...(lastOperationId?{lastOperationId}:{})};
     };
@@ -115,11 +137,11 @@ export class Navigator {
           else if(destination==='frontier') {
             const you=this.game.observation.you;
             if(!you) return false;
-            const here=unknownNeighbor(this.game,you.x,you.y);
+            const here=await perceivedProbe(this.game);
             if(here) { to=here; probe=here; return true; }
             let best:Point|undefined, bestDistance=Infinity;
             for (const cell of this.game.observation.world) {
-              if(!unknownNeighbor(this.game,cell.x,cell.y)) continue;
+              if(!unknownNeighbors(this.game,cell.x,cell.y).length) continue;
               const route=await this.game.route({x:cell.x,y:cell.y},{expectedRevision:this.game.state.revision});
               if(route.distance===null || route.distance>=bestDistance) continue;
               bestDistance=route.distance; best={x:cell.x,y:cell.y};
@@ -133,11 +155,11 @@ export class Navigator {
       if(!await choose()) return result('noRoute',{why:'disconnected',hint:routeHints.disconnected});
       while(true) {
         const stopped=gate(); if(stopped) return result(stopped);
-        if(this.game.observation.location.id!==level) return result('changed');
+        if(this.game.observation.location.id!==level) return result('changed',{stop:{kind:'levelChanged',before:level,after:this.game.observation.location.id}});
         const revision=this.game.state.revision;
         if(probe) {
           const query=await this.game.actions(probe,{expectedRevision:revision});
-          const move=query.cell.actions.find(a=>a.method==='game.move');
+          const move=probeOffer(query.cell);
           if(query.cell.movement.relation!=='adjacent' || !move?.arguments || !('direction' in move.arguments))
             return result('noRoute',{why:'targetUnknown',hint:routeHints.targetUnknown});
           if(actionsTaken>=limit) return result('stepLimit');
@@ -154,7 +176,7 @@ export class Navigator {
         }
         if(route.distance===0 && !climb && !door) {
           const you=this.game.observation.you;
-          const nextUnknown=you?unknownNeighbor(this.game,you.x,you.y):undefined;
+          const nextUnknown=edge&&you?await perceivedProbe(this.game):undefined;
           if(edge && nextUnknown) { to=nextUnknown; probe=nextUnknown; edge=false; continue; }
           if(destination!=='frontier' || ++frontiersReached>=frontierLimit) return result('arrived');
           if(actionsTaken>=limit) return result('stepLimit');
@@ -176,21 +198,22 @@ export class Navigator {
         options.onStep?.(frame);
         const after=gate(); if(after) return result(after);
         if(frame.outcome.status!=='completed') return result('interrupted');
-        if(typeof health==='number' && typeof frame.observation.vitals.health==='number' && frame.observation.vitals.health<health) return result('changed');
-        if(JSON.stringify(frame.observation.vitals.condition)!==condition || frame.observation.vitals.hunger!==hunger) return result('changed');
+        if(typeof health==='number' && typeof frame.observation.vitals.health==='number' && frame.observation.vitals.health<health) return result('changed',{stop:{kind:'healthLost',before:health,after:frame.observation.vitals.health}});
+        if(JSON.stringify(frame.observation.vitals.condition)!==condition) return result('changed',{stop:{kind:'conditionChanged',before:condition?JSON.parse(condition):null,after:frame.observation.vitals.condition}});
+        if(frame.observation.vitals.hunger!==hunger) return result('changed',{stop:{kind:'hungerChanged',before:hunger,after:frame.observation.vitals.hunger}});
         if(route.distance===0) {
           if(door) return result((await this.game.actions({direction:door})).cell.terrain?.type==='openDoor'?'arrived':'interrupted');
           return result(frame.observation.location.id!==level?'arrived':'interrupted');
         }
-        if(frame.observation.location.id!==level) return result('changed');
-        if(!frame.outcome.positionChanged) return result('interrupted');
-        if(noticeCreatures && frame.observation.world.some(c=>c.occupant?.kind==='creature' && !before.some(p=>p.x===c.x && p.y===c.y && p.occupant?.appearance===c.occupant?.appearance))) return result('changed',{hint:'A creature is now perceived.'});
+        if(frame.observation.location.id!==level) return result('changed',{stop:{kind:'levelChanged',before:level,after:frame.observation.location.id}});
+        if(!frame.outcome.positionChanged) return result('interrupted',{stop:{kind:'positionUnchanged'}});
+        if(noticeCreatures && frame.observation.world.some(c=>c.occupant?.kind==='creature' && !before.some(p=>p.x===c.x && p.y===c.y && p.occupant?.appearance===c.occupant?.appearance))) return result('changed',{stop:{kind:'creaturePerceived'},hint:'A creature is now perceived.'});
         if(actionsTaken>=limit) return result(!climb && !door && (destination!=='frontier' || frontiersReached+1>=frontierLimit) && frame.observation.you?.x===to!.x && frame.observation.you?.y===to!.y ? 'arrived' : 'stepLimit');
       }
     } catch(error) {
       const elapsed=this.game.observation.turn-accountedTurn;
       if(elapsed>0){actionsTaken++;turnsElapsed+=elapsed;}
-      if(error instanceof WorldError && 'error' in error.response && error.response.error?.code==='staleRevision') return result('changed');
+      if(error instanceof WorldError && 'error' in error.response && error.response.error?.code==='staleRevision') return result('changed',{stop:{kind:'staleRevision'}});
       throw new NavigationError(result('error'),error); // Never retry missing or uncertain receipts here.
     } finally { this.running=false; }
   }

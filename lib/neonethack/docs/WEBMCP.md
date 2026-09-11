@@ -153,3 +153,19 @@ as well as structured content. The retired 2024 HTTP+SSE transport is not suppor
 WebMCP accepts both document and earlier navigator registration surfaces, including
 synchronous registration, explicit unregister methods and returned cleanup
 callbacks. It never uses `clearContext` to erase other scripts’ tools.
+
+## Reply context without extra gameplay
+
+The shared adapter enriches snapshot replies with `state`, action-local `messages`
+and a revision-bound `context`. Nearby attempts come from the snapshot's C
+neighborhood; one free `session.navigation` query adds frontiers, doors and stairs.
+It submits no movement, consumes no turns and never answers a question. Standing
+questions, ended runs and unresolved input skip that navigation query. A query
+failure or revision mismatch marks context unavailable without changing the saved
+action outcome, adopting another revision or retrying input. All transports use
+this same path, including browser calls shared with a human.
+
+Navigation messages aggregate confirmed substeps; their turn labels are response
+boundaries. Observation messages are empty; the low `observation.heard` field is
+rolling history. Historical receipts keep their messages nested and labelled.
+Typed `navigation.stop` details describe witnessed changes, not predicted danger.

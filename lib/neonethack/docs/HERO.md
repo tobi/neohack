@@ -276,6 +276,10 @@ already includes its final confirmed scene for deciding what to do next.
 is reachable, it approaches a remembered closed door not known locked and makes
 one explicit open attempt, then stops. It does not pick locks, kick or repeat
 a resisted opening.
+When no frontier or door is reachable, exploration can probe an adjacent unknown
+square, including diagonals, using C-provided movement offers. Its policy skips
+known restrictions, squeezes, occupants and disclosed hazards; it does not infer
+corner rules in JavaScript or treat an uncertain attempt as guaranteed passage.
 Pass `maxFrontiers` to explicitly continue across several successive perceived
 frontiers, for example `explore({maxFrontiers:20,maxActions:80})`. It defaults to
 one; the action budget applies to the whole call, and a door attempt still ends

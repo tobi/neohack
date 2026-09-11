@@ -1577,7 +1577,7 @@ test(
     );
     const { methods } = await import("../../../lib/neonethack/dist/mcp/agent-data.js");
     const tools=methods.map(m=>({name:m.name,description:m.description,inputSchema:m.schema}));
-    const snapshotPart=({summary,operationId,historical,navigation,creatures,requestId,presentation,reply,cancel,verification,next,...frame})=>{
+    const snapshotPart=({summary,operationId,historical,navigation,creatures,requestId,presentation,reply,cancel,verification,next,state,messages,messageScope,context,...frame})=>{
       const {neighborhood,...observation}=frame.observation;
       return {...frame,observation,events:frame.events.filter(e=>!(e.type==='saw'&&e.kind==='terrain'&&(e.mark==='\\u0000'||e.mark==='\u0000')))};
     };
@@ -1608,6 +1608,9 @@ test(
     let state = created.structuredContent;
     assert.deepEqual(await sharedSnapshot(), snapshotPart(state));
     assert.equal(state.presentation.kind,'compact');
+    assert.equal(state.context.status,'available');
+    assert.equal(state.context.revision,state.revision);
+    assert.ok(state.context.nearby.cells.length<=9);
     const humanBeforeQuery = await agentSnapshot(page);
     const full=(await call('observe',{sessionId:state.sessionId})).structuredContent;
     assert.deepEqual(await agentSnapshot(page), humanBeforeQuery, 'observation preserves the human action outcome and events');
@@ -1707,7 +1710,12 @@ test(
       state.observation.turn + 1,
     );
     state = recovered.structuredContent;
-    assert.deepEqual(await sharedSnapshot(), snapshotPart(state));
+    const {events:humanEvents,...humanScene}=await sharedSnapshot();
+    const {events:observedEvents,...observedScene}=snapshotPart(state);
+    assert.deepEqual(humanScene,observedScene);
+    assert.deepEqual(observedEvents,[]);
+    assert.deepEqual(state.messages,[]);
+    assert.ok(Array.isArray(humanEvents));
     assert.deepEqual((await agentSnapshot(page)).observation,state.observation,'recovered receipt includes the complete neighborhood');
     await page.locator("#recovery").waitFor({ state: "hidden" });
     await page.setViewportSize({ width: 390, height: 844 });
@@ -3826,7 +3834,8 @@ test('free WebMCP observation preserves live touch equipment intent; input inval
   const actions = await call("inspect", { sessionId: frame.sessionId, target: 'here' });
   assert.equal(actions.isError, false);
   const dispatched = await page.evaluate(start => globalThis.equipmentRequests.slice(start), dispatchStart);
-  assert.deepEqual(dispatched, ['session.observe', 'session.actions']);
+  assert.deepEqual(dispatched, ['session.observe', 'session.navigation', 'session.actions']);
+  assert.equal(observed.structuredContent.context.status,'available');
   assert.equal((await snapshot(page)).observation.turn, frame.observation.turn);
   assert.equal(observed.structuredContent.revision, frame.revision);
   assert.equal(await page.locator('.rightbar').isVisible(), true);

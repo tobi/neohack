@@ -35,6 +35,76 @@
     "historical": {
       "type": "boolean"
     },
+    "inputSubmitted": {
+      "type": "boolean"
+    },
+    "state": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer"
+        },
+        "turn": {
+          "type": "integer"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "location": {
+          "type": "object"
+        },
+        "vitals": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "revision",
+        "turn",
+        "position",
+        "location",
+        "vitals"
+      ],
+      "additionalProperties": false
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "turn": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn",
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "messageScope": {
+      "type": "string",
+      "enum": [
+        "action",
+        "navigation",
+        "observation",
+        "historical",
+        "none"
+      ]
+    },
+    "context": {
+      "type": "object"
+    },
     "presentation": {
       "type": "object",
       "properties": {
@@ -156,6 +226,12 @@
           },
           "cost": {
             "const": "variable"
+          },
+          "cautions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
