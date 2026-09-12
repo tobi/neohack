@@ -894,8 +894,10 @@ each run's best reported progress among runs updated in the window, across the
 whole ledger, not just the plotted 200 or all-time leaders. They are not claims
 about when the high score was achieved. Unknown scores are omitted, not zero;
 never parse a dungeon label to manufacture a numeric depth. The all-time list
-continues to rank by ascension, peak experience level, then turns. Clearly label
-browser reports and missing older data. Error telemetry sends only a bounded category and
+continues to rank by ascension, peak experience level, then turns. Rankings,
+records and the ascension and longest-run totals include only runs with a
+published recording; self-reported runs without one stay in the recent list and
+the run count. Clearly label browser reports and missing older data. Error telemetry sends only a bounded category and
 engine package, asynchronously and once per category/package/page visit. Never
 send bookmarks, vault IDs, raw messages, stacks or journals in diagnostic reports.
 Reports go to structured Vercel logs; the public ledger API excludes diagnostics.

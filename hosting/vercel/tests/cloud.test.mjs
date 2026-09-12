@@ -2,7 +2,10 @@ import { resolve } from 'node:path';
 import {createBlockRun} from './published-block-fixture.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createTestHarness } from './server.mjs';
+import { createTestHarness, publicStoreFor } from './server.mjs';
+import { storageContext } from '../src/storage.ts';
+import { publicReplayContext } from '../src/public-replay-store.ts';
+import { markRecorded } from '../src/ledger-store.ts';
 import { chromium } from '../../../web/neohack.dev/node_modules/playwright-core/index.mjs';
 
 async function fixture(t) {
@@ -11,7 +14,7 @@ async function fixture(t) {
   t.after(async()=>{try {await browser?.close();} finally {await server.close();}});
   const {url} = await server.listen();
   browser = await chromium.launch({executablePath:process.env.CHROMIUM ?? '/usr/bin/chromium',headless:true,chromiumSandbox:true});
-  return {url:url.href.replace(/\/$/,''),browser};
+  return {url:url.href.replace(/\/$/,''),browser,server};
 }
 async function create(page, url) {
   await page.goto(url);
@@ -159,15 +162,24 @@ test('cloud saving waits five idle seconds, resets on play, and explicit sharing
   await page.close();
 });
 
-test('ledger ranks all runs, preserves progress, keeps diagnostics private and renders safely on mobile', {timeout:30000}, async t => {
-  const {url,browser}=await fixture(t);
+test('ledger ranks recorded runs, lists self-reported ones, preserves progress, keeps diagnostics private and renders safely on mobile', {timeout:30000}, async t => {
+  const {url,browser,server}=await fixture(t);
+  const vault=crypto.randomUUID();
   const post=(path,body)=>fetch(url+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
   const winner={id:'g-winning-run',name:'<img src=x onerror=alert(1)>',role:'valkyrie',turn:5000,maxLevel:20,ended:true,endKind:'ascended',vault:'PRIVATE',pending:{secret:'PRIVATE'}};
-  assert.equal((await post('/api/runs',{runs:[winner]})).status,200);
-  for(let batch=0;batch<5;batch++) assert.equal((await post('/api/runs',{runs:Array.from({length:50},(_,n)=>({id:`g-${batch}-${n}`,name:'Ada',role:'wizard',turn:10,maxLevel:1,ended:false}))})).status,200);
-  await post('/api/runs',{runs:[{...winner,turn:1,ended:false,maxLevel:1}]});
+  const crowd=batch=>Array.from({length:50},(_,n)=>({id:`g-${batch}-${n}`,name:'Ada',role:'wizard',turn:10,maxLevel:1,ended:false}));
+  assert.equal((await fetch(url+'/api/vaults/'+vault+'/adventures',{method:'PUT',body:JSON.stringify([winner,...[0,1,2,3,4].flatMap(crowd)].map(({id})=>({id})))})).status,204);
+  assert.equal((await post('/api/runs',{runs:[winner]})).status,400,'publication names the registering vault');
+  assert.deepEqual(await(await post('/api/runs',{vault,runs:[winner]})).json(),{stored:1,refused:0});
+  for(let batch=0;batch<5;batch++) assert.equal((await post('/api/runs',{vault,runs:crowd(batch)})).status,200);
+  await post('/api/runs',{vault,runs:[{...winner,turn:1,ended:false,maxLevel:1}]});
   let stats=await (await fetch(url+'/api/stats')).json();
-  assert.equal(stats.totals.runs,251);assert.equal(stats.totals.ascended,1);assert.equal(stats.totals.living,250);
+  assert.equal(stats.totals.runs,251);assert.equal(stats.totals.living,250);assert.equal(stats.recent.length,200);
+  assert.equal(stats.totals.ascended,0,'a self-reported ascension is not counted');assert.deepEqual(stats.best,[]);
+  assert.equal((await(await fetch(url+'/api/runs/'+winner.id)).json()).turn,5000,'a stale update never lowers progress');
+  await storageContext.run(server.store,()=>publicReplayContext.run(publicStoreFor(server.store),()=>markRecorded(winner.id)));
+  stats=await (await fetch(url+'/api/stats')).json();
+  assert.equal(stats.totals.ascended,1);assert.equal(stats.best.length,1);
   assert.equal(stats.best[0].id,winner.id);assert.equal(stats.best[0].turn,5000);
   assert.ok(!JSON.stringify(stats).includes('PRIVATE'));
   assert.equal((await post('/api/errors',{code:'module_load',message:'PRIVATE',url:'PRIVATE'})).status,204);
@@ -175,7 +187,7 @@ test('ledger ranks all runs, preserves progress, keeps diagnostics private and r
   const page=await browser.newPage({viewport:{width:390,height:844}});
   await page.goto(url+'/dashboard');
   assert.equal(new URL(page.url()).pathname, '/dashboard');
-  await page.waitForFunction(()=>document.querySelector('#runs').children.length===100);
+  await page.waitForFunction(()=>document.querySelector('#runs').children.length===1);
   assert.ok((await page.locator('#runs tr').first().textContent()).includes(stats.best[0].name));
   assert.equal(await page.locator('#runs img').count(),0);
   assert.equal(await page.locator('#errors, #dungeon-health, #error-summary').count(),0);

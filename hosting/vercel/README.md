@@ -109,7 +109,21 @@ per metric (peak hero level and depth) per UTC day for the current seven dates.
 last-seven-days records. The windows select runs by their latest `updatedAt`,
 not by creation or achievement time. Missing/nonpositive/noninteger scores are
 omitted; accepted updates retain known peak level and depth. Expired dates are
-filtered at read time even when no new runs arrive. A summary with an older
+filtered at read time even when no new runs arrive.
+
+Ledger metadata is browser-reported. `POST /api/runs` names the vault that
+registered the run in its private adventure directory; unregistered ids and
+uploads without a vault are refused. The first accepted publication binds the
+record to that vault (a record that predates binding belongs to the vault that
+uploaded its input archive), and later uploads from another vault are refused.
+Values the engine cannot produce reject the upload: experience levels above 30,
+depths above 512, a current level above the peak, or an unknown outcome kind.
+Leaders, today's/seven-day records and the ascension
+and longest-run totals count only runs whose input archive has been published
+(`replayAvailable`); other runs remain listed among recent runs and in the total
+count. Because published predecessor records bootstrap without recording state,
+run `rebuild-ledger.mjs --apply` once after deploying this format so their
+replay state is indexed. A summary with an older
 projection format is refreshed once from its existing partition using conditional
 writes. Authoritative run records, journals and runtime pins are untouched;
 normal statistics requests still read only the 32 summaries.

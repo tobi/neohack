@@ -26,7 +26,7 @@ test('metadata indexed after an operator correction cannot restore the old name'
   const old=saveLedgerRun(run);
   try{await started;await renameLedgerRun(run.id,run.name,'Nick Johnson');}
   finally{release();await old;}
-  assert.equal((await ledgerRun(run.id)).name,'Nick Johnson');assert.equal((await ledgerStats()).best[0].name,'Nick Johnson');
+  assert.equal((await ledgerRun(run.id)).name,'Nick Johnson');assert.equal((await ledgerStats()).recent[0].name,'Nick Johnson');
  });
 });
 

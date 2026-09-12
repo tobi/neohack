@@ -107,9 +107,12 @@ test("private data stays private and malformed requests never commit", async () 
           body: JSON.stringify(body),
         }),
       );
+    const vault = crypto.randomUUID();
+    await handler(new Request(`https://neohack.dev/api/vaults/${vault}/adventures`, { method: "PUT", body: '[{"id":"a"}]' }));
     assert.equal(
       (
         await send("/api/runs", {
+          vault,
           runs: [
             { id: "a", turn: 1, vaultId: "PRIVATE", accountId: "PRIVATE" },
           ],
@@ -165,11 +168,13 @@ test('storage health fails closed without attempting writes during a storage out
 test('ledger persists across independent server instances and stale updates cannot erase completed runs', async t=>{
   const store=new MemoryStorage();
   const one=createTestHarness({store});const a=(await one.listen()).url;
-  const submit=(url,runs)=>fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({runs})});
+  const vault='33333333-3333-4333-8333-333333333333';
+  const submit=(url,runs)=>fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({vault,runs})});
+  await fetch(new URL('/api/vaults/'+vault+'/adventures',a),{method:'PUT',body:JSON.stringify([{id:'durable-run'}])});
   assert.equal((await submit(a,[{id:'durable-run',name:'Hero',role:'wizard',turn:900,ended:true,maxLevel:8}])).status,200);
   await one.close();
   const two=createTestHarness({store});t.after(()=>two.close());const b=(await two.listen()).url;
   await submit(b,[]);await submit(b,[{id:'durable-run',turn:1,ended:false}]);
   const stats=await (await fetch(new URL('/api/stats',b))).json();
-  assert.equal(stats.totals.runs,1);assert.equal(stats.best[0].turn,900);assert.equal(stats.best[0].ended,true);
+  assert.equal(stats.totals.runs,1);assert.equal(stats.recent[0].turn,900);assert.equal(stats.recent[0].ended,true);
 });

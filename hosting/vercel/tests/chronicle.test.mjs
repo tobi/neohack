@@ -9,7 +9,8 @@ import { storyModelContext, CHRONICLE_MIN_DEPTH, CHRONICLE_MIN_LEVEL } from "../
 import { storageContext } from "../src/storage.ts";
 import { publicReplayContext } from "../src/public-replay-store.ts";
 import { publishManifest } from "../src/protocol-replays.ts";
-import { markRecorded } from "../src/ledger-store.ts";
+import { markRecorded, saveLedgerRun } from "../src/ledger-store.ts";
+import { sanitizeRun } from "../src/board.ts";
 
 /** A genuine, short input archive recorded with the staged engine package. */
 async function recordArchive(id, name) {
@@ -45,6 +46,9 @@ async function seed(store, id, archive, run) {
     await publishManifest(id); await markRecorded(id);
   }));
 }
+
+/** Ledger metadata as an upload would store it, without a publishing vault. */
+const seedLedger = (store, runs) => storageContext.run(store, async () => { for (const raw of runs) await saveLedgerRun(sanitizeRun(raw, Date.now())); });
 
 /** NDJSON lines with the time each arrived, so incremental delivery is checked. */
 const readLines = async (response, until = () => false) => {
@@ -83,7 +87,7 @@ test("a chronicle is generated once per eligible dead hero, cached publicly and 
   const id = "chronicleRun0001", other = "chronicleRun0002", living = "chronicleRun0003";
   const archive = await recordArchive(id, "Alara Ashbrook");
   await seed(store, id, archive, { name: "Alara Ashbrook" });
-  const post = (runs) => fetch(new URL("/api/runs", url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runs }) });
+  const post = (runs) => seedLedger(store, runs);
   await post([
     { id, name: "Alara Ashbrook", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: CHRONICLE_MIN_DEPTH, maxLevel: CHRONICLE_MIN_LEVEL, heroLevel: CHRONICLE_MIN_LEVEL },
     { id: other, name: "Shallow", role: "wizard", turn: 40, ended: true, endKind: "death", maxDepth: CHRONICLE_MIN_DEPTH - 1, maxLevel: 5 },
@@ -129,7 +133,7 @@ test("a chronicle is generated once per eligible dead hero, cached publicly and 
   const stats = await (await fetch(new URL("/api/stats", url))).json();
   const listed = stats.best.find((x) => x.id === id);
   assert.equal(listed.chronicleAvailable, true);
-  assert.equal(stats.best.find((x) => x.id === other).chronicleAvailable, false);
+  assert.equal(stats.recent.find((x) => x.id === other).chronicleAvailable, false);
   const timings=info.mock.calls.map(c=>JSON.parse(c.arguments[0])).filter(x=>x.event==='chronicle_timing');
   assert.equal(timings.length,1,'cached/ineligible requests do not report another generation');
   const timing=timings[0];assert.equal(timing.outcome,'completed');assert.equal(timing.stage,'store');
@@ -162,10 +166,10 @@ test("ledger links lead to each run's page, which shows the tale with anchored e
   t.after(async () => { await browser.close(); await server.close(); });
   const told = "chronicleRun0006", fresh = "chronicleRun0007";
   for (const [id, name] of [[told, "Bririn Bramble"], [fresh, "Coren Cinder"]]) await seed(store, id, await recordArchive(id, name), { name });
-  await fetch(new URL("/api/runs", url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runs: [
+  await seedLedger(store, [
     { id: told, name: "Bririn Bramble", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 5, maxLevel: 4 },
     { id: fresh, name: "Coren Cinder", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 3, maxLevel: 2 },
-  ] }) });
+  ]);
   await fetch(new URL("/api/runs/" + told + "/chronicle", url), { method: "POST" });
   assert.equal(calls.length, 1);
   const page = await browser.newPage();
@@ -228,9 +232,9 @@ test("ledger links lead to each run's page, which shows the tale with anchored e
   // The replay page leads with the chronicle and can tell a new one inline.
   const third = "chronicleRun0008";
   await seed(store, third, await recordArchive(third, "Elen Fairwind"), { name: "Elen Fairwind" });
-  await fetch(new URL("/api/runs", url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runs: [
+  await seedLedger(store, [
     { id: third, name: "Elen Fairwind", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 3, maxLevel: 2 },
-  ] }) });
+  ]);
   await page.goto(new URL("/replays/" + told, url).href);
   await page.waitForSelector("#chronicle-section:not([hidden]) .chronicle:not(.chronicle-draft)");
   assert.equal(await page.locator("#chronicle-section .chronicle-title").textContent(), "Tale Bririn Bramble");
@@ -261,7 +265,7 @@ test("a model failure releases the claim, is never retried automatically and lea
   t.after(() => server.close());
   const id = "chronicleRun0004";
   await seed(store, id, await recordArchive(id, "Unlucky"), { name: "Unlucky" });
-  await fetch(new URL("/api/runs", url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runs: [{ id, name: "Unlucky", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 4, maxLevel: 3 }] }) });
+  await seedLedger(store, [{ id, name: "Unlucky", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 4, maxLevel: 3 }]);
   const warnings = [], warn = console.warn;
   console.warn = (line) => warnings.push(line);
   t.after(() => { console.warn = warn; });
@@ -290,7 +294,7 @@ test("without a model credential the endpoint refuses before replaying anything"
   delete process.env.VERCEL_OIDC_TOKEN; delete process.env.AI_GATEWAY_API_KEY;
   t.after(() => { for (const [k, v] of Object.entries(saved)) if (v !== undefined) process.env[k] = v; });
   const id = "chronicleRun0005";
-  await fetch(new URL("/api/runs", url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runs: [{ id, name: "Keyless", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 4, maxLevel: 3 }] }) });
+  await seedLedger(store, [{ id, name: "Keyless", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 4, maxLevel: 3 }]);
   const r = await fetch(new URL("/api/runs/" + id + "/chronicle", url), { method: "POST" });
   assert.equal(r.status, 503);
   assert.equal(publicStoreFor(store).docs.size, 0, "no claim or story is written");
@@ -315,10 +319,10 @@ test("a watcher receives replay progress, the story as it is written and the sto
   t.after(() => server.close());
   const watched = "chronicleRun0010", abandoned = "chronicleRun0011";
   for (const [id, name] of [[watched, "Fenric Fernwood"], [abandoned, "Isara Flint"]]) await seed(store, id, await recordArchive(id, name), { name });
-  await fetch(new URL("/api/runs", url), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runs: [
+  await seedLedger(store, [
     { id: watched, name: "Fenric Fernwood", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 4, maxLevel: 3 },
     { id: abandoned, name: "Isara Flint", role: "valkyrie", turn: 5, ended: true, endKind: "death", maxDepth: 4, maxLevel: 3 },
-  ] }) });
+  ]);
   const post = (id) => fetch(new URL("/api/runs/" + id + "/chronicle", url), { method: "POST", headers: { accept: "application/x-ndjson" } });
 
   let r = await post(watched);
@@ -371,7 +375,7 @@ test('renamed public replay renders the correction while exact WASM snapshots an
  const store=new MemoryStorage(),id='chronicleRun0099',original='Alara Ashbrook';
  const server=createTestHarness({store}),{url}=await server.listen();t.after(()=>server.close());
  const archive=await recordArchive(id,original);await seed(store,id,archive,{name:original});
- await fetch(new URL('/api/runs',url),{method:'POST',body:JSON.stringify({runs:[{id,name:original,role:'valkyrie',turn:1,ended:true,endKind:'quit'}]})});
+ await seedLedger(store,[{id,name:original,role:'valkyrie',turn:1,ended:true,endKind:'quit'}]);
  await storageContext.run(store,()=>publicReplayContext.run(publicStoreFor(store),()=>renamePublicRun(id,original,'Nick Johnson')));
  const bytes=(await publicStoreFor(store).read('replays/'+id+'/'+archive.chunk.path)).value;assert.deepEqual(Buffer.from(bytes),archive.bytes);
  const browser=await chromium.launch({executablePath:process.env.CHROMIUM??'/usr/bin/chromium',headless:true,chromiumSandbox:true});t.after(()=>browser.close());

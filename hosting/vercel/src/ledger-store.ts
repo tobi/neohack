@@ -5,7 +5,9 @@ import { preserveAttribution } from './run-attribution.ts';
 import { publicReplayStorage } from "./public-replay-store.ts";
 const SHARDS = 32;
 const DAY = 86_400_000;
-const SUMMARY_FORMAT = 2;
+// Format 3: rankings, records and ascension/longest totals count only runs
+// with a public recording. Self-reported metadata alone stays in recent runs.
+const SUMMARY_FORMAT = 3;
 const RECENT_LIMIT = 200;
 const RECORD_LIMIT = 3;
 const partition = (id: string) =>
@@ -57,12 +59,16 @@ function summarize(shard: Shard, now = Date.now()) {
     runs = entries
       .map((e) => ({ ...e.run, replayAvailable: e.recorded, chronicleAvailable: e.chronicled === true }))
       .sort(rank),
+    // Ledger metadata is browser-reported. Only a run whose input archive was
+    // published under its vault token competes for rankings and records.
+    verified = runs.filter((r) => r.replayAvailable),
     roles: Record<string, number> = {};
   for (const run of runs) roles[run.role] = (roles[run.role] ?? 0) + 1;
   const today = Math.floor(now / DAY), daily: Record<string, DailyRecords> = {};
   for (let day = today - 6; day <= today; day++) {
     const active = runs.filter(run => Math.floor(run.updatedAt / DAY) === day);
-    if (active.length) daily[day] = { runs: active.length, level: records(active, "level"), depth: records(active, "depth") };
+    const ranked = active.filter((r) => r.replayAvailable);
+    if (active.length) daily[day] = { runs: active.length, level: records(ranked, "level"), depth: records(ranked, "depth") };
   }
   return {
     format: SUMMARY_FORMAT,
@@ -70,12 +76,12 @@ function summarize(shard: Shard, now = Date.now()) {
     totals: {
       runs: runs.length,
       living: runs.filter((r) => !r.ended).length,
-      ascended: runs.filter((r) => r.endKind === "ascended").length,
-      longest: runs.reduce((n, r) => Math.max(n, r.turn), 0),
+      ascended: verified.filter((r) => r.endKind === "ascended").length,
+      longest: verified.reduce((n, r) => Math.max(n, r.turn), 0),
     },
     roles,
-    best: runs.slice(0, 100),
-    recorded: runs.filter((r) => r.replayAvailable).slice(0, 100),
+    best: verified.slice(0, 100),
+    recorded: verified.slice(0, 100),
     recent: [...runs].sort(recentOrder).slice(0, RECENT_LIMIT),
     daily,
   };
@@ -128,18 +134,37 @@ async function indexEntries(shard: number, entries: Entry[]) {
 }
 const indexRun = async (run: Run, recorded = false, chronicled = false) =>
   indexEntries(partition(run.id), [{ run, recorded, chronicled, replay: await replayState(run.id) ?? undefined }]);
-async function writeRun(run: Run, recorded = false) {
-  const original = (await read("ledger/runs/" + run.id + ".json"))
+/** The same digest protocol-replays keeps as the input archive owner. */
+export const vaultOwner = (vault: string) =>
+  createHash("sha256").update(vault).digest("hex");
+class Refused extends Error {}
+async function writeRun(run: Run, recorded = false, owner?: string) {
+  const path = "ledger/runs/" + run.id + ".json";
+  const original = (await read(path))
     ? undefined
     : (await read("board/index.json"))?.runs?.find((r: Run) => r.id === run.id);
-  const current = await update<{ run?: Run }, Run>(
-    "ledger/runs/" + run.id + ".json",
-    () => ({ run: original }),
-    (doc) => {
-      doc.run = preserveAttribution(doc.run, progress(doc.run, run), newer(doc.run, run));
-      return doc.run!;
-    },
-  );
+  // A record that predates ownership belongs to whoever published its input
+  // archive; failing that, the first vault to publish it claims it.
+  const archiveOwner = owner === undefined ? undefined : (await read("input-runs/" + run.id + ".json"))?.owner;
+  let current: Run;
+  try {
+    current = await update<{ run?: Run; owner?: string }, Run>(
+      path,
+      () => ({ run: original }),
+      (doc) => {
+        if (owner !== undefined) {
+          const bound = doc.owner ?? archiveOwner;
+          if (bound !== undefined && bound !== owner) throw new Refused();
+          doc.owner = owner;
+        }
+        doc.run = preserveAttribution(doc.run, progress(doc.run, run), newer(doc.run, run));
+        return doc.run!;
+      },
+    );
+  } catch (error) {
+    if (error instanceof Refused) return null;
+    throw error;
+  }
   await indexRun(current, recorded);
   return current;
 }
@@ -186,11 +211,13 @@ async function initialize() {
     throw error;
   }
 }
-export async function saveLedgerRun(run: Run) {
+/** With an owner (an upload's vault digest) the write is refused, returning
+ * null, when the run is bound to another vault. Server-side writers pass none. */
+export async function saveLedgerRun(run: Run, owner?: string) {
   await initialize();
   // A private input head alone does not prove that public publication succeeded.
   // markRecorded persists publication even when it precedes the metadata write.
-  return writeRun(run);
+  return writeRun(run, false, owner);
 }
 /** Explicit operator maintenance; not exposed through an HTTP upload. */
 export async function renameLedgerRun(id: string, original: string, name: string) {

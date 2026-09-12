@@ -172,11 +172,11 @@ async function writeCloud(saves: CloudAdventure[], vault: string) {
   }
   if(batch.length)batches.push(batch);
   for(const runs of batches) {
-    const responses=await Promise.all([
-      writeDirectory(runs.map(run=>run.id),vault),
-      fetch('/api/runs',{method:'POST',headers,body:JSON.stringify({runs:runs.map(save=>{const {pending:_pending,...meta}=save as CloudAdventure & {pending?:unknown};return meta;})}),signal:AbortSignal.timeout(10000)}),
-    ]);
-    if(!responses[1]!.ok)throw Error('Cloud adventure metadata was not saved.');
+    // The ledger publishes only runs this vault has registered, so the
+    // directory write must land before the metadata upload.
+    await writeDirectory(runs.map(run=>run.id),vault);
+    const response=await fetch('/api/runs',{method:'POST',headers,body:JSON.stringify({vault,runs:runs.map(save=>{const {pending:_pending,...meta}=save as CloudAdventure & {pending?:unknown};return meta;})}),signal:AbortSignal.timeout(10000)});
+    if(!response.ok)throw Error('Cloud adventure metadata was not saved.');
     for(const run of runs)publishedRuns.set(vault+':'+run.id,JSON.stringify(run));
   }
   published.set(vault,serialized);

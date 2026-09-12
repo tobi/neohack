@@ -8,8 +8,11 @@ test('slow metadata upload coalesces continuing play instead of queuing stale sn
  const run=turn=>[{id:'queue-probe',name:'Probe',role:'wizard',turn,ended:false}];
  queueCloud(run(0),'vault');
  for(let turn=1;turn<=40;turn++){t.mock.timers.tick(1000);queueCloud(run(turn),'vault');await settle();}
- assert.equal(sent.length,2,'one pair of requests despite sustained input and a slow connection');
- release();await settle();t.mock.timers.tick(5000);await settle();
+ assert.equal(sent.length,1,'one directory registration despite sustained input and a slow connection');
+ assert.ok(sent[0].url.endsWith('/adventures'),'the ledger waits until the vault has registered the run');
+ release();await settle();await settle();
+ assert.equal(sent.length,2);assert.equal(sent[1].url,'/api/runs');assert.equal(sent[1].body.vault,'vault');
+ t.mock.timers.tick(5000);await settle();await settle();
  assert.equal(sent.length,4,'one follow-up publishes the latest state');
  assert.equal(sent.filter(x=>x.url.endsWith('/adventures'))[1].body[0].turn,40);
  assert.equal(sent.filter(x=>x.url==='/api/runs')[1].body.runs[0].turn,40);

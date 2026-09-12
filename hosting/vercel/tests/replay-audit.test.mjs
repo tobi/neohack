@@ -21,11 +21,11 @@ test('negative audits persist through metadata, publication hints, chronicle ind
     assert.equal(await auditReplayAvailability('audited', await verdict('audited', 'invalid')), true);
     await saveLedgerRun(original); await markRecorded('audited'); await markChronicled('audited'); await rebuildLedgerSummaries();
     const stats = await ledgerStats();
-    assert.deepEqual(stats.totals, totals); assert.deepEqual(await ledgerRun('audited'), original);
+    assert.deepEqual({ runs: stats.totals.runs, living: stats.totals.living }, { runs: totals.runs, living: totals.living }); assert.deepEqual(await ledgerRun('audited'), original);
+    assert.equal(totals.longest, 20); assert.equal(stats.totals.longest, 0, 'an invalid recording no longer counts');
     assert.equal(stats.recorded.length, 0);
-    for (const list of [stats.best, stats.recent, stats.records.today.level, stats.records.week.depth]) {
-      assert.equal(list[0].replayAvailable, false); assert.equal(list[0].chronicleAvailable, true);
-    }
+    for (const list of [stats.best, stats.records.today.level, stats.records.week.depth]) assert.deepEqual(list, [], 'an invalid recording is not ranked');
+    assert.equal(stats.recent[0].replayAvailable, false); assert.equal(stats.recent[0].chronicleAvailable, true);
     assert.equal(await auditReplayAvailability('audited', await verdict('audited', 'verified')), true);
     assert.equal((await ledgerStats()).recorded[0].id, 'audited');
   });
