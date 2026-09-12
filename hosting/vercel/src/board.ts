@@ -16,7 +16,6 @@ const CONTROLS = new Set(["manual", "webmcp", "bot", "script", "playground"]);
 // produce. Impossible values reject the whole upload; unknown ones stay omitted.
 const MAX_HERO_LEVEL = 30; // engine MAXULEV
 const MAX_DEPTH = 512; // engine MAXDUNGEON * MAXLEVEL
-const MAX_TURN = 10_000_000; // plausibility bound; the engine itself ends play at 1e9
 const END_KINDS = new Set(["death", "quit", "disconnected", "ascended", "escaped", "engineError", "unknown"]);
 
 export type Run = {
@@ -72,7 +71,7 @@ export function sanitizeRun(
     typeof raw !== "object" ||
     !Number.isSafeInteger(raw.turn) ||
     Number(raw.turn) < 0 ||
-    Number(raw.turn) > MAX_TURN
+    Number(raw.turn) > 1e9
   )
     return null;
   if (typeof raw.id !== "string" || !RUN_ID.test(raw.id)) return null;

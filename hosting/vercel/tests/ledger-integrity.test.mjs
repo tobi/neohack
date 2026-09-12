@@ -10,10 +10,10 @@ const VAULT='11111111-1111-4111-8111-111111111111', OTHER='22222222-2222-4222-82
 const run=(id,overrides={})=>({id,name:'Hero',role:'wizard',turn:100,maxLevel:2,maxDepth:1,ended:false,...overrides});
 
 test('impossible engine values reject the upload; unknown values stay omitted',()=>{
- const clean=sanitizeRun(run('ok',{heroLevel:30,maxLevel:30,maxDepth:512,turn:10_000_000,endKind:'ascended'}),now);
- assert.equal(clean.maxLevel,30);assert.equal(clean.maxDepth,512);assert.equal(clean.turn,10_000_000);assert.equal(clean.endKind,'ascended');
+ const clean=sanitizeRun(run('ok',{heroLevel:30,maxLevel:30,maxDepth:512,turn:1e9,endKind:'ascended'}),now);
+ assert.equal(clean.maxLevel,30);assert.equal(clean.maxDepth,512);assert.equal(clean.turn,1e9);assert.equal(clean.endKind,'ascended');
  for(const forged of [
-  {maxLevel:31},{heroLevel:31},{maxDepth:513},{turn:10_000_001},{turn:999_999_999},
+  {maxLevel:31},{heroLevel:31},{maxDepth:513},{turn:1e9+1},
   {heroLevel:5,maxLevel:4},{endKind:'won'},{endKind:''},
  ])assert.equal(sanitizeRun(run('forged',forged),now),null,JSON.stringify(forged));
  for(const unknown of [0,-1,1.5,Infinity,'6'])assert.equal(sanitizeRun(run('unknown',{maxLevel:unknown,heroLevel:unknown}),now).maxLevel,undefined);

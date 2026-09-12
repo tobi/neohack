@@ -117,8 +117,8 @@ uploads without a vault are refused. The first accepted publication binds the
 record to that vault (a record that predates binding belongs to the vault that
 uploaded its input archive), and later uploads from another vault are refused.
 Values the engine cannot produce reject the upload: experience levels above 30,
-depths above 512, a current level above the peak, an unknown outcome kind, or
-more than ten million turns. Leaders, today's/seven-day records and the ascension
+depths above 512, a current level above the peak, or an unknown outcome kind.
+Leaders, today's/seven-day records and the ascension
 and longest-run totals count only runs whose input archive has been published
 (`replayAvailable`); other runs remain listed among recent runs and in the total
 count. Because published predecessor records bootstrap without recording state,
