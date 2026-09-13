@@ -48,8 +48,9 @@ npm test --prefix lib/neonethack
 
 Start with the [quickstart](lib/neonethack/docs/QUICKSTART.md) for a runnable
 example. See the [library README](lib/neonethack/README.md) for native
-prerequisites, CMake/Ninja recipes and the public APIs. On x86_64 Linux, enter
-`nix develop` at this root for the locked native/WASM build tools; no manually
+prerequisites, CMake/Ninja recipes and the public APIs. On x86_64 Linux, `make`
+automatically enters the locked Nix build environment. Use `nix develop` for
+interactive work or direct npm/CMake commands; no manually
 installed Lua or Emscripten SDK is needed.
 
 ## Layout

@@ -1,3 +1,13 @@
+# Enter the project's locked shell once for the entire invocation. A dedicated
+# marker avoids mistaking an unrelated Nix shell for this build environment.
+.DEFAULT_GOAL := all
+ifneq ($(NNH_NIX_SHELL),1)
+.PHONY: all configure native engine wasm test test-wasm install mcp generate check-generated clean __nix
+all configure native engine wasm test test-wasm install mcp generate check-generated clean: __nix
+__nix:
+	@command -v nix >/dev/null || { echo 'Install Nix with flakes enabled to build neohack.' >&2; exit 1; }
+	+nix develop "$(abspath ../..)" --command $(MAKE) $(MAKECMDGOALS)
+else
 # The same CMake graph supports both Make and Ninja. No JavaScript runtime is
 # needed to build/link the native C library from committed generated sources.
 BUILD ?= build/native
@@ -36,3 +46,4 @@ check-generated:
 	node scripts/generate.ts --check
 clean:
 	$(CMAKE) --build $(BUILD) --target clean
+endif

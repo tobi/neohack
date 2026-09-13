@@ -7,7 +7,8 @@ neonethack` retrieves this code. Linux is the tested native platform.
 ## From source: one real world
 
 Install Nix with flakes enabled on x86_64 Linux. The root flake supplies the
-locked compiler, Lua, Emscripten and JavaScript tooling.
+locked compiler, Lua, Emscripten and JavaScript tooling. `make` enters it
+automatically; the interactive shell below also covers the npm/Node commands.
 From the **repository/source root**:
 
 ```sh

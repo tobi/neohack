@@ -58,7 +58,11 @@ blocks new operations until uncertainty is addressed.
 
 ## Build native
 
-Run `nix develop` from the repository root on x86_64 Linux. The locked shell
+On x86_64 Linux, install Nix with flakes enabled; `make` (including
+`make -C lib/neonethack` from the root) enters the locked shell automatically.
+It preserves requested targets and command-line overrides, and reuses an
+existing neohack Nix shell. Run `nix develop` from the repository root for
+interactive work or direct npm/CMake commands. The locked shell
 provides the C compiler, CMake, pkg-config, Make/Ninja, `flock`, ncurses/UUID,
 Lua 5.4.9, Emscripten 6.0.9, Node 24 and Bun 1.3.14. Use `nix develop .#node22`
 for the alternate Node major. Browser checks need working Chromium sandbox
@@ -126,7 +130,7 @@ builds do not require JavaScript.
 ### Browser example
 
 ```sh
-make wasm                    # inside nix develop
+make wasm                    # automatically enters the locked Nix shell
 npm run build:example
 npm run serve:example        # static-only server, no game backend
 npm run test:wasm

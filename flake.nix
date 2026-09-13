@@ -25,6 +25,7 @@
           clang gnumake git curl gnutar gzip unzip util-linux uv
         ] ++ [ bun ];
         LUA_HOME = "${lua}";
+        NNH_NIX_SHELL = "1";
         NNH_LUA_ARCHIVE = "${lua.src}";
         EMSCRIPTEN_ROOT = "${emscripten}/share/emscripten";
         # A development shell has no installed output. Do not embed its

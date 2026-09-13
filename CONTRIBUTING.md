@@ -39,6 +39,8 @@ From the repository root on x86_64 Linux, install Nix with flakes enabled,
 then enter the locked build environment. `nix develop .#node22` checks the
 alternate supported Node major; the default shell uses Node 24. CI uses these
 same shells (the lightweight quality job also retains the minimum-Node check).
+`make` enters the default locked shell automatically when needed, including
+`make -C lib/neonethack`; direct npm, Node and CMake commands still need the shell.
 
 ```sh
 nix develop
