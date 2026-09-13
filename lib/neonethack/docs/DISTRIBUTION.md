@@ -6,18 +6,20 @@ and [replay limits](REPLAY.md) for the supported runtime profile.
 
 ## Build a checked preview
 
-Prerequisites: the native Linux build tools, Node/npm, GNU tar and an installed
-Emscripten **6.0.9** SDK. A sandbox-capable Chrome/Chromium must be available for
+Prerequisite: Nix with flakes on x86_64 Linux. The checked-in flake/lock supplies
+the native tools, Node/npm and pinned Emscripten **6.0.9** package.
+A sandbox-capable Chrome/Chromium must be available for
 browser checks (`CHROMIUM` overrides the executable). From the repository root:
 
 ```sh
-EMSDK=/absolute/path/to/emsdk \
-  npm run --prefix lib/neonethack package:preview -- /tmp/neonethack-preview
+nix develop
+npm run --prefix lib/neonethack package:preview -- /tmp/neonethack-preview
 ```
 
 The output directory must not exist. The script takes an explicit source
-snapshot without changing Git staging, includes hash-checked Lua 5.4.9 source
-and the actual SDK's runtime sources/headers/notices, and builds in that copy.
+snapshot without changing Git staging, includes the flake/lock, hash-checked
+Lua 5.4.9 source and the actual compiler package's runtime sources/headers/notices,
+and builds in that copy. Flake changes affect source and compiler-cache identity.
 Source checks reject symlinks at fixed source roots and every inventory parent,
 not just leaves. The source tree must remain trusted and stable while it is
 being snapshotted; these checks are not a hostile-filesystem race sandbox.
@@ -40,7 +42,9 @@ Successful output contains:
   recipes, Lua source archive, Emscripten runtime source/headers and source hashes.
 - `neonethack-VERSION-linux-ARCH.tar.gz`: C library/header/CLI, engine, static
   data, CMake/pkg-config metadata and notices. It is built for the current host,
-  **not** a portable binary for every Linux/glibc version.
+  **not** a portable binary for every Linux/glibc version. Native binaries built
+  in Nix retain Nix-store runtime dependencies; consumers need that closure or
+  must rebuild the matching source. This archive does not export a Nix closure.
 - `neonethack-VERSION.tgz`: TypeScript/Node/MCP interfaces, shared-core WASM,
   schemas, documentation, inline source maps and runtime notices.
 - `SHA256SUMS`, `PREVIEW.json`: matching archive hashes, source identity, WASM
@@ -60,7 +64,7 @@ notices is not this distribution recipe.
 To independently repeat the archive audit against a **trusted local preview**:
 
 ```sh
-EMSDK=/absolute/path/to/emsdk npm run --prefix lib/neonethack test:archives -- \
+nix develop --command npm run --prefix lib/neonethack test:archives -- \
   /path/to/preview /tmp/new-neonethack-audit
 ```
 
@@ -74,14 +78,13 @@ expanded tar and 40,000 headers, with the GNU-long-name subset used by this reci
 
 ## Rebuild from the source archive
 
-Extract it and read `SOURCE-MANIFEST.json`. With the external SDK/tooling
-installed, follow the library README. Native and WASM builds prefer the included
-Lua archive; no Lua development installation is needed for that source bundle.
-Unset `LUA_HOME` to use the included native Lua source. Ordinary source builds
-without that archive can still use a system Lua 5.4 installation.
+Extract it and read `SOURCE-MANIFEST.json`. Enter `nix develop` in the extracted
+root and follow the library README. The environment supplies Lua headers and
+its hash-checked source archive. The bundled Lua archive also supports explicit
+non-Nix native builds; unset `LUA_HOME` and `NNH_LUA_ARCHIVE` to use that copy.
 
 The runtime source copy is not a complete Emscripten/LLVM compiler distribution.
-Use the external 6.0.9 SDK. The manifest records source bytes and the original
+Use the included locked flake to obtain the compiler. The manifest records source bytes and the original
 `SOURCE_DATE_EPOCH`; pass that epoch when rebuilding. This recipe does not yet
 promise bit-for-bit identical binaries across hosts or different toolchains.
 

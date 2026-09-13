@@ -7,12 +7,12 @@ NetHack commands, answer prompts, reconstruct decisions or implement game rules.
 
 ## Build and run the example
 
-Requirements: native engine build prerequisites, Node ≥22.18, CMake, Make/Ninja,
-and Emscripten (tested with **6.0.9**). No browser `SharedArrayBuffer`, COOP/COEP
+The root Nix flake supplies the native prerequisites, Node, CMake, Make/Ninja,
+Lua **5.4.9** and Emscripten **6.0.9**. No browser `SharedArrayBuffer`, COOP/COEP
 headers or Bun runtime is required.
 
 ```sh
-# Activate your Emscripten SDK first, or set EMSDK=/path/to/emsdk.
+nix develop
 make -C lib/neonethack wasm
 npm ci --prefix lib/neonethack
 npm run --prefix lib/neonethack build:example
@@ -23,8 +23,14 @@ npm run --prefix lib/neonethack serve:example
 The build first prepares host-generated headers/data, then cross-compiles the
 engine and semantic core. CMake/Ninja tracks sources, included headers, compile
 flags and preloaded data; no stale-object "exists, therefore skip" rules.
-Lua 5.4.9 source is fetched from lua.org with a pinned SHA-256. Its code and the
+Lua 5.4.9 source is supplied by Nix from lua.org with a pinned SHA-256. Its code and the
 engine are compiled separately from native libraries.
+
+The locked Nix Emscripten package includes its LLVM/Binaryen dependencies and
+packaging patches. Both flake files participate in source and compiler cache
+identity. Updating the environment requires a fresh build; it never changes
+the runtime pin of an existing game. Writable Emscripten caches live under the
+ignored library build directory, not in the Nix store or source archives.
 
 Artifacts go to `dist/wasm/`: two WASM modules, ESM loaders, private workers,
 static game data, licenses and a content-derived build manifest. Relocate that

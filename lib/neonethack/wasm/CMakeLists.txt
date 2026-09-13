@@ -1,7 +1,9 @@
 # Included by the top-level project when configured with emcmake.
 include(FetchContent)
 set(NNH_LUA_URL https://www.lua.org/ftp/lua-5.4.9.tar.gz)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/lua-5.4.9.tar.gz")
+if(DEFINED ENV{NNH_LUA_ARCHIVE} AND EXISTS "$ENV{NNH_LUA_ARCHIVE}")
+  set(NNH_LUA_URL "$ENV{NNH_LUA_ARCHIVE}")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/lua-5.4.9.tar.gz")
   set(NNH_LUA_URL "${CMAKE_CURRENT_SOURCE_DIR}/third_party/lua-5.4.9.tar.gz")
 endif()
 FetchContent_Declare(lua URL "${NNH_LUA_URL}"

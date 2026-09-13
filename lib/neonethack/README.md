@@ -58,10 +58,11 @@ blocks new operations until uncertainty is addressed.
 
 ## Build native
 
-Requirements: C99 compiler, CMake ≥3.20, pkg-config, Make, Ninja (or CMake's Unix Makefiles
-generator), `flock` (util-linux), Lua 5.4 headers/static library, ncurses and UUID
-development files. Bun 1.3.14 or newer and Emscripten 6.0.9 are needed for MCP builds.
-The tested native build platform is Linux.
+Run `nix develop` from the repository root on x86_64 Linux. The locked shell
+provides the C compiler, CMake, pkg-config, Make/Ninja, `flock`, ncurses/UUID,
+Lua 5.4.9, Emscripten 6.0.9, Node 24 and Bun 1.3.14. Use `nix develop .#node22`
+for the alternate Node major. Browser checks need working Chromium sandbox
+support; set `CHROMIUM` to a suitable host browser when necessary.
 The library alone has no Lua or Node dependency; these are engine/tooling needs.
 
 ```sh
@@ -75,7 +76,8 @@ npm run check:tools           # exact cross-export tool parity (also requires Bu
 npm run test:install          # static/shared, Debug/Release, Make/Ninja + relocation
 ```
 
-Set `LUA_HOME` to a Lua 5.4 installation if pkg-config or mise cannot locate it.
+The shell sets `LUA_HOME`, `NNH_LUA_ARCHIVE` and `EMSCRIPTEN_ROOT`; no separately
+managed SDK is needed. Explicit non-Nix native builds can set `LUA_HOME`.
 The pkg-config resolver supports `include/lua5.4` and multiarch `liblua5.4.a`
 layouts; `npm run test:lua-layout -- HEADER_DIRECTORY STATIC_LIBRARY` independently
 builds and plays a fresh engine using that layout, without changing your Lua
@@ -124,7 +126,7 @@ builds do not require JavaScript.
 ### Browser example
 
 ```sh
-make wasm                    # requires activated Emscripten, tested 6.0.9
+make wasm                    # inside nix develop
 npm run build:example
 npm run serve:example        # static-only server, no game backend
 npm run test:wasm

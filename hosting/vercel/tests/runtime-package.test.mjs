@@ -13,6 +13,7 @@ test('compiler cache identity follows engine/build inputs, independent of UI and
   const files={'src/explorer.c':'a','engine/dat/data.base':'b','wasm/CMakeLists.txt':'c','wasm/core-worker.mjs':'d','docs/PROTOCOL.md':'e'};
   assert.equal(compileIdentity(files),compileIdentity({...files,'wasm/core-worker.mjs':'changed','docs/PROTOCOL.md':'changed'}));
   for(const path of ['src/explorer.c','engine/dat/data.base','wasm/CMakeLists.txt']) assert.notEqual(compileIdentity(files),compileIdentity({...files,[path]:'changed'}));
+  assert.notEqual(compileIdentity(files, {'flake.lock':'old'}),compileIdentity(files, {'flake.lock':'new'}));
 });
 
 test('hosted packages reuse verified compiler bytes and new current preserves bookmarked runs', {timeout:90000}, async t=>{

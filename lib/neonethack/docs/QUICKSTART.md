@@ -6,12 +6,12 @@ neonethack` retrieves this code. Linux is the tested native platform.
 
 ## From source: one real world
 
-Requirements: C99 compiler, CMake, Make/Ninja, `flock`, ncurses/UUID development
-files, Lua 5.4 development files (or the Lua archive included in a source preview),
-and Node ≥22.18. See the library README for installation/toolchain details.
+Install Nix with flakes enabled on x86_64 Linux. The root flake supplies the
+locked compiler, Lua, Emscripten and JavaScript tooling.
 From the **repository/source root**:
 
 ```sh
+nix develop
 make -C lib/neonethack test
 npm ci --prefix lib/neonethack
 npm run --prefix lib/neonethack build
@@ -52,10 +52,10 @@ transport; `neonethack/low` exposes exact named protocol calls.
 
 ## Browser: no gameplay server
 
-From the source root, with Emscripten 6.0.9 installed:
+From the source root, inside `nix develop`:
 
 ```sh
-EMSDK=/absolute/path/to/emsdk make -C lib/neonethack wasm
+make -C lib/neonethack wasm
 npm run --prefix lib/neonethack build:example
 npm run --prefix lib/neonethack serve:example
 ```
@@ -97,16 +97,16 @@ See [DISTRIBUTION.md](DISTRIBUTION.md) for the checked preview/archive audit.
 
 ## Bun/WASM MCP
 
-Install Bun (tested 1.3.14), Node build tooling and Emscripten 6.0.9, then:
+Enter `nix develop` for Bun, Node and Emscripten, then:
 
 ```sh
 npm ci --prefix lib/neonethack
-EMSDK=/path/to/emsdk make mcp
+make mcp
 ./bin/neohack-mcp                      # stdio
 ./bin/neohack-mcp --http 8080           # 127.0.0.1:8080/mcp
 ./bin/neohack-mcp --list                # local run tokens/pins, no gameplay
 # Optional user installation:
-EMSDK=/path/to/emsdk make mcp MCP_PREFIX="$HOME/.local"
+make mcp MCP_PREFIX="$HOME/.local"
 ```
 
 A source build installs the launcher and a companion `libexec/neohack-mcp/`

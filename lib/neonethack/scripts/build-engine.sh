@@ -18,10 +18,8 @@ fi
 if [ -z "${LUA_HOME:-}" ]; then
   if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists lua5.4; then
     LUA_HOME=$(pkg-config --variable=prefix lua5.4)
-  elif command -v mise >/dev/null 2>&1; then
-    LUA_HOME=$(mise where lua@5.4.9)
   else
-    echo 'Set LUA_HOME to a Lua 5.4 development installation.' >&2; exit 1
+    echo 'Enter nix develop for Lua 5.4.9, or set LUA_HOME explicitly.' >&2; exit 1
   fi
 fi
 HEAD="$LUA_HOME/include"

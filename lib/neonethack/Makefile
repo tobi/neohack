@@ -6,12 +6,13 @@ BUILD ?= build/native
 CMAKE ?= $(shell command -v cmake)
 GENERATOR ?= Ninja
 PREFIX ?= /usr/local
+LIBDIR ?= lib
 MCP_PREFIX ?= $(abspath ../..)
 WASM_BUILD ?= build/wasm
 .PHONY: all configure native engine wasm test test-wasm install mcp generate check-generated clean
 all: native
 configure:
-	$(CMAKE) -S . -B $(BUILD) -G "$(GENERATOR)" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$(PREFIX)
+	$(CMAKE) -S . -B $(BUILD) -G "$(GENERATOR)" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$(PREFIX) -DCMAKE_INSTALL_LIBDIR=$(LIBDIR) -DCMAKE_C_COMPILER="$(shell command -v $(CC))" -DLUA_HOME="$(LUA_HOME)"
 native: configure
 	$(CMAKE) --build $(BUILD) --target native
 engine:

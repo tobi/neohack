@@ -183,6 +183,11 @@ interaction and visual decisions, and update DESIGN.md when those decisions chan
 
 ## Verification
 
+Enter `nix develop` at the repository root before building. `flake.nix` and
+`flake.lock` pin the Linux compiler environment, including Emscripten, Lua,
+Node and Bun; CI uses the same shells. Keep their hashes in source/compile
+provenance. Do not restore machine-specific SDK paths or vendor compiler binaries.
+
 Run checks appropriate to the affected layers. The core checks are:
 
 ```sh

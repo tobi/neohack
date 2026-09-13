@@ -21,7 +21,7 @@ From the repository root, build the library once:
 ```sh
 npm ci --prefix lib/neonethack
 npm run --prefix lib/neonethack build
-# Activate your installed Emscripten SDK, or set EMSDK to its absolute path.
+# Enter nix develop at the repository root for the locked build tools.
 make -C lib/neonethack wasm
 bun install --cwd web/neohack.dev
 bun run --cwd web/neohack.dev build

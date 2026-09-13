@@ -35,9 +35,13 @@ C symbols use the `nnh_private_*` link namespace even in static libraries; only
 
 ## Validation
 
-From the repository root, with the prerequisites in the library README:
+From the repository root on x86_64 Linux, install Nix with flakes enabled,
+then enter the locked build environment. `nix develop .#node22` checks the
+alternate supported Node major; the default shell uses Node 24. CI uses these
+same shells (the lightweight quality job also retains the minimum-Node check).
 
 ```sh
+nix develop
 npm ci --ignore-scripts --registry=https://registry.npmjs.org --prefix lib/neonethack
 node lib/neonethack/scripts/generate.ts --check
 make -C lib/neonethack test
@@ -45,8 +49,6 @@ make -C lib/neonethack test
 make -C lib/neonethack wasm
 npm test --prefix lib/neonethack
 npm run --prefix lib/neonethack test:install
-# Activate Emscripten 6.0.9, or set EMSDK to its installed SDK root.
-make -C lib/neonethack wasm
 npm run --prefix lib/neonethack test:wasm
 npm run --prefix lib/neonethack test:browser
 npm run --prefix lib/neonethack check:tools
@@ -76,6 +78,13 @@ For distribution changes, run the complete
 A successful build alone does not validate the final archives.
 
 ## Source and dependencies
+
+Update build dependencies deliberately with `nix flake update`, review the lock
+diff and rerun native/WASM/browser and archive checks. Emscripten must remain
+6.0.9 and Lua 5.4.9 unless the runtime profile is explicitly revised. Compiler
+packages, their patches and dependencies are pinned by the Nix lock; they are
+not assumed byte-identical to an upstream SDK installation. Cache keys include
+both flake files. Dependency binaries and caches stay outside committed source.
 
 Retain upstream attribution, licenses and dated engine change notices. New
 vendored engine files require `npm run --prefix lib/neonethack sources:update`
