@@ -16,7 +16,7 @@ Start with the [first-five-minutes guide](docs/QUICKSTART.md) for runnable
 source, browser and installed-preview paths.
 For the playing loop, read [How an agent plays](docs/AGENT_PLAY.md).
 
-WebMCP and stdio MCP return [self-contained compact perceived frames](docs/PROTOCOL.md#mcp-observation-presentation).
+WebMCP and stdio MCP return [compact perceived frames with a text map](docs/PROTOCOL.md#mcp-observation-presentation); `syncState` returns the full JSON scene.
 The [Bun/WASM MCP CLI](docs/TYPESCRIPT.md#bunwasm-mcp) shares WebMCP’s exact tool executor, navigation and presentation.
 It supports stdio and `--http PORT`; each run has an independent WASM worker and durable append-only SQLite journal. The retired C MCP executable and static bundle are removed.
 
@@ -112,8 +112,9 @@ builds do not require JavaScript.
 - **MCP/WebMCP:** a generated navigation vocabulary through Bun/WASM stdio/HTTP
   or the browser adapter, with complete low-operation coverage, exact receipts
   and explicitly bound questions. See the [short play guide](docs/AGENT_PLAY.md).
-  Compact MCP replies label omitted local action detail and clear-terrain events;
-  observe returns the full observation and receipt returns the full input result.
+  Compact MCP replies render the perceived level as `map.text` and label the
+  omitted JSON layers; syncState returns the full observation and receipt returns
+  the full input result.
 
 - **WASM:** [`typescript/wasm.ts`](typescript/wasm.ts) runs the same C core with
   isolated engine workers. Choose volatile memory or explicitly locked,

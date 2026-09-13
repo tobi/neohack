@@ -340,7 +340,7 @@
     },
     {
       "name": "session.route",
-      "description": "Find a shortest known walking route in the perceived current level. Free revision-bound query; does not move. knownWalking excludes closed doors, occupants, boulders, known hazards and uncertain diagonal squeezes. Null distance means no route known under this policy, not impossible or unsafe. why classifies a null distance as targetOccupied, targetUnknown, closedDoor or disconnected. Steps exclude the origin. Recheck after input.",
+      "description": "Find a shortest known walking route in the perceived current level. Free revision-bound query; does not move. knownWalking excludes closed doors, non-ally occupants, boulders, known hazards and uncertain diagonal squeezes; a displayed tame ally is displaceable and may lie on the route. Null distance means no route known under this policy, not impossible or unsafe. why classifies a null distance as targetOccupied, targetUnknown, closedDoor or disconnected. Steps exclude the origin. Recheck after input.",
       "schema": {
         "type": "object",
         "properties": {

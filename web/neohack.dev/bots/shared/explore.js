@@ -47,7 +47,7 @@ export function createExplorer() {
                 (distance(step) > distance(hero.position) || (distance(hero.position) > 1 && distance(step) === distance(hero.position))))
                 .sort((a, b) => distance(b) - distance(a) || Number(visited.has(key(a))) - Number(visited.has(key(b))));
             for (const square of escapes) {
-                await hero.go({ to: { x: square.x, y: square.y }, force: true });
+                await hero.go({ direction: square.direction });
                 return;
             }
             log("No further retreat route. Stopping here.");
@@ -91,7 +91,7 @@ export function createExplorer() {
                 if (unknown) {
                     probed.add(key(hero.position) + ">" + key(unknown));
                     log(unknown.movement.intent === "allyBump" ? "Trying to move past a companion." : "Trying one adjacent unexplored square.");
-                    await hero.go({ to: { x: unknown.x, y: unknown.y }, force: true });
+                    await hero.go({ direction: unknown.direction });
                     return;
                 }
                 const position = key(hero.position);

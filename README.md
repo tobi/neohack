@@ -25,8 +25,8 @@ await nethack.close();
 ```
 
 No keys, inventory letters, modal terminal prompts or hidden-state queries.
-Named operations have individual schemas. Library gameplay calls return full perceived snapshots; MCP/WebMCP turns use
-compact observation updates, with full observations available on request. Genuine
+Named operations have individual schemas. Library gameplay calls return full perceived snapshots; MCP/WebMCP turns return
+compact frames with a text map, with the full JSON observation available on request. Genuine
 decisions remain the caller's responsibility.
 
 Try the [live game](https://neohack.dev), [play with an agent](lib/neonethack/docs/AGENT_BROWSER.md),

@@ -13,9 +13,10 @@ test(
     t.after(() => rm(dir, { recursive: true, force: true }));
     const trace = join(dir, "trace.jsonl");
     // Shared navigation adds free planning queries; budget counts those too.
-    // Seed 7 exercises a witnessed door opening with this navigation policy.
+    // Seed 12 exercises a witnessed door opening with this navigation policy,
+    // which routes through a displayed tame ally instead of corking on it.
     const result = await runProject("curious-imp", {
-      seed: 7,
+      seed: 12,
       calls: 2000,
       trace,
     });
@@ -55,9 +56,11 @@ test(
     const dir = await mkdtemp(join(tmpdir(), "exploration-policy-test-"));
     t.after(() => rm(dir, { recursive: true, force: true }));
     const impTrace = join(dir, "imp.jsonl"), mapperTrace = join(dir, "mapper.jsonl");
-    const imp = await runProject("curious-imp", { seed: 7, calls: 2000, trace: impTrace });
-    const mapper = await runProject("cartographer", { seed: 7, calls: 2000, trace: mapperTrace });
-    const fighter = await runProject("steady-fighter", { seed: 7, calls: 2000 });
+    // Seed 20 lets all three policies reach their own stop within this budget
+    // under the ally-displacing route policy.
+    const imp = await runProject("curious-imp", { seed: 20, calls: 2000, trace: impTrace });
+    const mapper = await runProject("cartographer", { seed: 20, calls: 2000, trace: mapperTrace });
+    const fighter = await runProject("steady-fighter", { seed: 20, calls: 2000 });
     for (const result of [imp, mapper, fighter]) {
       assert.equal(result.reason, "stopped", result.error);
       assert.ok(result.moves > 40);

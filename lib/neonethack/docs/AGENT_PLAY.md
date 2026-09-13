@@ -8,9 +8,10 @@ vocabulary. Keep the short `sessionId`; the adapter owns request IDs and revisio
 | --- | --- |
 | Begin once | `create({role:"valkyrie"})` |
 | Return to a saved run | `resume({sessionId})` |
-| Read the full scene, free | `observe({sessionId})` |
-| Inspect nearby attempts, free | `inspect({sessionId,target:"here"})` |
-| Walk toward a destination | `go({sessionId,to:{x:40,y:10},maxActions:8})` |
+| Walk a leg toward a destination | `go({sessionId,to:{x:40,y:10}})` |
+| Reveal the next frontiers | `explore({sessionId,maxFrontiers:4})` |
+| Resynchronize with the full JSON scene, free | `syncState({sessionId})` |
+| Inspect attempts at one square, free | `inspect({sessionId,target:"here"})` |
 | Answer the standing question | `answer({sessionId,decisionId,value})` |
 | Cancel its current action | `cancel({sessionId,decisionId})` |
 | Release the saved run | `suspend({sessionId})` |
@@ -23,16 +24,47 @@ Use an exact returned item reference: `eat({sessionId,itemId:"item-42"})`.
 The example ID is a placeholder; copy yours from inventory or the floor view.
 `drop` also accepts `quantity`. Omit `itemId` to ask the engine for a selection.
 Readable names are not item IDs. `inspect` returns `attempts` with tool/argument
-syntax; eligibility does not guarantee safety or success.
+syntax and, when the square can be resolved, `mark` for the character NetHack
+displays there; eligibility does not guarantee safety or success.
 
-Replies already include `state` (position, level and vitals), fresh `messages`,
-and `context` from free perceived-state queries. Nearby cells contain executable
-`attempts`; known frontiers, doors and downward stairs are included when available.
-You do not need an observe–inspect–navigation ritual after each successful action.
+Every reply is a complete view for the next decision: `state` (position, level
+and vitals), fresh `messages`, a text `map` of the perceived level, `creatures`
+with target IDs, and `context` from free perceived-state queries. `map.text`
+draws the known part of the level with x labels and ticks every five columns and
+each row's y in front; `map.legend` names what every mark on this map stands
+for, built from the same terrain, object and creature layers the JSON exposes.
+MCP also returns the map in a separate fenced text block with real newlines;
+the first text block and `structuredContent` retain the complete JSON reply.
+`map.positions` indexes displayed occupants, objects and terrain features by
+mark, with exact `{x,y}` coordinates for every match. Plain floor, corridor
+and wall cells are omitted from this index. For example, `map.positions['+']`
+locates displayed closed doors without counting columns in JSON-escaped text.
+Duplicate marks list all matches; the index never selects one for you.
+Use a chosen coordinate with `attack({target:{x,y}})` or `go({to:{x,y}})`;
+`kick` takes `target:{direction:...}` from the adjacent context or inspect offer.
+`mark` is the character NetHack displays for that square; `map.text` is those
+marks laid out with rulers. JSON entities on the map (`creatures[]`,
+`context.nearby.cells` when the square is in the known world,
+`context.frontiers`, `context.doors`, `context.waysDown`, and inspect) carry
+the same `mark`. Marks are display, not identity or a hidden item.
+`context.nearby` gives one line per adjacent square: terrain, movement intent,
+occupant, hazards and which tools the resolver offers there (`go` means
+`go({direction})`); known frontiers, doors and downward stairs follow.
+You do not need a syncState–inspect–navigation ritual after an action; the
+ordinary reply already omits the JSON `observation.world`, `heard` and
+`knowledge` in favour of the map (see `presentation.omitted`). `syncState`
+returns them when you actually need cell-level facts or lost your context.
 `context.status: unavailable` affects enrichment only; the action's outcome and
 receipt remain authoritative. Message turns identify the response boundary, not
-individual internal turns of a counted action. Observation returns no fresh
-messages; `observation.heard` is recent history and may repeat.
+individual internal turns of a counted action. `syncState` carries no fresh
+messages, so it omits the `messages` field; the JSON `observation.heard` it
+returns is recent history and may repeat.
+
+Move in legs rather than single steps. `go({to})` walks any known route in one
+call, `explore` walks to the next frontier (`maxFrontiers` for several) and
+`descend` approaches known stairs; each leg stops for a question, damage,
+hunger, a new creature or a blocked step and reports why in `navigation`. One
+leg replaces many step-and-read exchanges.
 
 A question arrives as `decision`, accompanied by `reply.arguments` and
 `reply.valueSchema`. Copy those bound arguments and supply your chosen `value`:
@@ -52,8 +84,10 @@ and terminal facts outrank your intention.
 
 `explore({sessionId,maxActions:8})` explores a bounded leg; `descend` approaches
 known downward stairs. Both stop on changed circumstances or questions. `go`
-uses perceived routes. Its `force:true` option attempts only adjacent ordinary
-movement; deliberate force attack is the separate `attack` tool.
+uses perceived routes and swaps places with a displayed tame ally standing on
+them, as ordinary movement does; hostile or peaceful occupants are never routed
+through. `go({direction})` attempts one adjacent ordinary step;
+deliberate force attack is the separate `attack` tool.
 If there is no knownWalking path, `navigation.reason` is `noRoute` and `why` is
 `targetOccupied`, `targetUnknown`, `closedDoor` or `disconnected`, with a `hint`
 for the next explicit tool. Zero-action stops did not run input. Confirmed partial
@@ -64,7 +98,7 @@ creature or position change. An occupied square does not imply a hostile creatur
 Rejected arguments marked `inputSubmitted:false` include the schema or current
 context needed to correct them; they need no recovery.
 
-After an uncertain error or lost response, call `observe({sessionId})`. It checks any retained
+After an uncertain error or lost response, call `syncState({sessionId})`. It checks any retained
 uncertain receipt without resending input, then returns the current scene and
 standing question. If the receipt cannot be verified, stop and follow the explicit
 resume instruction. Never repeat an action or navigation leg blindly. `receipt`

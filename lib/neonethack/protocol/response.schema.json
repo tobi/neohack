@@ -143,6 +143,9 @@
                 "horizontal",
                 "vertical"
               ]
+            },
+            "mark": {
+              "type": "string"
             }
           },
           "required": [
@@ -6666,6 +6669,9 @@
                               "horizontal",
                               "vertical"
                             ]
+                          },
+                          "mark": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -13137,6 +13143,9 @@
                       "horizontal",
                       "vertical"
                     ]
+                  },
+                  "mark": {
+                    "type": "string"
                   }
                 },
                 "required": [

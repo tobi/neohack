@@ -17,7 +17,11 @@ static void routes(void) {
     assert(steps[0] == a+1 && steps[2] == a+3);
     map[a+1].trap = 1; assert(nnh_known_route(&k,map,a+3,steps) == -1); map[a+1].trap = 0;
     map[a+1].boulder = 1; assert(nnh_known_route(&k,map,a+3,steps) == -1); map[a+1].boulder = 0;
-    map[a+1].occupant = 3; assert(nnh_known_route(&k,map,a+3,steps) == -1); map[a+1].occupant = 0;
+    /* A tame ally in a corridor is displaceable; any other occupant blocks. */
+    map[a+1].occupant = 3; assert(nnh_known_route(&k,map,a+3,steps) == 3); assert(steps[0] == a+1);
+    assert(nnh_known_route(&k,map,a+1,steps) == 1);
+    map[a+1].occupant = 2; assert(nnh_known_route(&k,map,a+3,steps) == -1);
+    assert(nnh_known_route(&k,map,a+1,steps) == -1); map[a+1].occupant = 0;
     map[a+1].terrain = T_DOOR_CLOSED; map[a+1].lock = 2;
     assert(nnh_known_route(&k,map,a+3,steps) == -1); /* Open is an explicit operation. */
     map[a+1].terrain = T_DOOR_OPEN; assert(nnh_known_route(&k,map,a+3,steps) == 3);
@@ -41,7 +45,7 @@ static void routes(void) {
     cell.in_bounds = 1; cell.terrain = T_UNKNOWN; assert(!strcmp(nnh_known_block(&cell), "targetUnknown"));
     cell.terrain = T_DARK; assert(!strcmp(nnh_known_block(&cell), "targetUnknown"));
     cell.terrain = T_FLOOR; cell.occupant = 2; assert(!strcmp(nnh_known_block(&cell), "targetOccupied"));
-    cell.occupant = 3; assert(!strcmp(nnh_known_block(&cell), "targetOccupied"));
+    cell.occupant = 3; assert(!strcmp(nnh_known_block(&cell), "disconnected"));
     cell.occupant = 0; cell.terrain = T_DOOR_CLOSED; assert(!strcmp(nnh_known_block(&cell), "closedDoor"));
     cell.terrain = T_WALL; assert(!strcmp(nnh_known_block(&cell), "disconnected"));
 }
@@ -71,6 +75,25 @@ int main(void) {
     k.direction_reliable=0; nnh_resolve_cell(&k,32,&c); assert(!strcmp(c.intent,"unknown")); assert(!c.restriction);
     k.cells[0].in_bounds=0; nnh_resolve_cell(&k,0,&c); assert(c.walkable==0 && c.action_count==0);
     mj_init(&b); nnh_emit_cell_actions(&c,&b); assert(!strstr(b.buf,"terrain")); mj_free(&b);
+    strcpy(k.cells[40].mark, "."); k.cells[40].occupant = k.cells[40].object = 0;
+    nnh_resolve_cell(&k,40,&c);
+    mj_init(&b); nnh_emit_cell_actions(&c,&b);
+    { const char *t = strstr(b.buf, "\"terrain\":{"), *end = t ? strchr(t, '}') : 0, *m = t ? strstr(t, "\"mark\":\".\"") : 0;
+      assert(t && end && m && m < end); }
+    mj_free(&b);
+    k.cells[40].occupant = 2; strcpy(k.cells[40].mark, "d");
+    nnh_resolve_cell(&k,40,&c);
+    mj_init(&b); nnh_emit_cell_actions(&c,&b);
+    { const char *t = strstr(b.buf, "\"terrain\":{"), *end = t ? strchr(t, '}') : 0, *m = t ? strstr(t, "\"mark\"") : 0;
+      assert(t && end && (!m || m > end)); assert(strstr(b.buf, "\"occupant\"")); }
+    mj_free(&b);
+    k.cells[40].occupant = 0; k.cells[40].object = 1; strcpy(k.cells[40].mark, "$");
+    nnh_resolve_cell(&k,40,&c);
+    mj_init(&b); nnh_emit_cell_actions(&c,&b);
+    { const char *t = strstr(b.buf, "\"terrain\":{"), *end = t ? strchr(t, '}') : 0, *m = t ? strstr(t, "\"mark\"") : 0;
+      assert(t && end && (!m || m > end)); }
+    mj_free(&b);
+    k.cells[40].object = 0; strcpy(k.cells[40].mark, ".");
     k.cells[4].terrain=T_DOOR_CLOSED; nnh_resolve_cell(&k,4,&c);
     for(i=0;i<c.action_count;i++) { assert(!strcmp(c.actions[i].availability,"outOfReach")); assert(!c.actions[i].arguments); }
     k.inventory_current=1; k.tools=0; nnh_resolve_cell(&k,40,&c); assert(!strcmp(c.actions[c.action_count-1].availability,"knownBlocked"));

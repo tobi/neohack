@@ -33,7 +33,7 @@ The concrete name and seed are recorded before `new_game`; resume reuses them.
 Generated names are ASCII, at most 31 bytes, and contain no identity suffixes.
 
 MCP/WebMCP use the navigation vocabulary generated from `protocol/agent.ts`:
-`create`, `observe`, `inspect`, `go`, `eat`, `answer`, etc. The low library and
+`create`, `syncState`, `inspect`, `go`, `eat`, `answer`, etc. The low library and
 NDJSON retain this document's precise dotted methods and tagged answers.
 Low JavaScript tool discovery uses underscores, such as `session_observe`.
 These are deliberately separate interfaces; obsolete MCP names have no aliases.
@@ -226,6 +226,10 @@ It comes from disclosed engine symbols, including perceived backgrounds beneath
 occupants, never unseen map structure or neighboring tiles. It is retained with
 terrain memory and omitted when unknown or when the terrain is not an intact
 door. Neighborhood and cell-action terrain expose the same orientation.
+`terrain.mark` is the engine's displayed character for that square when nothing
+covers it: no occupant, no object, the cell is present, and the display char is
+a single printable non-space ASCII character. Occupant and object `mark` are
+unchanged. A covering layer omits `terrain.mark`.
 Optional `cell.visible` reports the engine's current sight of that square.
 `false` retains remembered terrain; it does not imply an empty square or
 absence of a creature perceived through another sense. Older engine packages
@@ -398,9 +402,13 @@ or `disconnected` from perceived knowledge of that square.
 
 The shared C resolver computes the shortest path in steps, with a stable compass
 tie-break order. The policy excludes unknown terrain, closed doors (even known
-unlocked doors), occupants, boulders, known hazards, intact doorway diagonals,
-uncertain corners and tight squeezes. It allows remembered terrain but does not
-promise it remains unchanged. Unusual locomotion or unreliable direction returns
+unlocked doors), hostile or peaceful occupants, boulders, known hazards, intact
+doorway diagonals, uncertain corners and tight squeezes. A displayed tame ally
+(`occupant.kind:"ally"`) is displaceable: ordinary movement swaps places under
+the engine's normal rules, so a route may pass through or end on its square.
+The swap is still an attempt; when the engine refuses ("You stop. … is in your
+way."), the step reports `positionChanged:false`. The policy allows remembered
+terrain but does not promise it remains unchanged. Unusual locomotion or unreliable direction returns
 `unsupportedMovement`. No path executes movement, opens a door, answers a question,
 resumes an unloaded run or changes a receipt. Inspect the input gate and re-query
 after an action; a route is a plan based on its revision, not a success guarantee.
@@ -578,26 +586,55 @@ MCP and WebMCP return self-contained perceived snapshots in `structuredContent`.
 No delta baseline is required. The low-level `CompactResponses` utility remains
 separate from this agent interface.
 
-Ordinary agent results label their `presentation.kind` as `compact`. They omit
-only `observation.neighborhood` and terrain `saw` events whose mark is the
-clear-grid NUL marker. The envelope names the omitted field and counts those
-clear events. Known world cells, visibility, uncertainty, apparent creatures,
-objects, hazards, inventory, vitals, real decisions and other events remain
-present. Outcomes, revisions and terminal facts retain their meaning.
+Ordinary agent results label their `presentation.kind` as `compact`. They
+present the perceived level as `map` instead of the JSON `observation.world`:
 
-Use the free `inspect` query for detailed attempts at a target.
-`observe` returns the full current perceived observation, including the
-neighborhood matrix, without consuming a turn or requiring an input guard:
+- `map.text` draws the known bounding box of the level. Labels and ticks mark
+  every fifth x column and every row starts with its y. Each cell uses
+  the engine's displayed `mark` (NetHack's default symbols: `.` floor, `#`
+  corridor, `-`/`|` wall, `+` closed door, `-`/`|` open door swung in its
+  frame, `<`/`>` stairs, `^` known trap, `` ` `` boulder, `@` you, and the
+  engine's creature/object marks). The legend disambiguates shared marks.
+  A mark that is not a single printable non-space ASCII character is left blank.
+- `map.legend` names what every mark on this particular map stands for, built
+  from the same terrain types, object knowledge and creature appearance/attitude
+  the JSON exposes. A mark shared by several meanings lists all of them.
+- `map.bounds` and `map.you` give the rendered window and the hero position.
+
+The map is presentation of perceived knowledge, not new knowledge: it is
+rendered from the same world cells `syncState` returns, never from hidden state.
+`mark` is the character NetHack displays for that square; `map.text` is those
+marks laid out with rulers. JSON entities on the map (`creatures`,
+`context.nearby.cells` when the square is in the known world,
+`context.frontiers`, `context.doors`, `context.waysDown`, and inspect) carry
+the same `mark`. Marks are display, not identity. A neighborhood cell missing
+from the known world gets no invented glyph.
+Compact results omit `observation.world`, `observation.neighborhood`,
+`observation.heard` and `observation.knowledge`, plus terrain `saw` events whose
+mark is the clear-grid NUL marker; `presentation.omitted` names those fields and
+`omittedClearTerrainEvents` counts those events. Apparent `creatures` with
+target IDs, `state`, `context.nearby` (one line per adjacent square with the
+tools the resolver offers there), frontiers, doors, stairs, inventory, vitals,
+real decisions and other events remain present. Outcomes, revisions and terminal
+facts retain their meaning.
+
+Use the free `inspect` query for executable attempts at a target. When the
+current observation can resolve that square, the inspect reply also includes
+`mark` beside `attempts`.
+`syncState` returns the full current perceived observation, including world
+cells, the neighborhood matrix, message history and player knowledge, plus the
+same map, without consuming a turn or requiring an input guard. It never carries
+fresh messages and therefore omits the `messages` field:
 
 ```json
-{"name":"observe","arguments":{"sessionId":"YOUR_SESSION_ID"}}
+{"name":"syncState","arguments":{"sessionId":"YOUR_SESSION_ID"}}
 ```
 
 MCP `receipt` returns a historical document nested under `receipt`, including the
 original observation and events. It has no top-level world or standing question,
 and historical questions have no executable reply suggestions. The low protocol's
 `session.receipt` remains the exact original response.
-After uncertainty, MCP `observe` checks the retained exact receipt and then returns
+After uncertainty, MCP `syncState` checks the retained exact receipt and then returns
 current state. It never resends input; missing verification keeps input blocked
 with a resume instruction. Normal navigation stops require no recovery call.
 There is no MCP `recover` tool. Do not infer execution from presentation equality.

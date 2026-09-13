@@ -60,12 +60,12 @@ async function atomicJSON(path, value, checkpoint) {
  * {snapshot,reservationId}) must recover that SAME reserved
  * operation, never dispatch a new action; absent exact evidence it must throw.
  * The callback is the injected bridge/dispatcher recovery boundary, not a retry
- * policy. Successful recovery always requests a fresh observe.
+ * policy. Successful recovery always requests a fresh syncState observation.
  *
  * execute(call,{preflight}), call(call), and play(name,args) share ownership.
  * preflight(envelope,call) runs inside it before reservation/send and MUST throw
  * to block. A configured preflight applies to ordinary requests through every
- * entrypoint. Explicit observe/recover perform only observation/exact recovery.
+ * entrypoint. Explicit observe (the MCP syncState tool)/recover perform only observation/exact recovery.
  * Never call client methods recursively from preflight; it already holds the
  * run lock. Use the supplied immutable envelope for all guard decisions.
  *
@@ -223,7 +223,7 @@ export function createSnapshotClient({ runDir, sessionId, send, recoverExact,
       const state = await readState();
       if (state.reason === 'RESUME_REQUIRED')
         throw fail('RESUME_REQUIRED', 'Explicit runtime ownership/resume is required outside this client.');
-      const observing = call.name === "observe";
+      const observing = call.name === "syncState";
       if (state.pendingRequest && state.pendingKind !== 'observe')
         throw fail('RECOVERY_REQUIRED', 'Exact recovery must settle pending execution before observation or new input.');
       if (!observing) {
@@ -253,13 +253,13 @@ export function createSnapshotClient({ runDir, sessionId, send, recoverExact,
       if (!state.pendingRequest || state.pendingKind === 'observe' || typeof recoverExact !== 'function')
         throw fail('RECOVERY_UNAVAILABLE', 'No pending exact operation or no exact recovery provider.');
       const recovered = await receive(state.pendingRequest, state, recoverExact, 'recovery');
-      const observed = await execute({ name: "observe", arguments: {} });
+      const observed = await execute({ name: "syncState", arguments: {} });
       if (observed.state.status !== 'current')
         throw fail('STALE_SNAPSHOT', 'Recovery settled, but current observation is unavailable.');
       return { recovered, observed, state: observed.state };
     }
     const owner = Object.freeze({ assertOwned, readSnapshot, send: execute, recover,
-      observe: () => execute({ name: "observe", arguments: {} }) });
+      observe: () => execute({ name: "syncState", arguments: {} }) });
     try { return await callback(owner); }
     // A failed fsync/rename is not proof of durable state, even if a current
     // file happens to be visible. Retain ownership for operator inspection.

@@ -225,7 +225,7 @@ test('exact recovery archives the old receipt then observes; lost input is never
   assert.equal(recovered.recovered.state.snapshot.revision, 10);
   assert.equal(recovered.state.snapshot.revision, 12);
   assert.equal(recovered.state.pendingRequest, null);
-  assert.deepEqual(calls.map(call => call.name), ["observe", 'attack', "observe"]);
+  assert.deepEqual(calls.map(call => call.name), ["syncState", 'attack', "syncState"]);
   assert.equal((await receipts(runDir)).filter(row => row.kind === 'recovery').length, 1);
 });
 
@@ -287,7 +287,7 @@ test('missing exact recovery and failed post-recovery observation remain closed'
   let observed = 0;
   const { client, runDir } = await setup(t, {
     send: async call => {
-      if (call.name !== "observe") throw Error('lost input');
+      if (call.name !== "syncState") throw Error('lost input');
       if (++observed > 1) throw Error('lost observation');
       return frame(3);
     }, recoverExact: async () => frame(4),

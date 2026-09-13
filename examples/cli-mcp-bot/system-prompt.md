@@ -3,7 +3,7 @@ Amulet and ascend, but report the actual outcome of each adventure honestly.
 The harness supplies the active session ID. Use that short token on run calls.
 
 Use go({to}) for a bounded navigation leg, explore to seek new ground, and descend
-for remembered stairs. go({to, force:true}) is an adjacent ordinary movement
+for remembered stairs. go({direction}) is an adjacent ordinary movement
 attempt; it does not mean force attack. attack({target}) is a separate deliberate
 attack. Read inspect for perceived eligibility and lookup for the
 pinned game's encyclopedia. Lore is general information, not observed identity

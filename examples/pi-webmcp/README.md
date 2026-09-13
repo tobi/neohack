@@ -11,7 +11,7 @@ bun examples/pi-webmcp/run.mjs --minutes 60 --headed
 
 `agent-browser.toml` selects the website and model. The launcher discovers the
 page's actual schemas; the hosted page must expose the current `create`,
-`observe` and `help` vocabulary. `--check` reads discovery and help without
+`syncState` and `help` vocabulary. `--check` reads discovery and help without
 creating a game. `--check-pi` also verifies Pi file reading/writing, exposing only
 WebMCP help. `--headed` requires a display; omit it for a headless browser.
 

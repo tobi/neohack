@@ -47,7 +47,7 @@ const actionOffer = { oneOf: offerMethods.flatMap(action => {
 }) };
 const cellActions = closed({
   x: integer, y: integer, dx: integer, dy: integer, inBounds: boolean, visible: nullable(boolean),
-  terrain: closed({ type: string, freshness: enumeration("current", "remembered", "unknown"), orientation: enumeration("horizontal", "vertical") }, ["type", "freshness"]),
+  terrain: closed({ type: string, freshness: enumeration("current", "remembered", "unknown"), orientation: enumeration("horizontal", "vertical"), mark: string }, ["type", "freshness"]),
   door: closed({ lock: enumeration("locked", "unlocked", "unknown"), freshness: enumeration("witnessed", "remembered", "unknown"), observedTurn: integer }, ["lock", "freshness"]),
   occupant: closed({ kind: enumeration("self", "creature", "ally"), mark: string, color: integer, appearance: string, attitude: enumeration("hostile", "peaceful", "tame") }, ["kind"]),
   objects: array(closed({ mark: string, color: integer, kind: enumeration("boulder"), category: string, known: closed({appearance: string, depictedCreature: string}, ["appearance"]) }, ["mark", "color"])),
@@ -71,7 +71,7 @@ const observation = object({
   perception: object({ version: integer, inventory: enumeration("current", "lastKnown", "unknown"), here: enumeration("current", "lastKnown", "unknown"), equipment: enumeration("current", "lastKnown", "unknown"), knowledge: enumeration("current", "lastKnown", "unknown") }, ["version", "inventory", "here", "equipment"]),
   world: array(object({
     x: integer, y: integer, visible: boolean,
-    terrain: object({ type: string, knowledge: { const: "remembered" }, freshness: enumeration("current", "remembered", "unknown"), orientation: enumeration("horizontal", "vertical") }, ["type", "knowledge"]),
+    terrain: object({ type: string, knowledge: { const: "remembered" }, freshness: enumeration("current", "remembered", "unknown"), orientation: enumeration("horizontal", "vertical"), mark: string }, ["type", "knowledge"]),
     occupant: object({ kind: enumeration("self", "creature", "ally"), mark: string, color: integer, appearance: string, attitude: enumeration("hostile", "peaceful", "tame") }, ["kind", "mark"]),
     objects: array(object({ mark: string, color: integer, kind: enumeration("boulder"), category: string, known: closed({appearance: string, depictedCreature: string}, ["appearance"]) }, ["mark", "color"])),
   }, ["x", "y", "terrain"])), heard: array(string),
@@ -140,9 +140,10 @@ export const compactResponseSchema: Schema = {
     messages: array(closed({turn:integer,text:string})),
     messageScope: enumeration('action','navigation','observation','historical','none'),
     context: {type:'object'},
-    presentation: closed({kind:{const:'compact'},omitted:array(string),omittedClearTerrainEvents:integer,
-      fullObservation:{const:'observe'},attempts:{const:'inspect'},fullInputReceipt:{const:'receipt'}},
-      ['kind','omitted','omittedClearTerrainEvents','fullObservation','attempts']),
+    map: closed({text:string,legend:{type:'object',additionalProperties:string},positions:{type:'object',additionalProperties:array(closed({x:integer,y:integer}))},bounds:closed({x:{type:'array',items:integer,minItems:2,maxItems:2},y:{type:'array',items:integer,minItems:2,maxItems:2}}),you:nullable({type:'object'})}),
+    presentation: closed({kind:{const:'compact'},omitted:array(string),omittedClearTerrainEvents:integer,map:{const:'rendered from observation.world'},
+      fullObservation:{const:'syncState'},attempts:{const:'inspect'},fullInputReceipt:{const:'receipt'}},
+      ['kind','omitted','omittedClearTerrainEvents','map','fullObservation','attempts']),
     reply: closed({tool:{const:'answer'},arguments:closed({sessionId:string,decisionId:string}),valueSchema:{type:'object'},instruction:string}),
     cancel: closed({tool:{const:'cancel'},arguments:closed({sessionId:string,decisionId:string})}),
     attempts: array(closed({tool:string,arguments:{type:'object'},availability:enumeration('attemptable','uncertain','needsSelection'),cost:{const:'variable'},cautions:array(string)},['tool','arguments','availability','cost'])),

@@ -45,7 +45,7 @@ test('old rolling eye text without a fresh heard event is never a bump', () => {
 test('a newer completed query supersedes a real bump at the same revision', () => {
   const f = mcp();
   const request = structuredClone(f.records[0]); request.message.id = 2;
-  request.message.params.name = "observe";
+  request.message.params.name = "syncState";
   const response = structuredClone(f.records[1]); response.message.id = 2;
   Object.assign(response.message.result.structuredContent.outcome, { action: 'observe', turnsElapsed: 0 });
   response.message.result.structuredContent.events = [];
@@ -184,7 +184,7 @@ test('pending, duplicate and orphan MCP records fail closed, including a later q
     f => { f.records.shift(); },
     f => { f.records.splice(1, 0, { direction: 'request', message: { ...f.records[0].message, id: 2 } }); },
     f => { f.records[1].message.result.isError = true; },
-    f => { f.records[0].message.params.name = "observe"; },
+    f => { f.records[0].message.params.name = "syncState"; },
   ]) {
     const f = mcp(); change(f); assert.equal(freshEyeBumpEvidence(f).evidence, null);
   }

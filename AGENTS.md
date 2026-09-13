@@ -58,7 +58,7 @@ Keep current guidance consistent across these documents:
   and Bun stdio/HTTP MCP expose the navigation vocabulary generated from
   `protocol/agent.ts`. There is no MCP profile switch. Precise operations remain
   available through the low library, C API and NDJSON.
-  Agent tools use plain names (`create`, `observe`, `inspect`, `eat`, `answer`),
+  Agent tools use plain names (`create`, `syncState`, `inspect`, `eat`, `answer`),
   explicit `itemId` selectors and context-bound `value` answers. Generate syntax
   in the shared adapter; never rename low operations as a side effect or teach sample
   clients a different question contract. Inspect offers and question replies
@@ -105,7 +105,7 @@ interaction and visual decisions, and update DESIGN.md when those decisions chan
 - MCP may own request IDs, revision tracking and response reconstruction; the
   engine still enforces exact receipts and stale-input checks. Require explicit
   run tokens, and never treat an uncertain response as permission to act again.
-- MCP `observe` returns current state and may verify a retained uncertain receipt
+- MCP `syncState` returns the full current state and may verify a retained uncertain receipt
   using read-only queries. It never resends gameplay. Missing verification keeps
   input blocked. Historical MCP receipts are nested documents, not live worlds
   or executable decisions; normal navigation stops need no recovery call.

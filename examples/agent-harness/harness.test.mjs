@@ -26,7 +26,7 @@ async function setup(t,{initial=frame(),respond,records=()=>[]}={}){
   const sent=[];let current=structuredClone(initial);
   const client=createSnapshotClient({runDir,sessionId,send:async(call,context)=>{
     sent.push(structuredClone(call));
-    if(call.name==="observe")return structuredClone(current);
+    if(call.name==="syncState")return structuredClone(current);
     if(respond)current=await respond(call,structuredClone(current),context);
     else {current.revision++;current.observation.turn++;current.outcome={action:call.name==='attack'?'attack':call.name.replace('game_',''),status:'completed',turnsElapsed:1,positionChanged:false,effects:['attacked']};}
     return structuredClone(current);

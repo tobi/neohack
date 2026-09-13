@@ -102,12 +102,10 @@ An Entity has `type`, `appearance`, `attitude`, `kind`, `position: [x,y]`,
 A perceived Balrog two west and one north has `type === entities.Balrog` and
 `offset === [-2,-1]`; no hidden statistics are disclosed.
 
-`hero.go({to,force?})` plans a bounded navigation leg to coordinates or a fresh
-perceived Entity. `force:true` is restricted to an adjacent square and attempts
-ordinary movement, including normal bumps, opening and possible pushes. It
-bypasses navigator policy only, never engine rules or standing decisions. It does
-not mean force attack. A farther forced destination is rejected with an instruction
-to choose an adjacent square.
+`hero.go({to})` plans a bounded navigation leg to coordinates or a fresh
+perceived Entity. `hero.go({direction})` attempts one ordinary step, including
+opening, companion swaps and possible pushes. Displayed creatures are refused;
+use `attack` for a deliberate attack. Engine rules and standing decisions apply.
 
 `hero.attack({target})` is distinct: a fresh perceived creature reference or an
 adjacent coordinate (including an apparently empty square) becomes the precise
@@ -267,7 +265,9 @@ const leg = await navigator.explore({ maxActions: 8 });
 console.log(leg.reason, leg.actionsTaken, leg.snapshot.outcome);
 ```
 
-`go({to:{x,y}})` plans and attempts a known route on the current level.
+`go({to:{x,y}})` plans and attempts a known route on the current level. A
+displayed tame ally on the route is displaced by ordinary movement (the engine
+reports `swappedPlaces`); other occupants are never routed through.
 A `noRoute` result includes `why` (`targetOccupied`, `targetUnknown`, `closedDoor`
 or `disconnected`) and a `hint` for the next explicit tool. `lastOperationId` names
 the last confirmed input; it does not request recovery. A normal partial leg
@@ -294,7 +294,7 @@ If a later substep fails, `NavigationError.result` retains the confirmed actions
 turns and last confirmed snapshot; its `cause` retains the underlying error.
 An uncertain failed input may have executed beyond that snapshot. Recover the
 retained exact input through the SDK's receipt/request recovery path. In MCP,
-`observe` verifies its receipt and reads current state without resending gameplay;
+`syncState` verifies its receipt and reads current state without resending gameplay;
 unavailable verification keeps input blocked. Never restart navigation as recovery.
 
 Route and frontier semantics live in C. This executor only submits the named

@@ -68,9 +68,23 @@ export function createAgentHarness({ runId, sessionId, client, operations,
     return {status:'OK',runId,sessionId,revision:state.revision};
   }});
 
+  /** Ordinary MCP replies present the level as map.text. This harness's
+   * perception, progress and walking modules read JSON world cells, so a
+   * compact frame is completed with the free syncState query. The completed
+   * scene must carry the action's own revision; otherwise someone else acted
+   * and the caller must observe deliberately before deciding. */
+  async function completeFrame(result) {
+    const observed = await client.observe();
+    const frame = currentResult(observed);
+    if (frame.revision !== result.response.revision)
+      throw Object.assign(new Error('The scene changed before the action reply could be completed; observe explicitly.'),
+        {code:'CURRENT_STATE_REQUIRED',sendAttempted:true,result});
+    return {...result, state: observed.state};
+  }
   async function dispatch(intent) {
     try {
-      const result = await dispatcher(intent);
+      let result = await dispatcher(intent);
+      if (!Array.isArray(currentResult(result).observation.world)) result = await completeFrame(result);
       await lifecycle.acceptSnapshot(currentResult(result));
       return result;
     } catch (error) {

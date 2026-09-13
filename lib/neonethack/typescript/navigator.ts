@@ -3,7 +3,7 @@ import type {CellActions,Compass,RouteWhy,Snapshot} from './types.js';
 export interface NavigationOptions { maxActions?: number; signal?: AbortSignal; onStep?: (snapshot: Snapshot) => void; stopOnNewCreatures?: boolean }
 export interface ExploreOptions extends NavigationOptions { maxFrontiers?: number }
 const routeHints: Record<RouteWhy, string> = {
-  targetOccupied: 'The square is occupied. Inspect its occupant; an adjacent go with force:true attempts ordinary movement, not force attack.',
+  targetOccupied: 'A hostile or peaceful creature occupies the square; routes only displace tame allies. Inspect its occupant or go to a free square beside it.',
   targetUnknown: 'Inspect or step adjacent; knownWalking does not guess unmapped tiles.',
   closedDoor: 'Open the door, or explore toward it. go does not open doors.',
   disconnected: 'No reachable unvisited frontier or closed door. Search, or walk to a remembered edge and step into the dark.',
@@ -20,7 +20,7 @@ function unknownNeighbors(game:Game,x:number,y:number):Point[] {
   }
   return result;
 }
-/** Exploration policy uses C restrictions; direct go(force) remains an attempt. */
+/** Exploration policy uses C restrictions; a single go({direction}) step remains an attempt. */
 function probeOffer(cell:CellActions) {
   if(cell.movement.relation!=='adjacent'||cell.movement.knownRestriction||cell.movement.requiresSqueeze||cell.hazards?.length||cell.occupant||!['unknown','step'].includes(cell.movement.intent??'unknown'))return;
   const offer=cell.actions.find(a=>a.method==='game.move');
@@ -57,17 +57,26 @@ export class NavigationError extends Error {
   }
 }
 export type Point = {x:number;y:number};
-export interface GoOptions extends NavigationOptions {to:Point;force?:boolean}
+/** go({to}) walks a routed leg; go({direction}) takes one ordinary step. */
+export type GoOptions = NavigationOptions & ({to:Point;direction?:undefined} | {direction:Compass;to?:undefined});
+export const compassOffsets:Record<Compass,readonly [number,number]> = {
+  north:[0,-1], northeast:[1,-1], east:[1,0], southeast:[1,1], south:[0,1], southwest:[-1,1], west:[-1,0], northwest:[-1,-1],
+};
 /** Opt in by constructing one for a Game. Planning stays in C; this executor
  * submits bounded named actions and never answers a standing decision. */
 export class Navigator {
   private running = false;
   constructor(readonly game: Game) {}
   go(options:GoOptions):Promise<NavigationResult> {
-    return options.force ? this.direct({...options.to},options) : this.run({...options.to},false,options);
+    if((options.to===undefined)===(options.direction===undefined)) throw Error('go takes exactly one of to (a routed leg) or direction (one step)');
+    return options.direction!==undefined ? this.step(options.direction,options) : this.run({...options.to!},false,options);
   }
-  private async direct(to:Point, options:NavigationOptions):Promise<NavigationResult> {
-    if(options.maxActions!==undefined && (!Number.isInteger(options.maxActions) || options.maxActions<1 || options.maxActions>1659)) throw Error('maxActions must be an integer from 1 to 1659');
+  /** One ordinary engine move: door bumps, boulder pushes and ally swaps happen
+   * under engine rules. A square displaying a creature is refused before any
+   * input; attacking is the separate attack operation. */
+  private async step(direction:Compass, options:NavigationOptions):Promise<NavigationResult> {
+    const offset=compassOffsets[direction];
+    if(!offset) throw Error('direction must be a compass direction');
     if(this.running) throw Error('A navigation leg is already running');
     this.running=true;
     let actionsTaken=0, turnsElapsed=0;
@@ -81,12 +90,17 @@ export class Navigator {
       if(this.game.decision) return result('decision');
       if(options.signal?.aborted) return result('aborted');
       const revision=this.game.state.revision;
-      const query=await this.game.actions(to,{expectedRevision:revision});
+      const you=this.game.observation.you;
+      if(!you) throw Error('Your position is unknown; a single step needs a perceived position');
+      const to:Point={x:you.x+offset[0],y:you.y+offset[1]};
+      const query=await this.game.actions({direction},{expectedRevision:revision});
+      if(query.cell.occupant && query.cell.occupant.kind!=='self' && query.cell.occupant.kind!=='ally')
+        throw Error(`A creature is displayed ${direction}; go never attacks. Use attack for a deliberate attack.`);
       const move=query.cell.actions.find(a=>a.method==='game.move');
-      if(query.cell.movement.relation!=='adjacent' || !move?.arguments || !('direction' in move.arguments))
-        throw Error('Choose an adjacent square for a direct attempt; force does not mean force attack');
+      if(!query.cell.inBounds || !move?.arguments || !('direction' in move.arguments))
+        throw Error(`No ordinary movement is offered ${direction}`);
       if(options.signal?.aborted) return result('aborted');
-      const frame=await this.game.move(move.arguments.direction!,{expectedRevision:revision});
+      const frame=await this.game.move(direction,{expectedRevision:revision});
       actionsTaken++; turnsElapsed += frame.outcome.turnsElapsed;
       accountedTurn=frame.observation.turn;
         options.onStep?.(frame);

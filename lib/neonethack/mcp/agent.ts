@@ -1,11 +1,13 @@
 import {actionMessages,attemptsFor,nearbyContext,stateSummary,orderedReply} from './reply-context.js';
+import {markAt,renderMap} from './map.js';
 import {Game, Neonethack, Navigator, NavigationError, WorldError, type Transport} from '../typescript/client.js';
-import type {Request, Response, Snapshot} from '../typescript/types.js';
+import {compassOffsets} from '../typescript/navigator.js';
+import type {Compass, Request, Response, Snapshot} from '../typescript/types.js';
 import {methods, tools, instructions, answers} from './agent-data.js';
 export {tools,instructions};
 type Schema={type?:string;properties?:Record<string,Schema>;required?:string[];dependentRequired?:Record<string,string[]>;additionalProperties?:boolean;oneOf?:Schema[];enum?:unknown[];const?:unknown;items?:Schema;minimum?:number;maximum?:number;minLength?:number;maxLength?:number;minItems?:number;maxItems?:number;uniqueItems?:boolean};
 function valid(value:unknown,s:Schema):boolean {
-  if(s.oneOf) return s.oneOf.filter(c=>valid(value,c)).length===1;
+  if(s.oneOf && s.oneOf.filter(c=>valid(value,c)).length!==1) return false;
   if('const' in s && value!==s.const) return false;
   if(s.enum && !s.enum.includes(value)) return false;
   if(s.type==='object') {
@@ -58,18 +60,26 @@ export function present(response:Response, extra:Record<string,unknown>={}, comp
     result.events=[];
     result.outcome={action:'navigation',status:'completed',turnsElapsed:0,positionChanged:false,effects:[]};
   }
-  if(compact && isSnapshot(response)){
-    const {neighborhood,...observation}=response.observation;
-    const events=result.events as Array<{type:string;kind?:string;mark?:string}>;
-    const retained=events.filter(e=>!(e.type==='saw'&&e.kind==='terrain'&&(e.mark==='\\u0000'||e.mark==='\u0000')));
-    result.observation=observation;result.events=retained;
-    result.presentation={kind:'compact',omitted:['observation.neighborhood'],omittedClearTerrainEvents:events.length-retained.length,fullObservation:'observe',attempts:'inspect',...(result.operationId?{fullInputReceipt:'receipt'}:{})};
-  }
   if(isSnapshot(response)) {
+    // The text map is the agent's view of the perceived level; JSON cells stay
+    // available through syncState. Both derive from the same world layers.
+    result.map=renderMap(response.observation);
+    if(compact){
+      const {neighborhood,world,heard,knowledge,...observation}=response.observation;
+      const events=result.events as Array<{type:string;kind?:string;mark?:string}>;
+      const retained=events.filter(e=>!(e.type==='saw'&&e.kind==='terrain'&&(e.mark==='\\u0000'||e.mark==='\u0000')));
+      result.observation=observation;result.events=retained;
+      result.presentation={kind:'compact',omitted:['observation.world','observation.neighborhood','observation.heard','observation.knowledge'],
+        omittedClearTerrainEvents:events.length-retained.length,map:'rendered from observation.world',fullObservation:'syncState',attempts:'inspect',...(result.operationId?{fullInputReceipt:'receipt'}:{})};
+    }
     result.state=stateSummary(response);
-    result.messages=extra.messages??((extra.navigation as {actionsTaken?:number}|undefined)?.actionsTaken===0?[]:actionMessages(response));
-    result.messageScope=extra.messageScope??(extra.historical?'historical':'action');
-    if(result.messageScope==='observation'||result.messageScope==='none')result.events=[];
+    const scope=extra.messageScope??(extra.historical?'historical':'action');
+    // Observation replies never carry fresh messages; say nothing instead of [].
+    if(scope==='observation'||scope==='none'){result.events=[];delete result.messages;delete result.messageScope;}
+    else {
+      result.messages=extra.messages??((extra.navigation as {actionsTaken?:number}|undefined)?.actionsTaken===0?[]:actionMessages(response));
+      result.messageScope=scope;
+    }
   }
   return orderedReply(result);
 }
@@ -102,12 +112,19 @@ export class AgentClient {
   }
   private verificationHint(sid:string|undefined,response:Response):Record<string,unknown> {
     if(!sid||!this.pending.has(sid))return {};
-    const message='The input is uncertain. Call observe to verify its exact receipt and read current state; do not resend gameplay.';
+    const message='The input is uncertain. Call syncState to verify its exact receipt and read current state; do not resend gameplay.';
     return {error:('error' in response&&response.error)||{code:'uncertainExecution',message},summary:message,
-      next:{tool:'observe',arguments:{sessionId:sid}}};
+      next:{tool:'syncState',arguments:{sessionId:sid}}};
   }
   private async reply(frame:Response,extra:Record<string,unknown>={},compact=true):Promise<Record<string,unknown>> {
     const result=present(frame,extra,compact);
+    if('cell' in frame){
+      const game=this.games.get(frame.sessionId);
+      if(game && 'basis' in frame && game.state.revision===frame.basis.revision){
+        const mark=markAt(game.observation,frame.cell.x,frame.cell.y);
+        if(mark!==undefined)result.mark=mark;
+      }
+    }
     if(!isSnapshot(frame)||frame.ended||uncertain(frame)||this.pending.has(frame.sessionId))return orderedReply(result);
     const context:Record<string,unknown>={revision:frame.revision,nearby:nearbyContext(frame)};
     result.context=context;
@@ -115,7 +132,11 @@ export class AgentClient {
     try {
       const query=await this.api.transport.send({version:1,method:'session.navigation',params:{sessionId:frame.sessionId,expectedRevision:frame.revision}});
       if('kind' in query&&query.kind==='navigation'&&!('error' in query)&&query.sessionId===frame.sessionId&&query.basis.revision===frame.revision&&query.basis.levelId===frame.observation.location.id) {
-        context.status='available';context.frontiers=query.frontiers;context.waysDown=query.waysDown;context.doors=query.doors;
+        const withMark=<T extends {x:number;y:number}>(entry:T)=>{
+          const mark=markAt(frame.observation,entry.x,entry.y);
+          return mark===undefined?entry:{...entry,mark};
+        };
+        context.status='available';context.frontiers=query.frontiers.map(withMark);context.waysDown=query.waysDown.map(withMark);context.doors=query.doors.map(withMark);
       } else {
         context.status='unavailable';context.reason='error' in query&&query.error&&typeof query.error==='object'&&'code' in query.error?query.error.code:'unexpectedResponse';
       }
@@ -183,11 +204,11 @@ export class AgentClient {
         return {version:1,summary:instructions,tools:tools.map(({name,description})=>({name,description}))};
       }
       const game=sid?this.games.get(sid):undefined;
-      if(entry.method==='session.create' && this.creationUncertain) throw Error('Creation is uncertain. Observe or resume the existing run before creating another.');
+      if(entry.method==='session.create' && this.creationUncertain) throw Error('Creation is uncertain. Call syncState or resume on the existing run before creating another.');
       const safe=['session.create','session.resume','session.observe','agent.receipt'].includes(entry.method);
-      if(!safe && !game) throw Error('Observe or resume this session first.');
-      if(!safe && sid && this.pending.has(sid)) throw Error('An input is uncertain. Call observe to verify its receipt and read the current scene; do not submit a new action.');
-      if(!safe && game && game.state.revision!==revision) return {version:1,sessionId:sid,summary:'State changed while this call was queued. Observe before acting.',error:{code:'staleRevision',message:'State changed while this call was queued. Observe before acting.'}};
+      if(!safe && !game) throw Error('Call syncState or resume on this session first.');
+      if(!safe && sid && this.pending.has(sid)) throw Error('An input is uncertain. Call syncState to verify its receipt and read the current scene; do not submit a new action.');
+      if(!safe && game && game.state.revision!==revision) return {version:1,sessionId:sid,summary:'State changed while this call was queued. Read the returned state before acting.',error:{code:'staleRevision',message:'State changed while this call was queued. Read the returned state before acting.'}};
       if(entry.method==='session.observe'||entry.method==='session.resume')return this.observe(sid!,entry.method==='session.resume');
       if(entry.method==='agent.receipt') {
         const response=await this.api.request('session.receipt',{sessionId:sid!,requestId:input.operationId as string});
@@ -195,17 +216,23 @@ export class AgentClient {
         // questions carry evidence, never executable answer/cancel suggestions.
         const receipt=present(response,{historical:true});delete receipt.reply;delete receipt.cancel;
         return {version:1,kind:'receipt',historical:true,sessionId:sid,operationId:input.operationId,
-          summary:'Historical receipt only. This is not the current world or an active question. Use observe for current state.',
+          summary:'Historical receipt only. This is not the current world or an active question. Use syncState for current state.',
           ...('error' in response && response.error?{error:response.error}:{}),receipt};
       }
       const messages:ReturnType<typeof actionMessages>=[];
       try {
         if(entry.method==='agent.go' || entry.method==='agent.explore' || entry.method==='agent.descend') {
-          const to=input.to as {x:number;y:number}|undefined, you=game!.observation.you;
-          if(input.force&&to&&(!you||Math.max(Math.abs(to.x-you.x),Math.abs(to.y-you.y))!==1))return this.invalidInput(game!.state,'notAdjacent','A direct attempt requires an adjacent square. Omit force for navigation; no input submitted.',{target:to,position:you});
+          const direction=input.direction as Compass|undefined, you=game!.observation.you;
+          if(direction){
+            // go never attacks: a square displaying a creature is refused before any input.
+            if(!you)return this.invalidInput(game!.state,'unknownPosition','Your position is unknown, so a single step has no target; no input submitted.',{direction});
+            const target={x:you.x+compassOffsets[direction][0],y:you.y+compassOffsets[direction][1]};
+            const occupant=game!.observation.world.find(c=>c.x===target.x&&c.y===target.y)?.occupant;
+            if(occupant&&occupant.kind==='creature')return this.invalidInput(game!.state,'occupied',`A creature is displayed ${direction}; go never attacks. Use attack for a deliberate attack; no input submitted.`,{direction,target,occupant,attack:{tool:'attack',arguments:{sessionId:sid,target}}});
+          }
           const navigator=new Navigator(game!);
           const legOptions={maxActions:input.maxActions as number|undefined,signal:options.signal,onStep:(frame:Snapshot)=>messages.push(...actionMessages(frame))};
-          const leg=entry.method==='agent.go' ? await navigator.go({...legOptions,to:input.to as {x:number;y:number},force:input.force as boolean|undefined}) : entry.method==='agent.explore' ? await navigator.explore({...legOptions,maxFrontiers:input.maxFrontiers as number|undefined}) : await navigator.descend(legOptions);
+          const leg=entry.method==='agent.go' ? await navigator.go(direction?{...legOptions,direction}:{...legOptions,to:input.to as {x:number;y:number}}) : entry.method==='agent.explore' ? await navigator.explore({...legOptions,maxFrontiers:input.maxFrontiers as number|undefined}) : await navigator.descend(legOptions);
           this.adopt(leg.snapshot);return this.reply(leg.snapshot,{messages,messageScope:'navigation',navigation:{reason:leg.reason,actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,...(leg.stop?{stop:leg.stop}:{}),...(leg.hint?{hint:leg.hint}:{}),...(leg.why?{why:leg.why}:{}),...(leg.lastOperationId?{lastOperationId:leg.lastOperationId}:{})},...this.verificationHint(sid,leg.snapshot)},true);
         }
         let method=entry.method, params:Record<string,unknown>={...input};
@@ -225,8 +252,8 @@ export class AgentClient {
           method='game.attack';params={sessionId:sid,direction:move.arguments.direction};
         }
         if(method.startsWith('decision.') && input.decisionId!==game!.decision?.id) return {
-          version:1,sessionId:sid,summary:'The decision changed. Observe and answer the exact returned decisionId; no input submitted.',
-          error:{code:'staleDecision',message:'The decision changed. Observe and answer the exact returned decisionId; no input submitted.'},
+          version:1,sessionId:sid,summary:'The decision changed. Read the returned decision and answer its exact decisionId; no input submitted.',
+          error:{code:'staleDecision',message:'The decision changed. Read the returned decision and answer its exact decisionId; no input submitted.'},
         };
         if(method==='decision.answer') {
           const kind=game!.decision!.kind,format=answerFormats[kind];
@@ -269,7 +296,7 @@ export class AgentClient {
           const original=cause instanceof WorldError && 'error' in cause.response?cause.response.error:undefined;
           const message=`Navigation stopped after ${leg.actionsTaken} actions and ${leg.turnsElapsed} turns. Substep error: ${cause instanceof Error?cause.message:String(cause)}`;
           this.adopt(leg.snapshot);
-          const result=present(leg.snapshot,{messages,messageScope:'navigation',navigation:{reason:'error',actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,observation:pending?'lastConfirmed':'current',...(lastOperationId?{lastOperationId}:{}),hint:'Call observe before choosing another action; do not blindly repeat this navigation leg.'},error:{code:original?.code??(pending?'uncertainExecution':'agentError'),message},next:{tool:'observe',arguments:{sessionId:sid}}},true);
+          const result=present(leg.snapshot,{messages,messageScope:'navigation',navigation:{reason:'error',actionsTaken:leg.actionsTaken,turnsElapsed:leg.turnsElapsed,observation:pending?'lastConfirmed':'current',...(lastOperationId?{lastOperationId}:{}),hint:'Call syncState before choosing another action; do not blindly repeat this navigation leg.'},error:{code:original?.code??(pending?'uncertainExecution':'agentError'),message},next:{tool:'syncState',arguments:{sessionId:sid}}},true);
           delete result.operationId;
           if(pending && 'requestId' in pending.params)result.operationId=pending.params.requestId;
           const presentation=result.presentation as Record<string,unknown>;
@@ -278,7 +305,7 @@ export class AgentClient {
         }
         if(entry.method==='session.create' && !(error instanceof WorldError)) {
           this.creationUncertain=true;
-          throw Error(`Creation reply unavailable; a run may already exist. Do not resubmit create. Recover the run token from the owning page or retained invocation, then observe or resume it. ${error instanceof Error?error.message:String(error)}`);
+          throw Error(`Creation reply unavailable; a run may already exist. Do not resubmit create. Recover the run token from the owning page or retained invocation, then syncState or resume it. ${error instanceof Error?error.message:String(error)}`);
         }
         if(error instanceof WorldError){this.adopt(error.response);return present(error.response,{},true);}
         throw error;
@@ -288,8 +315,8 @@ export class AgentClient {
     try{return await run;}
     catch(error) {
       const pending=sid?this.pending.get(sid):undefined;
-      const message=(error instanceof Error?error.message:String(error))+(pending?' Call observe to verify the previous input and read current state. Do not resend the action.':'');
-      return {version:1,...(sid?{sessionId:sid}:{}),summary:message,error:{code:pending?'uncertainExecution':'agentError',message},...(pending?{next:{tool:'observe',arguments:{sessionId:sid}}}:{}),...(pending && 'requestId' in pending.params?{operationId:pending.params.requestId}:{})};
+      const message=(error instanceof Error?error.message:String(error))+(pending?' Call syncState to verify the previous input and read current state. Do not resend the action.':'');
+      return {version:1,...(sid?{sessionId:sid}:{}),summary:message,error:{code:pending?'uncertainExecution':'agentError',message},...(pending?{next:{tool:'syncState',arguments:{sessionId:sid}}}:{}),...(pending && 'requestId' in pending.params?{operationId:pending.params.requestId}:{})};
     }
   }
 }

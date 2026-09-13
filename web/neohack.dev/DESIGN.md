@@ -523,7 +523,7 @@ that action is busy. Refresh the notice when the action settles, even if the
 display queue is still catching up. A lost or unresolved reply still blocks input
 and shows the notice; animation never clears the retained request.
 
-There is no MCP `recover` tool. `observe` checks a retained uncertain operation's
+There is no MCP `recover` tool. `syncState` checks a retained uncertain operation's
 exact receipt with read-only requests and then returns current state. The browser
 clears its matching pending metadata only after that receipt and a healthy current
 scene are verified. An unrelated receipt cannot clear uncertainty. Historical

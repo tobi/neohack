@@ -11,15 +11,15 @@ test('Pi binding registers only discovered tools, passes exact arguments, report
   t.mock.method(globalThis,'fetch',async(url,options)=>{
     calls.push({url,options});
     assert.equal(options.headers.authorization,'Bearer fixture');
-    return {ok:true,json:async()=>url.endsWith('/tools')?{tools:[{name:'observe',description:'Observe',inputSchema:schema}]}:{result:'fixture'}};
+    return {ok:true,json:async()=>url.endsWith('/tools')?{tools:[{name:'syncState',description:'Synchronize',inputSchema:schema}]}:{result:'fixture'}};
   });
-  await extension({registerTool:tool=>registered.push(tool),on:(event,fn)=>handlers.set(event,fn),getActiveTools:()=>['observe']});
-  assert.deepEqual(registered.map(t=>t.name),['observe']);
+  await extension({registerTool:tool=>registered.push(tool),on:(event,fn)=>handlers.set(event,fn),getActiveTools:()=>['syncState']});
+  assert.deepEqual(registered.map(t=>t.name),['syncState']);
   assert.deepEqual(registered[0].parameters,schema);
   await handlers.get('session_start')({}, {model:{provider:'vllm',id:'current',contextWindow:524288}});
   assert.equal(JSON.parse(calls[1].options.body).contextWindow,524288);
   const output=await registered[0].execute('id',{});
-  assert.deepEqual(JSON.parse(calls[2].options.body),{name:'observe',arguments:{}});
+  assert.deepEqual(JSON.parse(calls[2].options.body),{name:'syncState',arguments:{}});
   assert.equal(output.content[0].text,'{"result":"fixture"}');
 });
 

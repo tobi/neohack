@@ -34,8 +34,8 @@ must not silently resume an old game on a different engine. Stop after death or
 ascension; save the exact end facts. Do not restart a hero in this invocation.
 
 ## Reading the scene
-observe gives perceived state and genuine standing decisions for free.
-After an error or lost reply, use observe: it checks any retained uncertain receipt
+Every reply carries the current view (map.text, state, context). syncState returns the full JSON scene for free.
+After an error or lost reply, use syncState: it checks any retained uncertain receipt
 without resending input. If verification fails, stop and follow the resume instruction.
 Normal navigation stops need no recovery call. Historical receipt documents are
 not current positions or active questions; there is no recover tool.
@@ -114,7 +114,7 @@ export function pageTools(result, origin) {
     if(typeof tool.name!=='string'||!tool.inputSchema||!tool.frameId||names.has(tool.name)||['read_file','write_file'].includes(tool.name))throw Error('Invalid, duplicate or conflicting WebMCP tool');
     names.add(tool.name);
   }
-  if(!names.has('create')||!names.has('observe')||!names.has('help'))throw Error('The configured page does not expose NeoHack WebMCP');
+  if(!names.has('create')||!names.has('syncState')||!names.has('help'))throw Error('The configured page does not expose NeoHack WebMCP');
   return tools;
 }
 async function invoke(config, tool, args) {
@@ -188,12 +188,12 @@ async function main(){
     if(values['check-pi'])tools=tools.filter(t=>t.name==='help');
     fs.writeFileSync(path.join(runDir,'tools.json'),JSON.stringify(tools,null,2));
     if(values.check){
-      const result=await invoke(config,tools.find(t=>t.name==='help'),{name:'observe'});
+      const result=await invoke(config,tools.find(t=>t.name==='help'),{name:'syncState'});
       fs.writeFileSync(path.join(runDir,'check.json'),JSON.stringify(result,null,2));
       if(result?.isError)throw Error('Read-only WebMCP help failed');
       console.log(`Verified ${tools.length} page tools and read-only help. No game created.`);return;
     }
-    const prompt=values['check-pi'] ? 'Read NETHACK.md using read_file. Invoke help with name observe. Write check-report.md using write_file, stating what the help returned. Then finish. This is a read-only binding check: do not create a game.' : `Read NETHACK.md, then play one new NeoHack game through the provided WebMCP tools, aiming for ascension. Keep PROGRESS.md current, and write report.md at the end. Continue until terminal state, uncertain execution or deadline ${new Date(config.deadline).toISOString()}. Tools are read_file, write_file and page WebMCP only. Do not merely describe a plan; play.`;
+    const prompt=values['check-pi'] ? 'Read NETHACK.md using read_file. Invoke help with name syncState. Write check-report.md using write_file, stating what the help returned. Then finish. This is a read-only binding check: do not create a game.' : `Read NETHACK.md, then play one new NeoHack game through the provided WebMCP tools, aiming for ascension. Keep PROGRESS.md current, and write report.md at the end. Continue until terminal state, uncertain execution or deadline ${new Date(config.deadline).toISOString()}. Tools are read_file, write_file and page WebMCP only. Do not merely describe a plan; play.`;
     const fd=fs.openSync(path.join(runDir,'pi.jsonl'),'wx'),err=fs.openSync(path.join(runDir,'pi.stderr.log'),'wx');
     child=spawn(settings.pi.command,['--model',values.model??settings.pi.model,'--thinking',settings.pi.thinking,
       '--no-builtin-tools','--no-extensions','--no-skills','--no-prompt-templates','--no-context-files',

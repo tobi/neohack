@@ -29,7 +29,7 @@ menus before agent input. These commands describe the current navigation-only
 source contract. If the deployed build does not expose `go`, check its version
 instead of assuming an older tool has the same meaning.
 
-## Create or observe one run
+## Create or resynchronize with one run
 
 The shell examples use `jq`. Arguments are the tool’s parameters directly.
 An empty creation object chooses a random character and generated name; specify
@@ -47,13 +47,14 @@ GAME_ID=$(jq -er '.sessionId' "$PLAY_DIR/frame.json")
 Run creation once. If its reply is lost, retrieve the original invocation or
 inspect the owning page before creating again. An already open game exposes its
 public token through `agent-browser get attr pixel-nethack data-session-id`.
-Observe it for free:
+Read its full JSON scene for free (ordinary replies already carry `map.text`,
+`state`, `creatures` and `context`):
 
 ```sh
-agent-browser --json webmcp invoke observe \
-  --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid}')" > "$PLAY_DIR/observe.json"
-jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/observe.json"
-jq '.data.output.structuredContent' "$PLAY_DIR/observe.json" > "$PLAY_DIR/frame.json"
+agent-browser --json webmcp invoke syncState \
+  --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid}')" > "$PLAY_DIR/syncState.json"
+jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/syncState.json"
+jq '.data.output.structuredContent' "$PLAY_DIR/syncState.json" > "$PLAY_DIR/frame.json"
 ```
 
 Check both the CLI envelope and game result. A timed-out invocation is not a
@@ -86,7 +87,7 @@ squares represent single steps. To deliberately attempt an ordinary step east,
 including its normal bumps or attempts to open a door:
 
 ```sh
-jq '{sessionId,to:{x:(.observation.you.x+1),y:.observation.you.y},force:true}' \
+jq '{sessionId,direction:"east"}' \
   "$PLAY_DIR/frame.json" > "$PLAY_DIR/move.json"
 agent-browser --json webmcp invoke go \
   --params "@$PLAY_DIR/move.json" > "$PLAY_DIR/moved.json"
@@ -95,7 +96,7 @@ jq '.data.output.structuredContent' "$PLAY_DIR/moved.json" > "$PLAY_DIR/frame.js
 ```
 
 Refresh `frame.json` after every operation before using it for another target.
-`force:true` permits only adjacent ordinary movement: it does not bypass rules,
+`go({direction})` attempts one adjacent ordinary step: it does not bypass rules,
 confirmations or standing decisions, and is not force attack. Use `attack` for a
 deliberate adjacent attack. Eligibility is not a safety guarantee.
 
@@ -115,7 +116,7 @@ names or IDs; an ambiguous name returns candidates. Use `help` with a tool’s
 
 ## Check current state and return
 
-After a lost input reply, **do not invoke the action again**. Call `observe` to
+After a lost input reply, **do not invoke the action again**. Call `syncState` to
 read current state and check any retained uncertain receipt without resending
 input. If verification fails, stop and follow the resume instruction. Normal
 navigation stops need no recovery call. `receipt({sessionId,operationId})` nests

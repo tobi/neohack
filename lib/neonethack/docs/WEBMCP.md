@@ -55,7 +55,7 @@ submits engine input. Item selections continue to use opaque item references.
 Normal navigation stops need no recovery call. Read the returned scene and choose
 the next action. There is no `recover` tool.
 
-After an error or lost reply, call `observe({sessionId})`. It looks up any retained
+After an error or lost reply, call `syncState({sessionId})`. It looks up any retained
 uncertain operation by its exact receipt ID, then reads a fresh current scene.
 It never resends gameplay or continues a navigation leg. A verified completion is
 reported in `verification` with its operation ID and outcome; current position,
@@ -68,7 +68,7 @@ not manufacture missing consent or clear an unverified request.
 is nested under `receipt`, with no top-level world or decision, and no executable
 answer/cancel suggestions for old questions. The low-level exact receipt is unchanged.
 If an outer bridge loses the entire reply, the adapter may not know which reply
-the caller missed. `observe` returns current state instead of guessing the latest
+the caller missed. `syncState` returns current state instead of guessing the latest
 historical operation. Retain bridge invocation IDs for exact correlation.
 
 A signal aborted before submission prevents input. Aborting after submission
@@ -156,9 +156,11 @@ callbacks. It never uses `clearContext` to erase other scripts’ tools.
 
 ## Reply context without extra gameplay
 
-The shared adapter enriches snapshot replies with `state`, action-local `messages`
-and a revision-bound `context`. Nearby attempts come from the snapshot's C
-neighborhood; one free `session.navigation` query adds frontiers, doors and stairs.
+The shared adapter enriches snapshot replies with `state`, action-local `messages`,
+a text `map` rendered from the perceived world cells and a revision-bound
+`context`. Nearby squares (terrain, movement intent, occupant, hazards and the
+tools offered there) come from the snapshot's C neighborhood; one free
+`session.navigation` query adds frontiers, doors and stairs.
 It submits no movement, consumes no turns and never answers a question. Standing
 questions, ended runs and unresolved input skip that navigation query. A query
 failure or revision mismatch marks context unavailable without changing the saved
@@ -166,6 +168,7 @@ action outcome, adopting another revision or retrying input. All transports use
 this same path, including browser calls shared with a human.
 
 Navigation messages aggregate confirmed substeps; their turn labels are response
-boundaries. Observation messages are empty; the low `observation.heard` field is
-rolling history. Historical receipts keep their messages nested and labelled.
+boundaries. `syncState` never carries fresh messages and omits the field; the low
+`observation.heard` it returns is rolling history. Historical receipts keep their
+messages nested and labelled.
 Typed `navigation.stop` details describe witnessed changes, not predicted danger.

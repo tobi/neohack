@@ -97,7 +97,7 @@ try {
       const call=JSON.parse(body),tool=tools.find(t=>t.name===call.name);
       if(!tool || !call.arguments || typeof call.arguments!=='object' || Array.isArray(call.arguments) || 'sessionId' in call.arguments)throw Error('Invalid bound tool call');
       let result;
-      if(call.name==='observe')result=(await harness.observe({deliberate:true})).response;
+      if(call.name==='syncState')result=(await harness.observe({deliberate:true})).response;
       else if(tool.annotations?.readOnlyHint){
         const original=catalog.find(t=>t.name===call.name);
         result=(await rpc('tools/call',{name:call.name,arguments:{...call.arguments,...(original.inputSchema.properties?.sessionId?{sessionId}:{})}})).result;

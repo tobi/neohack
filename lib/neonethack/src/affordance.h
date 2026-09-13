@@ -59,6 +59,8 @@ void nnh_emit_gate(const nnh_knowledge *, mj_Buf *);
 void nnh_emit_cell_actions(const nnh_cell_actions *, mj_Buf *);
 void nnh_emit_display(const nnh_known_cell *, mj_Buf *);
 const char *nnh_terrain_freshness(int, int);
+/* Engine display char when this cell currently shows terrain, else NULL. */
+const char *nnh_terrain_mark(const nnh_known_cell *);
 void nnh_emit_neighborhood(const nnh_knowledge *, mj_Buf *);
 /* Conservative known-walking policy, not a prediction of safe movement.
  * Returns steps (origin excluded), or -1 when no route is known. */

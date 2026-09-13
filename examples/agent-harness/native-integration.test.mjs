@@ -43,7 +43,10 @@ if(process.env.NEONETHACK_MCP_TEST_ROOT){
     await assert.rejects(harness.dispatch({runId:'wrong',sessionId,expectedRevision:before.state.revision,operation:"wait",args:{},approved:true}));
     assert.equal(sent,count);
     const waited=await harness.dispatch({runId,sessionId,expectedRevision:before.state.revision,operation:"wait",args:{},approved:true});
-    assert.equal(sent,count+1);assert.equal(waited.state.revision,before.state.revision+1);
+    // One action, then one free syncState completing the map-only reply with JSON world cells at the same revision.
+    assert.equal(sent,count+2);assert.equal(waited.state.revision,before.state.revision+1);
+    assert.equal(waited.response.observation.world,undefined);assert.equal(typeof waited.response.map.text,'string');
+    assert.ok(Array.isArray(waited.state.snapshot.observation.world));assert.equal(waited.state.snapshot.revision,waited.response.revision);
     assert.equal(waited.response.observation.turn,before.state.snapshot.observation.turn+waited.response.outcome.turnsElapsed);
     loseReply=true;
     await assert.rejects(harness.dispatch({runId,sessionId,expectedRevision:waited.state.revision,operation:"wait",args:{},approved:true}));

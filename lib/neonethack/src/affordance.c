@@ -126,6 +126,14 @@ const char *nnh_terrain_freshness(int terrain, int visible)
     return terrain == T_UNKNOWN || terrain == T_DARK ? "unknown" :
         visible == 1 ? "current" : "remembered";
 }
+const char *nnh_terrain_mark(const nnh_known_cell *c)
+{
+    unsigned char ch;
+    if (!c || c->occupant || c->object || !c->mark[0] || c->mark[1]) return NULL;
+    ch = (unsigned char) c->mark[0];
+    if (ch < 33 || ch > 126) return NULL;
+    return c->mark;
+}
 void nnh_emit_display(const nnh_known_cell *c, mj_Buf *b)
 {
     if (c->occupant) {
@@ -166,6 +174,7 @@ void nnh_emit_cell_actions(const nnh_cell_actions *c, mj_Buf *b)
             mj_key(b, "orientation"); mj_strv(b, c->known.door_orientation == 1 ? "horizontal" : "vertical");
         }
         mj_key(b, "freshness"); mj_strv(b, nnh_terrain_freshness(c->known.terrain, c->known.visible));
+        { const char *mark = nnh_terrain_mark(&c->known); if (mark) { mj_key(b, "mark"); mj_strv(b, mark); } }
         mj_endobj(b);
         if (c->known.terrain == T_DOOR_CLOSED || c->known.terrain == T_DOOR_OPEN) {
             mj_key(b, "door"); mj_obj(b);
@@ -268,7 +277,11 @@ int nnh_known_paths(const nnh_knowledge *basis, const nnh_known_cell *map, int *
             if (dx[i] && dy[i] &&
                 (known_rock(&k.cells[40 + dx[i]]) || k.cells[40 + dx[i]].boulder) &&
                 (known_rock(&k.cells[40 + 9 * dy[i]]) || k.cells[40 + 9 * dy[i]].boulder)) continue;
-            if (edge.walkable != 1 || !edge.intent || strcmp(edge.intent, "step") ||
+            /* A displayed tame ally is displaceable: ordinary movement swaps
+             * places under normal rules. Other occupants stay excluded so a
+             * route never plans an attack or a peaceful confirmation. */
+            if (edge.walkable != 1 || !edge.intent ||
+                (strcmp(edge.intent, "step") && strcmp(edge.intent, "allyBump")) ||
                 edge.restriction || edge.requires_squeeze || edge.known.trap) continue;
             parent[next] = at; queue[tail++] = next;
         }
@@ -280,7 +293,7 @@ const char *nnh_known_block(const nnh_known_cell *c)
 {
     if (!c || !c->in_bounds) return "disconnected";
     if (c->terrain == T_UNKNOWN || c->terrain == T_DARK) return "targetUnknown";
-    if (c->occupant >= 2) return "targetOccupied";
+    if (c->occupant == 2) return "targetOccupied"; /* allies are displaceable, so they never block by themselves */
     if (c->terrain == T_DOOR_CLOSED) return "closedDoor";
     return "disconnected";
 }

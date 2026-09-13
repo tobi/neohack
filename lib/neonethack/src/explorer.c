@@ -122,7 +122,8 @@ perceived_display(const cell_t *source, int self, nnh_known_cell *cell)
     snprintf(cell->object_category, sizeof cell->object_category, "%s", source->object_category);
     snprintf(cell->object_appearance, sizeof cell->object_appearance, "%s", source->object_appearance);
     snprintf(cell->depicted_creature, sizeof cell->depicted_creature, "%s", source->depicted_creature);
-    if (source->ch >= 32 && source->ch < 127) {
+    if (!source->present) cell->mark[0] = '\0';
+    else if (source->ch >= 32 && source->ch < 127) {
         cell->mark[0] = (char) source->ch; cell->mark[1] = '\0';
     } else snprintf(cell->mark, sizeof cell->mark, "\\u%04x", source->ch & 0xffff);
 }
@@ -3112,6 +3113,7 @@ emit_world(game_t *g, mj_Buf *b)
             if ((g->terrain[y][x] == T_DOOR_CLOSED || g->terrain[y][x] == T_DOOR_OPEN) && c->door_orientation) {
                 mj_key(b, "orientation"); mj_strv(b, c->door_orientation == 1 ? "horizontal" : "vertical");
             }
+            { const char *mark = nnh_terrain_mark(&displayed); if (mark) { mj_key(b, "mark"); mj_strv(b, mark); } }
             mj_endobj(b);
             nnh_emit_display(&displayed, b);
             mj_endobj(b);

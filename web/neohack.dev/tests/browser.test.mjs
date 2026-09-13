@@ -1577,8 +1577,9 @@ test(
     );
     const { methods } = await import("../../../lib/neonethack/dist/mcp/agent-data.js");
     const tools=methods.map(m=>({name:m.name,description:m.description,inputSchema:m.schema}));
-    const snapshotPart=({summary,operationId,historical,navigation,creatures,requestId,presentation,reply,cancel,verification,next,state,messages,messageScope,context,...frame})=>{
-      const {neighborhood,...observation}=frame.observation;
+    // Compact agent replies present world cells as map.text; compare the shared facts both views carry.
+    const snapshotPart=({summary,operationId,historical,navigation,creatures,requestId,presentation,reply,cancel,verification,next,state,messages,messageScope,context,map,...frame})=>{
+      const {neighborhood,world,heard,knowledge,...observation}=frame.observation;
       return {...frame,observation,events:frame.events.filter(e=>!(e.type==='saw'&&e.kind==='terrain'&&(e.mark==='\\u0000'||e.mark==='\u0000')))};
     };
     const sharedSnapshot=async()=>{const frame=await agentSnapshot(page);return frame?snapshotPart(frame):null;};
@@ -1608,11 +1609,12 @@ test(
     let state = created.structuredContent;
     assert.deepEqual(await sharedSnapshot(), snapshotPart(state));
     assert.equal(state.presentation.kind,'compact');
+    assert.equal(state.observation.world,undefined);assert.ok(state.map.text.includes('@'),'the agent reply renders the perceived level as text');
     assert.equal(state.context.status,'available');
     assert.equal(state.context.revision,state.revision);
     assert.ok(state.context.nearby.cells.length<=9);
     const humanBeforeQuery = await agentSnapshot(page);
-    const full=(await call('observe',{sessionId:state.sessionId})).structuredContent;
+    const full=(await call('syncState',{sessionId:state.sessionId})).structuredContent;
     assert.deepEqual(await agentSnapshot(page), humanBeforeQuery, 'observation preserves the human action outcome and events');
     assert.deepEqual(full.observation, humanBeforeQuery.observation, 'explicit observation returns the entire shared HUD scene');
     assert.deepEqual(full.decision, humanBeforeQuery.decision);
@@ -1668,7 +1670,7 @@ test(
     const stale=await call('wait',{sessionId:state.sessionId});
     assert.equal(stale.isError,true);
     assert.equal((await agentSnapshot(page)).revision,human.revision);
-    state=(await call('observe',{sessionId:state.sessionId})).structuredContent;
+    state=(await call('syncState',{sessionId:state.sessionId})).structuredContent;
     const actions = await call("inspect", {
       sessionId: state.sessionId,
       target: "here",
@@ -1701,7 +1703,7 @@ test(
     const wrong = await call("wait", args("web-wrong-retry"));
     assert.equal(wrong.isError, true);
     assert.equal(wrong.structuredContent.error.code,"uncertainExecution");
-    const recovered = await call("observe",{sessionId:state.sessionId});
+    const recovered = await call("syncState",{sessionId:state.sessionId});
     assert.equal(recovered.isError, false);
     assert.equal(recovered.structuredContent.verification.status, 'settled');
     assert.equal(await page.evaluate(()=>globalThis.__verificationInputs),1,'verification does not resend the input');
@@ -1714,7 +1716,7 @@ test(
     const {events:observedEvents,...observedScene}=snapshotPart(state);
     assert.deepEqual(humanScene,observedScene);
     assert.deepEqual(observedEvents,[]);
-    assert.deepEqual(state.messages,[]);
+    assert.equal(state.messages,undefined,'syncState carries no fresh messages');
     assert.ok(Array.isArray(humanEvents));
     assert.deepEqual((await agentSnapshot(page)).observation,state.observation,'recovered receipt includes the complete neighborhood');
     await page.locator("#recovery").waitFor({ state: "hidden" });
@@ -1861,7 +1863,7 @@ test('native WebMCP rejects an old confirmation after a human opens a different 
   await page.getByLabel('Game menu', { exact: true }).click();
   await page.getByRole('button', { name: 'Abandon run', exact: true }).click();
   await ready(page);
-  const quit = (await call("observe", { sessionId })).structuredContent;
+  const quit = (await call("syncState", { sessionId })).structuredContent;
   assert.notEqual(quit.decision.id, prayer.decision.id);
   const stale = await call("answer", { sessionId, decisionId: prayer.decision.id, value: true });
   assert.equal(stale.isError, true);
@@ -3829,7 +3831,7 @@ test('free WebMCP observation preserves live touch equipment intent; input inval
   const selected = await choose.elementHandle();
   assert.equal(await choose.getAttribute('aria-pressed'), 'true');
   const dispatchStart = await page.evaluate(() => globalThis.equipmentRequests.length);
-  const observed = await call("observe", { sessionId: frame.sessionId });
+  const observed = await call("syncState", { sessionId: frame.sessionId });
   assert.equal(observed.isError, false);
   const actions = await call("inspect", { sessionId: frame.sessionId, target: 'here' });
   assert.equal(actions.isError, false);
@@ -3847,7 +3849,7 @@ test('free WebMCP observation preserves live touch equipment intent; input inval
   frame = await snapshot(page);
   assert.deepEqual(frame.observation.inventory.find(item => item.id === shieldId).equipmentSlots, ['shield'],
     'preserved callbacks still act on the live Game');
-  await call("observe", { sessionId: frame.sessionId }); // Refresh agent revision after human equipment input.
+  await call("syncState", { sessionId: frame.sessionId }); // Refresh agent revision after human equipment input.
   const dagger = frame.observation.inventory.find(item => item.equipmentSlots?.includes('alternateWeapon'));
   await page.getByRole('button', { name: 'Choose equipment slot for ' + dagger.label, exact: true }).tap();
   const oldSlot = await page.locator('[data-slot=weapon]').boundingBox();
@@ -3860,7 +3862,7 @@ test('free WebMCP observation preserves live touch equipment intent; input inval
     'an old equipment touch cannot answer the standing question');
   await page.getByRole('button', { name: 'Cancel action', exact: true }).tap();
   await ready(page);
-  await call("observe", { sessionId: frame.sessionId });
+  await call("syncState", { sessionId: frame.sessionId });
   await page.getByRole('button', { name: /^Backpack/ }).tap();
   await page.getByRole('button', { name: 'Choose equipment slot for ' + dagger.label, exact: true }).tap();
   const dropped = await call("drop", { sessionId: frame.sessionId, itemId: dagger.id });
@@ -4822,7 +4824,7 @@ test('WebMCP attribution persists while natural presentation trails durable agen
  assert.equal(queued.text,'TURN '+queued.turn);
  assert.ok(queued.revisions.every((r,i,a)=>!i||r>=a[i-1]),'presentation never rolls backward');
  // Read-only calls see the latest state without flushing or stealing the view.
- const observed=(await call('observe',{sessionId})).structuredContent;
+ const observed=(await call('syncState',{sessionId})).structuredContent;
  assert.equal(observed.revision,state.revision);
  assert.ok(Number(await page.locator('pixel-nethack').getAttribute('data-presentation-pending'))>0);
  await page.screenshot({path:`${root}/test-results/webmcp-paced.png`});
@@ -4905,7 +4907,7 @@ test('paced WebMCP distinguishes a waiting reply from a lost action result', {ti
   await page.locator('#recovery').waitFor({state:'visible'});
   assert.equal(await page.getByRole('button',{name:'Search',exact:true}).isDisabled(),true);
   assert.equal((await call('search',{...sid,turns:1})).isError,true);
-  const verified=await call('observe',sid);assert.equal(verified.isError,false);
+  const verified=await call('syncState',sid);assert.equal(verified.isError,false);
   assert.equal(verified.structuredContent.verification.status,'settled');
   const accepted=await page.evaluate(()=>globalThis.replyProbe.response);
   assert.equal(verified.structuredContent.observation.turn,accepted.observation.turn);
@@ -4929,10 +4931,9 @@ test('WebMCP walking shows each completed step at a readable pace without delayi
   new MutationObserver(()=>{const s=host.displaySnapshot;if(s)globalThis.walkingFrames.push({revision:s.revision,turn:s.observation.turn,you:s.observation.you,time:performance.now()});}).observe(host,{attributes:true,attributeFilter:['data-revision']});
  });
  for(let i=0;i<8;i++){
-  const you=state.observation.you;
-  const to=state.observation.world.find(c=>Math.abs(c.x-you.x)+Math.abs(c.y-you.y)===1&&c.terrain.type==='floor'&&!c.occupant);
-  assert.ok(to,'known adjacent floor');
-  const result=await call('go',{sessionId,to:{x:to.x,y:to.y},force:true});
+  const to=state.context.nearby.cells.find(c=>['north','south','east','west'].includes(c.direction)&&c.terrain==='floor'&&!c.occupant);
+  assert.ok(to,'known adjacent floor from the reply context');
+  const result=await call('go',{sessionId,direction:to.direction});
   assert.equal(result.isError,false,JSON.stringify(result.structuredContent));state=result.structuredContent;
   assert.equal(state.outcome.positionChanged,true);positions.push(state.observation.you);
  }

@@ -2,7 +2,7 @@ import { ScriptControls, ScriptJournal, copyState, returnedState, type ScriptSta
 import { attachController } from './lifecycle.js';
 import { HeroEventListeners, type HeroEventDetails, type HeroEventName, type HeroListener, type BotResult, type StopReason, type CellChange } from './hero-events.js';
 import type { Game } from './client.js';
-import type { GoOptions, NavigationOptions, ExploreOptions, NavigationResult, Point } from './navigator.js';
+import type { NavigationOptions, ExploreOptions, NavigationResult, Point } from './navigator.js';
 import type { AutomaticPickup, CellActions, Cell, Item, ItemRef, Snapshot } from './types.js';
 import { direction, entities } from './vocabulary.js';
 export { direction, entities } from './vocabulary.js';
@@ -412,12 +412,14 @@ export class Hero {
   senseClosest(filter: entities = entities.Creature): Entity | undefined { return this.sense(filter)[0]; }
   /** Reference text from the pinned encyclopedia; never observed identity. */
   lookup(name:string) { this.assertActive(); return this.game.lookup(name); }
-  /** Navigate to a perceived destination. Force is only an adjacent ordinary move. */
-  go(options: Omit<GoOptions,'to'> & {to:Point|Entity}): Promise<NavigationResult> {
+  /** Navigate to a perceived destination, or take one ordinary step by direction. */
+  go(options: NavigationOptions & ({to:Point|Entity;direction?:undefined} | {direction:direction;to?:undefined})): Promise<NavigationResult> {
     this.assertActive();
+    if(options.direction!==undefined) { const {to:_to,...step}=options; return this.game.go({...step,direction:options.direction}); }
     const target=options.to;
     if(target instanceof Entity) current(target,this.game);
-    return this.game.go({...options,to:target instanceof Entity ? {x:target.position[0],y:target.position[1]} : {...target}});
+    const {direction:_direction,...leg}=options;
+    return this.game.go({...leg,to:target instanceof Entity ? {x:target.position[0],y:target.position[1]} : {...target!}});
   }
   /** Walk toward the nearest perceived unvisited frontier, then a remembered edge
    * into adjacent darkness if no frontier remains. Optional maxActions (default

@@ -105,6 +105,86 @@
     "context": {
       "type": "object"
     },
+    "map": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "legend": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "positions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "integer"
+                },
+                "y": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "bounds": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "y": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "you": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "text",
+        "legend",
+        "positions",
+        "bounds",
+        "you"
+      ],
+      "additionalProperties": false
+    },
     "presentation": {
       "type": "object",
       "properties": {
@@ -120,8 +200,11 @@
         "omittedClearTerrainEvents": {
           "type": "integer"
         },
+        "map": {
+          "const": "rendered from observation.world"
+        },
         "fullObservation": {
-          "const": "observe"
+          "const": "syncState"
         },
         "attempts": {
           "const": "inspect"
@@ -134,6 +217,7 @@
         "kind",
         "omitted",
         "omittedClearTerrainEvents",
+        "map",
         "fullObservation",
         "attempts"
       ],

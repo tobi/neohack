@@ -82,7 +82,7 @@ const runner = createAgentHarness({
   runId, sessionId, client, records,
   operations: createOperationValidators({sessionId}),
 });
-await runner.observe({deliberate: true});
+await runner.observe({deliberate: true}); // the MCP syncState tool
 const {state} = await runner.view();
 await runner.dispatch({
   runId, sessionId, expectedRevision: state.revision,
@@ -96,7 +96,10 @@ decisions still require their exact current `decisionId` and explicit answer.
 Supported operation validators come from `protocol/agent.ts`, with no default
 argument injection, coercion, unknown-field fallback, or copied game schema.
 
-Use the shared library's `CompactObservationReader` in `decodeReply` if the
+Ordinary MCP replies present the level as `map.text`; `dispatch` completes each
+such frame with the free `syncState` query so the harness's perception, progress
+and walking modules read JSON world cells at the action's own revision. Use the
+shared library's `CompactObservationReader` in `decodeReply` if the
 transport returns compact deltas. One reader belongs to one connection. Retain
 original request/reply pairs for `records()`; observation.heard is a rolling
 buffer and cannot establish a fresh bump. The default client decoder unwraps
@@ -181,7 +184,7 @@ directory; `summary.json` records sanitized results and limitations. This is a
 usability sample, separate from fixed policy/seed gameplay benchmarks.
 
 The September 8 check using `vllm/current` passed with six calls: create,
-observe, inspect, pray, answer(false), suspend. Observe and inspect were
-concurrent free reads. All 54 live schemas were available; the host supplied
+observe (now named `syncState`), inspect, pray, answer(false), suspend. Observe
+and inspect were concurrent free reads. All 54 live schemas were available; the host supplied
 no argument corrections. Native/WASM contract tests separately cover all six
 question kinds. One model sample does not establish a general success rate.

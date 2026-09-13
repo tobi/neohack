@@ -27,7 +27,7 @@ export type ActionOffer = { [M in OfferMethod]: {
 export interface CellActions {
   x: number; y: number; dx: number; dy: number; inBounds: boolean;
   visible?: boolean | null;
-  terrain?: { type: string; freshness: "current" | "remembered" | "unknown"; orientation?: "horizontal" | "vertical" };
+  terrain?: { type: string; freshness: "current" | "remembered" | "unknown"; orientation?: "horizontal" | "vertical"; mark?: string };
   door?: { lock: "locked" | "unlocked" | "unknown"; freshness: "witnessed" | "remembered" | "unknown"; observedTurn?: number };
   occupant?: { kind: "self" | "creature" | "ally"; mark?: string; color?: number; appearance?: string; attitude?: "hostile" | "peaceful" | "tame" };
   objects?: { mark: string; color: number; kind?: "boulder"; category?: string; known?: {appearance: string; depictedCreature?: string} }[];
@@ -65,7 +65,7 @@ export interface Cell {
   x: number; y: number;
   /** Engine sight at this boundary. Omitted by older engine packages. */
   visible?: boolean;
-  terrain: { type: string; knowledge: "remembered"; freshness?: "current" | "remembered" | "unknown"; orientation?: "horizontal" | "vertical" };
+  terrain: { type: string; knowledge: "remembered"; freshness?: "current" | "remembered" | "unknown"; orientation?: "horizontal" | "vertical"; mark?: string };
   occupant?: { kind: "self" | "creature" | "ally"; mark: string; color?: number; appearance?: string; attitude?: "hostile" | "peaceful" | "tame" };
   objects?: { mark: string; color: number; kind?: "boulder"; category?: string; known?: {appearance: string; depictedCreature?: string} }[];
 }
