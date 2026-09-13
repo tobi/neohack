@@ -66,6 +66,54 @@ Keep current guidance consistent across these documents:
 - Prefer replacing an awkward method and updating its consumers over adding a
   compatibility layer. Keep introductions short and link to the exact contract.
 
+## MCP decision contract
+
+MCP uses one shared `DecisionFrame` for stdio, HTTP and WebMCP.
+This changes agent presentation and admission, not native/low operation semantics.
+See [the frame contract](lib/neonethack/docs/PROTOCOL.md#mcp-observation-presentation)
+for the shape; implementation and scenario checks establish what a build supports.
+
+- Keep one authoritative home for each fact: `basis` identifies the session,
+  integrity revision, perceived `viewId`, level and turn; `control.gate` describes
+  input authority; `outcome` separates submission, completion and actual changes;
+  `scene.self` holds canonical self-state. Query data belongs in `result`.
+  Remove legacy top-level `state`, `observation`, `messages`, `context` and `reply`.
+- Routine `scene.kind: snapshot` frames must be compact and complete for the next
+  decision, with nearby attempts, perceived entities/features, inventory, underfoot
+  knowledge, automatic pickup, perception and map. `syncState` additionally supplies
+  full `scene.world`. No mandatory action–sync loop or model-side delta reconstruction.
+  Unavailable perception must not masquerade as an empty scene or current knowledge.
+- Nest executable reply syntax and permitted cancellation inside the exact
+  `decision` on first presentation. No implicit answers, blanket confirmations,
+  reused question IDs or fallback actions. Events are fresh witnessed evidence;
+  rolling narration and historical receipts are not new events or live questions.
+- Require the caller's explicit `viewId` on mutating calls against a live view,
+  except `answer`/`cancel`, which bind to the exact decision ID. Session lifecycle
+  calls (`create`, `resume`, `suspend`) do not use a prior gameplay view. Never
+  refresh a stale basis and silently retarget input.
+  Revision can advance without elapsed time, movement or an obvious scene change.
+- Use the uniform target selectors `{direction}`, `{position:{x,y}}`, `{ref}`
+  and `{symbol,scope:'adjacent'|'level'}` within each tool's declared subset.
+  Here/self is `{direction:'self'}` where applicable. Directions are words, not
+  vectors. Opaque item IDs and decision choice IDs remain separate namespaces.
+  Resolve only within the captured perceived view; zero or multiple symbol matches
+  submit no input. Never choose the nearest or filter out an ally to resolve ambiguity.
+  Creature refs do not establish identity across views or disappearance.
+- `step` is one ordinary adjacent attempt; `go` takes a destination only.
+  Preserve tame-ally swaps and real warnings; a displayed non-ally requires a
+  deliberate interaction rather than automatic combat. A step is no safety promise
+  and must not be preempted by a long-leg new-creature policy. Navigation remains
+  bounded shared execution over C plans, with explicit progress and stop causes.
+- Keep the live input basis distinct from animation/display snapshots. Serialize
+  human and agent input; takeover or abort stops future steps, settles accepted
+  input and preserves its exact receipt. Read queries preserve human focus and
+  selections. Ownership loss and uncertain execution block further input.
+- Validate scenario parity and measure real wire/model-visible sizes and separate
+  engine, planning, enrichment and storage costs. Report proposals, targets and
+  historical measurements as such; smaller replies and better survival are not
+  established improvements without evidence. Do not ban legal repeated actions
+  merely because an example bot loops.
+
 ## Perceptual parity and UX
 
 Before any UX work, read [web/neohack.dev/AGENTS.md](web/neohack.dev/AGENTS.md)

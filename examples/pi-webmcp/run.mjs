@@ -34,7 +34,10 @@ must not silently resume an old game on a different engine. Stop after death or
 ascension; save the exact end facts. Do not restart a hero in this invocation.
 
 ## Reading the scene
-Every reply carries the current view (map.text, state, context). syncState returns the full JSON scene for free.
+DecisionFrame version 2 carries basis (sessionId, revision, viewId, levelId, turn),
+control.gate, outcome, scene, decision, events and query result. scene.self holds
+position, location and vitals; scene.map.text is the map. Routine scenes are complete
+for the next decision. syncState additionally returns full scene.world for free.
 After an error or lost reply, use syncState: it checks any retained uncertain receipt
 without resending input. If verification fails, stop and follow the resume instruction.
 Normal navigation stops need no recovery call. Historical receipt documents are
@@ -44,25 +47,30 @@ help when you need their documented information. Use help for exact operation
 arguments; the discovered schemas are authoritative. MCP/WebMCP navigation is
 higher-level than the precise semantic library; there is no generic act/raw-key
 escape hatch. Coordinates and opaque item/creature references are not labels.
-Compare location.id after every action: a trap can change levels or branches.
+Compare basis.levelId after every action: a trap can change levels or branches.
 Track HP/maxHP, hunger, conditions, equipment, position, revision and pending
 input. Treat terrain, objects, hazards and apparent creatures as separate layers.
 Remembered or unseen cells are uncertain. A glyph alone does not identify food
 or a monster. Losing sight of a creature does not establish its death.
-observation.heard is a rolling buffer. Fresh messages come from action-local
-events; corroborate them with the action outcome and current observation.
+Fresh witnessed evidence comes from events; corroborate it with outcome and scene.
 
 ## Actions, decisions and movement
-Every input is a deliberate choice. go/explore/descend have explicit bounds;
+Every input is a deliberate choice. Pass the exact basis.viewId on mutations,
+except create/resume/suspend and answer/cancel, which bind to exact decision IDs.
+step {target:{direction:'east'}} attempts one adjacent step; go accepts a destination
+to only. attack/open/kick use each tool's target subset: position, ref, or symbol
+with explicit scope, and direction where offered. Never reuse refs from older views.
+go/explore/descend have explicit bounds;
 use short legs, inspect their actual stop reason and replan after interruption.
 A knownWalking route policy is not proof of physical impossibility. Search
 plausible dead ends for secret doors instead of repeating refused moves forever.
 An action's eligibility means an attempt is offered, not that it will succeed.
-Use answer with the exact current decisionId and explicit value matching reply.valueSchema,
-or cancel. Do not silently confirm warnings or resume occupations.
+Use answer with the exact current decision.id and explicit value matching
+decision.reply.valueSchema, or decision.cancel when offered. Do not silently
+confirm warnings or resume occupations. Read control.gate before further input.
 Check the returned state after every attack. A dead/moved target is not permission
 to attack the same square again. Zero elapsed turns can be legitimate, including
-terminal events. Exact end.kind and cause outrank the intended action summary.
+terminal events. Exact terminal facts outrank the intended action summary.
 
 ## Survival checklist
 Verify a useful starting weapon is actually wielded and armor is actually worn.

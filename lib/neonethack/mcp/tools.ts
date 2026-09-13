@@ -5,7 +5,7 @@ import type { Method } from "../typescript/types.js";
 
 /** Tool definitions and C validation are generated from the same catalog. */
 export { tools, instructions } from "./tool-data.js";
-export { compactResponseSchema } from "./protocol-data.js";
+export { mcpResponseSchema } from "./protocol-data.js";
 
 export const toolMethods = new Map(
   tools.map((tool) => [

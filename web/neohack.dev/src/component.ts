@@ -7,8 +7,9 @@ import { heroArt } from './characters';
 import {InputPlayback} from './input-playback';
 import {replayDocument} from '../../../lib/neonethack/wasm/protocol-reader.mjs';
 import { Neonethack, isSnapshot, type Transport } from '../../../lib/neonethack/typescript/client';
-import { tools, toolMethods } from '../../../lib/neonethack/mcp/tools';
-import { registerWebMcp, type WebMcpContext } from '../../../lib/neonethack/typescript/webmcp';
+import { McpService, tools } from '../../../lib/neonethack/mcp/service';
+import { catalog } from '../../../lib/neonethack/mcp/protocol-data';
+import { registerWebMcp, type WebMcpContext, type WebMcpRegistration } from '../../../lib/neonethack/typescript/webmcp';
 import type { Snapshot, Request } from 'neonethack/types';
 export { Neonethack as default, Neonethack, Game, WorldError, UncertainExecution, Hero, Entity, Inventory, InventoryItem, direction, entities, defineBot, runBot } from '../../../lib/neonethack/typescript/client';
 export { tools, registerWebMcp };
@@ -32,6 +33,10 @@ export class NeohackWorld extends HTMLElement {
   private timer?: ReturnType<typeof setInterval>;
   private transport?: Pick<Transport, 'send'>;
   private writable = false;
+  private connectionId = 0;
+  private agent?: McpService;
+  private agentTransport?: Pick<Transport, 'send'>;
+  private registrations = new Set<WebMcpRegistration>();
   private index = 0;
   private root = this.attachShadow({mode:'open'});
   private status: HTMLElement;
@@ -262,34 +267,45 @@ export class NeohackWorld extends HTMLElement {
   pause() { clearInterval(this.timer); this.timer = undefined; this.updateControls(); }
   /** Host opts into execution; default connections expose only catalog read-only tools. */
   connect(transport: Pick<Transport,'send'>, options: {writable?: boolean} = {}) {
+    this.disconnectTransport();
     this.transport = transport; this.writable = options.writable === true;
-    return new Neonethack({send: request => this.send(request), close: async () => { this.transport = undefined; }});
+    const connectionId = this.connectionId;
+    const guarded = this.agentTransport = {send: (request: Request) => this.send(request, connectionId)};
+    this.agent = new McpService(guarded);
+    return new Neonethack({...guarded, close: async () => {
+      if(this.connectionId === connectionId) this.disconnectTransport();
+    }});
   }
-  private async send(request: Request) {
-    const tool = tools.find(t => toolMethods.get(t.name) === request.method);
-    if(!tool || (!this.writable && !tool.annotations.readOnlyHint)) throw Error('This connection is read-only');
-    if(!this.transport) throw Error('No game transport connected');
+  private disconnectTransport() {
+    this.connectionId++;
+    for(const registration of this.registrations) registration.dispose();
+    this.registrations.clear();
+    this.transport = undefined;
+    this.agentTransport = undefined;
+    this.agent = undefined;
+  }
+  private async send(request: Request, connectionId = this.connectionId) {
+    if(connectionId !== this.connectionId || !this.transport) throw Error('No game transport connected');
+    // Capability admission for the public low client, not another tool dispatcher.
+    const method = catalog.methods.find(method => method.name === request.method);
+    if(!method || (!this.writable && !method.readOnly)) throw Error('This connection is read-only');
     const result = await this.transport.send(structuredClone(request));
-    if(isSnapshot(result)) this.snapshot = result;
+    if(connectionId === this.connectionId && isSnapshot(result)) this.snapshot = result;
     return result;
   }
   async registerWebMcp(context?: WebMcpContext) {
-    const actual = context ?? (document as Document & {modelContext?:WebMcpContext}).modelContext ?? (navigator as Navigator & {modelContext?:WebMcpContext}).modelContext;
-    if(!actual) return {supported:false,toolCount:0,dispose(){}};
-    const controller = new AbortController(), names:string[] = [], cleanups:(()=>void)[] = [];
-    let toolCount=0;
-    const dispose=()=>{controller.abort();for(const cleanup of cleanups.splice(0))cleanup();for(const name of names.splice(0))actual.unregisterTool?.(name);};
-    try {
-      for(const tool of this.availableTools()) {
-        const cleanup = await actual.registerTool({...tool,execute:async input=>{
-          const response=await this.send({version:1,method:toolMethods.get(tool.name)!,params:input} as Request);
-          return {content:[{type:'text',text:JSON.stringify(response)}],isError:'error' in response};
-        }},{signal:controller.signal});
-        toolCount++;
-        if(typeof cleanup === "function")cleanups.push(cleanup);else names.push(tool.name);
-      }
-    } catch(error){dispose();throw error;}
-    return {supported:true,toolCount,dispose};
+    if(!this.agentTransport || !this.agent) return {supported:false,toolCount:0,dispose(){}};
+    const connectionId = this.connectionId;
+    const shared = await registerWebMcp(this.agentTransport, context, {
+      service: this.agent, tools: this.availableTools(),
+    });
+    const registration = {...shared, dispose: () => {
+      this.registrations.delete(registration);
+      shared.dispose();
+    }};
+    if(connectionId !== this.connectionId) registration.dispose();
+    else this.registrations.add(registration);
+    return registration;
   }
   private availableTools() { return this.transport ? tools.filter(t=>this.writable || t.annotations.readOnlyHint) : []; }
   /** JSON-RPC / WebMCP vocabulary, delivered on this element's message event. */
@@ -302,10 +318,8 @@ export class NeohackWorld extends HTMLElement {
       switch(m.method) {
         case 'tools/list': result = {tools:this.availableTools()}; break;
         case 'tools/call': {
-          const method = toolMethods.get(m.params?.name);
-          if(!method) throw Error('Unknown tool');
-          const response = await this.send({version:1,method,params:m.params.arguments ?? {}} as Request);
-          result = {content:[{type:'text',text:JSON.stringify(response)}],structuredContent:response,isError:'error' in response}; break;
+          if(!this.agent || !this.availableTools().some(tool => tool.name === m.params?.name)) throw Error('Tool is unavailable on this connection');
+          result = await this.agent.call(m.params.name, m.params.arguments ?? {}); break;
         }
         case 'world.snapshot': result = this.snapshot; break;
         case 'world.render': this.snapshot = m.params.snapshot; result = {}; break;

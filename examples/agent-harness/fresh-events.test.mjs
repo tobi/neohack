@@ -16,12 +16,13 @@ function fixture() {
   };
   return { records: [{ request, response }], snapshot: { sessionId: 'fixture-session', revision: 7 } };
 }
-function mcp(f = fixture(), name = "moveWithoutAttack") {
+function mcp(f = fixture(), name = "step") {
   const { request, response } = f.records[0];
   const { sessionId, direction } = request.params;
+  const output={version:2,basis:{sessionId,revision:response.revision,viewId:'view-7'},outcome:{...response.outcome,action:'move',submission:'accepted',actionsTaken:1},events:response.events};
   f.records = [
-    { direction: 'request', message: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { sessionId, direction } } } },
-    { direction: 'response', message: { jsonrpc: '2.0', id: 1, result: { isError: false, structuredContent: response } } },
+    { direction: 'request', message: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { sessionId, viewId:'view-6',target:{direction} } } } },
+    { direction: 'response', message: { jsonrpc: '2.0', id: 1, result: { isError: false, structuredContent: output } } },
   ];
   return f;
 }
@@ -124,7 +125,7 @@ test('only the exact witnessed heard message counts, not lore or mention of an e
 
 test('MCP pairs match outer IDs and preserve call identity without invented input revisions', () => {
   const f = mcp();
-  assert.equal(latestCompletedPair(f.records).request.params.name, "moveWithoutAttack");
+  assert.equal(latestCompletedPair(f.records).request.params.name, "step");
   assert.equal(freshEyeBumpEvidence(f).evidence.callId, 1);
   f.records[1].message.id = '1';
   assert.equal(latestCompletedPair(f.records), null);
@@ -196,7 +197,7 @@ test('single-action go requires an actual move outcome; navigation aggregates ar
   const f = fixture(); frame(f).outcome.action = 'move'; frame(f).navigation = { actionsTaken: 1 };
   mcp(f, 'go');
   assert.equal(freshEyeBumpEvidence(f).kind, 'fresh-eye-bump');
-  f.records[1].message.result.structuredContent.navigation.actionsTaken = 2;
+  f.records[1].message.result.structuredContent.outcome.actionsTaken = 2;
   assert.equal(freshEyeBumpEvidence(f).reason, 'navigation-not-single-action');
 });
 

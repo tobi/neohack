@@ -1,67 +1,51 @@
-import type { Response } from "../typescript/types.js";
+import type {DecisionFrame, AgentScene} from './frame.js';
+import {SceneReader, type SceneFrame, type DeltaScene, type SceneRemoval} from './scene.js';
 
-/** Presentation only. Engine responses/receipts and UI observations stay full. */
-export class CompactResponses {
-  private previous?: Record<string, any>;
-  private sequence = 0;
-  project(response: Response, method: string): Record<string, any> {
-    const result = structuredClone(response) as Record<string, any>;
-    // tools/list already supplies the catalog. Avoid returning it a second time.
-    if (result.catalog) delete result.catalog;
-    if (!result.observation) return result;
-    if (method !== "session.observe") delete result.observation.neighborhood;
-    const old = this.previous;
-    const snapshot = method === "session.observe" || method === "session.resume" ||
-      !old || old.sessionId !== result.sessionId || result.revision < old.revision ||
-      old.observation.location.id !== result.observation.location.id;
-    this.previous = structuredClone(result);
-    const id = ++this.sequence;
-    if (snapshot) {
-      result.update = { kind: "snapshot", id };
-      return result;
-    }
-    const before = old.observation, after = result.observation;
-    const observation: Record<string, any> = {};
-    const remove = Object.keys(before).filter(key => !(key in after));
-    for (const [key, value] of Object.entries(after)) {
-      if (key !== "world" && JSON.stringify(value) !== JSON.stringify(before[key])) observation[key] = value;
-    }
-    const key = (cell: any) => `${cell.x},${cell.y}`;
-    const cells = new Map(before.world.map((cell: any) => [key(cell), cell]));
-    const current = new Set(after.world.map(key));
-    const changed = after.world.filter((cell: any) => JSON.stringify(cell) !== JSON.stringify(cells.get(key(cell))));
-    const worldRemoved = before.world.filter((cell: any) => !current.has(key(cell))).map((cell: any) => [cell.x, cell.y]);
-    if (changed.length) observation.world = changed;
-    result.observation = observation;
-    result.update = { kind: "delta", id, base: id - 1, ...(remove.length ? { remove } : {}), ...(worldRemoved.length ? { worldRemoved } : {}) };
-    return result;
-  }
-}
+const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const cellKey = (cell: {x: number; y: number}) => `${cell.x},${cell.y}`;
 
-/** Materialize compact observations. Keep one reducer per MCP connection.
- * A missing/out-of-order delta throws; resynchronize with session.observe.
- * This is presentation state, never authority to repeat engine input.
- */
-export class CompactObservationReader {
-  private last?: Record<string, any>;
-  apply(response: Record<string, any>): Record<string, any> {
-    const result = structuredClone(response);
-    if (!result.update) return result;
-    const { update } = result;
-    if (update.kind === "delta") {
-      if (!this.last || this.last.update.id !== update.base || this.last.sessionId !== result.sessionId)
-        throw Error("Missing observation baseline; call session.observe to resynchronize.");
-      const observation = structuredClone(this.last.observation);
-      for (const key of update.remove ?? []) delete observation[key];
-      for (const [key, value] of Object.entries(result.observation)) if (key !== "world") observation[key] = value;
-      const cells = new Map<string, any>(observation.world.map((cell: any) => [`${cell.x},${cell.y}`, cell]));
-      for (const [x, y] of update.worldRemoved ?? []) cells.delete(`${x},${y}`);
-      for (const cell of result.observation.world ?? []) cells.set(`${cell.x},${cell.y}`, cell);
-      observation.world = [...cells.values()].sort((a, b) => a.y - b.y || a.x - b.x);
-      result.observation = observation;
-    } else if (update.kind !== "snapshot") throw Error("Unknown observation update kind");
-    this.last = structuredClone(result);
-    delete result.update;
-    return result;
+/** Opt-in presentation deltas. Baselines never authorize or replay game input. */
+export class SceneProjector {
+  private readonly reader = new SceneReader();
+  private readonly ambiguous = new Set<string>();
+
+  project(frame: DecisionFrame, sinceViewId?: string): SceneFrame {
+    const previous = frame.basis ? this.reader.current(frame.basis.sessionId) : undefined;
+    const result = this.reader.apply(frame);
+    if (result.scene && result.basis && previous?.scene && previous.basis?.viewId === result.basis.viewId &&
+      !equal(previous.scene, result.scene)) this.ambiguous.add(result.basis.sessionId);
+    const ambiguous = result.basis ? this.ambiguous.has(result.basis.sessionId) : false;
+    // The same view can be returned with optional full-state enrichment. A
+    // dropped enrichment reply makes that view ID ambiguous as a delta base;
+    // establish a fresh snapshot at the next view before sending deltas again.
+    if (result.scene && result.basis && previous?.basis?.viewId !== result.basis.viewId)
+      this.ambiguous.delete(result.basis.sessionId);
+    if (!result.scene || !result.basis || !previous?.scene || !previous.basis ||
+      sinceViewId !== previous.basis.viewId || result.basis.levelId !== previous.basis.levelId ||
+      result.basis.viewId === previous.basis.viewId || ambiguous) return result;
+    const before = previous.scene, after = result.scene;
+    const scene: DeltaScene = {kind: 'delta', baseViewId: previous.basis.viewId};
+    const changes: Partial<AgentScene> = {};
+    // Non-world arrays replace in full; world entries replace complete cells.
+    for (const key of Object.keys(after) as (keyof AgentScene)[]) {
+      if (key !== 'kind' && key !== 'world' && !equal(before[key], after[key]))
+        Object.assign(changes, {[key]: after[key]});
+    }
+    Object.assign(scene, changes);
+    const remove = (Object.keys(before) as (keyof AgentScene)[]).filter((key): key is SceneRemoval =>
+      (key === 'automaticPickup' || key === 'navigation' || key === 'world' || key === 'knowledge') && !Object.hasOwn(after, key));
+    if (remove.length) scene.remove = remove;
+    if (after.world) {
+      if (!before.world) scene.world = after.world;
+      else {
+        const cells = new Map(before.world.map(cell => [cellKey(cell), cell]));
+        const current = new Set(after.world.map(cellKey));
+        const changed = after.world.filter(cell => !equal(cell, cells.get(cellKey(cell))));
+        const removed = before.world.filter(cell => !current.has(cellKey(cell))).map(cell => ({x: cell.x, y: cell.y}));
+        if (changed.length) scene.world = changed;
+        if (removed.length) scene.worldRemoved = removed;
+      }
+    }
+    return {...result, scene};
   }
 }

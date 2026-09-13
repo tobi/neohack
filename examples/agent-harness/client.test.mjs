@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm, rmdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fork, spawn } from 'node:child_process';
-import { createInterface } from 'node:readline';
+import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { createSnapshotClient } from './client.mjs';
 
@@ -16,7 +15,7 @@ const frame = (revision, extra = {}) => ({ version: 1, sessionId, requestId: nul
     world: [], heard: [] },
   outcome: { action: 'fixture', status: 'completed', turnsElapsed: 0, positionChanged: false, effects: [] },
   events: [], decision: null, ended: false, end: null, ...extra });
-const mcp = value => ({ jsonrpc: '2.0', id: 1, result: { structuredContent: value } });
+const low = value => value;
 const deferred = () => {
   let resolve;
   const promise = new Promise(done => { resolve = done; });
@@ -39,7 +38,7 @@ test('call and play replace the same authoritative snapshot and preserve explici
   const calls = [];
   const { client, runDir } = await setup(t, { send: async call => {
     calls.push(call);
-    return mcp(frame(++next, next === 2 ? { decision: { id: 'exact-question', kind: 'confirmation' } } : {}));
+    return low(frame(++next, next === 2 ? { decision: { id: 'exact-question', kind: 'confirmation' } } : {}));
   } });
   await client.observe();
   await client.call({ name: 'attack', arguments: { direction: 'east', expectedRevision: 1 } });
@@ -170,7 +169,7 @@ test('a public query without observation explicitly invalidates preflight until 
 
 for (const [label, bad, code, status] of [
   ['JSON-RPC error', { jsonrpc: '2.0', id: 1, error: { code: -1, message: 'failed' } }, 'REPLY_ERROR', 'error'],
-  ['MCP error with apparently valid content', { result: { isError: true, structuredContent: frame(8) } }, 'REPLY_ERROR', 'error'],
+  ['MCP envelope is not a low snapshot', { result: { structuredContent: frame(8) } }, 'INVALID_REPLY', 'uncertain'],
   ['semantic error', frame(8, { error: { code: 'incompleteRequest', message: 'unknown' } }), 'REPLY_ERROR', 'error'],
   ['unknown execution', frame(8, { outcome: { status: 'unknown' } }), 'UNCERTAIN_REPLY', 'uncertain'],
   ['storage failure', frame(8, { storage: { status: 'failed' } }), 'UNCERTAIN_REPLY', 'uncertain'],
@@ -225,7 +224,7 @@ test('exact recovery archives the old receipt then observes; lost input is never
   assert.equal(recovered.recovered.state.snapshot.revision, 10);
   assert.equal(recovered.state.snapshot.revision, 12);
   assert.equal(recovered.state.pendingRequest, null);
-  assert.deepEqual(calls.map(call => call.name), ["syncState", 'attack', "syncState"]);
+  assert.deepEqual(calls.map(call => call.name), ["observe", 'attack', "observe"]);
   assert.equal((await receipts(runDir)).filter(row => row.kind === 'recovery').length, 1);
 });
 
@@ -287,7 +286,7 @@ test('missing exact recovery and failed post-recovery observation remain closed'
   let observed = 0;
   const { client, runDir } = await setup(t, {
     send: async call => {
-      if (call.name !== "syncState") throw Error('lost input');
+      if (call.name !== "observe") throw Error('lost input');
       if (++observed > 1) throw Error('lost observation');
       return frame(3);
     }, recoverExact: async () => frame(4),
@@ -305,7 +304,7 @@ test('missing exact recovery and failed post-recovery observation remain closed'
 });
 
 test('injected public decoder receives raw replies without a second perception reducer', async t => {
-  const raw = { result: { structuredContent: { update: { kind: 'delta' } } } };
+  const raw = frame(2);
   const { client } = await setup(t, { send: async () => raw,
     decodeReply: reply => { assert.deepEqual(reply, raw); return frame(2); } });
   assert.equal((await client.observe()).state.revision, 2);
@@ -373,70 +372,30 @@ test('process death during snapshot write preserves complete uncertain state and
   assert.equal((await resumed.readSnapshot()).revision, 2);
 });
 
-// Opt in after building native, without adding a runtime/dependency requirement
-// to the fixture suite: NEONETHACK_MCP_TEST_ROOT=$PWD/lib/neonethack node --test ...
-if (process.env.NEONETHACK_MCP_TEST_ROOT) {
-  test('native MCP: mixed formats, real decision, old receipt and exact recovery', { timeout: 30000 }, async t => {
-    const root = process.env.NEONETHACK_MCP_TEST_ROOT;
-    const runDir = await mkdtemp(join(tmpdir(), 'neohack-client-native-'));
-    const runtime = spawn(join(root, 'dist/mcp/cli.js'), [
-      '--sessions', join(runDir, 'sessions'),
-    ], { stdio: ['pipe', 'pipe', 'pipe'] });
-    const closed = once(runtime, 'exit');
-    let stderr = '';
-    runtime.stderr.on('data', bytes => { stderr += bytes; });
-    const lines = createInterface({ input: runtime.stdout })[Symbol.asyncIterator]();
-    t.after(async () => { runtime.stdin.end(); await closed; await rm(runDir, { recursive: true, force: true }); });
-    let sequence = 0;
-    async function rpc(method, params) {
-      runtime.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: ++sequence, method, params })}\n`);
-      const next = await lines.next();
-      assert.equal(next.done, false, stderr);
-      const response = JSON.parse(next.value);
-      assert.equal(response.id, sequence);
-      assert.equal(response.error, undefined, JSON.stringify(response));
-      return response;
-    }
-    await rpc('initialize', { protocolVersion: '2025-11-25', capabilities: {},
-      clientInfo: { name: 'snapshot-test', version: '1' } });
-    runtime.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
-    const created = (await rpc('tools/call', { name: "create", arguments: {
-      name: 'SnapshotTest', seed: 42, role: 'valkyrie', race: 'dwarf', gender: 'female', align: 'lawful',
-    } })).result.structuredContent;
-    let loseReply = false;
-    const reservations = new Map();
-    const client = createSnapshotClient({ runDir: join(runDir, 'client'), sessionId: created.sessionId,
-      send: async (call, context) => {
-        const reply = await rpc('tools/call', call);
-        reservations.set(context.reservationId, reply.result.structuredContent.operationId);
-        if (loseReply) { loseReply = false; throw Error('fixture lost committed reply'); }
-        return reply;
-      },
-      recoverExact: async (call, context) => {
-        assert.equal(call.name, "wait");
-        const operationId = reservations.get(context.reservationId);
-        assert.equal(typeof operationId, 'string');
-        return rpc('tools/call', { name: 'receipt', arguments: { sessionId: created.sessionId, operationId } });
-      },
-    });
-    const initial = (await client.observe()).state;
-    const waited = await client.call({ name: "wait", arguments: {} });
-    assert.equal(waited.state.snapshot.observation.turn, initial.snapshot.observation.turn + 1);
-    const eating = await client.play("eat");
-    assert.equal(eating.state.snapshot.decision.kind, 'item');
-    const cancelled = await client.call({ name: "cancel", arguments: {
-      decisionId: eating.state.snapshot.decision.id,
-    } });
-    assert.equal(cancelled.state.snapshot.decision, null);
-    const historical = await client.play('receipt', { operationId: waited.response.operationId });
-    assert.equal(historical.state.status, 'needs-observation');
-    assert.equal(historical.state.snapshot.revision, cancelled.state.revision);
-    await client.observe();
-    loseReply = true;
-    await assert.rejects(client.play("wait"), /fixture lost committed reply/);
-    await assert.rejects(client.observe(), { code: 'RECOVERY_REQUIRED' });
-    const recovered = await client.recover();
-    assert.equal(recovered.state.status, 'current');
-    assert.equal(recovered.state.snapshot.observation.turn, waited.state.snapshot.observation.turn + 1);
+// Actual engine coverage uses a new temporary store and the direct low library.
+if (process.env.NEONETHACK_NATIVE_TEST_ROOT) {
+  test('native library: real decision, historical receipt and exact recovery', {timeout:30000}, async t => {
+    const root=process.env.NEONETHACK_NATIVE_TEST_ROOT;
+    const {createNative}=await import(new URL('../../lib/neonethack/dist/typescript/native.js',import.meta.url));
+    const {librarySender}=await import('./library-client.mjs');
+    const runDir=await mkdtemp(join(tmpdir(),'neohack-client-native-'));
+    const api=createNative({executable:join(root,'build/native/neonethack'),enginePath:join(root,'engine/playground/nethack'),dataPath:join(root,'engine/playground'),sessionsPath:join(runDir,'sessions')});
+    t.after(async()=>{await api.close();await rm(runDir,{recursive:true,force:true});});
+    const game=await api.create({seed:42,role:'valkyrie',race:'dwarf',gender:'female',align:'lawful'});
+    const send=librarySender(api);let loseReply=false;
+    const client=createSnapshotClient({runDir:join(runDir,'client'),sessionId:game.id,
+      send:async(call,context)=>{const reply=await send(call,context);if(loseReply){loseReply=false;throw Error('lost committed reply');}return reply;},
+      recoverExact:async(_call,{reservationId})=>api.request('session.receipt',{sessionId:game.id,requestId:reservationId})});
+    const initial=(await client.observe()).state.snapshot;
+    const waited=await client.play('wait');
+    assert.equal(waited.response.observation.turn,initial.observation.turn+1);
+    const eating=await client.play('eat');assert.equal(eating.response.decision.kind,'item');
+    const cancelled=await client.play('cancel',{decisionId:eating.response.decision.id});
+    assert.equal(cancelled.response.decision,null);
+    loseReply=true;await assert.rejects(client.play('wait'),/lost committed reply/);
+    await assert.rejects(client.observe(),{code:'RECOVERY_REQUIRED'});
+    const recovered=await client.recover();
+    assert.equal(recovered.state.status,'current');
+    assert.equal(recovered.state.snapshot.observation.turn,cancelled.response.observation.turn+1);
   });
 }

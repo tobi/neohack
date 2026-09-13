@@ -15,12 +15,10 @@ function immutable(value) {
 }
 function fail(code, message) { return Object.assign(new Error(message), { code }); }
 
-/** Unwrap public responses only. Inject the library's CompactObservationReader
- * through decodeReply for deltas; this module never reconstructs perception. */
+/** This reference policy accepts low library snapshots, never MCP frames. */
 export function decodeSnapshotReply(raw) {
-  if (raw?.error || raw?.isError || raw?.result?.isError)
-    throw fail('REPLY_ERROR', 'The request returned an error.');
-  return raw?.result?.structuredContent ?? raw?.structuredContent ?? raw;
+  if (raw?.error) throw fail('REPLY_ERROR', 'The request returned an error.');
+  return raw;
 }
 
 async function syncDirectory(directory) {
@@ -52,7 +50,7 @@ async function atomicJSON(path, value, checkpoint) {
  * process crash an operator must establish that the owner is stopped before
  * removing that directory. Keep state.json and receipts intact for recovery.
  *
- * send({name,arguments}, {snapshot,reservationId}) returns a raw semantic/MCP reply. High MCP
+ * send({name,arguments}, {snapshot,reservationId}) returns a raw low library reply. The library sender
  * owns request IDs/revisions; arguments.expectedRevision is checked locally and
  * removed before send. send must durably reserve its exact operation before
  * engine input. reservationId is a local correlation token, never a game input
@@ -60,12 +58,12 @@ async function atomicJSON(path, value, checkpoint) {
  * {snapshot,reservationId}) must recover that SAME reserved
  * operation, never dispatch a new action; absent exact evidence it must throw.
  * The callback is the injected bridge/dispatcher recovery boundary, not a retry
- * policy. Successful recovery always requests a fresh syncState observation.
+ * policy. Successful recovery always requests a fresh low session.observe snapshot.
  *
  * execute(call,{preflight}), call(call), and play(name,args) share ownership.
  * preflight(envelope,call) runs inside it before reservation/send and MUST throw
  * to block. A configured preflight applies to ordinary requests through every
- * entrypoint. Explicit observe (the MCP syncState tool)/recover perform only observation/exact recovery.
+ * entrypoint. Explicit observe (the low session.observe operation)/recover perform only observation/exact recovery.
  * Never call client methods recursively from preflight; it already holds the
  * run lock. Use the supplied immutable envelope for all guard decisions.
  *
@@ -160,18 +158,16 @@ export function createSnapshotClient({ runDir, sessionId, send, recoverExact,
         sessionId, kind, reservationId: pending.pendingId, call, raw });
       let response;
       try {
-        if (raw?.error || raw?.isError || raw?.result?.isError)
+        if (raw?.error)
           throw fail('REPLY_ERROR', 'The request returned an error.');
         response = clone(await decodeReply(raw));
-        if (response?.kind === 'receipt' && response.historical === true && object(response.receipt))
-          response = { ...response.receipt, historical: true };
         if (!object(response)) throw fail('INVALID_REPLY', 'Missing semantic reply.');
         if (response.version !== 1) throw fail('INVALID_REPLY', 'Unsupported semantic response version.');
         if (response.error) throw fail('REPLY_ERROR', 'The semantic reply returned an error.');
         if (response.sessionId !== sessionId) throw fail('WRONG_SESSION', 'Reply belongs to another session.');
         if (call.arguments.requestId !== undefined && response.requestId !== call.arguments.requestId)
           throw fail('WRONG_RECEIPT', 'Reply request identity does not match.');
-        if (response.update?.kind === 'delta') throw fail('UNRESOLVED_DELTA', 'Inject the shared compact reader before accepting deltas.');
+        if (response.update?.kind === 'delta') throw fail('UNRESOLVED_DELTA', 'This library policy requires a complete low snapshot.');
         if ((response.outcome && !settled.has(response.outcome.status))
           || [response.storage, response.recording].some(value => value && value.status !== 'ok'))
           throw fail('UNCERTAIN_REPLY', 'Execution or durability remains uncertain.');
@@ -223,7 +219,7 @@ export function createSnapshotClient({ runDir, sessionId, send, recoverExact,
       const state = await readState();
       if (state.reason === 'RESUME_REQUIRED')
         throw fail('RESUME_REQUIRED', 'Explicit runtime ownership/resume is required outside this client.');
-      const observing = call.name === "syncState";
+      const observing = call.name === "observe";
       if (state.pendingRequest && state.pendingKind !== 'observe')
         throw fail('RECOVERY_REQUIRED', 'Exact recovery must settle pending execution before observation or new input.');
       if (!observing) {
@@ -253,13 +249,13 @@ export function createSnapshotClient({ runDir, sessionId, send, recoverExact,
       if (!state.pendingRequest || state.pendingKind === 'observe' || typeof recoverExact !== 'function')
         throw fail('RECOVERY_UNAVAILABLE', 'No pending exact operation or no exact recovery provider.');
       const recovered = await receive(state.pendingRequest, state, recoverExact, 'recovery');
-      const observed = await execute({ name: "syncState", arguments: {} });
+      const observed = await execute({ name: "observe", arguments: {} });
       if (observed.state.status !== 'current')
         throw fail('STALE_SNAPSHOT', 'Recovery settled, but current observation is unavailable.');
       return { recovered, observed, state: observed.state };
     }
     const owner = Object.freeze({ assertOwned, readSnapshot, send: execute, recover,
-      observe: () => execute({ name: "syncState", arguments: {} }) });
+      observe: () => execute({ name: "observe", arguments: {} }) });
     try { return await callback(owner); }
     // A failed fsync/rename is not proof of durable state, even if a current
     // file happens to be visible. Retain ownership for operator inspection.

@@ -88,7 +88,7 @@ function unpack(pair) {
 // Explicit public operation mappings, not substrings or the reply's claim alone.
 const movements = new Map([
   ['game.move', 'move'], ['game.moveWithoutAttack', 'moveWithoutAttack'],
-  ["moveWithoutAttack", 'moveWithoutAttack'], ['go', 'move'],
+  ['step', 'move'], ['go', 'move'],
 ]);
 
 /**
@@ -109,20 +109,23 @@ export function freshEyeBumpEvidence({ records, snapshot } = {}) {
   const { method, params, frame, error, mcp, callId } = call;
   if (error || frame?.error) return absent('latest-response-error');
   if (!object(frame) || !object(params)) return absent('missing-frame');
+  if(frame.version!==(mcp?2:1))return absent('unsupported-frame');
+  const basis=mcp?frame.basis:frame;
   if (frame.historical === true) return absent('historical-receipt');
   if (typeof snapshot?.sessionId !== 'string' || !snapshot.sessionId
-      || params.sessionId !== snapshot.sessionId || frame.sessionId !== snapshot.sessionId)
+      || params.sessionId !== snapshot.sessionId || basis?.sessionId !== snapshot.sessionId)
     return absent('session-mismatch');
-  if (!revision(snapshot.revision) || !revision(frame.revision) || frame.revision !== snapshot.revision)
+  if (!revision(snapshot.revision) || !revision(basis.revision) || basis.revision !== snapshot.revision)
     return absent('revision-mismatch');
   if (!mcp && (typeof params.requestId !== 'string' || !params.requestId
       || params.requestId !== frame.requestId)) return absent('request-id-mismatch');
   if ((!mcp || Object.hasOwn(params, 'expectedRevision'))
-      && (!revision(params.expectedRevision) || params.expectedRevision >= frame.revision))
+      && (!revision(params.expectedRevision) || params.expectedRevision >= basis.revision))
     return absent('input-revision-mismatch');
   const action = movements.get(method);
   if (!action || frame.outcome?.action !== action) return absent('unrelated-operation');
-  if (method === 'go' && frame.navigation?.actionsTaken !== 1)
+  if (mcp && (!params.viewId || frame.outcome?.submission!=='accepted'))return absent('unwitnessed-submission');
+  if (method === 'go' && frame.outcome?.actionsTaken !== 1)
     return absent('navigation-not-single-action');
   const outcome = frame.outcome;
   if (!['completed', 'blocked'].includes(outcome.status)
@@ -135,7 +138,7 @@ export function freshEyeBumpEvidence({ records, snapshot } = {}) {
   return {
     kind: 'fresh-eye-bump', reason: 'action-local-heard',
     evidence: {
-      sessionId: frame.sessionId, revision: frame.revision,
+      sessionId: basis.sessionId, revision: basis.revision,
       ...(mcp ? { callId } : { requestId: frame.requestId }),
       method, action, status: outcome.status, turnsElapsed: outcome.turnsElapsed,
       text: event.text, source: 'events.heard',

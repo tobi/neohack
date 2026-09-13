@@ -25,8 +25,8 @@ function currentResult(result) {
 /**
  * Composed reference policy, not an autonomous player or alternate game API.
  * client is createSnapshotClient(), already bound to one exclusively owned run.
- * operations is a Map of explicitly enabled high-MCP names to strict argument
- * validators. Caller owns transport, compact reconstruction, exact recovery,
+ * operations is a Map of explicitly enabled library policy calls to strict
+ * low argument validators. Caller owns transport, exact recovery,
  * and each authorized choice. No default generic action or automatic consent.
  * records() returns original paired public trace data for the current connection.
  * Missing fresh bump evidence never overrules perceived eye/unknown proximity.
@@ -43,10 +43,10 @@ export function createAgentHarness({ runId, sessionId, client, operations,
     await lifecycle.acceptSnapshot(frame);
     lifecycle.assertAllowed('play');
     if (intent.operation === 'attack' || intent.operation === "kick") {
-      let target = intent.args.target;
-      if (intent.operation === "kick") {
-        const delta = directions[target?.direction];
-        if (!delta || !frame.observation.you) throw blocked('Explicit adjacent kick direction required.');
+      let target;
+      {
+        const delta = directions[intent.operation==='attack'?intent.args.direction:intent.args.target?.direction];
+        if (!delta || !frame.observation.you) throw blocked('Explicit adjacent direction required.');
         target = {x:frame.observation.you.x+delta[0], y:frame.observation.you.y+delta[1]};
       }
       validateGuardIdentity({runId, operation:intent.operation==='attack'?'attack':'kick', target,
@@ -62,29 +62,15 @@ export function createAgentHarness({ runId, sessionId, client, operations,
     const itemAction = itemActions.get(intent.operation);
     if (itemAction) {
       const selection = resolveItemSelection(frame, {sessionId,revision:state.revision,
-        id:intent.args.itemId,action:itemAction});
+        id:intent.args.item?.id,action:itemAction});
       if (!selection.ok) throw blocked('Item selection rejected: '+selection.reason,selection);
     }
     return {status:'OK',runId,sessionId,revision:state.revision};
   }});
 
-  /** Ordinary MCP replies present the level as map.text. This harness's
-   * perception, progress and walking modules read JSON world cells, so a
-   * compact frame is completed with the free syncState query. The completed
-   * scene must carry the action's own revision; otherwise someone else acted
-   * and the caller must observe deliberately before deciding. */
-  async function completeFrame(result) {
-    const observed = await client.observe();
-    const frame = currentResult(observed);
-    if (frame.revision !== result.response.revision)
-      throw Object.assign(new Error('The scene changed before the action reply could be completed; observe explicitly.'),
-        {code:'CURRENT_STATE_REQUIRED',sendAttempted:true,result});
-    return {...result, state: observed.state};
-  }
   async function dispatch(intent) {
     try {
-      let result = await dispatcher(intent);
-      if (!Array.isArray(currentResult(result).observation.world)) result = await completeFrame(result);
+      const result = await dispatcher(intent);
       await lifecycle.acceptSnapshot(currentResult(result));
       return result;
     } catch (error) {
@@ -152,16 +138,13 @@ export function createAgentHarness({ runId, sessionId, client, operations,
     if (!next.allowed) return next;
     const {command} = next;
     const operation = command.action;
-    let target = {x:command.target.x,y:command.target.y};
-    if (command.action !== 'attack') {
-      const dx=target.x-snapshot.observation.you.x,dy=target.y-snapshot.observation.you.y;
-      const direction=Object.keys(directions).find(k=>directions[k][0]===dx&&directions[k][1]===dy);
-      if (!direction) return queue.stop('targetNotAdjacent');
-      target={direction};
-    }
+    const dx=command.target.x-snapshot.observation.you.x,dy=command.target.y-snapshot.observation.you.y;
+    const direction=Object.keys(directions).find(k=>directions[k][0]===dx&&directions[k][1]===dy);
+    if (!direction) return queue.stop('targetNotAdjacent');
+    const args=command.action==='attack'?{direction}:{target:{direction}};
     try {
       const result=await dispatch({runId,sessionId,expectedRevision:command.basis.revision,
-        operation,args:{target},approved:true});
+        operation,args,approved:true});
       return {result,continuation:queue.settle(currentResult(result))};
     } catch(error) { queue.stop(error.sendAttempted?'uncertainResult':'dispatchRejected'); throw error; }
   }

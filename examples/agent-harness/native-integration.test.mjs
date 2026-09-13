@@ -5,57 +5,52 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createBridge} from './bridge.mjs';
-import {createSnapshotClient} from './client.mjs';
-import {createAgentHarness} from './harness.mjs';
-import {createOperationValidators} from './operations.mjs';
+import {createDecisionClient} from './decision-client.mjs';
 
-// Optional real-engine test uses a new disposable store, never archived saves.
+// Opt-in real MCP + WASM scenario. Every invocation owns a disposable store.
 if(process.env.NEONETHACK_MCP_TEST_ROOT){
-  test('native bridge + snapshot client + composed dispatcher preserve exact one-action ownership', {timeout:30000}, async t=>{
+  test('MCP v2 runner: compact actions, explicit decisions, stale views and no action-sync loop', {timeout:30000}, async t=>{
     const root=process.env.NEONETHACK_MCP_TEST_ROOT;
-    const dir=await mkdtemp(join(tmpdir(),'neohack-composed-native-'));
+    const dir=await mkdtemp(join(tmpdir(),'neohack-mcp-v2-'));
     const bridge=createBridge({command:join(root,'dist/mcp/cli.js'),
-      args:['--sessions',join(dir,'sessions')],
-      journalPath:join(dir,'bridge.jsonl')});
+      args:['--sessions',join(dir,'sessions')],journalPath:join(dir,'bridge.jsonl')});
     t.after(async()=>{await bridge.close();await rm(dir,{recursive:true,force:true});});
     let sequence=0;
-    await bridge.rpc({jsonrpc:'2.0',id:++sequence,method:'initialize',params:{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'composed-fixture',version:'1'}}});
+    const rpc=(method,params)=>bridge.rpc({jsonrpc:'2.0',id:++sequence,method,params});
+    await rpc('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'v2-example-fixture',version:'2'}});
     await bridge.notify({jsonrpc:'2.0',method:'notifications/initialized'});
-    const created=await bridge.rpc({jsonrpc:'2.0',id:++sequence,method:'tools/call',params:{name:"create",arguments:{name:'ComposedFixture',seed:42,role:'valkyrie',race:'dwarf',gender:'female',align:'lawful'}}});
-    const sessionId=created.result.structuredContent.sessionId,runId='disposable';
-    const {CompactObservationReader}=await import(pathToFileURL(join(root,'dist/mcp/compact.js')).href);
-    const reader=new CompactObservationReader();let sent=0,loseReply=false;const records=[],reservations=new Map();
-    const client=createSnapshotClient({runDir:join(dir,'client'),sessionId,
-      send:async(call,{reservationId})=>{
-        sent++;const request={jsonrpc:'2.0',id:++sequence,method:'tools/call',params:call};
-        const response=await bridge.rpc(request,{reservationId});records.push({request,response});
-        reservations.set(reservationId,response.result?.structuredContent?.operationId);
-        if(loseReply){loseReply=false;throw Error('fixture lost response before client persistence');}
-        return response;
-      },recoverExact:async(call,{reservationId})=>{
-        const operationId=reservations.get(reservationId);assert.equal(typeof operationId,'string');
-        return bridge.rpc({jsonrpc:'2.0',id:++sequence,method:'tools/call',params:{name:'receipt',arguments:{sessionId,operationId}}});
-      },decodeReply:raw=>reader.apply(raw.result.structuredContent)});
-    const harness=createAgentHarness({runId,sessionId,client,records:()=>records,operations:createOperationValidators({sessionId})});
-    assert.equal((await harness.view()).lifecycle.state,'unknown');
-    await harness.observe({deliberate:true});
-    const before=await harness.view(),count=sent;
-    await assert.rejects(harness.dispatch({runId:'wrong',sessionId,expectedRevision:before.state.revision,operation:"wait",args:{},approved:true}));
-    assert.equal(sent,count);
-    const waited=await harness.dispatch({runId,sessionId,expectedRevision:before.state.revision,operation:"wait",args:{},approved:true});
-    // One action, then one free syncState completing the map-only reply with JSON world cells at the same revision.
-    assert.equal(sent,count+2);assert.equal(waited.state.revision,before.state.revision+1);
-    assert.equal(waited.response.observation.world,undefined);assert.equal(typeof waited.response.map.text,'string');
-    assert.ok(Array.isArray(waited.state.snapshot.observation.world));assert.equal(waited.state.snapshot.revision,waited.response.revision);
-    assert.equal(waited.response.observation.turn,before.state.snapshot.observation.turn+waited.response.outcome.turnsElapsed);
-    loseReply=true;
-    await assert.rejects(harness.dispatch({runId,sessionId,expectedRevision:waited.state.revision,operation:"wait",args:{},approved:true}));
-    await assert.rejects(harness.observe({deliberate:true}));
-    const recovered=await harness.recover({deliberate:true});
-    assert.equal(recovered.state.status,'current');assert.equal(harness.lifecycle.status().state,'alive');
-    assert.equal(recovered.state.snapshot.observation.turn,waited.state.snapshot.observation.turn+1);
-    assert.equal(records.filter(r=>r.request.params.name==="wait").length,2); // first wait and lost-reply wait; no replay
-    assert.equal(bridge.pendingCount,0);
-    const closed=await bridge.close();assert.equal(closed.childClosed,true);assert.equal(closed.ownedProcessesRemaining,false);
+    const tools=(await rpc('tools/list',{})).result.tools;
+    const created=(await rpc('tools/call',{name:'create',arguments:{seed:42,role:'valkyrie',race:'dwarf',gender:'female',align:'lawful'}})).result.structuredContent;
+    assert.equal(created.version,2);
+    const sessionId=created.basis.sessionId;
+    const {SceneReader}=await import(pathToFileURL(join(root,'dist/mcp/scene.js')).href);
+    const sent=[];
+    const client=createDecisionClient({sessionId,tools,reader:new SceneReader(),send:async call=>{
+      sent.push(call);return (await rpc('tools/call',call)).result.structuredContent;
+    }});
+    client.accept(created);
+    const waited=await client.call({name:'wait',arguments:{viewId:created.basis.viewId}});
+    assert.equal(sent.length,1);
+    assert.equal(waited.scene.world,undefined);
+    assert.equal(typeof waited.scene.map.text,'string');
+    assert.equal(waited.basis.turn,created.basis.turn+waited.outcome.turnsElapsed);
+    assert.equal(waited.basis.revision,created.basis.revision+1);
+    await assert.rejects(client.call({name:'wait',arguments:{viewId:created.basis.viewId}}),/viewId/);
+    assert.equal(sent.length,1);
+    const prayer=await client.call({name:'pray',arguments:{viewId:waited.basis.viewId}});
+    assert.equal(prayer.control.gate,'decision');
+    assert.equal(prayer.decision.reply.tool,'answer');
+    await assert.rejects(client.call({name:'answer',arguments:{decisionId:'old-question',value:false}}),/exact/);
+    const declined=await client.call({name:prayer.decision.reply.tool,
+      arguments:{...prayer.decision.reply.arguments,value:false}});
+    assert.equal(declined.basis.turn,prayer.basis.turn);
+    assert.ok(declined.basis.revision>prayer.basis.revision);
+    assert.equal(declined.control.gate,'ready');
+    assert.equal(sent.filter(call=>call.name==='syncState').length,0);
+    const synced=await client.call({name:'syncState',arguments:{}});
+    assert.ok(Array.isArray(synced.scene.world));
+    assert.equal(synced.basis.revision,declined.basis.revision);
+    const closed=await bridge.close();
+    assert.equal(closed.childClosed,true);assert.equal(closed.ownedProcessesRemaining,false);
   });
 }

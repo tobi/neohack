@@ -78,6 +78,12 @@ The [live game at neohack.dev](https://neohack.dev) exposes game tools through b
 [agent-browser walkthrough](lib/neonethack/docs/AGENT_BROWSER.md) to create a game,
 play from perceived observations and resume saved adventures.
 
+The [MCP redesign contract](lib/neonethack/docs/PROTOCOL.md#mcp-observation-presentation)
+defines one DecisionFrame, explicit view-bound input, nested question replies,
+uniform targets and separate `step`/destination `go`. This is the target under
+implementation; check a build's schemas before using the new examples.
+Native/low semantics and published save integrity remain unchanged.
+
 ## Distributions and notices
 
 Build matching source/native/npm archives with the

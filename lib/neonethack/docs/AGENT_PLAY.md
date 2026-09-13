@@ -1,115 +1,115 @@
 # How an agent plays
 
-Create a run, read the perceived scene, attempt a named action, and answer any
-question explicitly. Native stdio MCP, HTTP MCP and browser WebMCP use the same
-vocabulary. Keep the short `sessionId`; the adapter owns request IDs and revisions.
+Create a run, read its DecisionFrame, attempt a named action and answer any
+standing question explicitly. This guide describes the MCP redesign target being
+implemented across Bun/WASM stdio, HTTP and browser WebMCP. Check a build's
+`help` schemas before using it; this is not a claim that production has deployed
+the redesign. Native/low semantics remain unchanged.
+
+Keep `basis.sessionId` and `basis.viewId` from the returned frame. Gameplay calls
+against that live view require both; `answer` and `cancel` instead require the
+exact `decision.id`. The adapter owns engine request IDs and revision plumbing,
+but cannot silently substitute a newer view for the one you acted on. Lifecycle
+calls (`create`, `resume`, `suspend`) do not require a prior gameplay view.
 
 | Intent | MCP / WebMCP call |
 | --- | --- |
 | Begin once | `create({role:"valkyrie"})` |
 | Return to a saved run | `resume({sessionId})` |
-| Walk a leg toward a destination | `go({sessionId,to:{x:40,y:10}})` |
-| Reveal the next frontiers | `explore({sessionId,maxFrontiers:4})` |
-| Resynchronize with the full JSON scene, free | `syncState({sessionId})` |
-| Inspect attempts at one square, free | `inspect({sessionId,target:"here"})` |
+| Attempt one adjacent step | `step({sessionId,viewId,target:{direction:"east"}})` |
+| Walk toward a destination | `go({sessionId,viewId,to:{x:40,y:10}})` |
+| Explore a bounded leg | `explore({sessionId,viewId,maxActions:8})` |
+| Resynchronize with the full perceived scene, free | `syncState({sessionId})` |
+| Inspect here, free | `inspect({sessionId,target:{direction:"self"}})` |
 | Answer the standing question | `answer({sessionId,decisionId,value})` |
-| Cancel its current action | `cancel({sessionId,decisionId})` |
+| Cancel its current action when permitted | `cancel({sessionId,decisionId})` |
 | Release the saved run | `suspend({sessionId})` |
 
-`help({})` lists every tool; `help({name:"eat"})` gives one schema. Specialist
-commands remain available: spells, equipment, offerings, engraving, native
-running and more. No profile switch or raw-key escape hatch is needed.
+Coordinates and IDs above are examples, not selected actions. `help({})` lists
+tools; `help({name:"eat"})` gives one schema. Specialist named commands remain
+discoverable. No profile switch or raw-key escape hatch is needed.
 
-Use an exact returned item reference: `eat({sessionId,itemId:"item-42"})`.
-The example ID is a placeholder; copy yours from inventory or the floor view.
-`drop` also accepts `quantity`. Omit `itemId` to ask the engine for a selection.
-Readable names are not item IDs. `inspect` returns `attempts` with tool/argument
-syntax and, when the square can be resolved, `mark` for the character NetHack
-displays there; eligibility does not guarantee safety or success.
+## Read one frame
 
-Every reply is a complete view for the next decision: `state` (position, level
-and vitals), fresh `messages`, a text `map` of the perceived level, `creatures`
-with target IDs, and `context` from free perceived-state queries. `map.text`
-draws the known part of the level with x labels and ticks every five columns and
-each row's y in front; `map.legend` names what every mark on this map stands
-for, built from the same terrain, object and creature layers the JSON exposes.
-MCP also returns the map in a separate fenced text block with real newlines;
-the first text block and `structuredContent` retain the complete JSON reply.
-`map.positions` indexes displayed occupants, objects and terrain features by
-mark, with exact `{x,y}` coordinates for every match. Plain floor, corridor
-and wall cells are omitted from this index. For example, `map.positions['+']`
-locates displayed closed doors without counting columns in JSON-escaped text.
-Duplicate marks list all matches; the index never selects one for you.
-Use a chosen coordinate with `attack({target:{x,y}})` or `go({to:{x,y}})`;
-`kick` takes `target:{direction:...}` from the adjacent context or inspect offer.
-`mark` is the character NetHack displays for that square; `map.text` is those
-marks laid out with rulers. JSON entities on the map (`creatures[]`,
-`context.nearby.cells` when the square is in the known world,
-`context.frontiers`, `context.doors`, `context.waysDown`, and inspect) carry
-the same `mark`. Marks are display, not identity or a hidden item.
-`context.nearby` gives one line per adjacent square: terrain, movement intent,
-occupant, hazards and which tools the resolver offers there (`go` means
-`go({direction})`); known frontiers, doors and downward stairs follow.
-You do not need a syncState–inspect–navigation ritual after an action; the
-ordinary reply already omits the JSON `observation.world`, `heard` and
-`knowledge` in favour of the map (see `presentation.omitted`). `syncState`
-returns them when you actually need cell-level facts or lost your context.
-`context.status: unavailable` affects enrichment only; the action's outcome and
-receipt remain authoritative. Message turns identify the response boundary, not
-individual internal turns of a counted action. `syncState` carries no fresh
-messages, so it omits the `messages` field; the JSON `observation.heard` it
-returns is recent history and may repeat.
+The [DecisionFrame contract](PROTOCOL.md#mcp-observation-presentation) separates
+`control.gate`, actual `outcome`, current `scene`, standing `decision`, fresh
+`events` and query `result`. Read the gate before attempting more input. A query
+may have no action outcome; unavailable basis or scene is explicitly null.
+Terminal details live in `scene.end`; the input gate still governs further input.
+Never infer execution from elapsed turns or position alone.
 
-Move in legs rather than single steps. `go({to})` walks any known route in one
-call, `explore` walks to the next frontier (`maxFrontiers` for several) and
-`descend` approaches known stairs; each leg stops for a question, damage,
-hunger, a new creature or a blocked step and reports why in `navigation`. One
-leg replaces many step-and-read exchanges.
+Routine replies are self-contained scene snapshots for the next decision:
+`scene.self`, `nearby`, `entities`, `features`, `map`, `inventory`, `here`,
+`automaticPickup` and `perception`. Full `scene.world` is supplied by `syncState`
+when cell layers or resynchronization are needed. Do not add a sync/inspect/route
+ritual after every action. Unavailable knowledge is not an empty floor or bag.
 
-A question arrives as `decision`, accompanied by `reply.arguments` and
-`reply.valueSchema`. Copy those bound arguments and supply your chosen `value`:
+`scene.map.text` is a perceived visual summary with coordinate rulers and a
+legend. Its symbol-position index retains duplicate matches. Use structured
+nearby/entity/feature positions for targets; do not count ASCII columns or infer
+terrain under an object from its glyph. The map never identifies hidden creatures,
+items or safety. Read-only sync does not turn rolling narration into fresh events.
 
-| Question | Example value |
+## Choose a target
+
+Tools accept declared subsets of one target grammar:
+
+| Selector | Example |
 | --- | --- |
-| Confirmation | `false` to decline, `true` to accept |
-| Text | `"My potion nickname"` |
-| Item | `{itemId:"item-42"}` |
-| Choice | An array of returned option names or numeric IDs |
-| Target | `"north"` or `"self"` |
-| Position | `{x:40,y:10}`, a compass direction, `"help"` or `"finish"` |
+| Direction | `{target:{direction:"east"}}` |
+| Coordinate | `{target:{position:{x:31,y:15}}}` |
+| Perceived reference | `{target:{ref:"RETURNED_REF"}}` |
+| Display symbol in explicit scope | `{target:{symbol:"g",scope:"adjacent"}}` |
+| Here/self, where permitted | `{target:{direction:"self"}}` |
 
-Never reuse an old `decisionId`. Answering may produce another question.
-Cancellation can spend turns or resources: the actual outcome, `turnsElapsed`
-and terminal facts outrank your intention.
+`scope` is `adjacent` or `level`, within the tool's spatial restrictions.
+An absent or ambiguous symbol match submits no input; select from the disclosed
+candidates explicitly. An ally with the same symbol still counts. References
+belong to their perceived view, not a persistent hidden creature identity.
 
-`explore({sessionId,maxActions:8})` explores a bounded leg; `descend` approaches
-known downward stairs. Both stop on changed circumstances or questions. `go`
-uses perceived routes and swaps places with a displayed tame ally standing on
-them, as ordinary movement does; hostile or peaceful occupants are never routed
-through. `go({direction})` attempts one adjacent ordinary step;
-deliberate force attack is the separate `attack` tool.
-If there is no knownWalking path, `navigation.reason` is `noRoute` and `why` is
-`targetOccupied`, `targetUnknown`, `closedDoor` or `disconnected`, with a `hint`
-for the next explicit tool. Zero-action stops did not run input. Confirmed partial
-legs need no recovery ritual: read the returned scene and choose what to do next.
+Item actions use opaque IDs, for example
+`eat({sessionId,viewId,itemId:"RETURNED_ITEM_ID"})`. Omit `itemId` to ask for an
+engine selection where supported. Names, inventory letters and decision choice
+IDs are not substitutes for an item ID. Inspect offers supply executable syntax
+for attempts, without promising safety or success.
 
-`navigation.stop.kind` identifies a witnessed health, hunger, condition, level,
-creature or position change. An occupied square does not imply a hostile creature.
-Rejected arguments marked `inputSubmitted:false` include the schema or current
-context needed to correct them; they need no recovery.
+## Move and answer deliberately
 
-After an uncertain error or lost response, call `syncState({sessionId})`. It checks any retained
-uncertain receipt without resending input, then returns the current scene and
-standing question. If the receipt cannot be verified, stop and follow the explicit
-resume instruction. Never repeat an action or navigation leg blindly. `receipt`
-is a diagnostic historical document nested under `receipt`; it is not your current
-position. There is no `recover` tool. A completely lost outer reply may require
-the bridge's invocation ID to identify the exact operation.
+`step` makes one ordinary adjacent attempt, preserving tame-ally swaps and real
+warnings. It does not automatically fight a displayed non-ally. `attack` is a
+separate deliberate action. A visible hostile elsewhere must not cause a
+long-leg stop policy to suppress a requested adjacent retreat attempt.
 
-Start with the [live browser walkthrough](AGENT_BROWSER.md) or
-[native/typed-library setup](QUICKSTART.md). The typed library retains precise
-methods and tagged answers; see [Hero](HERO.md) and [TypeScript](TYPESCRIPT.md).
-The [contract](PROTOCOL.md), [navigation and recovery](WEBMCP.md),
-[command coverage](COMMAND_COVERAGE.md) and
-[fixed-seed benchmark](../../../examples/benchmark/README.md) describe guarantees
-and demonstrated limits. No ascension ability is implied by tool coverage.
+`go` accepts a destination only. `explore` selects perceived frontiers and
+`descend` approaches known downward stairs. These are bounded legs over shared
+C planning, with progress and witnessed stop causes. They do not route through
+unknown terrain as though it were known floor, answer warnings or automatically
+continue after a stop. Normal confirmed partial progress needs no recovery call.
+
+A standing question contains `decision.reply.arguments` and
+`decision.reply.valueSchema`, plus `decision.cancel` when permitted. Copy the
+bound arguments and deliberately supply `value` matching that exact schema.
+Confirmations take booleans; item selections use opaque item IDs; choices use
+the returned option names/IDs and cardinality; text and direction questions use
+their contextual value shapes. Decision answer syntax is separate from the
+operation target grammar. Answering may produce another question with a new ID.
+Cancellation may spend turns or resources and is not rollback.
+
+## Uncertain execution
+
+After uncertain execution or a lost response, call `syncState({sessionId})`.
+It checks any retained exact receipt without resending gameplay, then returns
+the current scene and question. If verification is unavailable, keep input
+blocked and follow the recovery instruction. Do not repeat the action or leg.
+Rejected arguments that submitted no input need correction, not receipt recovery.
+
+`receipt` is diagnostic historical query data, not current position or an active
+question. Never execute answer syntax from an old receipt. There is no MCP
+`recover` tool. Retain bridge invocation IDs: a completely lost outer response
+may otherwise leave the exact operation unknown.
+
+Start with the [browser walkthrough](AGENT_BROWSER.md) or
+[local setup](QUICKSTART.md). The [WebMCP guide](WEBMCP.md) covers shared browser
+input and ownership. [Hero](HERO.md) and [TypeScript](TYPESCRIPT.md) document the
+distinct typed APIs; [command coverage](COMMAND_COVERAGE.md) records demonstrated
+limits. Tool coverage does not establish ascension ability.

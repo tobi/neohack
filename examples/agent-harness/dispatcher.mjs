@@ -1,4 +1,4 @@
-// Deliberately limited high-MCP vocabulary. Enabling an operation also requires
+// Deliberately limited library policy vocabulary. Enabling an operation also requires
 // a strict argument validator from the integrating harness (no fallback tool).
 export const SUPPORTED_OPERATIONS = Object.freeze([
   'attack', 'go', 'explore', 'descend',
@@ -56,7 +56,7 @@ function frozenCopy(value) {
  *     sending once, and persisting receipt/state. A preflight throw MUST stop
  *     before reservation/send. The immutable current public envelope is
  *     {sessionId,status:'current',revision,snapshot,pendingRequest:null}.
- *     The client enforces then strips local expectedRevision for high MCP.
+ *     The client enforces then strips local expectedRevision for the library sender.
  * All writers must use that same client/ownership mechanism; no extra lock here.
  *
  * guard({intent,state}) executes under ownership with immutable copies and must

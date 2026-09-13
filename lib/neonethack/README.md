@@ -16,7 +16,7 @@ Start with the [first-five-minutes guide](docs/QUICKSTART.md) for runnable
 source, browser and installed-preview paths.
 For the playing loop, read [How an agent plays](docs/AGENT_PLAY.md).
 
-WebMCP and stdio MCP return [compact perceived frames with a text map](docs/PROTOCOL.md#mcp-observation-presentation); `syncState` returns the full JSON scene.
+The MCP redesign uses a shared [DecisionFrame](docs/PROTOCOL.md#mcp-observation-presentation): compact scene snapshots for the next decision, with full `scene.world` on `syncState`. Check generated schemas for build support.
 The [Bun/WASM MCP CLI](docs/TYPESCRIPT.md#bunwasm-mcp) shares WebMCP’s exact tool executor, navigation and presentation.
 It supports stdio and `--http PORT`; each run has an independent WASM worker and durable append-only SQLite journal. The retired C MCP executable and static bundle are removed.
 
@@ -112,9 +112,10 @@ builds do not require JavaScript.
 - **MCP/WebMCP:** a generated navigation vocabulary through Bun/WASM stdio/HTTP
   or the browser adapter, with complete low-operation coverage, exact receipts
   and explicitly bound questions. See the [short play guide](docs/AGENT_PLAY.md).
-  Compact MCP replies render the perceived level as `map.text` and label the
-  omitted JSON layers; syncState returns the full observation and receipt returns
-  the full input result.
+  The redesign target renders the perceived level as `scene.map.text`, binds live
+  mutations to explicit `viewId`, and nests reply/cancel inside `decision`.
+  `syncState` adds full `scene.world`; receipt queries retain historical evidence
+  separately from current scene and decision. Native/low semantics are unchanged.
 
 - **WASM:** [`typescript/wasm.ts`](typescript/wasm.ts) runs the same C core with
   isolated engine workers. Choose volatile memory or explicitly locked,

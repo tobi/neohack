@@ -63,7 +63,6 @@ const OBS_F = `${STATE_DIR}/last-obs.json`;
 const DEATH_F = `${STATE_DIR}/last-death.json`;
 const LASTRUN_F = `${STATE_DIR}/last-run.json`;
 const TOKEN_LOG = `${LOG_DIR}/token-usage.jsonl`;
-const PROGRESS_F = `${STATE_DIR}/exploration-progress.json`;
 const LOG = `${LOG_DIR}/agent.log`;
 
 for (const d of [STATE_DIR, LOG_DIR, SESSIONS]) mkdirSync(d, { recursive: true });
@@ -109,53 +108,9 @@ const state = loadJson(STATE_F, { gameId: null, reqSeq: 0 });
 // Starting fresh is the default. -c/--continue opts into the saved game.
 let lastSessionId = CONTINUE_SESSION ? state.gameId : null;
 let latestRevision = null;
-let deathSeen = false;
+let runStopped = false;
 // skill guards: the bot "dies" when it stops making progress
-let stalledOps = 0;   // consecutive interactions without game-turn advancement
-let lastTurnSeen = null;
 let toollessSteps = 0; // consecutive model steps without any tool call
-let explorationProgress = loadJson(PROGRESS_F, null);
-
-function assessExplorationProgress(observation, tool, decision) {
-  const turn = Number(observation?.turn);
-  const depth = String(observation?.vitals?.depth ?? '').trim();
-  const pos = observation?.you;
-  const world = Array.isArray(observation?.world) ? observation.world : [];
-  if (!Number.isFinite(turn) || !depth || !pos || !['go', 'explore', 'descend', "search"].includes(tool)) return null;
-
-  const known = world.reduce((n, cell) => n + (cell.terrain?.type && cell.terrain.type !== 'dark' ? 1 : 0), 0);
-  const hasDownstairs = world.some(cell => cell.terrain?.type === 'stairsDown');
-  const creatureVisible = (observation.neighborhood?.cells ?? []).some(cell =>
-    cell.visible && cell.occupant && cell.occupant.kind !== 'self');
-
-  if (!explorationProgress || explorationProgress.depth !== depth) {
-    explorationProgress = { depth, bestKnown: known, lastProgressTurn: turn, lastSeenTurn: null, positions: [] };
-  }
-  if (known > explorationProgress.bestKnown) {
-    explorationProgress.bestKnown = known;
-    explorationProgress.lastProgressTurn = turn;
-    explorationProgress.positions = [];
-  }
-  if (explorationProgress.lastSeenTurn !== turn) {
-    explorationProgress.positions.push({ turn, key: `${pos.x},${pos.y}` });
-    explorationProgress.positions = explorationProgress.positions.slice(-24);
-    explorationProgress.lastSeenTurn = turn;
-  }
-
-  const stagnantTurns = turn - explorationProgress.lastProgressTurn;
-  const recent = explorationProgress.positions.slice(-12);
-  const uniquePositions = new Set(recent.map(p => p.key)).size;
-  const lastSix = recent.slice(-6);
-  const pingPong = lastSix.length === 6 && lastSix.every((p, i, a) => p.key === a[i % 2].key);
-  const tinyCycle = recent.length >= 8 && uniquePositions <= 3;
-  const cycleStuck = (pingPong && stagnantTurns >= 6) || (tinyCycle && stagnantTurns >= 8);
-  const noDiscoveryStuck = stagnantTurns >= 25 && !hasDownstairs;
-  const stuck = !decision && !creatureVisible && (cycleStuck || noDiscoveryStuck);
-
-  saveJson(PROGRESS_F, { ...explorationProgress, stagnantTurns, known, hasDownstairs, uniquePositions });
-  if (!stuck) return null;
-  return `${cycleStuck ? `position cycle (${uniquePositions} unique positions in ${recent.length} moves)` : `${stagnantTurns} turns without revealing a cell`} on depth ${depth}; known=${known}, downstairs=${hasDownstairs}`;
-}
 
 // ---- MCP HTTP 2026-07-28 -------------------------------------------------
 // @ai-sdk/mcp 2.0.41 negotiates server/discover and modern stateless HTTP.
@@ -194,9 +149,9 @@ const mcpClient = await createMCPClient({
 async function callBridge(tool, params) {
   const r = await mcpClient.callTool({ name: tool, arguments: params ?? {} });
   const structuredContent = r?.structuredContent ?? null;
-  if (!r?.isError && structuredContent?.revision !== undefined) latestRevision = structuredContent.revision;
-  const contentText = r?.content?.map(c => c.text ?? '').join('') ?? '';
-  const text = structuredContent ? JSON.stringify(structuredContent) : contentText;
+  if (structuredContent?.version !== 2) throw new Error('DecisionFrame v2 required; inspect the MCP runtime version.');
+  if (!r?.isError && structuredContent?.basis?.revision !== undefined) latestRevision = structuredContent.basis.revision;
+  const text = JSON.stringify(structuredContent);
   return {
     text,
     structuredContent,
@@ -228,8 +183,8 @@ if (lastSessionId) {
     saveJson(STATE_F, state);
     saveJson(CONV_F, []);
   } else {
-    latestRevision = resumed.structuredContent?.revision ?? null;
-    const turn = resumed.structuredContent?.observation?.turn ?? '?';
+    latestRevision = resumed.structuredContent?.basis?.revision ?? null;
+    const turn = resumed.structuredContent?.basis?.turn ?? '?';
     log(`session resumed: ${lastSessionId} turn=${turn} revision=${latestRevision ?? '?'}`);
   }
 }
@@ -244,16 +199,21 @@ for (const t of mcpTools) {
       opCount++;
       try {
         let { text, structuredContent, isError: bridgeIsError, error: bridgeError } = await callBridge(t.name, args ?? {});
-        const turn = structuredContent?.observation?.turn;
-        const depth = structuredContent?.observation?.vitals?.depth;
+        const turn = structuredContent?.basis?.turn;
+        const depth = structuredContent?.scene?.self?.location?.depthLabel;
+        if (['recoveryRequired','ownershipLost','unavailable'].includes(structuredContent.control.gate)) {
+          log(`op#${opCount} ${t.name} input blocked: ${structuredContent.control.gate}`);
+          runStopped = true;
+          return text;
+        }
         if (bridgeIsError) {
           const code = bridgeError?.code ?? 'toolError';
           const message = bridgeError?.message ?? text.slice(0, 300);
           log(`op#${opCount} ${t.name} ERROR ${code}: ${message}`);
-          return `MCP error ${code}: ${message}`;
+          return text;
         }
         // Capture only a successful, structurally valid session id.
-        const candidateSid = structuredContent?.sessionId;
+        const candidateSid = structuredContent?.basis?.sessionId;
         const sid = /^[A-Za-z0-9_-]{16}$/.test(candidateSid ?? '') ? candidateSid : undefined;
         if (sid && sid !== lastSessionId) {
           lastSessionId = sid;
@@ -265,19 +225,9 @@ for (const t of mcpTools) {
         let advisorNote = '';
         try {
           const j = JSON.parse(text);
-          const sc = j?.data?.output?.structuredContent ?? j;
-          if (sc?.observation) {
-            const effectiveObservation = sc.observation;
-            saveJson(OBS_F, { sessionId: sc.sessionId ?? lastSessionId, revision: sc.revision, ended: sc.ended, decision: sc.decision ?? null, observation: effectiveObservation });
-
-            const stuck = assessExplorationProgress(effectiveObservation, t.name, sc.decision);
-            if (stuck) {
-              const cause = `skills: exploration live-lock — ${stuck}`;
-              saveJson(DEATH_F, { cause, turn: effectiveObservation.turn, depth: effectiveObservation.vitals?.depth ?? null, at: new Date().toISOString() });
-              log(`op#${opCount} ${t.name} <<SKILL-DEATH>> ${cause}`);
-              advisorNote += `\n\nSTUCK DETECTED: ${stuck}. Stop this run for retrospective repair; do not continue the same route.`;
-              deathSeen = true;
-            }
+          const sc = j;
+          if (sc.version === 2 && sc.scene?.kind === 'snapshot') {
+            saveJson(OBS_F, sc);
             try {
               const advisorSrc = existsSync(ADVISOR_F) ? ADVISOR_F : BUNDLED_ADVISOR;
               const out = execFileSync('node', [advisorSrc, OBS_F], { timeout: 5000, encoding: 'utf8' });
@@ -290,32 +240,20 @@ for (const t of mcpTools) {
           }
           text = JSON.stringify(sc);
         } catch {}
-        if (structuredContent?.ended) {
-          const cause = structuredContent.end?.cause ?? structuredContent.end?.kind ?? 'ended';
+        if (structuredContent?.control?.gate === 'ended') {
+          const cause = structuredContent.scene?.end?.cause ?? structuredContent.scene?.end?.kind ?? 'ended';
           saveJson(DEATH_F, { cause, turn: turn ?? null, depth: depth ?? null, at: new Date().toISOString() });
           log(`op#${opCount} ${t.name} turn=${turn ?? '?'} <<DEATH>> ${cause}`);
-          deathSeen = true;
+          runStopped = true;
         } else if (turn !== undefined) {
           log(`op#${opCount} ${t.name} turn=${turn} depth=${depth ?? '?'}`);
         } else {
-          log(`op#${opCount} ${t.name} ok revision=${structuredContent?.revision ?? '?'}`);
+          log(`op#${opCount} ${t.name} ok revision=${structuredContent?.basis?.revision ?? '?'}`);
         }
-        // Skill guard 1: only observation-bearing game interactions can prove
-        // turn progress. Metadata tools such as inspect are successful
-        // without an observation and must not count as stalls.
-        if ((structuredContent?.outcome !== undefined) && turn !== undefined) {
-          const turnNum = Number(turn);
-          if (turnNum === lastTurnSeen) stalledOps++;
-          else { stalledOps = 0; lastTurnSeen = turnNum; }
-          if (stalledOps >= 3) {
-            saveJson(DEATH_F, { cause: 'skills: 3 interactions without advancing the game', turn: turnNum, depth: depth ?? null, at: new Date().toISOString() });
-            log(`op#${opCount} ${t.name} <<SKILL-DEATH>> 3 interactions without advancing`);
-            deathSeen = true;
-          }
-        }
-        return (text + advisorNote).slice(0, 20000);
+        return text + advisorNote;
       } catch (e) {
         log(`op#${opCount} ${t.name} ERROR: ${String(e.message ?? e).slice(0, 200)}`);
+        runStopped = true; // End this invocation; a lost transport reply is not permission to act again.
         return `Tool error: ${String(e.message ?? e).slice(0, 500)}`;
       }
     },
@@ -329,9 +267,9 @@ const model = openai.chat(MODEL);
 let doctrine = '';
 try { doctrine = readFileSync(DOCTRINE_F, 'utf8'); } catch { doctrine = readFileSync(BUNDLED_DOCTRINE, 'utf8'); }
 const sessionInstruction = lastSessionId
-  ? `SESSION: resumed session "${lastSessionId}". Begin with observe {"sessionId":"${lastSessionId}"}.`
+  ? `SESSION: resumed session "${lastSessionId}". Begin with syncState {"sessionId":"${lastSessionId}"}.`
   : 'SESSION: start a NEW adventure. Your first action must be create {"role":"valkyrie"}.';
-const system = `${doctrine}\n\n${sessionInstruction}`;
+const system = `${doctrine}\n\n${sessionInstruction}\nUse DecisionFrame v2: basis identifies session, revision, viewId, levelId and turn; scene.self holds position, location and vitals. Pass the exact basis.viewId on mutations except create/resume/suspend and answer/cancel. Answer the exact decision.id using decision.reply; cancellation must be offered by decision.cancel. step {target:{direction}} is one adjacent attempt; go takes to only. Read control.gate before acting. Fresh evidence is events; query data is result. Routine scenes are complete for the next decision; syncState additionally returns scene.world. Never reconstruct old observation/state/context envelopes.`;
 
 const initialPrompt = lastSessionId
   ? `Continue the resumed adventure (sessionId ${lastSessionId}). Observe, then play turn after turn. Descend as deep as you can.`
@@ -397,7 +335,7 @@ try {
       tools,
       stopWhen: [
         stepCountIs(Math.min(60, STEP_BUDGET - totalSteps)),
-        () => deathSeen,
+        () => runStopped,
       ],
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       providerOptions: {
@@ -420,18 +358,18 @@ try {
       const hasToolCall = m.role === 'assistant' && Array.isArray(m.content) && m.content.some(c => c.type === 'tool-call');
       if (hasToolCall) toollessSteps = 0; else toollessSteps++;
     }
-    if (toollessSteps >= 20 && !deathSeen) {
+    if (toollessSteps >= 20 && !runStopped) {
       saveJson(DEATH_F, { cause: 'skills: 20 model steps without interacting with the environment', at: new Date().toISOString() });
       log(`<<SKILL-DEATH>> ${toollessSteps} model steps without a tool call`);
-      deathSeen = true;
+      runStopped = true;
     }
-    messages.push({ role: 'user', content: deathSeen ? 'A death occurred — if the adventure is over, start a NEW game (create {"role":"valkyrie"}) and keep playing.' : 'Continue.' });
+    if (!runStopped) messages.push({ role: 'user', content: 'Continue.' });
     if (messages.length > 60) {
       messages = [messages[0], ...messages.slice(-58)];
     }
     saveJson(CONV_F, messages);
-    saveJson(LASTRUN_F, { finishedAt: new Date().toISOString(), totalSteps, deathSeen, tokenUsage: tokenTotals });
-    if (deathSeen) { log('death detected — ending run (conversation reset)'); saveJson(CONV_F, []); break; }
+    saveJson(LASTRUN_F, { finishedAt: new Date().toISOString(), totalSteps, runStopped, tokenUsage: tokenTotals });
+    if (runStopped) { log('run stopped — ending invocation (conversation reset)'); saveJson(CONV_F, []); break; }
     if (res.text) log(`model: ${res.text.slice(0, 300)}`);
   }
 } catch (e) {

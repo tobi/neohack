@@ -499,8 +499,25 @@ runtime loader on entry; they must not freeze the courtyard.
 
 Expose every existing MCP tool through native `document.modelContext` WebMCP (or early `navigator.modelContext` builds) when
 available, using the same names, descriptions and JSON schemas as stdio MCP. Share
-tool definitions so future catalog additions cannot drift. MCP/WebMCP expose the navigation agent vocabulary; the adapter owns operation
-IDs, observed revisions and response reconstruction. Explicit short run tokens,
+tool definitions so future catalog additions cannot drift. The MCP redesign target
+uses the shared [DecisionFrame](../../lib/neonethack/docs/PROTOCOL.md#mcp-observation-presentation):
+`basis`, `control.gate`, actual `outcome`, a self-contained `scene` snapshot,
+nested `decision.reply`/`cancel`, fresh `events`, query `result`, errors and
+`diagnostics`. Routine scenes are compact but complete for the next decision;
+`syncState` adds full `scene.world`. Remove legacy top-level state, observation,
+messages, context and reply from agent frames. This is the integration target,
+not a claim that a deployed build has completed the redesign.
+
+The adapter owns engine operation IDs and revision plumbing. Mutations against
+a live view carry the caller's explicit `viewId`; `answer` and `cancel` use the
+exact decision ID instead. Lifecycle calls (`create`, `resume`, `suspend`) need
+no prior gameplay view. Never refresh
+then silently retarget a stale human/agent choice. Operation targets share
+`{direction}`, `{position:{x,y}}`, `{ref}` and scoped `{symbol,scope}` selectors;
+here/self is `{direction:'self'}` where permitted. Resolve only disclosed matches
+in the captured view and reject ambiguity without input. `step` is one adjacent
+ordinary attempt; `go` takes a destination only. Preserve tame-ally swaps, real
+warnings and separate deliberate attack. Explicit short run tokens,
 perceived targets and deliberate decision answers pass through the public
 persistent WASM transport. Keep the durable live state authoritative while a
 presentation-only queue shows completed agent actions in order at about 180 ms
@@ -524,11 +541,15 @@ display queue is still catching up. A lost or unresolved reply still blocks inpu
 and shows the notice; animation never clears the retained request.
 
 There is no MCP `recover` tool. `syncState` checks a retained uncertain operation's
-exact receipt with read-only requests and then returns current state. The browser
+exact receipt with read-only requests and then returns the current DecisionFrame.
+Free reads preserve the human's open panels, selections and focus. Human takeover
+stops future leg steps and settles accepted input before transferring control;
+an aborted browser invocation never undoes input or erases its operation identity.
+Ownership loss blocks input rather than forking the save. The browser
 clears its matching pending metadata only after that receipt and a healthy current
 scene are verified. An unrelated receipt cannot clear uncertainty. Historical
-receipts are nested documents with no top-level world or executable old question;
-they never replace the visible current scene. Failed verification keeps input
+receipts are historical query data in `result`, without executable old questions;
+they never replace the frame's current scene/decision or the visible current scene. Failed verification keeps input
 blocked and directs the caller to resume, reopening the transport if needed.
 
 WebMCP creation and control set a permanent `webmcpAutomated` run-metadata flag.

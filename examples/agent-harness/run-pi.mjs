@@ -8,8 +8,7 @@ import {spawn, execFileSync} from 'node:child_process';
 import {createServer} from 'node:http';
 import {parseArgs} from 'node:util';
 import {createBridge} from './bridge.mjs';
-import {createSnapshotClient} from './client.mjs';
-import {createAgentHarness} from './harness.mjs';
+import {createDecisionClient} from './decision-client.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const {values} = parseArgs({options: {
@@ -34,17 +33,14 @@ try {
   execFileSync('npm', ['ci','--prefix',root], {stdio:['ignore',buildLog,buildLog]});
   execFileSync('npm', ['run','--prefix',root,'build'], {stdio:['ignore',buildLog,buildLog]});
 } finally { fs.closeSync(buildLog); }
-const {createOperationValidators} = await import('./operations.mjs');
-const {CompactObservationReader} = await import(pathToFileURL(path.join(root,'dist/mcp/compact.js')).href);
+const {SceneReader} = await import(pathToFileURL(path.join(root,'dist/mcp/scene.js')).href);
 const bridge = createBridge({command:path.join(root,'dist/mcp/cli.js'),
   args:['--sessions',path.join(dir,'sessions')],
   journalPath:path.join(dir,'mcp.jsonl'), timeoutMs:30000});
-let id=0, child, server, timer, killTimer, busy=false, stopped=false, harness;
-const records=[];
+let id=0, child, server, timer, killTimer, busy=false, stopped=false, client;
 const rpc = async (method, params, reservationId) => {
   const request={jsonrpc:'2.0',id:++id,method,params};
   const response=await bridge.rpc(request, reservationId ? {reservationId} : {});
-  records.push({request,response});
   if(response.error) throw Error(JSON.stringify(response.error));
   return response;
 };
@@ -61,21 +57,14 @@ try {
   await bridge.notify({jsonrpc:'2.0',method:'notifications/initialized'});
   const catalog=(await rpc('tools/list',{})).result.tools;
   const created=(await rpc('tools/call',{name:'create',arguments:{name:'Pi512',seed,role:'valkyrie',race:'dwarf',gender:'female',align:'lawful'}})).result.structuredContent;
-  if(!created?.sessionId || created.ended)throw Error('No live session created; inspect journal, do not blindly recreate');
-  const sessionId=created.sessionId, runId='pi-run'; metadata.sessionId=sessionId;saveMeta();
-  const reader=new CompactObservationReader();
-  const client=createSnapshotClient({runDir:path.join(dir,'client'),sessionId,
-    send:(call,{reservationId})=>rpc('tools/call',call,reservationId),
-    decodeReply:raw=>reader.apply(raw.result.structuredContent)});
-  const operations=createOperationValidators({sessionId});
-  harness=createAgentHarness({runId,sessionId,client,records:()=>records,operations});
-  await harness.observe({deliberate:true});
+  if(created?.version!==2 || !created.basis?.sessionId || created.control.gate!=='ready')throw Error('No live session created; inspect journal, do not blindly recreate');
+  const sessionId=created.basis.sessionId; metadata.sessionId=sessionId;saveMeta();
+  const reader=new SceneReader();
+  client=createDecisionClient({sessionId,tools:catalog,reader,
+    send:async call=>(await rpc('tools/call',call,randomUUID())).result.structuredContent});
+  client.accept(created);
   const excluded=new Set(['create','resume','suspend','receipt']);
-  const tools=catalog.filter(t=>!excluded.has(t.name) && (t.annotations?.readOnlyHint || operations.has(t.name))).map(t=>{
-    const inputSchema=structuredClone(t.inputSchema);delete inputSchema.properties?.sessionId;
-    if(inputSchema.required)inputSchema.required=inputSchema.required.filter(k=>k!=='sessionId');
-    return {...t,inputSchema};
-  });
+  const tools=catalog.filter(t=>!excluded.has(t.name));
   fs.writeFileSync(path.join(dir,'tools.json'),JSON.stringify(tools,null,2));
   const token=randomUUID();
   server=createServer(async(req,res)=>{
@@ -95,29 +84,20 @@ try {
     try {
       let body='';for await(const chunk of req){body+=chunk;if(body.length>1048576)throw Error('Request too large');}
       const call=JSON.parse(body),tool=tools.find(t=>t.name===call.name);
-      if(!tool || !call.arguments || typeof call.arguments!=='object' || Array.isArray(call.arguments) || 'sessionId' in call.arguments)throw Error('Invalid bound tool call');
-      let result;
-      if(call.name==='syncState')result=(await harness.observe({deliberate:true})).response;
-      else if(tool.annotations?.readOnlyHint){
-        const original=catalog.find(t=>t.name===call.name);
-        result=(await rpc('tools/call',{name:call.name,arguments:{...call.arguments,...(original.inputSchema.properties?.sessionId?{sessionId}:{})}})).result;
-      }else{
-        const {state}=await harness.view();
-        const response=await harness.dispatch({runId,sessionId,expectedRevision:state.revision,operation:call.name,args:call.arguments,approved:true});
-        result=response.response;
-      }
+      if(!tool || !call.arguments || typeof call.arguments!=='object' || Array.isArray(call.arguments) ||
+        (call.arguments.sessionId!==undefined && call.arguments.sessionId!==sessionId))throw Error('Invalid bound tool call');
+      const result=await client.call(call);
       reply(200,result);
-      const {state}=await harness.view();
-      if(state.snapshot?.ended && state.snapshot?.end?.kind!=='disconnected')setTimeout(()=>stop('terminal'),1500);
+      if(result.control.gate==='ended')await stop('terminal');
+      else if((client.blocked() && client.recovery()!=='scene') || ['ownershipLost','recoveryRequired'].includes(result.control.gate))await stop('input unavailable; inspect durable journal');
     }catch(error){
       reply(409,{error:error.message});
-      const state=await client.readSnapshot().catch(()=>null);
-      if(state && !['current','empty'].includes(state.status) || state?.pendingRequest)await stop('uncertain execution; inspect durable journal');
+      if(client.blocked() && client.recovery()!=='scene')await stop('uncertain execution; inspect durable journal');
     }finally{busy=false;}
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const endpoint=`http://127.0.0.1:${server.address().port}`;
-  const prompt=`Play this single existing NetHack game as far as you can, aiming for ascension. You have only MCP game tools, bound to your session automatically. Observe first. Choose each action deliberately; inspect exact perceived creature and item references, wield/equip useful starting gear, manage food, avoid melee floating eyes and gas spores, and reassess after every action. Never guess corpse safety or freshness from a glyph. Real decision answers are explicit. Stop on death or uncertain execution; do not recreate games. Navigation is bounded; replan when interrupted rather than blindly repeating. Do not use source code or hidden engine data. Record concise progress in your responses and a final report (state, tactical errors, suspected defects with evidence). The host retains all tool calls, saves, snapshots and this transcript. Session ${sessionId}; deadline ${metadata.deadline}. Continue gameplay until terminal, uncertainty or deadline, not merely after initial setup.`;
+  const prompt=`Play this single existing NetHack game as far as you can, aiming for ascension. You have only MCP game tools, Pass the exact sessionId shown below on game-scoped calls. Read the current frame with syncState first. Pass its exact basis.viewId on mutations; never refresh and retarget stale input. step {target:{direction}} is adjacent movement; go takes to only. Questions carry decision.reply and optional decision.cancel. Use exact decision IDs. Choose each action deliberately; inspect exact perceived creature and item references, wield/equip useful starting gear, manage food, avoid melee floating eyes and gas spores, and reassess after every action. Never guess corpse safety or freshness from a glyph. Real decision answers are explicit. Stop on death or uncertain execution; do not recreate games. Navigation is bounded; replan when interrupted rather than blindly repeating. Do not use source code or hidden engine data. Record concise progress in your responses and a final report (state, tactical errors, suspected defects with evidence). The host retains all tool calls, saves, snapshots and this transcript. Session ${sessionId}; deadline ${metadata.deadline}. Continue gameplay until terminal, uncertainty or deadline, not merely after initial setup.`;
   fs.writeFileSync(path.join(dir,'prompt.txt'),prompt);
   const stdout=fs.openSync(path.join(dir,'pi.jsonl'),'wx'),stderr=fs.openSync(path.join(dir,'pi.stderr.log'),'wx');
   child=spawn('pi',['--model',values.model,'--thinking','medium','--no-builtin-tools','--no-extensions','--no-skills','--no-prompt-templates','--no-context-files','--extension',path.join(here,'pi-extension.mjs'),'--session-dir',path.join(dir,'pi-sessions'),'--mode','json','--print','--system-prompt','You are a careful NetHack player. Only the explicitly provided game MCP tools are available. Use perceived game information; preserve uncertainty and genuine decisions.',prompt],

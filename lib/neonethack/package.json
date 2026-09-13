@@ -27,8 +27,8 @@
       "import": "./dist/typescript/native.js"
     },
     "./mcp": {
-      "types": "./dist/mcp/compact.d.ts",
-      "import": "./dist/mcp/compact.js"
+      "types": "./dist/mcp/scene.d.ts",
+      "import": "./dist/mcp/scene.js"
     },
     "./wasm": {
       "types": "./dist/typescript/wasm.d.ts",

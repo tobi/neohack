@@ -21,7 +21,7 @@ world.snapshot = game.state; // a public library Snapshot
 world.addEventListener('frame', event => console.log(event.detail));
 world.loadReplay(recordedFrames);
 await world.seek(0);
-world.play(250); // milliseconds per recorded frame, minimum 50
+world.play(250); // milliseconds per recorded frame, minimum 12.5
 world.pause();
 ```
 
@@ -56,8 +56,8 @@ must validate that iframe's origin and source before forwarding messages.
 
 | Method | Parameters |
 | --- | --- |
-| `tools/list` | none; returns generated schemas for this connection |
-| `tools/call` | `{name, arguments}`; unchanged named engine operation |
+| `tools/list` | none; returns the shared high agent catalog filtered by this connection's readonly capability |
+| `tools/call` | `{name, arguments}`; shared MCP named intent, returning DecisionFrame v2 |
 | `world.snapshot` | none; reads the last displayed snapshot |
 | `world.render` | `{snapshot}`; presentation only |
 | `replay.load` | `{frames}` |
@@ -66,11 +66,22 @@ must validate that iframe's origin and source before forwarding messages.
 | `replay.pause` | none |
 
 Without a transport, tool discovery returns an empty list. `tools/call` returns
-MCP text content plus `structuredContent`; explicit engine errors set `isError`.
+MCP text content plus the same DecisionFrame v2 in `structuredContent`; errors
+set `isError`. The exported `tools` are the shared high agent catalog, including
+v2 output schemas. The component's message bridge and native WebMCP registration
+share one `McpService`, including observed views and pending receipt correlation.
+Use `basis.viewId` on gameplay mutations and exact `decision.id` for answer/cancel;
+see the [agent play guide](../../lib/neonethack/docs/AGENT_PLAY.md).
+Low method mappings remain private to the `connect()` capability guard; the
+returned library client retains the complete low API when writable.
 Bridge validation failures return a JSON-RPC error and never retry a request.
 `registerWebMcp(context?)` registers only the current connection's allowed tools;
-retain its returned registration and call `dispose()` before replacing a connection
-or removing its host. It reports unsupported browsers without installing a shim.
+retain its returned registration and call `dispose()` when it is no longer needed
+or before removing its host. Closing/replacing a connection disposes its registered
+tools; old clients and callbacks cannot access the replacement connection. Already
+submitted input may settle on its original transport but cannot overwrite the
+replacement viewer's snapshot. The host still owns transport shutdown and receipts.
+Unsupported browsers do not receive a shim.
 
 ## Public ledger playback
 
@@ -94,9 +105,10 @@ unique case-insensitive handles and HttpOnly SameSite=Strict sessions. Cross-ori
 writes are rejected. The browser controls the phone/QR ceremony; the site never
 manufactures its own authentication QR code. See the [SimpleWebAuthn documentation](https://simplewebauthn.dev/docs/packages/server/).
 
-Signed-in live games and tests upload a separate private observation recording.
+Historical frame archives: signed-in live games and tests uploaded a separate
+private observation recording. New runs use pinned input archives as described above.
 These records are browser reports, not authoritative scores or resumable engine
-journals. Replays do not load WASM. Optional `observation.neighborhood` action-query
+journals. These older frame replays do not load WASM. Optional `observation.neighborhood` action-query
 expansions are omitted from the presentation recording; world cells, vitals,
 inventory, decisions and events remain. Frames are appended with an exact index,
 increasing revision, session identity and immutable engine package ID. Failed or
@@ -172,7 +184,7 @@ editor completions come from those declarations.
 pagination. Loads omit credentials and cancel when the source changes or the
 viewer is removed. A failed or missing recording remains a visible error.
 `autoplay`, `controls`, `sound` and `loop` are boolean attributes (absent or
-`="false"` means disabled). `speed` is 0.5–5×, default 4×; 1× is 250ms/frame.
+`="false"` means disabled). `speed` is 0.5–20×, default 4×; 1× is 250ms/frame.
 `play(interval)` still accepts explicit milliseconds; no interval uses `speed`.
 Controls overlay the bottom. A two-line “Open / neohack.dev” link at bottom right
 opens the public run page in a new tab, or the module's site home when the source
@@ -184,10 +196,13 @@ link and leads with the run's chronicle when one exists; `/dashboard?run=RUN_ID`
 forwards there. As a component `src`, either address resolves to the same public
 recording.
 The game menu and death notice copy an embed with that public source; private save
-URLs are never included. New cloud game visits record observed scenes separately
-from the engine journal. Older entries without public frames show unavailable.
+URLs are never included. New runs record inputs and reconstruct them with the
+pinned WASM engine. Older frame-only entries without public frames show unavailable.
 
 ### Progressive replay delivery
+
+The following describes historical frame archives. Input archives instead use
+the pinned-engine delivery and event semantics described near the top of this guide.
 
 Public replay loading reads a small manifest and immutable content-addressed
 chunks directly from a dedicated public Blob store/CDN. The upload path publishes
@@ -201,11 +216,15 @@ loaded prefix with an explicit interrupted message. Replacing or removing the
 viewer cancels its requests. replayprogress reports buffered length (and total
 when available); replayload still means the entire recording arrived.
 
-Private account recordings use authenticated same-origin pagination and the same
-progressive viewer. Their responses are never publicly cached. No replay path
-loads an engine or executes game actions.
+Historical private account recordings use authenticated same-origin pagination and the same
+progressive viewer. Their responses are never publicly cached. Frame-only playback
+does not load an engine; input archive playback reconstructs recorded inputs in
+an isolated pinned engine and never controls a live game.
 
 ### Owner-selected public account runs
+
+This publication flow applies to historical private frame recordings. New input
+archives use unlisted replay links and keep source/notes private.
 
 Account recordings start private. Make public explicitly publishes observed frames
 and a public run summary under a separate public replay ID. The account page

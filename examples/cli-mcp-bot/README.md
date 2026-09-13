@@ -68,14 +68,16 @@ ai-runner.sh ──> agent.mjs (one session: STEP_BUDGET model steps)
 - Per-model-turn input/output/cache token counts are appended to
   `state/logs/token-usage.jsonl`; `state/last-run.json` contains cumulative
   output-token and cache-miss totals.
-- MCP returns complete observations. The harness saves them to `state/last-obs.json`;
-  it does not reconstruct deltas or add request/revision fields. The small advisor
+- The MCP redesign target returns self-contained DecisionFrames. Adapt the saved
+  `state/last-obs.json` reader to `basis`, `control.gate`, `scene`, `outcome`, fresh
+  `events` and nested `decision.reply`/`cancel`; preserve the held `viewId` for
+  mutating calls. Do not infer rollout or test completion from these requirements.
+  No model-side delta reconstruction or compensating sync is needed. The small advisor
   uses `explore`/`descend` and engine action offers, with no independent pathfinder
   or corpse-safety table. Pending questions remain deliberate model choices.
-- Stuck detection tracks revealed cells, depth, position history and turns—not
-  merely whether turns advance. Three zero-turn actions, short position cycles,
-  or 25 turns without discovery when no downstairs is known end the run for
-  retrospective repair.
+- Loop handling belongs to the example's explicit policy. Zero elapsed turns,
+  repeated positions or lack of discovery do not prove rejected input or forbid
+  legal gameplay. Read the actual submission, outcome and gate before continuing.
 - Death detection resets the conversation; the model then starts a new game
   itself (new session ids are captured automatically).
 - The state directory (default `./state`, override with `NEONETHACK_BOT_STATE`)

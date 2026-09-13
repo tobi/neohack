@@ -1,376 +1,497 @@
 {
   "type": "object",
-  "required": [
-    "version"
-  ],
   "properties": {
     "version": {
-      "const": 1
+      "const": 2
     },
-    "sessionId": {
-      "type": "string"
-    },
-    "revision": {
-      "type": "integer"
-    },
-    "requestId": {
+    "basis": {
       "anyOf": [
         {
-          "type": "string"
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "integer"
+            },
+            "viewId": {
+              "type": "string"
+            },
+            "levelId": {
+              "type": "string"
+            },
+            "turn": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "sessionId",
+            "revision",
+            "viewId",
+            "levelId",
+            "turn"
+          ],
+          "additionalProperties": false
         },
         {
           "type": "null"
         }
       ]
     },
-    "observation": {
-      "type": "object"
-    },
-    "operationId": {
-      "type": "string"
-    },
-    "summary": {
-      "type": "string"
-    },
-    "historical": {
-      "type": "boolean"
-    },
-    "inputSubmitted": {
-      "type": "boolean"
-    },
-    "state": {
+    "control": {
       "type": "object",
       "properties": {
-        "revision": {
-          "type": "integer"
-        },
-        "turn": {
-          "type": "integer"
-        },
-        "position": {
-          "anyOf": [
-            {
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
+        "gate": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "decision",
+            "recoveryRequired",
+            "ownershipLost",
+            "ended",
+            "unavailable"
           ]
-        },
-        "location": {
-          "type": "object"
-        },
-        "vitals": {
-          "type": "object"
         }
       },
       "required": [
-        "revision",
-        "turn",
-        "position",
-        "location",
-        "vitals"
-      ],
-      "additionalProperties": false
-    },
-    "messages": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "turn": {
-            "type": "integer"
-          },
-          "text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "turn",
-          "text"
-        ],
-        "additionalProperties": false
-      }
-    },
-    "messageScope": {
-      "type": "string",
-      "enum": [
-        "action",
-        "navigation",
-        "observation",
-        "historical",
-        "none"
+        "gate"
       ]
     },
-    "context": {
-      "type": "object"
+    "outcome": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "submission": {
+              "type": "string",
+              "enum": [
+                "accepted",
+                "rejected",
+                "unknown",
+                "notSubmitted"
+              ]
+            },
+            "status": {
+              "type": "string"
+            },
+            "actionsTaken": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "turnsElapsed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "positionChanged": {
+              "type": "boolean"
+            },
+            "sceneChanged": {
+              "type": "boolean"
+            },
+            "operationId": {
+              "type": "string"
+            },
+            "action": {
+              "type": "string"
+            },
+            "effects": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "submission",
+            "status",
+            "actionsTaken",
+            "turnsElapsed",
+            "positionChanged",
+            "sceneChanged"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
-    "map": {
-      "type": "object",
-      "properties": {
-        "text": {
-          "type": "string"
-        },
-        "legend": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
-        "positions": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {
+    "scene": {
+      "anyOf": [
+        {
+          "oneOf": [
+            {
               "type": "object",
               "properties": {
-                "x": {
-                  "type": "integer"
+                "kind": {
+                  "const": "snapshot"
                 },
-                "y": {
-                  "type": "integer"
+                "self": {
+                  "type": "object",
+                  "properties": {
+                    "position": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "x": {
+                              "type": "integer"
+                            },
+                            "y": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "location": {
+                      "type": "object"
+                    },
+                    "vitals": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "position",
+                    "location",
+                    "vitals"
+                  ],
+                  "additionalProperties": false
+                },
+                "nearby": {
+                  "type": "object"
+                },
+                "entities": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "features": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "map": {
+                  "anyOf": [
+                    {
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "inventory": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "inventoryKnown": {
+                  "type": "boolean"
+                },
+                "here": {
+                  "type": "object"
+                },
+                "automaticPickup": {
+                  "type": "object"
+                },
+                "perception": {
+                  "type": "object"
+                },
+                "world": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "knowledge": {
+                  "type": "object"
+                },
+                "navigation": {
+                  "type": "object"
+                },
+                "end": {
+                  "anyOf": [
+                    {
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "required": [
-                "x",
-                "y"
-              ],
-              "additionalProperties": false
-            }
-          }
-        },
-        "bounds": {
-          "type": "object",
-          "properties": {
-            "x": {
-              "type": "array",
-              "items": {
-                "type": "integer"
-              },
-              "minItems": 2,
-              "maxItems": 2
-            },
-            "y": {
-              "type": "array",
-              "items": {
-                "type": "integer"
-              },
-              "minItems": 2,
-              "maxItems": 2
-            }
-          },
-          "required": [
-            "x",
-            "y"
-          ],
-          "additionalProperties": false
-        },
-        "you": {
-          "anyOf": [
-            {
-              "type": "object"
+                "kind",
+                "self",
+                "nearby",
+                "entities",
+                "features",
+                "map",
+                "inventory",
+                "inventoryKnown",
+                "here",
+                "perception",
+                "end"
+              ]
             },
             {
-              "type": "null"
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "delta"
+                },
+                "self": {
+                  "type": "object",
+                  "properties": {
+                    "position": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "x": {
+                              "type": "integer"
+                            },
+                            "y": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "location": {
+                      "type": "object"
+                    },
+                    "vitals": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "position",
+                    "location",
+                    "vitals"
+                  ],
+                  "additionalProperties": false
+                },
+                "nearby": {
+                  "type": "object"
+                },
+                "entities": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "features": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "map": {
+                  "anyOf": [
+                    {
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "inventory": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "inventoryKnown": {
+                  "type": "boolean"
+                },
+                "here": {
+                  "type": "object"
+                },
+                "automaticPickup": {
+                  "type": "object"
+                },
+                "perception": {
+                  "type": "object"
+                },
+                "world": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "knowledge": {
+                  "type": "object"
+                },
+                "navigation": {
+                  "type": "object"
+                },
+                "end": {
+                  "anyOf": [
+                    {
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "baseViewId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "remove": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "automaticPickup",
+                      "navigation",
+                      "world",
+                      "knowledge"
+                    ]
+                  },
+                  "uniqueItems": true
+                },
+                "worldRemoved": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "kind",
+                "baseViewId"
+              ]
             }
           ]
+        },
+        {
+          "type": "null"
         }
-      },
-      "required": [
-        "text",
-        "legend",
-        "positions",
-        "bounds",
-        "you"
-      ],
-      "additionalProperties": false
-    },
-    "presentation": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "const": "compact"
-        },
-        "omitted": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "omittedClearTerrainEvents": {
-          "type": "integer"
-        },
-        "map": {
-          "const": "rendered from observation.world"
-        },
-        "fullObservation": {
-          "const": "syncState"
-        },
-        "attempts": {
-          "const": "inspect"
-        },
-        "fullInputReceipt": {
-          "const": "receipt"
-        }
-      },
-      "required": [
-        "kind",
-        "omitted",
-        "omittedClearTerrainEvents",
-        "map",
-        "fullObservation",
-        "attempts"
-      ],
-      "additionalProperties": false
-    },
-    "reply": {
-      "type": "object",
-      "properties": {
-        "tool": {
-          "const": "answer"
-        },
-        "arguments": {
-          "type": "object",
-          "properties": {
-            "sessionId": {
-              "type": "string"
-            },
-            "decisionId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "sessionId",
-            "decisionId"
-          ],
-          "additionalProperties": false
-        },
-        "valueSchema": {
-          "type": "object"
-        },
-        "instruction": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "tool",
-        "arguments",
-        "valueSchema",
-        "instruction"
-      ],
-      "additionalProperties": false
-    },
-    "cancel": {
-      "type": "object",
-      "properties": {
-        "tool": {
-          "const": "cancel"
-        },
-        "arguments": {
-          "type": "object",
-          "properties": {
-            "sessionId": {
-              "type": "string"
-            },
-            "decisionId": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "sessionId",
-            "decisionId"
-          ],
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "tool",
-        "arguments"
-      ],
-      "additionalProperties": false
-    },
-    "attempts": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "tool": {
-            "type": "string"
-          },
-          "arguments": {
-            "type": "object"
-          },
-          "availability": {
-            "type": "string",
-            "enum": [
-              "attemptable",
-              "uncertain",
-              "needsSelection"
-            ]
-          },
-          "cost": {
-            "const": "variable"
-          },
-          "cautions": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "tool",
-          "arguments",
-          "availability",
-          "cost"
-        ],
-        "additionalProperties": false
-      }
-    },
-    "update": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "enum": [
-            "snapshot",
-            "delta"
-          ]
-        },
-        "id": {
-          "type": "integer"
-        },
-        "base": {
-          "type": "integer"
-        },
-        "remove": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "worldRemoved": {
-          "type": "array",
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "integer"
-            },
-            "minItems": 2,
-            "maxItems": 2
-          }
-        }
-      },
-      "required": [
-        "kind",
-        "id"
-      ],
-      "additionalProperties": false
+      ]
     },
     "decision": {
       "anyOf": [
         {
-          "type": "object"
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "reply": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "const": "answer"
+                },
+                "arguments": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "decisionId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "sessionId",
+                    "decisionId"
+                  ],
+                  "additionalProperties": false
+                },
+                "valueSchema": {
+                  "type": "object"
+                },
+                "instruction": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "tool",
+                "arguments",
+                "valueSchema",
+                "instruction"
+              ],
+              "additionalProperties": false
+            },
+            "cancel": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "const": "cancel"
+                },
+                "arguments": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "decisionId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "sessionId",
+                    "decisionId"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "tool",
+                "arguments"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "reply"
+          ]
         },
         {
           "type": "null"
@@ -383,21 +504,14 @@
         "type": "object"
       }
     },
-    "outcome": {
+    "diagnostics": {
       "type": "object"
     },
-    "ended": {
-      "type": "boolean"
+    "summary": {
+      "type": "string"
     },
-    "end": {
-      "anyOf": [
-        {
-          "type": "object"
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "result": {
+      "type": "object"
     },
     "error": {
       "type": "object",
@@ -414,14 +528,19 @@
         "message"
       ]
     },
-    "navigation": {
+    "verification": {
       "type": "object"
-    },
-    "creatures": {
-      "type": "array",
-      "items": {
-        "type": "object"
-      }
     }
-  }
+  },
+  "required": [
+    "version",
+    "basis",
+    "control",
+    "outcome",
+    "scene",
+    "decision",
+    "events",
+    "diagnostics"
+  ],
+  "additionalProperties": false
 }

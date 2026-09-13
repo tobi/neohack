@@ -2,7 +2,9 @@
 
 `neonethack/webmcp` registers the same navigation tools as Bun/WASM stdio/HTTP
 MCP. Names, descriptions and schemas are generated from `protocol/agent.ts`,
-with explicit mappings to the low semantic catalog. Use `go` for destinations,
+with explicit mappings to the low semantic catalog. This guide describes the
+MCP redesign target being implemented; check the build's generated schemas for
+availability. Use `step` for one adjacent attempt and `go` for destinations,
 `explore` and `descend` for bounded navigation legs, and `attack` for a
 separate deliberate attack. There is no profile switch or generic `act` tool.
 The low library, C API and NDJSON retain precise operations.
@@ -24,26 +26,34 @@ partial failure, and unregisters via the registration AbortSignal (or legacy
 remote MCP service or global JavaScript tool registry is installed.
 
 The adapter preserves `readOnlyHint`. Calls return `structuredContent`,
-`isError`, and the same result serialized in a text `content` block for older clients. Results contain a brief witnessed
-summary and a complete observation; agents do not merge deltas.
+`isError` and the same result serialized in a text `content` block. Game-scoped
+results use the shared [DecisionFrame](PROTOCOL.md#mcp-observation-presentation):
+basis, gate, actual outcome, scene snapshot, nested decision reply/cancel, fresh
+events, query result, structured error and diagnostics. Routine scenes are
+compact and complete for the next decision; `syncState` adds full `scene.world`.
+No legacy top-level state/observation/messages/context/reply fields. Default
+snapshots need no delta baseline; optional programmatic encoding is described
+in the frame contract.
 
-Pass the short `sessionId` back on calls. The adapter owns request IDs, its
-last observed revision; callers supply the exact returned `decision.id` as
-`decisionId` on every `answer` and `cancel`, along with their
-chosen `value`. A question is accompanied by `reply.arguments` (bound session and
-decision IDs), `reply.valueSchema`, and a `cancel` call when cancellable.
-Booleans answer confirmations, arrays select choice names/IDs, strings answer
-text/targets, and `{itemId,quantity?}` selects an item. The low decision stays
-unchanged; its kind supplies the tag sent to C. Item actions use top-level
-`itemId` and optional `quantity`; omit them to request a selection. An old ID is rejected before resolving named
-choices or submitting input, even if the new prompt has the same kind or labels.
-Closing/resuming the same pending question preserves its ID; a later question
-gets a different ID. Invalid or extra arguments
-are rejected before dispatch. A stale revision requires observation and a new
-judgment, not an automatic retry. The shared MCP adapter captures the shared run adapter
-revision when a call arrives; it does not track each HTTP client’s last view.
-HTTP client metadata does not establish ownership or decision authority.
-Decision identity remains explicit across connections and participants.
+Pass `basis.sessionId` and the explicit `basis.viewId` on mutations against
+the view you read. Lifecycle calls (`create`, `resume`, `suspend`) need no prior
+gameplay view. The adapter owns engine request
+IDs and revision plumbing, not permission to refresh a caller's stale target.
+`answer` and `cancel` instead require the exact returned `decision.id`.
+The standing `decision.reply.arguments`, `decision.reply.valueSchema` and
+permitted `decision.cancel` supply executable syntax on first presentation.
+Choose the value explicitly; old IDs reject before resolving choices or input,
+even when a newer prompt has the same labels. Closing/resuming the same pending
+question preserves its ID; later question instances get different IDs.
+
+Targets use declared subsets of `{direction}`, `{position:{x,y}}`, `{ref}`
+and `{symbol,scope:'adjacent'|'level'}`; here/self is
+`{direction:'self'}` where applicable. Item actions retain opaque `itemId`
+and optional quantity. Decision values follow their contextual schema rather
+than the operation target grammar. Missing or ambiguous symbol matches submit
+nothing. Invalid/extra arguments and stale views require correction or fresh
+judgment, never an automatic retry. HTTP metadata establishes neither ownership
+nor decision authority.
 
 Choice options include a readable `name` alongside their numeric `id` and
 displayed `label`. MCP accepts either names or IDs in `value`. Names
@@ -55,18 +65,18 @@ submits engine input. Item selections continue to use opaque item references.
 Normal navigation stops need no recovery call. Read the returned scene and choose
 the next action. There is no `recover` tool.
 
-After an error or lost reply, call `syncState({sessionId})`. It looks up any retained
+After uncertain execution or a lost reply, call `syncState({sessionId})`. It looks up any retained
 uncertain operation by its exact receipt ID, then reads a fresh current scene.
 It never resends gameplay or continues a navigation leg. A verified completion is
-reported in `verification` with its operation ID and outcome; current position,
-revision and standing question remain at the top level. An unavailable or mismatched
+reported as verification query data with its operation ID and outcome; the
+frame's basis, scene and decision describe the current view. An unavailable or mismatched
 receipt leaves input blocked and provides a `resume` instruction. A dead worker or
 storage fault may require reopening the transport first. Repeated observation does
 not manufacture missing consent or clear an unverified request.
 
 `receipt({sessionId, operationId})` is a diagnostic query. Its historical snapshot
-is nested under `receipt`, with no top-level world or decision, and no executable
-answer/cancel suggestions for old questions. The low-level exact receipt is unchanged.
+is nested in query `result`, not substituted for the current scene or decision;
+old questions carry no executable answer/cancel suggestions. The low-level exact receipt is unchanged.
 If an outer bridge loses the entire reply, the adapter may not know which reply
 the caller missed. `syncState` returns current state instead of guessing the latest
 historical operation. Retain bridge invocation IDs for exact correlation.
@@ -98,7 +108,7 @@ a different request cannot bypass them. Historical receipts retain their origina
 and a free observation keeps the visible world from rewinding. Resume selects the
 saved engine package. A query never silently resumes or upgrades another package.
 The visible custom element exposes `data-session-id` and `data-revision` for agents
-starting with an already open adventure; use `session.observe` for its full frame.
+starting with an already open adventure; use `syncState` to obtain its current DecisionFrame and view ID.
 
 This exposes browser-local capabilities, not an HTTP endpoint or a stdio MCP URL.
 The browser mediates agent access. Storage ownership and secure-context checks
@@ -116,6 +126,10 @@ changing discovery; the workshop owns creation and restricts access to its run.
 
 Library tests check mapped operation coverage, adapter-owned guards, read-only annotations,
 pre-submission cancellation, failed registration cleanup and unavailable browsers.
+These existing test areas are regression obligations for the redesign, not a
+claim that every new DecisionFrame scenario has passed. Validate view-bound
+rejections, ambiguous symbols, first-contact reply syntax, scene completeness,
+zero-turn decisions and lost-receipt recovery across the shared transports.
 The pixel browser suite uses sandboxed Chromium's real native WebMCP registry and
 `modelContextTesting` interface with experimental web platform features enabled.
 It exercises actual persistent WASM creation, queries, warnings, typed answers,
@@ -154,21 +168,21 @@ WebMCP accepts both document and earlier navigator registration surfaces, includ
 synchronous registration, explicit unregister methods and returned cleanup
 callbacks. It never uses `clearContext` to erase other scripts’ tools.
 
-## Reply context without extra gameplay
+## Shared scene without extra gameplay
 
-The shared adapter enriches snapshot replies with `state`, action-local `messages`,
-a text `map` rendered from the perceived world cells and a revision-bound
-`context`. Nearby squares (terrain, movement intent, occupant, hazards and the
-tools offered there) come from the snapshot's C neighborhood; one free
-`session.navigation` query adds frontiers, doors and stairs.
-It submits no movement, consumes no turns and never answers a question. Standing
-questions, ended runs and unresolved input skip that navigation query. A query
-failure or revision mismatch marks context unavailable without changing the saved
-action outcome, adopting another revision or retrying input. All transports use
-this same path, including browser calls shared with a human.
+The shared adapter derives `scene.self`, nearby attempts, entities, features,
+inventory, underfoot knowledge, automatic pickup, perception and map from C
+perceived state. Free enrichment consumes neither turns nor randomness and
+never answers a question. Unavailable enrichment must remain visibly unavailable;
+it cannot change a saved outcome or silently adopt a newer input basis.
 
-Navigation messages aggregate confirmed substeps; their turn labels are response
-boundaries. `syncState` never carries fresh messages and omits the field; the low
-`observation.heard` it returns is rolling history. Historical receipts keep their
-messages nested and labelled.
-Typed `navigation.stop` details describe witnessed changes, not predicted danger.
+Fresh `events` belong to the call. Navigation may aggregate confirmed substeps;
+response-boundary turn labels do not identify every internal event's turn.
+Rolling narration and historical receipt events must not become fresh events
+on sync. All transports share this projection and its integrity boundaries.
+
+The live input basis remains authoritative while the human display catches up.
+Read queries preserve open panels, selections and focus. Human takeover stops
+future leg steps, settles accepted input and transfers control deliberately.
+An aborted invocation cannot undo input or erase its operation identity.
+Ownership loss blocks further input instead of forking the save.

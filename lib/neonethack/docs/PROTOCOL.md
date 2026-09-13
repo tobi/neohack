@@ -33,7 +33,7 @@ The concrete name and seed are recorded before `new_game`; resume reuses them.
 Generated names are ASCII, at most 31 bytes, and contain no identity suffixes.
 
 MCP/WebMCP use the navigation vocabulary generated from `protocol/agent.ts`:
-`create`, `syncState`, `inspect`, `go`, `eat`, `answer`, etc. The low library and
+`create`, `syncState`, `inspect`, `step`, `go`, `eat`, `answer`, etc. The low library and
 NDJSON retain this document's precise dotted methods and tagged answers.
 Low JavaScript tool discovery uses underscores, such as `session_observe`.
 These are deliberately separate interfaces; obsolete MCP names have no aliases.
@@ -42,8 +42,10 @@ MCP item actions take `itemId` and an optional `quantity`; omit both to request
 the engine's selection. A readable name is never accepted as an item ID.
 MCP answers take `{sessionId, decisionId, value}`. The adapter checks the exact
 standing ID before interpreting `value` using that question's kind. Every
-question is accompanied by `reply` with the tool name, bound arguments and
-`valueSchema`, plus `cancel` when cancellable. The original `decision` is unchanged.
+question includes nested `decision.reply` with the tool name, bound arguments and
+`valueSchema`, plus `decision.cancel` when cancellable. The low decision semantics
+are unchanged; the agent projection adds this syntax. See the
+[DecisionFrame target](#mcp-observation-presentation) for view binding and rollout scope.
 Confirmation values are booleans; text and directions are strings; choices are
 arrays of returned names/IDs; item values are `{itemId, quantity?}`; positions
 are `{x,y}` or the cursor commands. An answer is never inferred or selected.
@@ -581,68 +583,131 @@ They are exposed identically through native, WASM, TypeScript, MCP and WebMCP.
 
 ## MCP observation presentation
 
-The C/TS/WASM API and durable receipts retain full observations. Native stdio/HTTP
-MCP and WebMCP return self-contained perceived snapshots in `structuredContent`.
-No delta baseline is required. The low-level `CompactResponses` utility remains
-separate from this agent interface.
+This section specifies the MCP redesign target being implemented. It is not a
+deployment or test-completion claim. The C/low TypeScript/WASM protocol and exact
+durable receipts retain their existing semantics. Bun/WASM stdio/HTTP MCP and
+WebMCP share one agent projection, schema and target resolver.
 
-Ordinary agent results label their `presentation.kind` as `compact`. They
-present the perceived level as `map` instead of the JSON `observation.world`:
+Every game-scoped result uses a version-2 `DecisionFrame`. The following is a
+field outline, not a captured response or a replacement for generated schemas:
 
-- `map.text` draws the known bounding box of the level. Labels and ticks mark
-  every fifth x column and every row starts with its y. Each cell uses
-  the engine's displayed `mark` (NetHack's default symbols: `.` floor, `#`
-  corridor, `-`/`|` wall, `+` closed door, `-`/`|` open door swung in its
-  frame, `<`/`>` stairs, `^` known trap, `` ` `` boulder, `@` you, and the
-  engine's creature/object marks). The legend disambiguates shared marks.
-  A mark that is not a single printable non-space ASCII character is left blank.
-- `map.legend` names what every mark on this particular map stands for, built
-  from the same terrain types, object knowledge and creature appearance/attitude
-  the JSON exposes. A mark shared by several meanings lists all of them.
-- `map.bounds` and `map.you` give the rendered window and the hero position.
-
-The map is presentation of perceived knowledge, not new knowledge: it is
-rendered from the same world cells `syncState` returns, never from hidden state.
-`mark` is the character NetHack displays for that square; `map.text` is those
-marks laid out with rulers. JSON entities on the map (`creatures`,
-`context.nearby.cells` when the square is in the known world,
-`context.frontiers`, `context.doors`, `context.waysDown`, and inspect) carry
-the same `mark`. Marks are display, not identity. A neighborhood cell missing
-from the known world gets no invented glyph.
-Compact results omit `observation.world`, `observation.neighborhood`,
-`observation.heard` and `observation.knowledge`, plus terrain `saw` events whose
-mark is the clear-grid NUL marker; `presentation.omitted` names those fields and
-`omittedClearTerrainEvents` counts those events. Apparent `creatures` with
-target IDs, `state`, `context.nearby` (one line per adjacent square with the
-tools the resolver offers there), frontiers, doors, stairs, inventory, vitals,
-real decisions and other events remain present. Outcomes, revisions and terminal
-facts retain their meaning.
-
-Use the free `inspect` query for executable attempts at a target. When the
-current observation can resolve that square, the inspect reply also includes
-`mark` beside `attempts`.
-`syncState` returns the full current perceived observation, including world
-cells, the neighborhood matrix, message history and player knowledge, plus the
-same map, without consuming a turn or requiring an input guard. It never carries
-fresh messages and therefore omits the `messages` field:
-
-```json
-{"name":"syncState","arguments":{"sessionId":"YOUR_SESSION_ID"}}
+```text
+DecisionFrame {
+  version: 2,
+  basis: {sessionId, revision, viewId, levelId, turn} | null,
+  control: {gate},
+  outcome: {
+    submission, status, actionsTaken, turnsElapsed,
+    positionChanged, sceneChanged, operationId?
+  } | null,
+  scene: {
+    kind: "snapshot",
+    self, nearby, entities, features, map, inventory, here,
+    automaticPickup, perception, world?
+  } | null,
+  decision, // null when absent; nested reply and permitted cancel when present
+  events,
+  result?,  // query data, not another current-state envelope
+  error?,
+  diagnostics
+}
 ```
 
-MCP `receipt` returns a historical document nested under `receipt`, including the
-original observation and events. It has no top-level world or standing question,
-and historical questions have no executable reply suggestions. The low protocol's
-`session.receipt` remains the exact original response.
-After uncertainty, MCP `syncState` checks the retained exact receipt and then returns
-current state. It never resends input; missing verification keeps input blocked
-with a resume instruction. Normal navigation stops require no recovery call.
-There is no MCP `recover` tool. Do not infer execution from presentation equality.
+There are no legacy top-level `state`, `observation`, `messages`, `context`
+or `reply` fields. Canonical self-state lives in `scene.self`; query-specific
+data lives in `result`. Basis/scene may be null when no current session view is
+available, including failed session entry. Never fabricate a current scene from
+a historical receipt or replace unavailable knowledge with an empty list.
 
-At the low level, item selector strings are perceived readable names; opaque
-references use `{"item":{"id":"ground-20"}}`. MCP instead takes
-`{"itemId":"ground-20"}`. Use the exact returned ID, never an inventory letter
-or parsed label.
+Admission, outcome and input authority are distinct. `outcome.submission`
+distinguishes confirmed acceptance, rejection and uncertainty; `status`
+describes what actually happened. `control.gate` distinguishes readiness,
+a standing decision, required recovery, lost ownership and an ended game.
+Elapsed time and position are not execution proofs. Integrity revision advances
+at accepted interaction boundaries, including zero-turn decisions; `viewId`
+binds an agent's perceived view, including its question.
+
+### Scene completeness and events
+
+Routine replies contain compact but self-contained `scene.kind: "snapshot"`
+views sufficient for the next decision, including nearby attempts, perceived
+entities/features, inventory, underfoot knowledge, automatic pickup, perception
+and a bounded map. They require neither model-side delta merging nor a mandatory
+action–sync loop. `syncState({sessionId})` additionally returns full
+`scene.world` for cell-layer inspection or resynchronization. It costs no game
+turn or randomness. Terminal details belong in `scene.end`; `control.gate`
+still determines whether further input is allowed. Preserve `inventoryKnown`
+and perception freshness rather than equating an empty list with known absence.
+
+The evolving catalog also defines optional programmatic encoding controls:
+`includeWorld` requests full world and `sinceViewId` requests a delta against
+the last sent baseline. These are separate from the default snapshot examples
+above, not different gameplay profiles. A delta carries `baseViewId`; a shared
+reader must validate session, level and base before applying changes and removals.
+A missing sender baseline returns a snapshot; a missing or out-of-order receiver
+baseline requires resynchronization. `sinceViewId` does not replace the mutation's
+authorizing `viewId`. Check the generated response schema and matching reader
+before opting in. Schema availability is not evidence of completed integration
+tests. Pagination and proposed byte/latency targets are not guaranteed here.
+
+`scene.map.text` draws perceived display marks with x/y rulers;
+`scene.map.legend` describes their disclosed meanings. Bounds, hero position
+and the symbol-position index avoid manual column counting. Duplicate marks keep
+all matches. A glyph is presentation, not identity, safety or a lossless encoding
+of terrain, objects, occupants and remembered hazards. Keep structured layers
+and their freshness; missing knowledge never becomes inferred floor.
+
+`events` carries fresh witnessed evidence for the call. Navigation can aggregate
+confirmed substeps; response-boundary turn labels do not establish every internal
+event's turn. Read-only sync does not replay rolling narration as fresh events.
+Enrichment failure must preserve the actual outcome and mark unavailable data
+without adopting another revision, retrying gameplay or clearing a question.
+
+### Targets and decisions
+
+Gameplay mutations against a live view require explicit `sessionId` and `viewId`.
+Lifecycle calls (`create`, `resume`, `suspend`) do not require `viewId`.
+`answer` and `cancel` use the exact
+returned `decision.id` instead. Stale views and ambiguous targets submit no
+input; an adapter must not refresh then silently retarget the same intent.
+
+The shared operation target grammar is `{direction}`,
+`{position:{x,y}}`, `{ref}` or `{symbol,scope:'adjacent'|'level'}`.
+Here/self uses `{direction:'self'}` where permitted. Each tool advertises its
+valid subset and spatial restrictions. Compass words are not vectors.
+Resolve symbols only in the captured perceived view and explicit scope:
+zero matches is not found, multiple matches is ambiguous. Do not select the
+nearest match or discard a tame ally to manufacture uniqueness. View-bound
+creature refs do not assert persistent identity after disappearance.
+
+`step({sessionId,viewId,target:{direction:"east"}})` is one adjacent ordinary
+attempt; `go({sessionId,viewId,to:{x,y}})` is destination-only navigation.
+Keep tame-ally swaps, genuine warnings and deliberate `attack` distinct.
+Neither eligibility nor route policy guarantees safety against unseen hazards.
+Read-only planning is separate from explicitly requested bounded execution.
+
+The first standing `decision` includes `decision.reply.arguments`,
+`decision.reply.valueSchema` and permitted `decision.cancel` syntax.
+Use the exact bound question ID and explicit value, preserving option IDs,
+cardinality and quantity rules. No defaults or replacement-question substitution.
+Operation targets and contextual answer values are different schemas.
+Item actions use opaque top-level `itemId`; at the low level an opaque item
+reference remains `{"item":{"id":"ground-20"}}`. Neither an inventory letter
+nor a decision choice ID substitutes for an item ID.
+
+### Recovery and historical evidence
+
+`syncState` checks a retained uncertain operation's exact receipt with read-only
+queries, then returns the current scene and decision. It never resends gameplay
+or continues a leg. Missing or mismatched verification keeps input blocked.
+Normal confirmed navigation stops and rejected arguments need no recovery ritual.
+There is no MCP `recover` tool.
+
+MCP `receipt` is historical query data in `result`, never a replacement for
+the frame's current scene or decision. Historical questions have no executable
+reply/cancel suggestions. The low `session.receipt` response remains exact.
+Retain operation and bridge invocation IDs; a lost outer reply must not cause the
+adapter to guess which historical operation to verify.
 
 ### Perceived attitude and normalized hunger
 

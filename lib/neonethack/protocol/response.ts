@@ -129,29 +129,39 @@ export const responseSchema: Schema = {
   ],
 };
 
-/** MCP presentation envelope; full engine schema remains separate. */
-export const compactResponseSchema: Schema = {
-  type: "object", required: ["version"],
-  properties: {
-    version: { const: 1 }, sessionId: string, revision: integer,
-    requestId: nullable(string), observation: { type: "object" },
-    operationId: string, summary: string, historical: boolean, inputSubmitted: boolean,
-    state: closed({revision:integer,turn:integer,position:nullable({type:'object'}),location:{type:'object'},vitals:{type:'object'}}),
-    messages: array(closed({turn:integer,text:string})),
-    messageScope: enumeration('action','navigation','observation','historical','none'),
-    context: {type:'object'},
-    map: closed({text:string,legend:{type:'object',additionalProperties:string},positions:{type:'object',additionalProperties:array(closed({x:integer,y:integer}))},bounds:closed({x:{type:'array',items:integer,minItems:2,maxItems:2},y:{type:'array',items:integer,minItems:2,maxItems:2}}),you:nullable({type:'object'})}),
-    presentation: closed({kind:{const:'compact'},omitted:array(string),omittedClearTerrainEvents:integer,map:{const:'rendered from observation.world'},
-      fullObservation:{const:'syncState'},attempts:{const:'inspect'},fullInputReceipt:{const:'receipt'}},
-      ['kind','omitted','omittedClearTerrainEvents','map','fullObservation','attempts']),
-    reply: closed({tool:{const:'answer'},arguments:closed({sessionId:string,decisionId:string}),valueSchema:{type:'object'},instruction:string}),
-    cancel: closed({tool:{const:'cancel'},arguments:closed({sessionId:string,decisionId:string})}),
-    attempts: array(closed({tool:string,arguments:{type:'object'},availability:enumeration('attemptable','uncertain','needsSelection'),cost:{const:'variable'},cautions:array(string)},['tool','arguments','availability','cost'])),
-    update: closed({ kind: enumeration("snapshot", "delta"), id: integer, base: integer,
-      remove: array(string), worldRemoved: array({ type: "array", items: integer, minItems: 2, maxItems: 2 }) }, ["kind", "id"]),
-    decision: nullable({ type: "object" }), events: array({ type: "object" }),
-    outcome: { type: "object" }, ended: boolean, end: nullable({ type: "object" }),
-    error: object({ code: string, message: string }),
-    navigation: { type: "object" }, creatures: array({ type: "object" }),
-  },
-};
+/** MCP DecisionFrame v2. Strict frame ownership, extensible perceived leaves.
+ * Engine responseSchema above is the unchanged low-level contract. */
+const mcpLeaf: Schema = {type: 'object'};
+const mcpPosition = closed({x: integer, y: integer});
+const mcpScene = object({
+  kind: {const:'snapshot'},
+  self: closed({position: nullable(mcpPosition), location: mcpLeaf, vitals: mcpLeaf}),
+  nearby: mcpLeaf, entities: array(mcpLeaf), features: array(mcpLeaf),
+  map: nullable(mcpLeaf), inventory: array(mcpLeaf), inventoryKnown: boolean,
+  here: mcpLeaf, automaticPickup: mcpLeaf, perception: mcpLeaf,
+  world: array(mcpLeaf), knowledge: mcpLeaf, navigation: mcpLeaf, end: nullable(mcpLeaf),
+}, ['kind', 'self', 'nearby', 'entities', 'features', 'map', 'inventory', 'inventoryKnown', 'here', 'perception', 'end']);
+const mcpDeltaScene = object({
+  ...mcpScene.properties, kind: {const:'delta'}, baseViewId: {type:'string', minLength:1},
+  remove: {...array(enumeration('automaticPickup', 'navigation', 'world', 'knowledge')), uniqueItems:true},
+  worldRemoved: array(mcpPosition),
+}, ['kind', 'baseViewId']);
+export const mcpResponseSchema: Schema = closed({
+  version: {const: 2},
+  basis: nullable(closed({sessionId: string, revision: integer, viewId: string, levelId: string, turn: integer})),
+  control: object({gate: enumeration('ready', 'decision', 'recoveryRequired', 'ownershipLost', 'ended', 'unavailable')}, ['gate']),
+  outcome: nullable(object({
+    submission: enumeration('accepted', 'rejected', 'unknown', 'notSubmitted'), status: string,
+    actionsTaken: {type:'integer', minimum:0}, turnsElapsed: {type:'integer', minimum:0},
+    positionChanged: boolean, sceneChanged: boolean, operationId: string,
+    action: string, effects: array(string), reason: string,
+  }, ['submission', 'status', 'actionsTaken', 'turnsElapsed', 'positionChanged', 'sceneChanged'])),
+  scene: nullable({oneOf:[mcpScene, mcpDeltaScene]}),
+  decision: nullable(object({
+    id: string, kind: string,
+    reply: closed({tool:{const:'answer'}, arguments:closed({sessionId:string, decisionId:string}), valueSchema:mcpLeaf, instruction:string}),
+    cancel: closed({tool:{const:'cancel'}, arguments:closed({sessionId:string, decisionId:string})}),
+  }, ['id', 'kind', 'reply'])),
+  events: array(mcpLeaf), diagnostics: mcpLeaf,
+  summary: string, result: mcpLeaf, error: object({code:string, message:string}), verification: mcpLeaf,
+}, ['version', 'basis', 'control', 'outcome', 'scene', 'decision', 'events', 'diagnostics']);

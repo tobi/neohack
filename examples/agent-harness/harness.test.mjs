@@ -18,7 +18,7 @@ function frame(){return {version:1,sessionId,revision:1,ended:false,end:null,dec
     world:[{x:10,y:10,visible:true,terrain:{type:'floor',freshness:'current'}},
       {x:11,y:10,visible:true,terrain:{type:'floor',freshness:'current'},
         occupant:{kind:'creature',appearance:'newt',attitude:'hostile',mark:':',color:5}}],heard:[]}};}
-const request=(operation='attack',args={target:{x:11,y:10}},expectedRevision=1)=>
+const request=(operation='attack',args={direction:'east'},expectedRevision=1)=>
   ({runId,sessionId,expectedRevision,operation,args,approved:true});
 async function setup(t,{initial=frame(),respond,records=()=>[]}={}){
   const runDir=await mkdtemp(join(tmpdir(),'neohack-composed-'));
@@ -26,7 +26,7 @@ async function setup(t,{initial=frame(),respond,records=()=>[]}={}){
   const sent=[];let current=structuredClone(initial);
   const client=createSnapshotClient({runDir,sessionId,send:async(call,context)=>{
     sent.push(structuredClone(call));
-    if(call.name==="syncState")return structuredClone(current);
+    if(call.name==="observe")return structuredClone(current);
     if(respond)current=await respond(call,structuredClone(current),context);
     else {current.revision++;current.observation.turn++;current.outcome={action:call.name==='attack'?'attack':call.name.replace('game_',''),status:'completed',turnsElapsed:1,positionChanged:false,effects:['attacked']};}
     return structuredClone(current);
@@ -48,20 +48,21 @@ test('malformed creature coordinates cannot pass the composed guard',async t=>{
 });
 test('wrong run, stale revision and invalid generated arguments fail before input',async t=>{
   const {harness,sent}=await setup(t);
-  for(const intent of [{...request(),runId:'other'},request('attack',{target:{x:11,y:10}},0),
-    request('attack',{target:{x:11,y:10},unknown:true})])await assert.rejects(harness.dispatch(intent));
+  for(const intent of [{...request(),runId:'other'},request('attack',{direction:'east'},0),
+    request('attack',{direction:'east',unknown:true})])await assert.rejects(harness.dispatch(intent));
   assert.equal(sent.length,0);
 });
 test('one explicitly selected ordinary attack emits one validated call, no local identity wire fields',async t=>{
   const {harness,sent}=await setup(t);const result=await harness.dispatch(request());
   assert.equal(result.state.revision,2);assert.equal(sent.length,1);
-  assert.deepEqual(sent[0],{name:'attack',arguments:{target:{x:11,y:10},sessionId}});
+  assert.deepEqual(sent[0],{name:'attack',arguments:{direction:'east',sessionId}});
 });
 test('fresh zero-turn bump blocks; rolling heard alone does not invent fresh evidence',async t=>{
   const initial=frame();initial.observation.heard=['You move right into the floating eye.'];
   const bump=structuredClone(initial);bump.outcome={action:'moveWithoutAttack',status:'completed',turnsElapsed:0,positionChanged:false,effects:[]};
   bump.events=[{type:'heard',text:initial.observation.heard[0]}];
-  let records=[{request:{jsonrpc:'2.0',id:1,method:'tools/call',params:{name:"moveWithoutAttack",arguments:{sessionId,direction:'east'}}},response:{jsonrpc:'2.0',id:1,result:{structuredContent:bump}}}];
+  bump.requestId='bump-1';
+  let records=[{request:{version:1,method:'game.moveWithoutAttack',params:{sessionId,direction:'east',expectedRevision:0,requestId:'bump-1'}},response:bump}];
   const {harness,sent}=await setup(t,{initial,records:()=>records});
   await assert.rejects(harness.dispatch(request()));assert.equal(sent.length,0);
   records=[];await harness.dispatch(request());assert.equal(sent.length,1);
@@ -75,16 +76,16 @@ test('exact item reference survives presentation and selection; guessed slot nev
   const initial=frame();initial.observation.inventory=[{id:'opaque-ration',label:'a food ration',location:'inventory',quantity:1,actions:['eat'],usage:[],equipmentSlots:[]}];
   const {harness,sent}=await setup(t,{initial});
   const view=await harness.view();assert.equal(view.items.inventory.items[0].id,'opaque-ration');
-  await assert.rejects(harness.dispatch(request("eat",{itemId: 'item-f'})));assert.equal(sent.length,0);
-  await harness.dispatch(request("eat",{itemId: 'opaque-ration'}));assert.equal(sent.length,1);
+  await assert.rejects(harness.dispatch(request("eat",{item:{id:'item-f'}})));assert.equal(sent.length,0);
+  await harness.dispatch(request("eat",{item:{id:'opaque-ration'}}));assert.equal(sent.length,1);
 });
 test('exact standing decisions remain explicit and are not bypassed by ordinary play',async t=>{
   const initial=frame();initial.decision={id:'exact-question',kind:'confirmation',action:'pray',cancellable:true};
   const {harness,sent}=await setup(t,{initial});
   await assert.rejects(harness.dispatch(request()));
-  await assert.rejects(harness.dispatch(request("answer",{decisionId:'old',value: true})));
+  await assert.rejects(harness.dispatch(request("answer",{decisionId:'old',answer:{kind:'confirmation',confirm:true}})));
   assert.equal(sent.length,0);
-  await harness.dispatch(request("answer",{decisionId:'exact-question',value: true}));assert.equal(sent.length,1);
+  await harness.dispatch(request("answer",{decisionId:'exact-question',answer:{kind:'confirmation',confirm:true}}));assert.equal(sent.length,1);
 });
 test('hunger change after progress stops a walking leg and prevents another automatic leg',async t=>{
   const initial=frame();delete initial.observation.world[1].occupant;
