@@ -83,8 +83,9 @@ play from perceived observations and resume saved adventures.
 
 The [MCP redesign contract](lib/neonethack/docs/PROTOCOL.md#mcp-observation-presentation)
 defines one DecisionFrame, explicit view-bound input, nested question replies,
-uniform targets and separate `step`/destination `go`. This is the target under
-implementation; check a build's schemas before using the new examples.
+uniform targets and eleven intention families. Actionless `use` and `interact`
+are free discovery; explicit actions execute. `travel` separates one-step and
+bounded destination modes. Check a build's schemas before using the examples.
 Native/low semantics and published save integrity remain unchanged.
 
 ## Distributions and notices

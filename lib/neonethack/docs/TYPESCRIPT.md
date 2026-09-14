@@ -74,8 +74,10 @@ There is no native C MCP, profile switch or fallback gameplay server.
 ```
 
 Every surface returns identical tool names/descriptions/schemas and identical
-`structuredContent` plus a JSON text content block. `go`, `explore`,
-`descend`, `navigation` and `route` are available everywhere. Route
+`structuredContent` plus a JSON text content block. Eleven intention families
+are available everywhere: see [agent play](AGENT_PLAY.md). Actionless `use` and
+`interact` discover perceived offers without input; explicit actions execute.
+`travel` selects immediate or bounded navigation modes; `plan` is read-only. Route
 planning remains perception-only C; ordinary failed route queries spend zero
 turns. Movement, searching, rest, door attempts and genuine decisions may cost
 turns. Navigation is bounded and stops for witnessed danger, changed conditions

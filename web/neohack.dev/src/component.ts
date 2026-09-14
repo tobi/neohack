@@ -7,12 +7,13 @@ import { heroArt } from './characters';
 import {InputPlayback} from './input-playback';
 import {replayDocument} from '../../../lib/neonethack/wasm/protocol-reader.mjs';
 import { Neonethack, isSnapshot, type Transport } from '../../../lib/neonethack/typescript/client';
-import { McpService, tools } from '../../../lib/neonethack/mcp/service';
+import { McpService, tools, readOnlyTools } from '../../../lib/neonethack/mcp/service';
+import {valid,type Schema} from '../../../lib/neonethack/mcp/schema';
 import { catalog } from '../../../lib/neonethack/mcp/protocol-data';
 import { registerWebMcp, type WebMcpContext, type WebMcpRegistration } from '../../../lib/neonethack/typescript/webmcp';
 import type { Snapshot, Request } from 'neonethack/types';
 export { Neonethack as default, Neonethack, Game, WorldError, UncertainExecution, Hero, Entity, Inventory, InventoryItem, direction, entities, defineBot, runBot } from '../../../lib/neonethack/typescript/client';
-export { tools, registerWebMcp };
+export { tools, readOnlyTools, registerWebMcp };
 declare const __NEOHACK_ART__: Record<string,string>;
 const artReady = loadArt(__NEOHACK_ART__);
 
@@ -307,7 +308,7 @@ export class NeohackWorld extends HTMLElement {
     else this.registrations.add(registration);
     return registration;
   }
-  private availableTools() { return this.transport ? tools.filter(t=>this.writable || t.annotations.readOnlyHint) : []; }
+  private availableTools() { return this.transport ? this.writable?tools:readOnlyTools : []; }
   /** JSON-RPC / WebMCP vocabulary, delivered on this element's message event. */
   async postMessage(message: {jsonrpc:'2.0'; id:string|number; method:string; params?:any}) {
     let reply: any;
@@ -318,7 +319,8 @@ export class NeohackWorld extends HTMLElement {
       switch(m.method) {
         case 'tools/list': result = {tools:this.availableTools()}; break;
         case 'tools/call': {
-          if(!this.agent || !this.availableTools().some(tool => tool.name === m.params?.name)) throw Error('Tool is unavailable on this connection');
+          const tool=this.availableTools().find(tool => tool.name === m.params?.name);
+          if(!this.agent || !tool || !valid(m.params.arguments??{},tool.inputSchema as Schema)) throw Error('Tool variant is unavailable on this connection');
           result = await this.agent.call(m.params.name, m.params.arguments ?? {}); break;
         }
         case 'world.snapshot': result = this.snapshot; break;

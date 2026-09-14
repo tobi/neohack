@@ -58,7 +58,7 @@ Keep current guidance consistent across these documents:
   and Bun stdio/HTTP MCP expose the navigation vocabulary generated from
   `protocol/agent.ts`. There is no MCP profile switch. Precise operations remain
   available through the low library, C API and NDJSON.
-  Agent tools use plain names (`create`, `syncState`, `inspect`, `eat`, `answer`),
+  Agent tools use eleven intention families (see [agent play](lib/neonethack/docs/AGENT_PLAY.md)),
   explicit `itemId` selectors and context-bound `value` answers. Generate syntax
   in the shared adapter; never rename low operations as a side effect or teach sample
   clients a different question contract. Inspect offers and question replies
@@ -80,7 +80,7 @@ for the shape; implementation and scenario checks establish what a build support
   Remove legacy top-level `state`, `observation`, `messages`, `context` and `reply`.
 - Routine `scene.kind: snapshot` frames must be compact and complete for the next
   decision, with nearby attempts, perceived entities/features, inventory, underfoot
-  knowledge, automatic pickup, perception and map. `syncState` additionally supplies
+  knowledge, automatic pickup, perception and map. `observe` additionally supplies
   full `scene.world`. No mandatory action–sync loop or model-side delta reconstruction.
   Unavailable perception must not masquerade as an empty scene or current knowledge.
 - Nest executable reply syntax and permitted cancellation inside the exact
@@ -88,8 +88,8 @@ for the shape; implementation and scenario checks establish what a build support
   reused question IDs or fallback actions. Events are fresh witnessed evidence;
   rolling narration and historical receipts are not new events or live questions.
 - Require the caller's explicit `viewId` on mutating calls against a live view,
-  except `answer`/`cancel`, which bind to the exact decision ID. Session lifecycle
-  calls (`create`, `resume`, `suspend`) do not use a prior gameplay view. Never
+  except `respond action answer`/`respond action cancel`, which bind to the exact decision ID. Session lifecycle
+  calls (`session action create`, `session action resume`, `session action suspend`) do not use a prior gameplay view. Never
   refresh a stale basis and silently retarget input.
   Revision can advance without elapsed time, movement or an obvious scene change.
 - Use the uniform target selectors `{direction}`, `{position:{x,y}}`, `{ref}`
@@ -99,7 +99,7 @@ for the shape; implementation and scenario checks establish what a build support
   Resolve only within the captured perceived view; zero or multiple symbol matches
   submit no input. Never choose the nearest or filter out an ally to resolve ambiguity.
   Creature refs do not establish identity across views or disappearance.
-- `step` is one ordinary adjacent attempt; `go` takes a destination only.
+- `travel mode step` is one ordinary adjacent attempt; `travel mode to` takes a destination only.
   Preserve tame-ally swaps and real warnings; a displayed non-ally requires a
   deliberate interaction rather than automatic combat. A step is no safety promise
   and must not be preempted by a long-leg new-creature policy. Navigation remains
@@ -113,6 +113,26 @@ for the shape; implementation and scenario checks establish what a build support
   historical measurements as such; smaller replies and better survival are not
   established improvements without evidence. Do not ban legal repeated actions
   merely because an example bot loops.
+
+## Agent intention families
+
+- Advertise only session, observe, interact, use, travel, equipment, inventory,
+  plan, lookup, respond and help. Native/low named methods remain complete;
+  do not restore one-tool-per-engine-command aliases or a universal act tool.
+- Omitting action on use or interact ALWAYS means free discovery, even with one
+  offer. Explicit action means execution. No label-based inference, default verb,
+  hidden-property classification or automatic question/confirmation chaining.
+- Item offers derive from current C-perceived item actions. Square offers derive
+  from the C action query. Keep general supported commands separately labelled
+  from eligibility; unavailable knowledge is never an empty possibilities list.
+- Return executable family variants bound to the observed viewId. Ambiguous
+  symbols return perceived candidates without input. Use strict variant schemas;
+  reject irrelevant fields instead of silently changing the requested operation.
+- Mixed query/mutation families are not wholly readonly. Readonly transports
+  advertise query-only variants and enforce those schemas before dispatch.
+- All travel modes preserve their semantics: step remains one adjacent ordinary
+  attempt, run/climb remain native operations, and to/explore/descend remain
+  explicitly bounded planning/execution. Grouping must not change engine rules.
 
 ## Perceptual parity and UX
 
@@ -153,7 +173,7 @@ interaction and visual decisions, and update DESIGN.md when those decisions chan
 - MCP may own request IDs, revision tracking and response reconstruction; the
   engine still enforces exact receipts and stale-input checks. Require explicit
   run tokens, and never treat an uncertain response as permission to act again.
-- MCP `syncState` returns the full current state and may verify a retained uncertain receipt
+- MCP `observe` returns the full current state and may verify a retained uncertain receipt
   using read-only queries. It never resends gameplay. Missing verification keeps
   input blocked. Historical MCP receipts are nested documents, not live worlds
   or executable decisions; normal navigation stops need no recovery call.
@@ -183,7 +203,7 @@ interaction and visual decisions, and update DESIGN.md when those decisions chan
 
 ## Verification
 
-Enter `nix develop` at the repository root before building. `flake.nix` and
+Make automatically enters the locked Nix shell; use `nix develop` for direct npm/Node commands. `flake.nix` and
 `flake.lock` pin the Linux compiler environment, including Emscripten, Lua,
 Node and Bun; CI uses the same shells. Keep their hashes in source/compile
 provenance. Do not restore machine-specific SDK paths or vendor compiler binaries.

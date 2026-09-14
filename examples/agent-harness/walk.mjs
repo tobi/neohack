@@ -4,8 +4,8 @@ import responseSchema from '../../lib/neonethack/protocol/response.schema.json' 
  * One caller-authorized, bounded knownWalking leg. No transport, state store,
  * replanning, force fallback, decision answers, or uncertain-input retries.
  *
- * go(args) must be a dispatcher-approved MCP go returning its reconstructed,
- * current structuredContent (not a raw envelope, delta, or historical receipt).
+ * go(args) is the low-library harness callback, returning a current public
+ * semantic snapshot (not an MCP DecisionFrame, delta, or historical receipt).
  * The dispatcher owns serialization, exact operation IDs, revisions and receipts.
  * Keep exclusive session ownership from initialFrame through go completion.
  * maxActions bounds inputs, not elapsed turns; ordinary movement can attack.

@@ -56,15 +56,14 @@ try {
   await rpc('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'neohack-pi',version:'1'}});
   await bridge.notify({jsonrpc:'2.0',method:'notifications/initialized'});
   const catalog=(await rpc('tools/list',{})).result.tools;
-  const created=(await rpc('tools/call',{name:'create',arguments:{name:'Pi512',seed,role:'valkyrie',race:'dwarf',gender:'female',align:'lawful'}})).result.structuredContent;
+  const created=(await rpc('tools/call',{name:"session",arguments:{action: "create", name:'Pi512',seed,role:'valkyrie',race:'dwarf',gender:'female',align:'lawful'}})).result.structuredContent;
   if(created?.version!==2 || !created.basis?.sessionId || created.control.gate!=='ready')throw Error('No live session created; inspect journal, do not blindly recreate');
   const sessionId=created.basis.sessionId; metadata.sessionId=sessionId;saveMeta();
   const reader=new SceneReader();
   client=createDecisionClient({sessionId,tools:catalog,reader,
     send:async call=>(await rpc('tools/call',call,randomUUID())).result.structuredContent});
   client.accept(created);
-  const excluded=new Set(['create','resume','suspend','receipt']);
-  const tools=catalog.filter(t=>!excluded.has(t.name));
+  const tools=catalog.map(tool=>tool.name==='session'?{...tool,inputSchema:{...tool.inputSchema,oneOf:tool.inputSchema.oneOf.filter(schema=>schema.properties.action.const==='quit')}}:tool);
   fs.writeFileSync(path.join(dir,'tools.json'),JSON.stringify(tools,null,2));
   const token=randomUUID();
   server=createServer(async(req,res)=>{
@@ -97,7 +96,7 @@ try {
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const endpoint=`http://127.0.0.1:${server.address().port}`;
-  const prompt=`Play this single existing NetHack game as far as you can, aiming for ascension. You have only MCP game tools, Pass the exact sessionId shown below on game-scoped calls. Read the current frame with syncState first. Pass its exact basis.viewId on mutations; never refresh and retarget stale input. step {target:{direction}} is adjacent movement; go takes to only. Questions carry decision.reply and optional decision.cancel. Use exact decision IDs. Choose each action deliberately; inspect exact perceived creature and item references, wield/equip useful starting gear, manage food, avoid melee floating eyes and gas spores, and reassess after every action. Never guess corpse safety or freshness from a glyph. Real decision answers are explicit. Stop on death or uncertain execution; do not recreate games. Navigation is bounded; replan when interrupted rather than blindly repeating. Do not use source code or hidden engine data. Record concise progress in your responses and a final report (state, tactical errors, suspected defects with evidence). The host retains all tool calls, saves, snapshots and this transcript. Session ${sessionId}; deadline ${metadata.deadline}. Continue gameplay until terminal, uncertainty or deadline, not merely after initial setup.`;
+  const prompt=`Play this single existing NetHack game as far as you can, aiming for ascension. You have only MCP game tools, Pass the exact sessionId shown below on game-scoped calls. Read the current frame with observe first. Pass its exact basis.viewId on mutations; never refresh and retarget stale input. travel {mode:step,target:{direction}} is adjacent movement; mode to takes a destination. Actionless use and interact are free discovery; add an explicit action to execute. Questions carry decision.reply and optional decision.cancel. Use exact decision IDs. Choose each action deliberately; inspect exact perceived creature and item references, use equipment to wield/wear useful starting gear, manage food, avoid melee floating eyes and gas spores, and reassess after every action. Never guess corpse safety or freshness from a glyph. Real decision answers are explicit. Stop on death or uncertain execution; do not recreate games. Navigation is bounded; replan when interrupted rather than blindly repeating. Do not use source code or hidden engine data. Record concise progress in your responses and a final report (state, tactical errors, suspected defects with evidence). The host retains all tool calls, saves, snapshots and this transcript. Session ${sessionId}; deadline ${metadata.deadline}. Continue gameplay until terminal, uncertainty or deadline, not merely after initial setup.`;
   fs.writeFileSync(path.join(dir,'prompt.txt'),prompt);
   const stdout=fs.openSync(path.join(dir,'pi.jsonl'),'wx'),stderr=fs.openSync(path.join(dir,'pi.stderr.log'),'wx');
   child=spawn('pi',['--model',values.model,'--thinking','medium','--no-builtin-tools','--no-extensions','--no-skills','--no-prompt-templates','--no-context-files','--extension',path.join(here,'pi-extension.mjs'),'--session-dir',path.join(dir,'pi-sessions'),'--mode','json','--print','--system-prompt','You are a careful NetHack player. Only the explicitly provided game MCP tools are available. Use perceived game information; preserve uncertainty and genuine decisions.',prompt],

@@ -33,14 +33,15 @@ The concrete name and seed are recorded before `new_game`; resume reuses them.
 Generated names are ASCII, at most 31 bytes, and contain no identity suffixes.
 
 MCP/WebMCP use the navigation vocabulary generated from `protocol/agent.ts`:
-`create`, `syncState`, `inspect`, `step`, `go`, `eat`, `answer`, etc. The low library and
+`session`, `observe`, `interact`, `use`, `travel`, `equipment`, `inventory`,
+`plan`, `lookup`, `respond` and `help`. The low library and
 NDJSON retain this document's precise dotted methods and tagged answers.
 Low JavaScript tool discovery uses underscores, such as `session_observe`.
 These are deliberately separate interfaces; obsolete MCP names have no aliases.
 
 MCP item actions take `itemId` and an optional `quantity`; omit both to request
 the engine's selection. A readable name is never accepted as an item ID.
-MCP answers take `{sessionId, decisionId, value}`. The adapter checks the exact
+MCP answers use `respond({action:"answer", sessionId, decisionId, value})`. The adapter checks the exact
 standing ID before interpreting `value` using that question's kind. Every
 question includes nested `decision.reply` with the tool name, bound arguments and
 `valueSchema`, plus `decision.cancel` when cancellable. The low decision semantics
@@ -49,7 +50,7 @@ are unchanged; the agent projection adds this syntax. See the
 Confirmation values are booleans; text and directions are strings; choices are
 arrays of returned names/IDs; item values are `{itemId, quantity?}`; positions
 are `{x,y}` or the cursor commands. An answer is never inferred or selected.
-`inspect` also returns `attempts` with MCP tool/argument templates beside the
+Actionless `interact` also returns `attempts` with MCP tool/argument templates beside the
 unchanged low-level cell facts. An offered call does not promise success or safety.
 
 ## Method families
@@ -583,8 +584,8 @@ They are exposed identically through native, WASM, TypeScript, MCP and WebMCP.
 
 ## MCP observation presentation
 
-This section specifies the MCP redesign target being implemented. It is not a
-deployment or test-completion claim. The C/low TypeScript/WASM protocol and exact
+This section specifies the source MCP contract. Runtime schemas establish build
+support; this is not a deployment claim. The C/low TypeScript/WASM protocol and exact
 durable receipts retain their existing semantics. Bun/WASM stdio/HTTP MCP and
 WebMCP share one agent projection, schema and target resolver.
 
@@ -633,7 +634,7 @@ Routine replies contain compact but self-contained `scene.kind: "snapshot"`
 views sufficient for the next decision, including nearby attempts, perceived
 entities/features, inventory, underfoot knowledge, automatic pickup, perception
 and a bounded map. They require neither model-side delta merging nor a mandatory
-action–sync loop. `syncState({sessionId})` additionally returns full
+action–sync loop. `observe({sessionId})` additionally returns full
 `scene.world` for cell-layer inspection or resynchronization. It costs no game
 turn or randomness. Terminal details belong in `scene.end`; `control.gate`
 still determines whether further input is allowed. Preserve `inventoryKnown`
@@ -663,11 +664,28 @@ event's turn. Read-only sync does not replay rolling narration as fresh events.
 Enrichment failure must preserve the actual outcome and mark unavailable data
 without adopting another revision, retrying gameplay or clearing a question.
 
+### Free discovery and strict variants
+
+The eleven families and examples are in [agent play](AGENT_PLAY.md).
+Actionless use discovers current perceived item actions; actionless interact
+queries a perceived square (self by default). Neither submits engine input,
+spends turns/randomness or changes the standing decision, even with one offer.
+Explicit action executes only the requested operation. No label-based verb
+inference or automatic question chaining. General supported commands are
+labelled separately from C eligibility. Discovery offers include executable
+family arguments bound to the returned viewId. Unavailable item perception
+withholds offers instead of inventing capabilities.
+
+Family schemas are strict unions, not interchangeable optional parameters.
+Mixed query/mutation tools advertise readOnlyHint false; readonly connections
+publish and enforce query-only variants. Grouping does not change low semantics,
+exact receipts, source pins or action costs.
+
 ### Targets and decisions
 
 Gameplay mutations against a live view require explicit `sessionId` and `viewId`.
-Lifecycle calls (`create`, `resume`, `suspend`) do not require `viewId`.
-`answer` and `cancel` use the exact
+Session variants (action create, resume, suspend) do not require `viewId`.
+`respond` actions answer and cancel use the exact
 returned `decision.id` instead. Stale views and ambiguous targets submit no
 input; an adapter must not refresh then silently retarget the same intent.
 
@@ -680,9 +698,9 @@ zero matches is not found, multiple matches is ambiguous. Do not select the
 nearest match or discard a tame ally to manufacture uniqueness. View-bound
 creature refs do not assert persistent identity after disappearance.
 
-`step({sessionId,viewId,target:{direction:"east"}})` is one adjacent ordinary
-attempt; `go({sessionId,viewId,to:{x,y}})` is destination-only navigation.
-Keep tame-ally swaps, genuine warnings and deliberate `attack` distinct.
+`travel({sessionId,viewId,mode:"step",target:{direction:"east"}})` is one adjacent ordinary
+attempt; `travel({sessionId,viewId,mode:"to",to:{x,y}})` is destination-only navigation.
+Keep tame-ally swaps, genuine warnings and deliberate `interact action attack` distinct.
 Neither eligibility nor route policy guarantees safety against unseen hazards.
 Read-only planning is separate from explicitly requested bounded execution.
 
@@ -697,13 +715,13 @@ nor a decision choice ID substitutes for an item ID.
 
 ### Recovery and historical evidence
 
-`syncState` checks a retained uncertain operation's exact receipt with read-only
+`observe` checks a retained uncertain operation's exact receipt with read-only
 queries, then returns the current scene and decision. It never resends gameplay
 or continues a leg. Missing or mismatched verification keeps input blocked.
 Normal confirmed navigation stops and rejected arguments need no recovery ritual.
 There is no MCP `recover` tool.
 
-MCP `receipt` is historical query data in `result`, never a replacement for
+MCP `observe({sessionId,operationId})` is historical query data in `result`, never a replacement for
 the frame's current scene or decision. Historical questions have no executable
 reply/cancel suggestions. The low `session.receipt` response remains exact.
 Retain operation and bridge invocation IDs; a lost outer reply must not cause the

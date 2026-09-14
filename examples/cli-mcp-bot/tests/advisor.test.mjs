@@ -12,9 +12,14 @@ test('reference advisor uses current navigation MCP schemas and leaves choices e
   for(const frame of frames){const r=recommend(frame),validate=schemas.get(r.tool);assert.ok(validate,r.tool);assert.ok(validate(r.args),JSON.stringify(validate.errors));}
   assert.equal(recommend({...base,decision:{kind:'confirmation'}}).tool,null);
   for(const gate of ['ended','ownershipLost','recoveryRequired'])assert.equal(recommend({...base,control:{gate}}).tool,null);
-  assert.equal(recommend(base).tool,'explore');
+  assert.equal(recommend(base).tool,'travel');
+  assert.equal(recommend(base).args.mode,'explore');
+  assert.equal(recommend(frames[1]).args.action,'eat');
+  assert.equal(recommend(frames[2]).tool,'interact');
+  assert.equal(recommend(frames[2]).args.action,undefined);
+  assert.equal(recommend(frames[2]).args.viewId,undefined);
   assert.equal(recommend(frames[1]).args.itemId,undefined);
   assert.equal(recommend(base).args.viewId,'view-1');
-  assert.equal(recommend({...base,scene:null}).tool,'syncState');
+  assert.equal(recommend({...base,scene:null}).tool,'observe');
   assert.throws(()=>recommend({version:1,observation:{}}),/v2/);
 });

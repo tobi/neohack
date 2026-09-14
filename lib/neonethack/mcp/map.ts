@@ -5,7 +5,7 @@ import type {Cell, Observation} from '../typescript/types.js';
  * occupants and objects), never from hidden engine state. `mark` is the
  * character NetHack displays for that square; the legend names what each mark
  * stands for on this map, and the full cell layers stay available through
- * syncState. */
+ * observe. */
 export interface PerceivedMap {
   /** Known bounding box. Labels and ticks mark every fifth x; rows start with y. */
   text: string;

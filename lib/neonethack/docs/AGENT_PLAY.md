@@ -1,115 +1,114 @@
 # How an agent plays
 
-Create a run, read its DecisionFrame, attempt a named action and answer any
-standing question explicitly. This guide describes the MCP redesign target being
-implemented across Bun/WASM stdio, HTTP and browser WebMCP. Check a build's
-`help` schemas before using it; this is not a claim that production has deployed
-the redesign. Native/low semantics remain unchanged.
+MCP and WebMCP expose eleven intention families, not one tool per engine command.
+The native/low API remains unchanged. Check the running build's help schemas;
+source documentation does not establish what production has deployed.
 
-Keep `basis.sessionId` and `basis.viewId` from the returned frame. Gameplay calls
-against that live view require both; `answer` and `cancel` instead require the
-exact `decision.id`. The adapter owns engine request IDs and revision plumbing,
-but cannot silently substitute a newer view for the one you acted on. Lifecycle
-calls (`create`, `resume`, `suspend`) do not require a prior gameplay view.
-
-| Intent | MCP / WebMCP call |
+| Tool | Intent |
 | --- | --- |
-| Begin once | `create({role:"valkyrie"})` |
-| Return to a saved run | `resume({sessionId})` |
-| Attempt one adjacent step | `step({sessionId,viewId,target:{direction:"east"}})` |
-| Walk toward a destination | `go({sessionId,viewId,to:{x:40,y:10}})` |
-| Explore a bounded leg | `explore({sessionId,viewId,maxActions:8})` |
-| Resynchronize with the full perceived scene, free | `syncState({sessionId})` |
-| Inspect here, free | `inspect({sessionId,target:{direction:"self"}})` |
-| Answer the standing question | `answer({sessionId,decisionId,value})` |
-| Cancel its current action when permitted | `cancel({sessionId,decisionId})` |
-| Release the saved run | `suspend({sessionId})` |
+| `session` | Explicit create, resume, suspend or quit |
+| `observe` | Current full scene/recovery, or an exact historical operationId |
+| `interact` | Free square discovery; explicit spatial actions, payment, prayer, skills, search/rest |
+| `use` | Free item discovery; explicit item use, firing, casting or engraving |
+| `travel` | Explicit step, run, climb, destination, exploration or descent mode |
+| `equipment` | Wield, wear, remove, quiver, swap or twoWeapon |
+| `inventory` | Pickup, drop or configurePickup |
+| `plan` | Free frontiers or route query |
+| `lookup` | Pinned encyclopedia |
+| `respond` | Exact decision answer or permitted cancellation |
+| `help` | Family descriptions and strict variant schemas |
 
-Coordinates and IDs above are examples, not selected actions. `help({})` lists
-tools; `help({name:"eat"})` gives one schema. Specialist named commands remain
-discoverable. No profile switch or raw-key escape hatch is needed.
+## Discover without acting
 
-## Read one frame
+Omitting `action` on `use` or `interact` is always free discovery, even if
+there is only one possible offer. Supplying `action` requests execution.
+Discovery consumes no engine input, turns or randomness, and never starts or
+answers an engine decision. Item candidates come from C's perceived actions,
+not labels, inventory letters, guessed powers or default verbs.
 
-The [DecisionFrame contract](PROTOCOL.md#mcp-observation-presentation) separates
-`control.gate`, actual `outcome`, current `scene`, standing `decision`, fresh
-`events` and query `result`. Read the gate before attempting more input. A query
-may have no action outcome; unavailable basis or scene is explicitly null.
-Terminal details live in `scene.end`; the input gate still governs further input.
-Never infer execution from elapsed turns or position alone.
+```js
+use({sessionId, itemId: "RETURNED_ITEM_ID"})
+interact({sessionId, target: {symbol: "+", scope: "adjacent"}})
+interact({sessionId}) // here/self
+```
 
-Routine replies are self-contained scene snapshots for the next decision:
-`scene.self`, `nearby`, `entities`, `features`, `map`, `inventory`, `here`,
-`automaticPickup` and `perception`. Full `scene.world` is supplied by `syncState`
-when cell layers or resynchronization are needed. Do not add a sync/inspect/route
-ritual after every action. Unavailable knowledge is not an empty floor or bag.
+Results contain executable offers bound to the returned `basis.viewId`.
+An item offer may point to `equipment` or `inventory`, not only `use`.
+Unavailable/stale perception is explicit, not an empty list of possibilities.
+Supported general commands are labelled separately from perceived eligibility;
+an available operation is never a safety or success prediction.
 
-`scene.map.text` is a perceived visual summary with coordinate rulers and a
-legend. Its symbol-position index retains duplicate matches. Use structured
-nearby/entity/feature positions for targets; do not count ASCII columns or infer
-terrain under an object from its glyph. The map never identifies hidden creatures,
-items or safety. Read-only sync does not turn rolling narration into fresh events.
+If a symbol has zero or multiple matches, no input is sent. Multiple matches
+return perceived candidates; choose a coordinate/reference explicitly. Allies
+still count. Spatial selectors are `{direction}`, `{position:{x,y}}`, `{ref}`
+or `{symbol,scope:'adjacent'|'level'}`, within each variant's declared subset.
+Ranged use accepts directions only, including permitted self/up/down.
+References bind a perceived square, not a persistent hidden creature identity.
 
-## Choose a target
+## Execute an explicit intention
 
-Tools accept declared subsets of one target grammar:
+Keep `basis.sessionId` and `basis.viewId` from the received frame. Mutations
+require that exact view except session create/resume/suspend and exact
+`respond` calls. Stale views reject without refreshing or retargeting input.
+Strict variants reject unrelated fields rather than silently ignoring them.
 
-| Selector | Example |
-| --- | --- |
-| Direction | `{target:{direction:"east"}}` |
-| Coordinate | `{target:{position:{x:31,y:15}}}` |
-| Perceived reference | `{target:{ref:"RETURNED_REF"}}` |
-| Display symbol in explicit scope | `{target:{symbol:"g",scope:"adjacent"}}` |
-| Here/self, where permitted | `{target:{direction:"self"}}` |
+```js
+session({action: "create", role: "valkyrie"})
+travel({sessionId, viewId, mode: "step", target: {direction: "east"}})
+travel({sessionId, viewId, mode: "to", to: {x: 40, y: 10}})
+travel({sessionId, viewId, mode: "explore", maxActions: 8})
+use({sessionId, viewId, action: "drink", itemId: "RETURNED_ITEM_ID"})
+interact({sessionId, viewId, action: "open", target: {direction: "east"}})
+equipment({sessionId, viewId, action: "wear", itemId: "RETURNED_ITEM_ID"})
+interact({sessionId, viewId, action: "rest", turns: 5})
+session({sessionId, action: "suspend"})
+```
 
-`scope` is `adjacent` or `level`, within the tool's spatial restrictions.
-An absent or ambiguous symbol match submits no input; select from the disclosed
-candidates explicitly. An ally with the same symbol still counts. References
-belong to their perceived view, not a persistent hidden creature identity.
+Coordinates and IDs are syntax examples, not selected actions.
+`travel mode step` retains ordinary one-step semantics and tame-ally swaps;
+displayed non-allies require explicit `interact action attack`. A distant
+hostile cannot impose long-leg stopping rules on an adjacent retreat attempt.
+Modes to/explore/descend are bounded C-planned known-walking legs, with witnessed
+progress and stop causes. maxPlanningMs defaults to 1000; zero submits no
+planning query/input. maxFrontiers explicitly permits multiple exploration legs.
+Run uses native direction/noPickup and optional `runMode`; climb is a direct
+vertical attempt. Neither is silently replaced by destination navigation.
 
-Item actions use opaque IDs, for example
-`eat({sessionId,viewId,itemId:"RETURNED_ITEM_ID"})`. Omit `itemId` to ask for an
-engine selection where supported. Names, inventory letters and decision choice
-IDs are not substitutes for an item ID. Inspect offers supply executable syntax
-for attempts, without promising safety or success.
+Explicit item actions may omit itemId to request a genuine engine selection
+where supported. `use action cast` starts the actual spell decision;
+perceived spell knowledge is not a decision-choice ID. `use action engrave`
+retains the engine's implement (including fingers), text and warning questions.
+No convenience auto-selects, auto-confirms or chains answers.
 
-## Move and answer deliberately
+## Read the frame and answer deliberately
 
-`step` makes one ordinary adjacent attempt, preserving tame-ally swaps and real
-warnings. It does not automatically fight a displayed non-ally. `attack` is a
-separate deliberate action. A visible hostile elsewhere must not cause a
-long-leg stop policy to suppress a requested adjacent retreat attempt.
+The [DecisionFrame](PROTOCOL.md#mcp-observation-presentation) separates basis,
+control.gate, actual outcome, perceived scene, standing decision, fresh events,
+query result and diagnostics. Routine scenes are complete for the next decision;
+`observe` additionally includes full world. No mandatory discovery/observe loop.
+Map positions and entities supply exact coordinates; do not count ASCII columns.
 
-`go` accepts a destination only. `explore` selects perceived frontiers and
-`descend` approaches known downward stairs. These are bounded legs over shared
-C planning, with progress and witnessed stop causes. They do not route through
-unknown terrain as though it were known floor, answer warnings or automatically
-continue after a stop. Normal confirmed partial progress needs no recovery call.
+Copy `decision.reply.arguments` and deliberately add a value matching its
+`valueSchema`. The tool is `respond`, with action answer. Permitted cancellation
+supplies a separate `decision.cancel` call with action cancel. Both bind the
+exact decisionId. Answers may spend turns or produce another genuine question;
+cancellation is not rollback. Item IDs and decision choice IDs are distinct.
 
-A standing question contains `decision.reply.arguments` and
-`decision.reply.valueSchema`, plus `decision.cancel` when permitted. Copy the
-bound arguments and deliberately supply `value` matching that exact schema.
-Confirmations take booleans; item selections use opaque item IDs; choices use
-the returned option names/IDs and cardinality; text and direction questions use
-their contextual value shapes. Decision answer syntax is separate from the
-operation target grammar. Answering may produce another question with a new ID.
-Cancellation may spend turns or resources and is not rollback.
+After a lost reply, `observe({sessionId})` verifies retained exact evidence
+without resending gameplay. Unverified input stays blocked. A normal navigation
+stop needs no recovery. `observe({sessionId,operationId})` returns historical
+evidence under result, never a live scene/question to act on. Terminal facts live
+in scene.end. Suspend preserves the run; explicit quit retains engine confirmation.
 
-## Uncertain execution
+See [browser setup](AGENT_BROWSER.md), [local setup](QUICKSTART.md), and
+[WebMCP ownership](WEBMCP.md). Tool-count reduction alone establishes neither
+better survival nor fewer model mistakes.
 
-After uncertain execution or a lost response, call `syncState({sessionId})`.
-It checks any retained exact receipt without resending gameplay, then returns
-the current scene and question. If verification is unavailable, keep input
-blocked and follow the recovery instruction. Do not repeat the action or leg.
-Rejected arguments that submitted no input need correction, not receipt recovery.
+## Catalog size measurement
 
-`receipt` is diagnostic historical query data, not current position or an active
-question. Never execute answer syntax from an old receipt. There is no MCP
-`recover` tool. Retain bridge invocation IDs: a completely lost outer response
-may otherwise leave the exact operation unknown.
-
-Start with the [browser walkthrough](AGENT_BROWSER.md) or
-[local setup](QUICKSTART.md). The [WebMCP guide](WEBMCP.md) covers shared browser
-input and ownership. [Hero](HERO.md) and [TypeScript](TYPESCRIPT.md) document the
-distinct typed APIs; [command coverage](COMMAND_COVERAGE.md) records demonstrated
-limits. Tool coverage does not establish ascension ability.
+On 2026-09-14, compared with commit 1487c20, JSON.stringify of the generated
+tools array shrank from 325,040 to 93,932 UTF-8 bytes (53 to 11 tools).
+Projecting only name, description and inputSchema shrank from 65,029 to 39,134
+bytes. This excludes the JSON-RPC envelope and is not a model-token, latency or
+survival measurement. Shared schema definitions reduce duplication while strict
+variant branches retain field restrictions and required input authority.

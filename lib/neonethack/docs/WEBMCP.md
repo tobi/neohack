@@ -1,13 +1,19 @@
 # WebMCP
 
-`neonethack/webmcp` registers the same navigation tools as Bun/WASM stdio/HTTP
+`neonethack/webmcp` registers the same eleven intention families as Bun/WASM stdio/HTTP
 MCP. Names, descriptions and schemas are generated from `protocol/agent.ts`,
 with explicit mappings to the low semantic catalog. This guide describes the
-MCP redesign target being implemented; check the build's generated schemas for
-availability. Use `step` for one adjacent attempt and `go` for destinations,
-`explore` and `descend` for bounded navigation legs, and `attack` for a
+current source contract; check the build's generated schemas for
+availability. Use `travel mode step` for one adjacent attempt and `travel mode to` for destinations,
+`travel mode explore` and `travel mode descend` for bounded navigation legs, and `interact action attack` for a
 separate deliberate attack. There is no profile switch or generic `act` tool.
 The low library, C API and NDJSON retain precise operations.
+
+Actionless `use` and `interact` are free discovery, even with one offer. Explicit
+action executes; no operation is inferred from an item label or a unique match.
+See [the family guide](AGENT_PLAY.md) for syntax. Readonly connections advertise
+query-only variants of mixed families and reject mutating variants before input;
+do not treat a whole family as readonly because it offers discovery.
 
 ```ts
 import { registerWebMcp } from 'neonethack/webmcp';
@@ -30,16 +36,16 @@ The adapter preserves `readOnlyHint`. Calls return `structuredContent`,
 results use the shared [DecisionFrame](PROTOCOL.md#mcp-observation-presentation):
 basis, gate, actual outcome, scene snapshot, nested decision reply/cancel, fresh
 events, query result, structured error and diagnostics. Routine scenes are
-compact and complete for the next decision; `syncState` adds full `scene.world`.
+compact and complete for the next decision; `observe` adds full `scene.world`.
 No legacy top-level state/observation/messages/context/reply fields. Default
 snapshots need no delta baseline; optional programmatic encoding is described
 in the frame contract.
 
 Pass `basis.sessionId` and the explicit `basis.viewId` on mutations against
-the view you read. Lifecycle calls (`create`, `resume`, `suspend`) need no prior
+the view you read. Lifecycle calls (`session action create`, `session action resume`, `session action suspend`) need no prior
 gameplay view. The adapter owns engine request
 IDs and revision plumbing, not permission to refresh a caller's stale target.
-`answer` and `cancel` instead require the exact returned `decision.id`.
+`respond action answer` and `respond action cancel` instead require the exact returned `decision.id`.
 The standing `decision.reply.arguments`, `decision.reply.valueSchema` and
 permitted `decision.cancel` supply executable syntax on first presentation.
 Choose the value explicitly; old IDs reject before resolving choices or input,
@@ -65,20 +71,20 @@ submits engine input. Item selections continue to use opaque item references.
 Normal navigation stops need no recovery call. Read the returned scene and choose
 the next action. There is no `recover` tool.
 
-After uncertain execution or a lost reply, call `syncState({sessionId})`. It looks up any retained
+After uncertain execution or a lost reply, call `observe({sessionId})`. It looks up any retained
 uncertain operation by its exact receipt ID, then reads a fresh current scene.
 It never resends gameplay or continues a navigation leg. A verified completion is
 reported as verification query data with its operation ID and outcome; the
 frame's basis, scene and decision describe the current view. An unavailable or mismatched
-receipt leaves input blocked and provides a `resume` instruction. A dead worker or
+receipt leaves input blocked and provides a `session action resume` instruction. A dead worker or
 storage fault may require reopening the transport first. Repeated observation does
 not manufacture missing consent or clear an unverified request.
 
-`receipt({sessionId, operationId})` is a diagnostic query. Its historical snapshot
+`observe({sessionId, operationId})` is a diagnostic query. Its historical snapshot
 is nested in query `result`, not substituted for the current scene or decision;
 old questions carry no executable answer/cancel suggestions. The low-level exact receipt is unchanged.
 If an outer bridge loses the entire reply, the adapter may not know which reply
-the caller missed. `syncState` returns current state instead of guessing the latest
+the caller missed. `observe` returns current state instead of guessing the latest
 historical operation. Retain bridge invocation IDs for exact correlation.
 
 A signal aborted before submission prevents input. Aborting after submission
@@ -108,7 +114,7 @@ a different request cannot bypass them. Historical receipts retain their origina
 and a free observation keeps the visible world from rewinding. Resume selects the
 saved engine package. A query never silently resumes or upgrades another package.
 The visible custom element exposes `data-session-id` and `data-revision` for agents
-starting with an already open adventure; use `syncState` to obtain its current DecisionFrame and view ID.
+starting with an already open adventure; use `observe` to obtain its current DecisionFrame and view ID.
 
 This exposes browser-local capabilities, not an HTTP endpoint or a stdio MCP URL.
 The browser mediates agent access. Storage ownership and secure-context checks

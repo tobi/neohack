@@ -159,8 +159,8 @@ export const mcpResponseSchema: Schema = closed({
   scene: nullable({oneOf:[mcpScene, mcpDeltaScene]}),
   decision: nullable(object({
     id: string, kind: string,
-    reply: closed({tool:{const:'answer'}, arguments:closed({sessionId:string, decisionId:string}), valueSchema:mcpLeaf, instruction:string}),
-    cancel: closed({tool:{const:'cancel'}, arguments:closed({sessionId:string, decisionId:string})}),
+    reply: closed({tool:{const:'respond'}, arguments:closed({sessionId:string, decisionId:string,action:{const:'answer'}}), valueSchema:mcpLeaf, instruction:string}),
+    cancel: closed({tool:{const:'respond'}, arguments:closed({sessionId:string, decisionId:string,action:{const:'cancel'}})}),
   }, ['id', 'kind', 'reply'])),
   events: array(mcpLeaf), diagnostics: mcpLeaf,
   summary: string, result: mcpLeaf, error: object({code:string, message:string}), verification: mcpLeaf,

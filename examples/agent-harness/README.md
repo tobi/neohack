@@ -48,15 +48,15 @@ and stop reason. `mcp.jsonl`, `sessions/`, `pi.jsonl`, `pi.stderr.log`,
 `pi-sessions/`, `tools.json` and `prompt.txt` retain calls, game saves,
 conversation and the actual tool/prompt configuration. This runner does not
 create the library harness's `client/` snapshot store.
-The owner creates the run; Pi receives the discovered tools except `create`,
-`resume`, `suspend` and diagnostic `receipt`. Item operations remain available
+The owner creates the run; Pi receives the eleven families with the `session`
+schema restricted to explicit quit. Create/resume/suspend remain owner-only. Item operations remain available
 when discovered. Exact recovery after uncertain execution requires separate
 inspection; the command never retries input automatically.
 
 The MCP client holds a DecisionFrame through the shared `SceneReader`. Callers
 supply the held `basis.viewId` on mutations or the exact question ID on
 answer/cancel. It does not inject a fresh view, reconstruct low snapshots or add
-an action–sync loop. `syncState` is a deliberate full-world/recovery query;
+an action–sync loop. `observe` is a deliberate full-world/recovery query;
 only explicit settled verification can clear uncertain execution. The runner
 stops when input becomes unavailable rather than running a recovery policy.
 
@@ -101,7 +101,7 @@ const runner = createAgentHarness({
   runId, sessionId, client, records,
   operations: createOperationValidators({sessionId}),
 });
-await runner.observe({deliberate: true}); // low session.observe, not MCP syncState
+await runner.observe({deliberate: true}); // low session.observe, not MCP observe
 const {state} = await runner.view();
 await runner.dispatch({
   runId, sessionId, expectedRevision: state.revision,
@@ -205,7 +205,7 @@ directory; `summary.json` records sanitized results and limitations. This is a
 usability sample, separate from fixed policy/seed gameplay benchmarks.
 
 The September 8 check using `vllm/current` passed with six calls: create,
-observe (now named `syncState`), inspect, pray, answer(false), suspend. Observe
+observe, interact discovery, interact prayer, respond answer(false), session suspend. Observe
 and inspect were concurrent free reads. All 54 live schemas were available; the host supplied
 no argument corrections. Native/WASM contract tests separately cover all six
 question kinds. One model sample does not establish a general success rate.

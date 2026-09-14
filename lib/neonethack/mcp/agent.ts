@@ -4,6 +4,7 @@ import {methods,tools,instructions,answers} from './agent-data.js';
 import {present,question,isSnapshot,uncertain,viewId,type DecisionFrame,type FrameOptions} from './frame.js';
 import {resolveTarget,TargetError,type AgentTarget} from './targets.js';
 import {valid,type Schema} from './schema.js';
+import {itemActions} from './item-actions.js';
 export {tools,instructions,present};
 const itemSelector=(input:Record<string,unknown>)=>({id:input.itemId,...(input.quantity!==undefined?{quantity:input.quantity}:{})});
 const answerFormats=answers as Record<string,{field:string;schema:Schema;instruction:string}>;
@@ -97,8 +98,8 @@ export class AgentClient {
     return this.reply(current,{readOnly:true,full:true,uncertain:true,verification:{status:'unresolved',operationId},error:{code:'uncertainExecution',message:'The previous input is not verified. Resume this same session; do not repeat the action.',retry:'verifyReceipt'}});
   }
   async call(name:string,args:Record<string,unknown>={},options:{signal?:AbortSignal}={}):Promise<DecisionFrame>{
-    const entry=methods.find(m=>m.name===name),sid=typeof args.sessionId==='string'?args.sessionId:undefined;
-    if(!entry||!valid(args,entry.schema as Schema))return this.reject(sid?this.games.get(sid)?.state:undefined,entry?'invalidParams':'unknownTool','No operation was sent. Use the returned schema.',entry?{tool:tools.find(t=>t.name===name)}:{tools:tools.map(({name,description})=>({name,description}))});
+    const tool=tools.find(t=>t.name===name),entry=methods.find(m=>m.name===name&&valid(args,m.schema as Schema)),sid=typeof args.sessionId==='string'?args.sessionId:undefined;
+    if(!entry)return this.reject(sid?this.games.get(sid)?.state:undefined,tool?'invalidParams':'unknownTool','No operation was sent. Use the returned schema.',tool?{tool}:{tools:tools.map(({name,description})=>({name,description}))});
     const input=structuredClone(args),revision=sid?this.games.get(sid)?.state.revision:undefined,key=sid??'creation';
     const run=(this.tails.get(key)??Promise.resolve()).catch(()=>{}).then(async()=>{
       const game=sid?this.games.get(sid):undefined,full=input.includeWorld===true;
@@ -110,10 +111,15 @@ export class AgentClient {
       const safe=['session.create','session.resume','session.observe','agent.receipt'].includes(entry.method);
       if(entry.method==='session.create'&&this.creationUncertain)return this.reply(undefined,{uncertain:true,error:{code:'uncertainExecution',message:'Creation is uncertain. Recover the existing run token; do not create again.'}});
       if(!safe&&!game)return this.reject(undefined,'sessionUnavailable','Sync or resume the explicit session before acting.');
-      if(!safe&&sid&&this.pending.has(sid))return this.reject(game?.state,'uncertainExecution','Verify the retained receipt with syncState; do not resend gameplay.');
+      if(!safe&&sid&&this.pending.has(sid))return this.reject(game?.state,'uncertainExecution','Verify the retained receipt with observe; do not resend gameplay.');
       if(!safe&&game&&game.state.revision!==revision)return this.reject(game.state,'staleRevision','State changed while the call was queued. Read the returned view before acting.');
       if(game&&'viewId' in input&&input.viewId!==viewId(game.state))return this.reject(game.state,'staleView','The supplied view is stale; no input submitted.');
       if(entry.method==='session.observe'||entry.method==='session.resume')return this.sync(sid!,entry.method==='session.resume');
+      if(entry.method==='agent.itemActions'){
+        const observed=await this.api.transport.send({version:1,method:'session.observe',params:{sessionId:sid!}});
+        this.adopt(observed);
+        return isSnapshot(observed)?this.reply(observed,{readOnly:true,full,result:itemActions(observed,input.itemId as string|undefined)}):this.reply(observed,{snapshot:game!.state,readOnly:true,full});
+      }
       if(entry.method==='agent.receipt'){
         const r=await this.api.request('session.receipt',{sessionId:sid!,requestId:input.operationId as string});
         // Historical low evidence is deliberately not a live DecisionFrame or executable question.
@@ -125,6 +131,9 @@ export class AgentClient {
       let method=entry.method;
       const {viewId:_view,includeWorld:_include,sinceViewId:_since,...params0}=input;
       const params:Record<string,unknown>={...params0};
+      for(const field of Object.keys(entry.selector))delete params[field];
+      if(method==='session.actions'&&input.target===undefined)params.target='here';
+      if(method==='game.run'&&'runMode' in params){params.mode=params.runMode;delete params.runMode;}
       const events:WorldEvent[]=[];
       try{
         if(isLeg(method)){
@@ -194,7 +203,7 @@ export class AgentClient {
     try{result=await run;}catch(error){
       const pending=sid?this.pending.get(sid):undefined;
       const message=error instanceof Error?error.message:String(error);
-      result=await this.reply(undefined,{snapshot:sid?this.games.get(sid)?.state:undefined,uncertain:!!pending||this.creationUncertain,rejected:!pending&&!this.creationUncertain,error:{code:pending||this.creationUncertain?'uncertainExecution':'agentError',message:this.creationUncertain?`Creation reply unavailable. Do not resubmit create. Recover the existing run token, then syncState or resume. ${message}`:pending?`Input receipt unresolved. Call syncState; do not resend gameplay. ${message}`:message}});
+      result=await this.reply(undefined,{snapshot:sid?this.games.get(sid)?.state:undefined,uncertain:!!pending||this.creationUncertain,rejected:!pending&&!this.creationUncertain,error:{code:pending||this.creationUncertain?'uncertainExecution':'agentError',message:this.creationUncertain?`Creation reply unavailable. Do not resubmit create. Recover the existing run token, then observe or resume. ${message}`:pending?`Input receipt unresolved. Call observe; do not resend gameplay. ${message}`:message}});
     }
     if(sid){
       const {viewId:_view,includeWorld:_full,sinceViewId:_since,...intentArgs}=input;

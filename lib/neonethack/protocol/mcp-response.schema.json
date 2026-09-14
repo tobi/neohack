@@ -424,7 +424,7 @@
               "type": "object",
               "properties": {
                 "tool": {
-                  "const": "answer"
+                  "const": "respond"
                 },
                 "arguments": {
                   "type": "object",
@@ -434,11 +434,15 @@
                     },
                     "decisionId": {
                       "type": "string"
+                    },
+                    "action": {
+                      "const": "answer"
                     }
                   },
                   "required": [
                     "sessionId",
-                    "decisionId"
+                    "decisionId",
+                    "action"
                   ],
                   "additionalProperties": false
                 },
@@ -461,7 +465,7 @@
               "type": "object",
               "properties": {
                 "tool": {
-                  "const": "cancel"
+                  "const": "respond"
                 },
                 "arguments": {
                   "type": "object",
@@ -471,11 +475,15 @@
                     },
                     "decisionId": {
                       "type": "string"
+                    },
+                    "action": {
+                      "const": "cancel"
                     }
                   },
                   "required": [
                     "sessionId",
-                    "decisionId"
+                    "decisionId",
+                    "action"
                   ],
                   "additionalProperties": false
                 }

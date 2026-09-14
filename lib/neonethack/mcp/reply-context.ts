@@ -2,24 +2,32 @@ import type {CellActions, Snapshot} from '../typescript/types.js';
 import {markAt} from './map.js';
 import {methods} from './agent-data.js';
 
+/** Convert a concrete low offer into the one public family variant. */
+export function offeredCall(method:string,input:Record<string,unknown>) {
+  const mapped=method==='game.move'?'agent.step':method==='game.attack'?'agent.attack':method;
+  const entry=methods.find(m=>m.method===mapped);
+  if(!entry)return undefined;
+  const args:Record<string,unknown>={...input,...entry.selector};
+  if(['agent.step','agent.attack'].includes(mapped)&&'direction' in args){args.target={direction:args.direction};delete args.direction;}
+  if('item' in args){const item=args.item as {id:string;quantity?:number};args.itemId=item.id;if(item.quantity!==undefined)args.quantity=item.quantity;delete args.item;}
+  return {tool:entry.name,arguments:args};
+}
+
 /** Syntax derived from actual C offers; an attempt is not a safety promise. */
 export function attemptsFor(cell:CellActions,sessionId:string,viewId?:string) {
   return cell.actions.flatMap(offer=>{
     if(!('arguments' in offer))return [];
-    // go {direction} is one ordinary step; it never attacks a displayed creature.
+    // Ordinary stepping never attacks a displayed creature.
     if(offer.method==='game.move'&&cell.occupant&&cell.occupant.kind==='creature')return [];
-    const tool=offer.method==='game.move'?'step':methods.find(m=>m.method===offer.method)?.name;
-    if(!tool)return [];
     const args:Record<string,unknown>={sessionId,...(viewId?{viewId}:{}),...offer.arguments};
-    if(offer.method==='game.move'&&'direction' in args){args.target={direction:args.direction};delete args.direction;}
-    if('item' in args){const item=args.item as {id:string;quantity?:number};args.itemId=item.id;if(item.quantity!==undefined)args.quantity=item.quantity;delete args.item;}
-    return [{tool,arguments:args,availability:offer.availability,cost:offer.cost,...('cautions' in offer?{cautions:offer.cautions}:{})}];
+    const call=offeredCall(offer.method,args);
+    return call?[{...call,availability:offer.availability,cost:offer.cost,...('cautions' in offer?{cautions:offer.cautions}:{})}]:[];
   });
 }
 const compassOf=(dx:number,dy:number)=>dx===0&&dy===0?'self':`${dy<0?'north':dy>0?'south':''}${dx<0?'west':dx>0?'east':''}`;
 /** One line per adjacent square: perceived facts plus which tools the C
  * resolver offers there (tool → availability). Full executable syntax is the
- * inspect query's job; here `go` means go {direction}. */
+ * actionless interact query's job. Keys include the explicit variant. */
 export function nearbyContext(frame:Snapshot) {
   const neighborhood=frame.observation.neighborhood;
   if(neighborhood?.status!=='available')return {status:'unavailable',reason:neighborhood?.reason??'unavailable'};
@@ -29,8 +37,8 @@ export function nearbyContext(frame:Snapshot) {
     for(const offer of cell.actions){
       if(!('arguments' in offer)||offer.availability==='knownBlocked')continue;
       if(offer.method==='game.move'&&cell.occupant&&cell.occupant.kind==='creature')continue;
-      const tool=offer.method==='game.move'?'step':methods.find(m=>m.method===offer.method)?.name;
-      if(tool)attempts[tool]=offer.availability;
+      const call=offeredCall(offer.method,{});
+      if(call)attempts[`${call.tool}.${call.arguments.action??call.arguments.mode}`]=offer.availability;
     }
     const mark=markAt(frame.observation,cell.x,cell.y);
     return {

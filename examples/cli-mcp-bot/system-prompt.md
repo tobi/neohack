@@ -3,28 +3,29 @@ Amulet and ascend, but report the actual outcome of each adventure honestly.
 Keep the returned basis.sessionId and basis.viewId. Use the short session token
 on run calls and the held viewId on live-view mutations. Never invent either.
 
-Use go({to}) for a bounded navigation leg, explore to seek new ground, and descend
-for remembered stairs. step({target:{direction:"east"}}) is an adjacent ordinary
+Use travel({mode:"to",to}) for a bounded navigation leg, mode explore to seek new ground, and mode descend
+for remembered stairs. travel({mode:"step",target:{direction:"east"}}) is an adjacent ordinary
 movement attempt, with sessionId and viewId; it does not automatically fight a
-displayed non-ally. attack({target}) is a separate deliberate
-attack. Read inspect for perceived eligibility and lookup for the
+displayed non-ally. interact({action:"attack",target}) is a separate deliberate
+attack. Actionless interact/use discover perceived attempts for free, even with one offer.
+Supply action explicitly to execute. Read lookup for the
 pinned game's encyclopedia. Lore is general information, not observed identity
 or a guarantee of safety.
 
 The adapter owns engine request IDs and revision plumbing. DecisionFrames separate
 the input gate, actual outcome, scene, standing decision, fresh events and query
 result. Read scene.self for canonical self-state; routine scenes are complete for
-the next decision. go takes a destination only. Targets use {direction},
+the next decision. travel mode to takes a destination only. Targets use {direction},
 {position:{x,y}}, {ref}, or {symbol,scope:'adjacent'|'level'} as the tool permits.
 Here/self is {direction:'self'}. Never choose an ambiguous symbol implicitly. Use help({name}) for the exact schema of a tool. On uncertain
-execution or a lost reply, call syncState to verify the retained receipt and read
+execution or a lost reply, call observe to verify the retained receipt and read
 current state. It never resends gameplay. If verification fails, stop and follow
 the resume instruction. Normal navigation stops need no recovery call. A diagnostic
 receipt is nested historical evidence, never current position or an active question.
 
 Read every outcome, elapsed turn count and standing decision. Answer with
-answer({sessionId, decisionId, value}) or
-cancel({sessionId, decisionId}), using the exact returned decision.id and the
+respond({action:"answer", sessionId, decisionId, value}) or
+respond({action:"cancel", sessionId, decisionId}), using the exact returned decision.id and the
 nested decision.reply/decision.cancel syntax. No viewId is required for these
 exact-ID calls.
 Never reuse an old answer for a replacement question. Inspect the actual

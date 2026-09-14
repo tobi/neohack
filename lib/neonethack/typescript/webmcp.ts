@@ -1,5 +1,6 @@
 import {McpService, tools} from '../mcp/service.js';
 import {present} from '../mcp/frame.js';
+import {valid,type Schema} from '../mcp/schema.js';
 import type {Transport} from './client.js';
 
 /** Structural types for document.modelContext and early navigator builds. */
@@ -20,7 +21,7 @@ export async function registerWebMcp(
   transport:Pick<Transport,'send'>,
   context:WebMcpContext|undefined = (globalThis.document as (Document & {modelContext?:WebMcpContext})|undefined)?.modelContext ??
     (globalThis.navigator as (Navigator & {modelContext?:WebMcpContext})|undefined)?.modelContext,
-  registration:{service?:McpService;tools?:readonly (typeof tools)[number][]}={},
+  registration:{service?:McpService;tools?:readonly {name:string;description:string;inputSchema:Schema;outputSchema:object;annotations:{readOnlyHint:boolean}}[]}={},
 ):Promise<WebMcpRegistration> {
   if(!context?.registerTool)return {supported:false,toolCount:0,dispose(){}};
   const agent=registration.service??new McpService(transport),controller=new AbortController(),registered:string[]=[],cleanups:(()=>void)[]=[];
@@ -31,6 +32,9 @@ export async function registerWebMcp(
         name:tool.name,description:tool.description,inputSchema:tool.inputSchema,outputSchema:tool.outputSchema,
         annotations:{readOnlyHint:tool.annotations.readOnlyHint},
         execute:async(input,options)=>{
+          if(tool.annotations.readOnlyHint&&!tools.find(candidate=>candidate.name===tool.name)?.annotations.readOnlyHint&&!valid(input,tool.inputSchema as Schema))return {
+            isError:true,structuredContent:present(undefined,{rejected:true,error:{code:'invalidParams',message:'Arguments are outside this registration’s advertised variants.'}}),content:[],
+          };
           if(controller.signal.aborted||options?.signal?.aborted)return {
             isError:true,structuredContent:present(undefined,{rejected:true,error:{code:'cancelled',message:'Tool call cancelled before submission.'}}),content:[],
           };

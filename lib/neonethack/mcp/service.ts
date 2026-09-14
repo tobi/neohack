@@ -2,6 +2,7 @@ import {AgentClient,tools,instructions} from './agent.js';
 import type {Transport} from '../typescript/client.js';
 import {SceneProjector} from './scene.js';
 export {tools,instructions};
+export {readOnlyTools} from './agent-data.js';
 /** The ONLY MCP tool execution boundary, shared by document registration,
  * stdio and HTTP. Transports never map gameplay operations or shape snapshots. */
 export class McpService {

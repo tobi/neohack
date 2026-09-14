@@ -294,7 +294,7 @@ If a later substep fails, `NavigationError.result` retains the confirmed actions
 turns and last confirmed snapshot; its `cause` retains the underlying error.
 An uncertain failed input may have executed beyond that snapshot. Recover the
 retained exact input through the SDK's receipt/request recovery path. In MCP,
-`syncState` verifies its receipt and reads current state without resending gameplay;
+`observe` verifies its receipt and reads current state without resending gameplay;
 unavailable verification keeps input blocked. Never restart navigation as recovery.
 
 Route and frontier semantics live in C. This executor only submits the named

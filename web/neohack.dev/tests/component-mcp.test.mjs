@@ -37,12 +37,12 @@ test('component shares agent frames across message and WebMCP calls, retaining l
   const page = await fixture(t);
   const result = await page.evaluate(async () => {
     const world = document.querySelector('neohack-world');
-    const {tools} = await import('/component/neohack.js');
+    const {tools,readOnlyTools} = await import('/component/neohack.js');
     const {WasmTransport} = await import('/runtime/typescript/wasm.js');
     const call = (method, params) => world.postMessage({jsonrpc:'2.0', id:'component-test', method, params});
     const invoke = (name, args) => call('tools/call', {name, arguments:args});
     const unconnected = await call('tools/list');
-    const unconnectedCall = await invoke('wait', {});
+    const unconnectedCall = await invoke("interact", {action: "rest"});
     const transport = await WasmTransport.create({storage:{kind:'memory'}});
     const sent = [];
     const traced = {send(request) { sent.push(request); return transport.send(request); }};
@@ -54,22 +54,22 @@ test('component shares agent frames across message and WebMCP calls, retaining l
       const low = world.connect(traced, {writable:true});
       const listed = (await call('tools/list')).result.tools;
       const registration = await world.registerWebMcp(context);
-      const created = (await invoke('create', {seed:42, role:'valkyrie'})).result;
+      const created = (await invoke("session", {action: "create", seed:42, role:'valkyrie'})).result;
       const first = created.structuredContent;
       const sessionId = first.basis.sessionId;
-      const waited = await registry.get('wait').execute({sessionId, viewId:first.basis.viewId});
+      const waited = await registry.get('interact').execute({action:'rest',sessionId, viewId:first.basis.viewId});
       const beforeStale = sent.length;
-      const stale = (await invoke('wait', {sessionId, viewId:first.basis.viewId})).result;
+      const stale = (await invoke("interact", {action: "rest", sessionId, viewId:first.basis.viewId})).result;
       const staleSent = sent.length - beforeStale;
       const beforeAbort = sent.length;
       const abort = new AbortController(); abort.abort();
-      const cancelled = await registry.get('wait').execute({sessionId, viewId:waited.structuredContent.basis.viewId}, {signal:abort.signal});
+      const cancelled = await registry.get('interact').execute({action:'rest',sessionId, viewId:waited.structuredContent.basis.viewId}, {signal:abort.signal});
       const abortSent = sent.length - beforeAbort;
-      const prayer = (await invoke('pray', {sessionId, viewId:waited.structuredContent.basis.viewId})).result;
+      const prayer = (await invoke("interact", {action: "pray", sessionId, viewId:waited.structuredContent.basis.viewId})).result;
       const question = prayer.structuredContent.decision;
-      const answered = await registry.get('answer').execute({...question.reply.arguments, value:false});
+      const answered = await registry.get('respond').execute({...question.reply.arguments, value:false});
       const snapshot = world.snapshot;
-      const oldWait = registry.get('wait');
+      const oldWait = registry.get('interact');
       const readonly = world.connect(traced);
       const disposedNames = [...registry.keys()];
       await low.close(); // Old owners cannot detach a replacement connection.
@@ -77,7 +77,8 @@ test('component shares agent frames across message and WebMCP calls, retaining l
       const readRegistration = await world.registerWebMcp(context);
       const readRegistry = [...registry.keys()];
       const beforeDenied = sent.length;
-      const denied = await invoke('wait', {sessionId, viewId:answered.structuredContent.basis.viewId});
+      const denied = await invoke("interact", {action: "rest", sessionId, viewId:answered.structuredContent.basis.viewId});
+      const readOnlyMutation=await registry.get('use').execute({action:'read',sessionId,viewId:answered.structuredContent.basis.viewId});
       let lowDenied = false;
       try { await readonly.request('game.wait', {sessionId, requestId:'forbidden', expectedRevision:snapshot.revision}); }
       catch(error) { lowDenied = /read-only/.test(String(error)); }
@@ -85,7 +86,8 @@ test('component shares agent frames across message and WebMCP calls, retaining l
       let oldClientDenied = false;
       try { await low.request('session.observe', {sessionId}); } catch { oldClientDenied = true; }
       const deniedSent = sent.length - beforeDenied;
-      const synced = await registry.get('syncState').execute({sessionId});
+      const synced = await registry.get('observe').execute({sessionId});
+      const readOnlyDiscovery=await registry.get('use').execute({sessionId});
       await readonly.describe(); // Low discovery remains available privately.
       let message;
       world.addEventListener('message', event => { message = event.data; }, {once:true});
@@ -126,8 +128,8 @@ test('component shares agent frames across message and WebMCP calls, retaining l
         first, waited:waited.structuredContent, stale:stale.structuredContent, staleSent,
         cancelled:cancelled.structuredContent, abortSent, question, answered:answered.structuredContent,
         disposedNames, readonlyNames:readTools.map(tool => tool.name), readRegistry,
-        expectedReadonly:tools.filter(tool => tool.annotations.readOnlyHint).map(tool => tool.name),
-        denied:!!denied.error, lowDenied, retired:retired.isError, oldClientDenied, deniedSent,
+        expectedReadonly:readOnlyTools.map(tool => tool.name),
+        denied:!!denied.error, readOnlyMutation:readOnlyMutation.isError, readOnlyDiscovery:readOnlyDiscovery.structuredContent,lowDenied, retired:retired.isError, oldClientDenied, deniedSent,
         synced:synced.structuredContent, sameMessage:JSON.stringify(rendered) === JSON.stringify(emitted),
         seek:seek.result, sameSnapshot:JSON.stringify(displayed.result) === JSON.stringify(snapshot),
         remainingRegistry:registry.size, disconnected:(await call('tools/list')).result.tools,
@@ -138,6 +140,9 @@ test('component shares agent frames across message and WebMCP calls, retaining l
   });
   assert.deepEqual(result.unconnected, []);
   assert.equal(result.unconnectedCall, true);
+  assert.equal(result.readOnlyMutation,true);
+  assert.equal(result.readOnlyDiscovery.result.kind,'itemActions');
+  assert.equal(result.readOnlyDiscovery.outcome.actionsTaken,0);
   assert.equal(result.sameCatalog, true);
   assert.equal(result.registered, result.outputVersions.length);
   assert.ok(result.outputVersions.every(version => version === 2));

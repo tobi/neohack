@@ -88,7 +88,7 @@ function unpack(pair) {
 // Explicit public operation mappings, not substrings or the reply's claim alone.
 const movements = new Map([
   ['game.move', 'move'], ['game.moveWithoutAttack', 'moveWithoutAttack'],
-  ['step', 'move'], ['go', 'move'],
+  ['travel.step', 'move'], ['travel.to','move'],
 ]);
 
 /**
@@ -106,7 +106,8 @@ export function freshEyeBumpEvidence({ records, snapshot } = {}) {
   if (!pair) return absent('no-completed-pair');
   const call = unpack(pair);
   if (!call) return absent('unmatched-reply');
-  const { method, params, frame, error, mcp, callId } = call;
+  const { params, frame, error, mcp, callId } = call;
+  const method=mcp&&call.method==='travel'?`travel.${params?.mode}`:call.method;
   if (error || frame?.error) return absent('latest-response-error');
   if (!object(frame) || !object(params)) return absent('missing-frame');
   if(frame.version!==(mcp?2:1))return absent('unsupported-frame');
@@ -125,7 +126,7 @@ export function freshEyeBumpEvidence({ records, snapshot } = {}) {
   const action = movements.get(method);
   if (!action || frame.outcome?.action !== action) return absent('unrelated-operation');
   if (mcp && (!params.viewId || frame.outcome?.submission!=='accepted'))return absent('unwitnessed-submission');
-  if (method === 'go' && frame.outcome?.actionsTaken !== 1)
+  if (method === 'travel.to' && frame.outcome?.actionsTaken !== 1)
     return absent('navigation-not-single-action');
   const outcome = frame.outcome;
   if (!['completed', 'blocked'].includes(outcome.status)
@@ -140,7 +141,7 @@ export function freshEyeBumpEvidence({ records, snapshot } = {}) {
     evidence: {
       sessionId: basis.sessionId, revision: basis.revision,
       ...(mcp ? { callId } : { requestId: frame.requestId }),
-      method, action, status: outcome.status, turnsElapsed: outcome.turnsElapsed,
+      method:call.method, ...(mcp?{mode:params.mode}:{}), action, status: outcome.status, turnsElapsed: outcome.turnsElapsed,
       text: event.text, source: 'events.heard',
     },
   };

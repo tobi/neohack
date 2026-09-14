@@ -1,7 +1,7 @@
 import type {Cell, Decision, End, Observation, Outcome, Response, Snapshot, WorldEvent} from '../typescript/types.js';
 import {answers} from './agent-data.js';
 import {renderMap, type PerceivedMap} from './map.js';
-import {nearbyContext, attemptsFor} from './reply-context.js';
+import {nearbyContext, attemptsFor, offeredCall} from './reply-context.js';
 import {targetRef} from './targets.js';
 
 export type Gate = 'ready'|'decision'|'recoveryRequired'|'ownershipLost'|'ended'|'unavailable';
@@ -64,8 +64,8 @@ export function question(sessionId:string,d:Decision):NonNullable<DecisionFrame[
   }
   if(d.kind==='target')schema.enum=[...(d.allowedTargets.includes('self')?['self']:[]),...(d.allowedTargets.includes('direction')?(d.allowedDirections??['north','northeast','east','southeast','south','southwest','west','northwest','up','down']):[])];
   const arguments_={sessionId,decisionId:d.id};
-  return {...d,reply:{tool:'answer',arguments:arguments_,valueSchema:schema,instruction:format.instruction},
-    ...(d.cancellable?{cancel:{tool:'cancel',arguments:arguments_}}:{})};
+  return {...d,reply:{tool:'respond',arguments:{...arguments_,action:'answer'},valueSchema:schema,instruction:format.instruction},
+    ...(d.cancellable?{cancel:{tool:'respond',arguments:{...arguments_,action:'cancel'}}}:{})};
 }
 function gateFor(s:Snapshot|undefined,options:FrameOptions):Gate {
   if(options.uncertain)return 'recoveryRequired';
@@ -126,6 +126,12 @@ export function present(response:Response|undefined,options:FrameOptions={}):Dec
   if(response&&!isSnapshot(response)&&'kind' in response){
     const {version:_version,sessionId:_sessionId,...data}=response;
     frame.result={...data,executableNow:gate==='ready',...('cell' in response?{attempts:attemptsFor(response.cell,response.sessionId,s?viewId(s):undefined)}:{})};
+    if('cell' in response&&s&&response.cell.dx===0&&response.cell.dy===0){
+      frame.result.commands=['pay','pray','enhance'].map(action=>({...offeredCall(`game.${action}`,{sessionId:s.sessionId,viewId:viewId(s)}),instruction:'Explicit engine command; applicability and consequences are not predicted.'}));
+    }else if('cell' in response&&s&&response.cell.inBounds&&Math.max(Math.abs(response.cell.dx),Math.abs(response.cell.dy))===1){
+      const target={position:{x:response.cell.x,y:response.cell.y}};
+      frame.result.commands=['attack','chat'].map(action=>({...offeredCall(`game.${action}`,{sessionId:s.sessionId,viewId:viewId(s),target}),instruction:'Explicit engine command; applicability and consequences are not predicted.'}));
+    }
   }
   return frame;
 }

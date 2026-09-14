@@ -94,6 +94,7 @@ async function fixture(
 async function nativeWebMcp(page, t, session) {
   const native = await rawNativeWebMcp(page, t, session);
   const { methods } = await import("../../../lib/neonethack/dist/mcp/agent-data.js");
+  const {valid} = await import("../../../lib/neonethack/dist/mcp/schema.js");
   // Hold only agent-received views. Never refresh from the human's live or
   // displayed snapshot: a human action must make the next agent input stale.
   const views = new Map();
@@ -109,7 +110,7 @@ async function nativeWebMcp(page, t, session) {
     await new Promise(resolve => setTimeout(resolve, 25));
   }
   return { ...native, call: async (name, args = {}) => {
-    const method = methods.find(method => method.name === name);
+    const method = methods.find(method => method.name === name&&(valid(args,method.schema)||valid({...args,viewId:args.viewId??'test-view'},method.schema)));
     const input = method?.schema.required?.includes('viewId') && args.viewId === undefined
       ? {...args, viewId: views.get(args.sessionId)} : args;
     const result = await native.call(name, input);
@@ -1592,8 +1593,7 @@ test(
     await page.waitForFunction(
       () => document.querySelector("pixel-nethack").dataset.webmcp === "ready",
     );
-    const { methods } = await import("../../../lib/neonethack/dist/mcp/agent-data.js");
-    const tools=methods.map(m=>({name:m.name,description:m.description,inputSchema:m.schema}));
+    const { tools } = await import("../../../lib/neonethack/dist/mcp/agent-data.js");
     // Project the actual HUD engine snapshot into the same perceived scene.
     // Navigation enrichment and reply diagnostics are adapter-only metadata.
     const snapshotPart=input=>{
@@ -1617,9 +1617,9 @@ test(
       assert.deepEqual(native.inputSchema, tool.inputSchema);
     }
     const call = native.call;
-    assert.equal((await call("help")).isError, false);
+    assert.equal((await call("help", {})).isError, false);
     assert.equal(await agentSnapshot(page), null);
-    const created = await call("create", {
+    const created = await call("session", {action: "create",
       name: "Mira",
       role: "valkyrie",
       race: "human",
@@ -1636,7 +1636,7 @@ test(
     assert.equal(state.scene.navigation.status,'available');
     assert.ok(state.scene.nearby.cells.length<=9);
     const humanBeforeQuery = await agentSnapshot(page);
-    const full=(await call('syncState',{sessionId:state.basis.sessionId})).structuredContent;
+    const full=(await call("observe", {sessionId:state.basis.sessionId})).structuredContent;
     assert.equal(full.basis.viewId,state.basis.viewId,'free observation retains the same perceived view');
     assert.deepEqual(await agentSnapshot(page), humanBeforeQuery, 'observation preserves the human action outcome and events');
     const {navigation:fullNavigation,...fullScene}=full.scene;
@@ -1656,7 +1656,7 @@ test(
       ...extra,
     });
     const prayerArgs = args("web-pray");
-    const prayer = await call("pray", prayerArgs);
+    const prayer = await call("interact", {action: "pray", ...(prayerArgs)});
     state = prayer.structuredContent;
     assert.equal(state.decision.kind, "confirmation");
     await page.locator("#decision[open]").waitFor();
@@ -1667,19 +1667,18 @@ test(
       "warnings await an explicit answer",
     );
     const decline = await call(
-      "answer",
-      args("web-decline", {
+      "respond", {action: "answer", ...(args("web-decline", {
         decisionId: state.decision.id,
         value: false,
-      }),
+      }))},
     );
     state = decline.structuredContent;
     assert.equal(state.decision, null);
     const waitArgs = args("web-wait");
-    state = (await call("wait", waitArgs)).structuredContent;
-    const next = (await call("wait", args("web-next"))).structuredContent;
+    state = (await call("interact", {action: "rest", ...(waitArgs)})).structuredContent;
+    const next = (await call("interact", {action: "rest", ...(args("web-next"))})).structuredContent;
     assert.deepEqual(
-      snapshotPart((await call("receipt",{sessionId:state.basis.sessionId,operationId:state.outcome.operationId})).structuredContent.result.receipt),
+      snapshotPart((await call("observe", {sessionId:state.basis.sessionId,operationId:state.outcome.operationId})).structuredContent.result.receipt),
       snapshotPart(state),
       "exact receipt retry",
     );
@@ -1691,11 +1690,11 @@ test(
     state = next;
     await page.evaluate(async()=>{const app=document.querySelector('pixel-nethack');await app.run(()=>app.game.wait());});
     const human=await agentSnapshot(page);
-    const stale=await call('wait',{sessionId:state.basis.sessionId,viewId:state.basis.viewId});
+    const stale=await call("interact", {action: "rest", sessionId:state.basis.sessionId,viewId:state.basis.viewId});
     assert.equal(stale.isError,true);
     assert.equal((await agentSnapshot(page)).revision,human.revision);
-    state=(await call('syncState',{sessionId:state.basis.sessionId})).structuredContent;
-    const actions = await call("inspect", {
+    state=(await call("observe", {sessionId:state.basis.sessionId})).structuredContent;
+    const actions = await call("interact", {
       sessionId: state.basis.sessionId,
       target: {direction:'self'},
     });
@@ -1717,17 +1716,17 @@ test(
       };
     });
     const uncertain = args("web-lost");
-    const lost=await call("wait", uncertain);
+    const lost=await call("interact", {action: "rest", ...(uncertain)});
     assert.equal(lost.isError, true);
     await page.locator("#recovery").waitFor({ state: "visible" });
-    const oldReceipt=await call('receipt',{sessionId:state.basis.sessionId,operationId:next.outcome.operationId});
+    const oldReceipt=await call("observe", {sessionId:state.basis.sessionId,operationId:next.outcome.operationId});
     assert.equal(oldReceipt.isError,false);assert.equal(oldReceipt.structuredContent.observation,undefined);
     assert.equal(await page.evaluate(()=>document.querySelector('pixel-nethack').current.pending.params.requestId),lost.structuredContent.outcome.operationId,
       'an unrelated receipt query cannot overwrite or clear the pending gameplay request');
-    const wrong = await call("wait", args("web-wrong-retry"));
+    const wrong = await call("interact", {action: "rest", ...(args("web-wrong-retry"))});
     assert.equal(wrong.isError, true);
     assert.equal(wrong.structuredContent.error.code,"uncertainExecution");
-    const recovered = await call("syncState",{sessionId:state.basis.sessionId});
+    const recovered = await call("observe", {sessionId:state.basis.sessionId});
     assert.equal(recovered.isError, false);
     assert.equal(recovered.structuredContent.verification.status, 'settled');
     assert.equal(await page.evaluate(()=>globalThis.__verificationInputs),1,'verification does not resend the input');
@@ -1755,9 +1754,9 @@ test(
       ),
       true,
     );
-    await call("suspend", { sessionId: state.basis.sessionId });
+    await call("session", {action: "suspend",  sessionId: state.basis.sessionId });
     assert.equal(await agentSnapshot(page), null);
-    const resumed = await call("resume", {
+    const resumed = await call("session", {action: "resume",
       sessionId: state.basis.sessionId,
     });
     assert.equal(resumed.isError, false);
@@ -1771,7 +1770,7 @@ test(
     // Retired callbacks must reject before touching the closed transport even
     // when that browser retains descriptors. Navigation clears the registry.
     let retired;
-    try { retired = await call("help"); }
+    try { retired = await call("help", {}); }
     catch (error) { retired = { removed: /Tool not found/.test(String(error)) }; }
     assert.ok(
       retired.removed ||
@@ -1811,7 +1810,7 @@ test('native WebMCP waits for registration while the title is already interactiv
     assert.equal(workers.length, 0, 'waiting for discovery cannot start a game');
     release();
     const native = await opening;
-    const created = await native.call("create", { name: 'Registry audit', role: 'valkyrie', seed: 9 });
+    const created = await native.call("session", {action: "create",  name: 'Registry audit', role: 'valkyrie', seed: 9 });
     assert.equal(created.isError, false);
     assert.equal((await snapshot(page)).sessionId, created.structuredContent.basis.sessionId);
     assert.equal((await snapshot(page)).observation.turn, 1);
@@ -1864,7 +1863,7 @@ test('native WebMCP waits for actual registry events after CDP enable completes'
     assert.equal(await snapshot(page), null);
     release();
     const native = await opening;
-    const created = await native.call("create", { name: 'Event audit', role: 'valkyrie', seed: 9 });
+    const created = await native.call("session", {action: "create",  name: 'Event audit', role: 'valkyrie', seed: 9 });
     assert.equal(invokes, 1, 'one invocation after the real native events arrive');
     assert.equal(created.isError, false);
     assert.equal((await snapshot(page)).sessionId, created.structuredContent.basis.sessionId);
@@ -1879,18 +1878,18 @@ test('native WebMCP waits for actual registry events after CDP enable completes'
 test('native WebMCP rejects an old confirmation after a human opens a different question', async t => {
   const { page, errors } = await fixture(t, { webmcp: true });
   const { call } = await nativeWebMcp(page, t);
-  const created = await call("create", { name: 'Decision audit', role: 'valkyrie', race: 'human', gender: 'female', align: 'lawful', seed: 9 });
+  const created = await call("session", {action: "create",  name: 'Decision audit', role: 'valkyrie', race: 'human', gender: 'female', align: 'lawful', seed: 9 });
   const sessionId = created.structuredContent.basis.sessionId;
-  const prayer = (await call("pray", { sessionId })).structuredContent;
+  const prayer = (await call("interact", {action: "pray",  sessionId })).structuredContent;
   assert.equal(prayer.decision.kind, 'confirmation');
   await page.getByRole('button', { name: 'No, not now', exact: true }).click();
   await ready(page);
   await page.getByLabel('Game menu', { exact: true }).click();
   await page.getByRole('button', { name: 'Abandon run', exact: true }).click();
   await ready(page);
-  const quit = (await call("syncState", { sessionId })).structuredContent;
+  const quit = (await call("observe", { sessionId })).structuredContent;
   assert.notEqual(quit.decision.id, prayer.decision.id);
-  const stale = await call("answer", { sessionId, decisionId: prayer.decision.id, value: true });
+  const stale = await call("respond", {action: "answer",  sessionId, decisionId: prayer.decision.id, value: true });
   assert.equal(stale.isError, true);
   assert.equal(stale.structuredContent.error.code, 'staleDecision');
   assert.equal(stale.structuredContent.outcome.operationId, undefined);
@@ -1899,7 +1898,7 @@ test('native WebMCP rejects an old confirmation after a human opens a different 
   assert.equal(unchanged.revision, quit.basis.revision);
   assert.equal(unchanged.observation.turn, quit.basis.turn);
   assert.deepEqual(unchanged.decision, engineQuestion(quit.decision));
-  assert.equal((await call("cancel", { sessionId, decisionId: quit.decision.id })).isError, false);
+  assert.equal((await call("respond", {action: "cancel",  sessionId, decisionId: quit.decision.id })).isError, false);
   assert.equal((await snapshot(page)).decision, null);
   assert.deepEqual(errors, []);
 });
@@ -2550,7 +2549,7 @@ test('hero names stay clear of the level label at phone and desktop widths', asy
   const { page } = await fixture(t, { webmcp: true });
   const { call } = await nativeWebMcp(page, t);
   for (const name of ['Browser Container', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcde']) {
-    const created = await call("create", { name, role: 'valkyrie', seed: 4 });
+    const created = await call("session", {action: "create",  name, role: 'valkyrie', seed: 4 });
     assert.equal(created.isError, false);
     // Existing saved names may still be long; creation itself is generated-only.
     await page.evaluate(name=>{const app=document.querySelector("pixel-nethack");app.current.name=name;app.render();},name);
@@ -2564,16 +2563,16 @@ test('hero names stay clear of the level label at phone and desktop widths', asy
         await page.screenshot({ path: `${root}/test-results/hero-name-${width}.png` });
       }
     }
-    await call("suspend", { sessionId: created.structuredContent.basis.sessionId });
+    await call("session", {action: "suspend",  sessionId: created.structuredContent.basis.sessionId });
   }
 });
 
 test('counted-action journal batches stay compact on phones and preserve full journal text', async t => {
   const { page } = await fixture(t, { webmcp: true });
   const { call } = await nativeWebMcp(page, t);
-  const created = await call("create", { name: 'Journal audit', role: 'valkyrie', seed: 4 });
+  const created = await call("session", {action: "create",  name: 'Journal audit', role: 'valkyrie', seed: 4 });
   const sessionId = created.structuredContent.basis.sessionId;
-  const rested = await call("rest", { sessionId, turns: 800 });
+  const rested = await call("interact", {action: "rest",  sessionId, turns: 800 });
   assert.equal(rested.isError, false);
   const entry = page.locator('#recent-messages .journal-inline').filter({ hasText: 'Count:' }).last();
   const text = await entry.textContent();
@@ -2856,7 +2855,7 @@ test("idle WebMCP discovery and closed adventures release storage for another ta
   await page.waitForFunction(() => document.querySelector("pixel-nethack").dataset.webmcp === "ready");
   const { call } = await nativeWebMcp(page, t);
   const owned = () => page.evaluate(async () => (await navigator.locks.query()).held.some(lock => lock.name === `neonethack:v1:${document.querySelector("pixel-nethack").storeName}`));
-  assert.equal((await call("help")).isError, false);
+  assert.equal((await call("help", {})).isError, false);
   assert.equal(await owned(), false, "discovery must not leave a title worker owning the store");
   // Exercise the C rejection through the client transport directly: the native
   // WebMCP schema validator can reject malformed input before opening storage.
@@ -2865,15 +2864,15 @@ test("idle WebMCP discovery and closed adventures release storage for another ta
   }));
   assert.ok(rejected.error);
   assert.equal(await owned(), false, "a rejected start must not keep an idle owner either");
-  const created = await call("create", { name: "Agent", role: "valkyrie", seed: 42 });
+  const created = await call("session", {action: "create",  name: "Agent", role: "valkyrie", seed: 42 });
   assert.equal(created.isError, false);
   const sid = created.structuredContent.basis.sessionId;
-  const warning = await call("pray", { sessionId: sid });
+  const warning = await call("interact", {action: "pray",  sessionId: sid });
   assert.equal(warning.isError, false);
   assert.equal(warning.structuredContent.decision.kind, "confirmation");
-  const fullWarning=await call('receipt',{sessionId:sid,operationId:warning.structuredContent.outcome.operationId});
+  const fullWarning=await call("observe", {sessionId:sid,operationId:warning.structuredContent.outcome.operationId});
   assert.equal(fullWarning.isError,false);
-  assert.equal((await call("suspend", { sessionId: sid })).isError, false);
+  assert.equal((await call("session", {action: "suspend",  sessionId: sid })).isError, false);
   assert.equal(await snapshot(page), null);
   assert.equal(await owned(), false, "closing an agent adventure must release its worker's store lock");
   const peer = await context.newPage();
@@ -3856,12 +3855,16 @@ test('free WebMCP observation preserves live touch equipment intent; input inval
   const selected = await choose.elementHandle();
   assert.equal(await choose.getAttribute('aria-pressed'), 'true');
   const dispatchStart = await page.evaluate(() => globalThis.equipmentRequests.length);
-  const observed = await call("syncState", { sessionId: frame.sessionId });
+  const observed = await call("observe", { sessionId: frame.sessionId });
   assert.equal(observed.isError, false);
-  const actions = await call("inspect", { sessionId: frame.sessionId, target: {direction:'self'} });
+  const actions = await call("interact", { sessionId: frame.sessionId, target: {direction:'self'} });
   assert.equal(actions.isError, false);
+  const itemActions = await call('use', {sessionId:frame.sessionId,itemId:shieldId});
+  assert.equal(itemActions.isError,false);
+  assert.equal(itemActions.structuredContent.outcome.actionsTaken,0);
+  assert.equal(itemActions.structuredContent.result.items[0].itemId,shieldId);
   const dispatched = await page.evaluate(start => globalThis.equipmentRequests.slice(start), dispatchStart);
-  assert.deepEqual(dispatched, ['session.observe', 'session.navigation', 'session.actions']);
+  assert.deepEqual(dispatched, ['session.observe', 'session.navigation', 'session.actions', 'session.observe']);
   assert.equal(observed.structuredContent.control.gate,'ready');
   assert.equal(observed.structuredContent.scene.navigation.status,'available');
   assert.equal((await snapshot(page)).observation.turn, frame.observation.turn);
@@ -3875,11 +3878,11 @@ test('free WebMCP observation preserves live touch equipment intent; input inval
   frame = await snapshot(page);
   assert.deepEqual(frame.observation.inventory.find(item => item.id === shieldId).equipmentSlots, ['shield'],
     'preserved callbacks still act on the live Game');
-  await call("syncState", { sessionId: frame.sessionId }); // Refresh agent revision after human equipment input.
+  await call("observe", { sessionId: frame.sessionId }); // Refresh agent revision after human equipment input.
   const dagger = frame.observation.inventory.find(item => item.equipmentSlots?.includes('alternateWeapon'));
   await page.getByRole('button', { name: 'Choose equipment slot for ' + dagger.label, exact: true }).tap();
   const oldSlot = await page.locator('[data-slot=weapon]').boundingBox();
-  const quit = await call("quit", { sessionId: frame.sessionId });
+  const quit = await call("session", {action: "quit",  sessionId: frame.sessionId });
   assert.equal(quit.isError, false);
   assert.ok(quit.structuredContent.decision);
   await page.touchscreen.tap(oldSlot.x + oldSlot.width / 2, oldSlot.y + oldSlot.height / 2);
@@ -3888,10 +3891,10 @@ test('free WebMCP observation preserves live touch equipment intent; input inval
     'an old equipment touch cannot answer the standing question');
   await page.getByRole('button', { name: 'Cancel action', exact: true }).tap();
   await ready(page);
-  await call("syncState", { sessionId: frame.sessionId });
+  await call("observe", { sessionId: frame.sessionId });
   await page.getByRole('button', { name: /^Backpack/ }).tap();
   await page.getByRole('button', { name: 'Choose equipment slot for ' + dagger.label, exact: true }).tap();
-  const dropped = await call("drop", { sessionId: frame.sessionId, itemId: dagger.id });
+  const dropped = await call("inventory", {action: "drop",  sessionId: frame.sessionId, itemId: dagger.id });
   assert.equal(dropped.isError, false);
   assert.ok(dropped.structuredContent.basis.revision > frame.revision);
   await page.getByRole('button', { name: /^Backpack/ }).tap();
@@ -4164,18 +4167,18 @@ test('tab handoff waits for an accepted input receipt and never repeats the acti
 
 test('WebMCP in a transferred tab requires explicit resume before acting again',{timeout:60000},async t=>{
   const {page,context,errors}=await fixture(t,{webmcp:true});const {call}=await nativeWebMcp(page,t);
-  const created=await call("create",{name:'Tab agent',role:'valkyrie',seed:9});
+  const created=await call("session", {action: "create", name:'Tab agent',role:'valkyrie',seed:9});
   assert.equal(created.isError,false);const sid=created.structuredContent.basis.sessionId;
   const peer=await context.newPage();await peer.goto(page.url());
   await peer.waitForFunction(()=>document.querySelector('pixel-nethack').snapshot?.sessionId);
   await page.getByRole('button',{name:'Play here',exact:true}).waitFor();
   const before=await snapshot(peer);
-  const refused=await call("wait",{sessionId:sid});
+  const refused=await call("interact", {action: "rest", sessionId:sid});
   assert.equal(refused.isError,true);assert.match(JSON.stringify(refused),/moved to another tab/);
   assert.deepEqual(await snapshot(peer),before);
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();
-  const resumed=await call("resume",{sessionId:sid});assert.equal(resumed.isError,false);
-  const waited=await call("wait",{sessionId:sid});assert.equal(waited.isError,false);
+  const resumed=await call("session", {action: "resume", sessionId:sid});assert.equal(resumed.isError,false);
+  const waited=await call("interact", {action: "rest", sessionId:sid});assert.equal(waited.isError,false);
   assert.equal((await snapshot(page)).revision,before.revision+1,"the resumed agent submits exactly one new attempt");
   assert.equal(await snapshot(peer),null);assert.deepEqual(errors,[]);
 });
@@ -4829,7 +4832,7 @@ test('journal preview is newest first, responsive and animates only new entries 
 test('WebMCP attribution persists while natural presentation trails durable agent input', {timeout:90000}, async t=>{
  const {page,errors}=await fixture(t,{webmcp:true});
  const {call}=await nativeWebMcp(page,t);
- const create=await call('create',{name:'Paced observer',role:'valkyrie',seed:9,harness_name:'Pi Browser',model_name:'Muse Spark'});
+ const create=await call("session", {action: "create", name:'Paced observer',role:'valkyrie',seed:9,harness_name:'Pi Browser',model_name:'Muse Spark'});
  assert.equal(create.isError,false,JSON.stringify(create.structuredContent));
  const sessionId=create.structuredContent.basis.sessionId;
  await page.emulateMedia({reducedMotion:'no-preference'});
@@ -4841,8 +4844,8 @@ test('WebMCP attribution persists while natural presentation trails durable agen
  // The game still checks each exact decision id; no inputs are fabricated.
  let state=create.structuredContent;
  for(let i=0;i<20;i++){
-  const asked=await call('pray',{sessionId});assert.equal(asked.isError,false);
-  state=(await call('cancel',{sessionId,decisionId:asked.structuredContent.decision.id})).structuredContent;
+  const asked=await call("interact", {action: "pray", sessionId});assert.equal(asked.isError,false);
+  state=(await call("respond", {action: "cancel", sessionId,decisionId:asked.structuredContent.decision.id})).structuredContent;
   assert.ok(!state.error,JSON.stringify(state.error));
  }
  const queued=await page.evaluate(()=>{const x=document.querySelector('pixel-nethack');return {pending:+x.dataset.presentationPending,live:x.snapshot.revision,shown:x.displaySnapshot.revision,turn:x.displaySnapshot.observation.turn,text:document.querySelector('#turn-pill').textContent,revisions:globalThis.shownRevisions};});
@@ -4850,16 +4853,16 @@ test('WebMCP attribution persists while natural presentation trails durable agen
  assert.equal(queued.text,'TURN '+queued.turn);
  assert.ok(queued.revisions.every((r,i,a)=>!i||r>=a[i-1]),'presentation never rolls backward');
  // Read-only calls see the latest state without flushing or stealing the view.
- const observed=(await call('syncState',{sessionId})).structuredContent;
+ const observed=(await call("observe", {sessionId})).structuredContent;
  assert.equal(observed.basis.revision,state.basis.revision);
  assert.ok(Number(await page.locator('pixel-nethack').getAttribute('data-presentation-pending'))>0);
  await page.screenshot({path:`${root}/test-results/webmcp-paced.png`});
- const quit=(await call('quit',{sessionId})).structuredContent;
+ const quit=(await call("session", {action: "quit", sessionId})).structuredContent;
  assert.equal(quit.decision.kind,'confirmation');
  await page.keyboard.press('Escape');
  assert.equal((await snapshot(page)).decision.id,quit.decision.id,'catch-up key never cancels a newer unseen question');
  assert.equal((await snapshot(page)).revision,quit.basis.revision);
- state=(await call('cancel',{sessionId,decisionId:quit.decision.id})).structuredContent;
+ state=(await call("respond", {action: "cancel", sessionId,decisionId:quit.decision.id})).structuredContent;
  // Pointer takeover catches up, without submitting a stale tile/item intent.
  if(Number(await page.locator('pixel-nethack').getAttribute('data-presentation-pending')))await page.locator('#watch-live').click();
  await page.waitForFunction(()=>document.querySelector('pixel-nethack').dataset.presentationPending==='0');
@@ -4879,12 +4882,12 @@ test('WebMCP attribution persists while natural presentation trails durable agen
 
 test('paced WebMCP distinguishes a waiting reply from a lost action result', {timeout:45000}, async t=>{
  const {page,errors}=await fixture(t,{webmcp:true});const {call}=await nativeWebMcp(page,t);
- const created=(await call('create',{role:'valkyrie',seed:9})).structuredContent;
+ const created=(await call("session", {action: "create", role:'valkyrie',seed:9})).structuredContent;
  const sid={sessionId:created.basis.sessionId};
  await page.emulateMedia({reducedMotion:'no-preference'});
  for(let i=0;i<20;i++){
-  const question=await call('pray',sid);assert.equal(question.isError,false);
-  assert.equal((await call('cancel',{...sid,decisionId:question.structuredContent.decision.id})).isError,false);
+  const question=await call("interact", {action: "pray", ...(sid)});assert.equal(question.isError,false);
+  assert.equal((await call("respond", {action: "cancel", ...sid,decisionId:question.structuredContent.decision.id})).isError,false);
  }
  assert.ok(Number(await page.locator('pixel-nethack').getAttribute('data-presentation-pending'))>2);
  await page.evaluate(async()=>{
@@ -4903,7 +4906,7 @@ test('paced WebMCP distinguishes a waiting reply from a lost action result', {ti
  });
  let invocation;
  try {
-  invocation=call('search',{...sid,turns:1});void invocation.catch(()=>{});
+  invocation=call("interact", {action: "search", ...sid,turns:1});void invocation.catch(()=>{});
   // The actual worker has completed its durable input. Let the presentation
   // timer render a queued frame while its original reply is still in flight.
   await page.waitForFunction(()=>{
@@ -4925,15 +4928,15 @@ test('paced WebMCP distinguishes a waiting reply from a lost action result', {ti
   assert.equal(await page.locator('#recovery').isVisible(),false);
   assert.equal(await page.evaluate(()=>document.querySelector('pixel-nethack').current.pending),undefined);
   // A later genuinely lost reply still stops input and surfaces the warning.
-  invocation=call('search',{...sid,turns:1});void invocation.catch(()=>{});
+  invocation=call("interact", {action: "search", ...sid,turns:1});void invocation.catch(()=>{});
   await page.waitForFunction(()=>globalThis.replyProbe.calls===2&&globalThis.replyProbe.held);
   assert.equal(await page.locator('#recovery').isVisible(),false);
   await page.evaluate(()=>globalThis.replyProbe.release());
   const lost=await invocation;invocation=null;assert.equal(lost.isError,true);
   await page.locator('#recovery').waitFor({state:'visible'});
   assert.equal(await page.getByRole('button',{name:'Search',exact:true}).isDisabled(),true);
-  assert.equal((await call('search',{...sid,turns:1})).isError,true);
-  const verified=await call('syncState',sid);assert.equal(verified.isError,false);
+  assert.equal((await call("interact", {action: "search", ...sid,turns:1})).isError,true);
+  const verified=await call("observe", sid);assert.equal(verified.isError,false);
   assert.equal(verified.structuredContent.verification.status,'settled');
   const accepted=await page.evaluate(()=>globalThis.replyProbe.response);
   assert.equal(verified.structuredContent.basis.turn,accepted.observation.turn);
@@ -4949,7 +4952,7 @@ test('paced WebMCP distinguishes a waiting reply from a lost action result', {ti
 
 test('WebMCP walking shows each completed step at a readable pace without delaying the agent', {timeout:45000}, async t=>{
  const {page,errors}=await fixture(t,{webmcp:true});const {call}=await nativeWebMcp(page,t);
- let state=(await call('create',{name:'Walking observer',role:'valkyrie',seed:9})).structuredContent;
+ let state=(await call("session", {action: "create", name:'Walking observer',role:'valkyrie',seed:9})).structuredContent;
  const sessionId=state.basis.sessionId,initialRevision=state.basis.revision,positions=[state.scene.self.position];
  await page.emulateMedia({reducedMotion:'no-preference'});
  await page.evaluate(()=>{
@@ -4959,7 +4962,7 @@ test('WebMCP walking shows each completed step at a readable pace without delayi
  for(let i=0;i<8;i++){
   const to=state.scene.nearby.cells.find(c=>['north','south','east','west'].includes(c.direction)&&c.terrain?.type==='floor'&&!c.occupant);
   assert.ok(to,'known adjacent floor from the reply context');
-  const result=await call('step',{sessionId,target:{direction:to.direction}});
+  const result=await call("travel", {mode: "step", sessionId,target:{direction:to.direction}});
   assert.equal(result.isError,false,JSON.stringify(result.structuredContent));state=result.structuredContent;
   assert.equal(state.outcome.positionChanged,true);positions.push(state.scene.self.position);
  }
@@ -5007,7 +5010,7 @@ test('text surfaces render markup literally across journals, item labels, menus 
 
 test('website WebMCP creation ignores arbitrary hero names and retains its generated name',async t=>{
  const {page,errors}=await fixture(t,{webmcp:true});const {call}=await nativeWebMcp(page,t);
- const result=await call('create',{name:'Custom Name',role:'valkyrie',race:'human',gender:'female',align:'lawful',seed:9});
+ const result=await call("session", {action: "create", name:'Custom Name',role:'valkyrie',race:'human',gender:'female',align:'lawful',seed:9});
  assert.ok(!result.error,JSON.stringify(result.error));await ready(page);
  const name=await page.locator('#hero-name').textContent();assert.notEqual(name,'Custom Name');assert.match(name,/^[A-Z][a-z]+ [A-Z][a-z]+$/);
  const metadata=await page.evaluate(()=>document.querySelector('pixel-nethack').current.name);assert.equal(metadata,name);

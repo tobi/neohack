@@ -16,12 +16,12 @@ function fixture() {
   };
   return { records: [{ request, response }], snapshot: { sessionId: 'fixture-session', revision: 7 } };
 }
-function mcp(f = fixture(), name = "step") {
+function mcp(f = fixture(), mode = "step") {
   const { request, response } = f.records[0];
   const { sessionId, direction } = request.params;
   const output={version:2,basis:{sessionId,revision:response.revision,viewId:'view-7'},outcome:{...response.outcome,action:'move',submission:'accepted',actionsTaken:1},events:response.events};
   f.records = [
-    { direction: 'request', message: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { sessionId, viewId:'view-6',target:{direction} } } } },
+    { direction: 'request', message: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name:'travel', arguments: { mode,sessionId, viewId:'view-6',...(mode==='to'?{to:{x:11,y:10}}:{target:{direction}}) } } } },
     { direction: 'response', message: { jsonrpc: '2.0', id: 1, result: { isError: false, structuredContent: output } } },
   ];
   return f;
@@ -46,7 +46,7 @@ test('old rolling eye text without a fresh heard event is never a bump', () => {
 test('a newer completed query supersedes a real bump at the same revision', () => {
   const f = mcp();
   const request = structuredClone(f.records[0]); request.message.id = 2;
-  request.message.params.name = "syncState";
+  request.message.params.name = "observe";
   const response = structuredClone(f.records[1]); response.message.id = 2;
   Object.assign(response.message.result.structuredContent.outcome, { action: 'observe', turnsElapsed: 0 });
   response.message.result.structuredContent.events = [];
@@ -125,7 +125,8 @@ test('only the exact witnessed heard message counts, not lore or mention of an e
 
 test('MCP pairs match outer IDs and preserve call identity without invented input revisions', () => {
   const f = mcp();
-  assert.equal(latestCompletedPair(f.records).request.params.name, "step");
+  assert.equal(latestCompletedPair(f.records).request.params.name, "travel");
+  assert.equal(latestCompletedPair(f.records).request.params.arguments.mode, "step");
   assert.equal(freshEyeBumpEvidence(f).evidence.callId, 1);
   f.records[1].message.id = '1';
   assert.equal(latestCompletedPair(f.records), null);
@@ -185,7 +186,7 @@ test('pending, duplicate and orphan MCP records fail closed, including a later q
     f => { f.records.shift(); },
     f => { f.records.splice(1, 0, { direction: 'request', message: { ...f.records[0].message, id: 2 } }); },
     f => { f.records[1].message.result.isError = true; },
-    f => { f.records[0].message.params.name = "syncState"; },
+    f => { f.records[0].message.params.name = "observe"; },
   ]) {
     const f = mcp(); change(f); assert.equal(freshEyeBumpEvidence(f).evidence, null);
   }
@@ -193,9 +194,9 @@ test('pending, duplicate and orphan MCP records fail closed, including a later q
   assert.equal(freshEyeBumpEvidence().evidence, null);
 });
 
-test('single-action go requires an actual move outcome; navigation aggregates are unsupported', () => {
+test('single-action travel to requires an actual move outcome; navigation aggregates are unsupported', () => {
   const f = fixture(); frame(f).outcome.action = 'move'; frame(f).navigation = { actionsTaken: 1 };
-  mcp(f, 'go');
+  mcp(f, 'to');
   assert.equal(freshEyeBumpEvidence(f).kind, 'fresh-eye-bump');
   f.records[1].message.result.structuredContent.outcome.actionsTaken = 2;
   assert.equal(freshEyeBumpEvidence(f).reason, 'navigation-not-single-action');

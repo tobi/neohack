@@ -26,7 +26,7 @@ No bash, JavaScript-evaluation or general browser-control tool is available.
 
 ## Starting and retaining a game
 Read the discovered schemas, then deliberately create one character using
-create. A dwarven lawful female Valkyrie is a reasonable starting choice.
+session with action create. A dwarven lawful female Valkyrie is a reasonable starting choice.
 Record its exact opaque sessionId in PROGRESS.md. Use that ID for every subsequent
 operation. Never create a replacement to recover a failed or uncertain request.
 The browser profile and Pi session are retained by the launcher. Runtime upgrades
@@ -37,12 +37,12 @@ ascension; save the exact end facts. Do not restart a hero in this invocation.
 DecisionFrame version 2 carries basis (sessionId, revision, viewId, levelId, turn),
 control.gate, outcome, scene, decision, events and query result. scene.self holds
 position, location and vitals; scene.map.text is the map. Routine scenes are complete
-for the next decision. syncState additionally returns full scene.world for free.
-After an error or lost reply, use syncState: it checks any retained uncertain receipt
+for the next decision. observe additionally returns full scene.world for free.
+After an error or lost reply, use observe: it checks any retained uncertain receipt
 without resending input. If verification fails, stop and follow the resume instruction.
 Normal navigation stops need no recovery call. Historical receipt documents are
 not current positions or active questions; there is no recover tool.
-Consult inspect, lookup, navigation, route and
+Consult actionless interact/use, lookup, plan and
 help when you need their documented information. Use help for exact operation
 arguments; the discovered schemas are authoritative. MCP/WebMCP navigation is
 higher-level than the precise semantic library; there is no generic act/raw-key
@@ -56,16 +56,17 @@ Fresh witnessed evidence comes from events; corroborate it with outcome and scen
 
 ## Actions, decisions and movement
 Every input is a deliberate choice. Pass the exact basis.viewId on mutations,
-except create/resume/suspend and answer/cancel, which bind to exact decision IDs.
-step {target:{direction:'east'}} attempts one adjacent step; go accepts a destination
-to only. attack/open/kick use each tool's target subset: position, ref, or symbol
+except session create/resume/suspend and respond, which binds to exact decision IDs.
+travel {mode:'step',target:{direction:'east'}} attempts one adjacent step; mode to accepts a destination
+to only. interact actions attack/open/kick use each variant's target subset: position, ref, or symbol
 with explicit scope, and direction where offered. Never reuse refs from older views.
-go/explore/descend have explicit bounds;
+travel modes to/explore/descend have explicit bounds;
 use short legs, inspect their actual stop reason and replan after interruption.
 A knownWalking route policy is not proof of physical impossibility. Search
 plausible dead ends for secret doors instead of repeating refused moves forever.
 An action's eligibility means an attempt is offered, not that it will succeed.
-Use answer with the exact current decision.id and explicit value matching
+Actionless use/interact always discover for free, even with one offer. Explicit action executes.
+Use respond action answer with the exact current decision.id and explicit value matching
 decision.reply.valueSchema, or decision.cancel when offered. Do not silently
 confirm warnings or resume occupations. Read control.gate before further input.
 Check the returned state after every attack. A dead/moved target is not permission
@@ -74,7 +75,7 @@ terminal events. Exact terminal facts outrank the intended action summary.
 
 ## Survival checklist
 Verify a useful starting weapon is actually wielded and armor is actually worn.
-Use exact current item IDs for wield/equip/eat/throw/read/zap and other actions.
+Use exact current item IDs for equipment and use actions.
 Prioritize a food supply. Act on canonical hunger rather than invented countdowns.
 A just-killed corpse is fresh evidence only: species safety remains a separate
 question. Never eat old carried meat or unknown corpses based on a glyph or name
@@ -122,7 +123,7 @@ export function pageTools(result, origin) {
     if(typeof tool.name!=='string'||!tool.inputSchema||!tool.frameId||names.has(tool.name)||['read_file','write_file'].includes(tool.name))throw Error('Invalid, duplicate or conflicting WebMCP tool');
     names.add(tool.name);
   }
-  if(!names.has('create')||!names.has('syncState')||!names.has('help'))throw Error('The configured page does not expose NeoHack WebMCP');
+  if(!names.has('session')||!names.has('observe')||!names.has('help'))throw Error('The configured page does not expose neohack WebMCP');
   return tools;
 }
 async function invoke(config, tool, args) {
@@ -196,12 +197,12 @@ async function main(){
     if(values['check-pi'])tools=tools.filter(t=>t.name==='help');
     fs.writeFileSync(path.join(runDir,'tools.json'),JSON.stringify(tools,null,2));
     if(values.check){
-      const result=await invoke(config,tools.find(t=>t.name==='help'),{name:'syncState'});
+      const result=await invoke(config,tools.find(t=>t.name==='help'),{name:'observe'});
       fs.writeFileSync(path.join(runDir,'check.json'),JSON.stringify(result,null,2));
       if(result?.isError)throw Error('Read-only WebMCP help failed');
       console.log(`Verified ${tools.length} page tools and read-only help. No game created.`);return;
     }
-    const prompt=values['check-pi'] ? 'Read NETHACK.md using read_file. Invoke help with name syncState. Write check-report.md using write_file, stating what the help returned. Then finish. This is a read-only binding check: do not create a game.' : `Read NETHACK.md, then play one new NeoHack game through the provided WebMCP tools, aiming for ascension. Keep PROGRESS.md current, and write report.md at the end. Continue until terminal state, uncertain execution or deadline ${new Date(config.deadline).toISOString()}. Tools are read_file, write_file and page WebMCP only. Do not merely describe a plan; play.`;
+    const prompt=values['check-pi'] ? 'Read NETHACK.md using read_file. Invoke help with name observe. Write check-report.md using write_file, stating what the help returned. Then finish. This is a read-only binding check: do not create a game.' : `Read NETHACK.md, then play one new neohack game through the provided WebMCP tools, aiming for ascension. Keep PROGRESS.md current, and write report.md at the end. Continue until terminal state, uncertain execution or deadline ${new Date(config.deadline).toISOString()}. Tools are read_file, write_file and page WebMCP only. Do not merely describe a plan; play.`;
     const fd=fs.openSync(path.join(runDir,'pi.jsonl'),'wx'),err=fs.openSync(path.join(runDir,'pi.stderr.log'),'wx');
     child=spawn(settings.pi.command,['--model',values.model??settings.pi.model,'--thinking',settings.pi.thinking,
       '--no-builtin-tools','--no-extensions','--no-skills','--no-prompt-templates','--no-context-files',

@@ -1,6 +1,8 @@
 /** One live MCP session. Transport journals exact calls; uncertainty stops input.
  * The shared SceneReader owns scene delivery. No old snapshot reconstruction,
  * automatic view binding, compensating observation, or gameplay retry. */
+import {valid} from '../../lib/neonethack/dist/mcp/schema.js';
+import {readOnlyTools} from '../../lib/neonethack/dist/mcp/agent-data.js';
 export function createDecisionClient({sessionId, tools, send, reader}) {
   if (!sessionId || !Array.isArray(tools) || typeof send !== 'function' || !reader)
     throw new TypeError('A session, discovered tools, transport and SceneReader are required.');
@@ -22,17 +24,18 @@ export function createDecisionClient({sessionId, tools, send, reader}) {
         throw new Error('Unknown tool or malformed arguments.');
       if (args.sessionId !== undefined && args.sessionId !== sessionId)
         throw new Error('Wrong session.');
-      if (['create', 'resume', 'suspend'].includes(request.name))
+      if (request.name==='session'&&['create', 'resume', 'suspend'].includes(args.action))
         throw new Error('Session lifecycle belongs to the run owner.');
       if (tool.inputSchema.properties?.sessionId) request.arguments = {...args, sessionId};
-      const readOnly = tool.annotations?.readOnlyHint === true;
+      const readSchema=readOnlyTools.find(tool=>tool.name===request.name)?.inputSchema;
+      const readOnly = !!readSchema&&valid(request.arguments,readSchema);
       if (!readOnly) {
         if (recovery() || !current || !['ready', 'decision'].includes(current.control.gate))
-          throw new Error('Input is blocked; use syncState for a fresh scene or exact receipt verification.');
-        if (['answer', 'cancel'].includes(request.name)) {
+          throw new Error('Input is blocked; use observe for a fresh scene or exact receipt verification.');
+        if (request.name==='respond') {
           if (!current.decision || args.decisionId !== current.decision.id)
             throw new Error('The exact standing decision ID is required.');
-          if (request.name === 'cancel' && !current.decision.cancel)
+          if (args.action === 'cancel' && !current.decision.cancel)
             throw new Error('This decision does not offer cancellation.');
         } else {
           if (current.control.gate !== 'ready') throw new Error('Resolve the standing decision explicitly.');
@@ -54,7 +57,7 @@ export function createDecisionClient({sessionId, tools, send, reader}) {
           (frame.control.gate === 'unavailable' && tool.inputSchema.properties?.sessionId)) needsScene = true;
       // A read failure has no input receipt to settle. Only an explicit fresh
       // sync repairs its scene; an unresolved mutation still requires verification.
-      if (request.name === 'syncState' && !frame.error && frame.basis?.sessionId === sessionId &&
+      if (request.name === 'observe' && args.operationId===undefined && !frame.error && frame.basis?.sessionId === sessionId &&
           frame.scene?.kind === 'snapshot' && ['ready', 'decision', 'ended'].includes(frame.control.gate) &&
           frame.outcome?.submission !== 'unknown') {
         needsScene = false;

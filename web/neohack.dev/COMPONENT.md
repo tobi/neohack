@@ -1,6 +1,6 @@
 # Embedding and the ascender workshop
 
-Build with `bun run build`. `/component/neohack.js` is a single ESM bundle with
+Build inside `nix develop` with `bun run build`. `/component/neohack.js` is a single ESM bundle with
 its selected runtime PNG artwork and shadow-root styles included. No framework,
 global CSS, game worker or account is required to display a public snapshot.
 The HTML tag can be used on another origin; the module route serves CORS headers.

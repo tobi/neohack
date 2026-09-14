@@ -18,7 +18,7 @@ const optional = ['automaticPickup', 'navigation', 'world', 'knowledge'] as cons
 const cellKey = (cell: {x: number; y: number}) => `${cell.x},${cell.y}`;
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 function fail(reason: string): never {
-  throw new Error(`${reason}; request a fresh syncState snapshot. Never resend gameplay to repair scene state.`);
+  throw new Error(`${reason}; request a fresh observe snapshot. Never resend gameplay to repair scene state.`);
 }
 function validateBasis(basis: DecisionFrame['basis']): asserts basis is Basis {
   if (!basis || ![basis.sessionId, basis.viewId, basis.levelId].every(value => typeof value === 'string' && value.length > 0) ||

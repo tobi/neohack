@@ -16,7 +16,7 @@ Start with the [first-five-minutes guide](docs/QUICKSTART.md) for runnable
 source, browser and installed-preview paths.
 For the playing loop, read [How an agent plays](docs/AGENT_PLAY.md).
 
-The MCP redesign uses a shared [DecisionFrame](docs/PROTOCOL.md#mcp-observation-presentation): compact scene snapshots for the next decision, with full `scene.world` on `syncState`. Check generated schemas for build support.
+The MCP redesign uses a shared [DecisionFrame](docs/PROTOCOL.md#mcp-observation-presentation): compact scene snapshots for the next decision, with full `scene.world` on `observe`. Check generated schemas for build support.
 The [Bun/WASM MCP CLI](docs/TYPESCRIPT.md#bunwasm-mcp) shares WebMCP’s exact tool executor, navigation and presentation.
 It supports stdio and `--http PORT`; each run has an independent WASM worker and durable append-only SQLite journal. The retired C MCP executable and static bundle are removed.
 
@@ -115,12 +115,12 @@ builds do not require JavaScript.
   `neonethack/high` adds Hero and script conveniences. The Node default export
   `Nethack` supplies native engine paths; browser transports are explicit.
   Browser-facing modules have no Node or Bun imports.
-- **MCP/WebMCP:** a generated navigation vocabulary through Bun/WASM stdio/HTTP
-  or the browser adapter, with complete low-operation coverage, exact receipts
+- **MCP/WebMCP:** eleven generated intention families through Bun/WASM stdio/HTTP
+  or the browser adapter, with audited mappings and explicit low-only omissions, exact receipts
   and explicitly bound questions. See the [short play guide](docs/AGENT_PLAY.md).
-  The redesign target renders the perceived level as `scene.map.text`, binds live
+  The adapter renders the perceived level as `scene.map.text`, binds live
   mutations to explicit `viewId`, and nests reply/cancel inside `decision`.
-  `syncState` adds full `scene.world`; receipt queries retain historical evidence
+  `observe` adds full `scene.world`; receipt queries retain historical evidence
   separately from current scene and decision. Native/low semantics are unchanged.
 
 - **WASM:** [`typescript/wasm.ts`](typescript/wasm.ts) runs the same C core with

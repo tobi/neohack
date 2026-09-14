@@ -10,13 +10,13 @@ bun examples/pi-webmcp/run.mjs --minutes 60 --headed
 ```
 
 `agent-browser.toml` selects the website and model. The launcher discovers the
-page's actual schemas; the hosted page must expose the current `create`,
-`syncState` and `help` vocabulary. `--check` reads discovery and help without
+page's actual schemas; the hosted page must expose the current `session`,
+`observe` and `help` vocabulary. `--check` reads discovery and help without
 creating a game. `--check-pi` also verifies Pi file reading/writing, exposing only
 WebMCP help. `--headed` requires a display; omit it for a headless browser.
 
 Normal play exposes all discovered WebMCP tools plus Pi's `read_file` and
-`write_file`. These names avoid a collision with NetHack's `read` action.
+`write_file`. These names distinguish local files from game-item reading through `use`.
 The extension uses Pi's own SDK, not another installed copy. Shell, editing and
 general browser-evaluation tools are disabled. File access is not an OS sandbox.
 

@@ -20,25 +20,25 @@ agent-browser open https://neohack.dev
 agent-browser wait 'pixel-nethack[data-webmcp="ready"]'
 agent-browser webmcp list
 agent-browser webmcp invoke help --params '{}'
-agent-browser webmcp invoke help --params '{"name":"go"}'
+agent-browser webmcp invoke help --params '{"name":"travel"}'
 ```
 
 Add `--headed` to watch. Keep the same browser profile and origin to retain the
 IndexedDB journal; cookie/localStorage exports do not replace it. Close human
 menus before agent input. These commands describe the MCP redesign target being
-implemented. Check that the deployed build advertises DecisionFrame, `step` and
+implemented. Check that the deployed build advertises DecisionFrame, `travel mode step` and
 explicit `viewId` schemas before using them; older schemas are not aliases.
 
 ## Create or resynchronize with one run
 
 The shell examples use `jq`. Arguments are the tool’s parameters directly.
-An empty creation object chooses a random character and generated name; specify
+Creation with only action create chooses a random character and generated name; specify
 only the identity fields you want to choose.
 
 ```sh
 PLAY_DIR=$(mktemp -d)
-agent-browser --json webmcp invoke create \
-  --params '{"seed":42,"role":"valkyrie","harness_name":"agent-browser"}' > "$PLAY_DIR/create.json"
+agent-browser --json webmcp invoke session \
+  --params '{"action":"create","seed":42,"role":"valkyrie","harness_name":"agent-browser"}' > "$PLAY_DIR/create.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/create.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/create.json" > "$PLAY_DIR/frame.json"
 GAME_ID=$(jq -er '.basis.sessionId' "$PLAY_DIR/frame.json")
@@ -48,13 +48,13 @@ Run creation once. If its reply is lost, retrieve the original invocation or
 inspect the owning page before creating again. An already open game exposes its
 public token through `agent-browser get attr pixel-nethack data-session-id`.
 Read its full perceived scene for free when needed. Ordinary replies already
-carry the complete next-decision scene; `syncState` adds `scene.world`:
+carry the complete next-decision scene; `observe` adds `scene.world`:
 
 ```sh
-agent-browser --json webmcp invoke syncState \
-  --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid}')" > "$PLAY_DIR/syncState.json"
-jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/syncState.json"
-jq '.data.output.structuredContent' "$PLAY_DIR/syncState.json" > "$PLAY_DIR/frame.json"
+agent-browser --json webmcp invoke observe \
+  --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid}')" > "$PLAY_DIR/observe.json"
+jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/observe.json"
+jq '.data.output.structuredContent' "$PLAY_DIR/observe.json" > "$PLAY_DIR/frame.json"
 ```
 
 Check both the CLI envelope and game result. A timed-out invocation is not a
@@ -69,18 +69,18 @@ and your held `viewId` on live-view mutations. Answers/cancellations instead bin
 to the exact returned question ID. Choose one operation at a time.
 
 ```sh
-agent-browser webmcp invoke inspect \
+agent-browser webmcp invoke interact \
   --params "$(jq -nc --arg sid "$GAME_ID" '{sessionId:$sid,target:{direction:"east"}}')"
-agent-browser --json webmcp invoke search \
-  --params "$(jq -c '{sessionId:.basis.sessionId,viewId:.basis.viewId,turns:1}' "$PLAY_DIR/frame.json")" > "$PLAY_DIR/search.json"
+agent-browser --json webmcp invoke interact \
+  --params "$(jq -c '{action:"search",sessionId:.basis.sessionId,viewId:.basis.viewId,turns:1}' "$PLAY_DIR/frame.json")" > "$PLAY_DIR/search.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/search.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/search.json" > "$PLAY_DIR/frame.json"
 ```
 
 Inspect the returned question before another action. To navigate, choose a
-perceived destination and invoke `go` with `{sessionId,viewId,to:{x,y},maxActions:8}`.
+perceived destination and invoke `travel mode to` with `{sessionId,viewId,mode:"to",to:{x,y},maxActions:8}`.
 The shared navigator plans known routes and stops on decisions or changed
-circumstances. `explore` requests one exploration leg; `descend` follows disclosed
+circumstances. `travel mode explore` requests one exploration leg; `travel mode descend` follows disclosed
 stairs. Neither is an endless autoplay command.
 
 The 9×9 neighborhood is a destination-selection area. Only the eight adjacent
@@ -88,16 +88,16 @@ squares represent single steps. To deliberately attempt an ordinary step east,
 including its normal bumps or attempts to open a door:
 
 ```sh
-jq '{sessionId:.basis.sessionId,viewId:.basis.viewId,target:{direction:"east"}}' \
+jq '{mode:"step",sessionId:.basis.sessionId,viewId:.basis.viewId,target:{direction:"east"}}' \
   "$PLAY_DIR/frame.json" > "$PLAY_DIR/move.json"
-agent-browser --json webmcp invoke step \
+agent-browser --json webmcp invoke travel \
   --params "@$PLAY_DIR/move.json" > "$PLAY_DIR/moved.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/moved.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/moved.json" > "$PLAY_DIR/frame.json"
 ```
 
 Refresh `frame.json` after every operation before using it for another target.
-`step({target:{direction:"east"}})` attempts one adjacent ordinary step, with
+`travel({mode:"step",target:{direction:"east"}})` attempts one adjacent ordinary step, with
 session/view arguments as above. It preserves rules, tame-ally swaps and real
 confirmations; it does not automatically fight a displayed non-ally. Use `attack` for a
 deliberate adjacent attack. Eligibility is not a safety guarantee.
@@ -105,13 +105,13 @@ deliberate adjacent attack. Eligibility is not a safety guarantee.
 Answer a standing question explicitly. For a confirmation you choose to decline:
 
 ```sh
-agent-browser --json webmcp invoke answer \
+agent-browser --json webmcp invoke respond \
   --params "$(jq -c '.decision.reply.arguments + {value:false}' "$PLAY_DIR/frame.json")" > "$PLAY_DIR/answered.json"
 jq -e '.success == true and .data.output.isError == false' "$PLAY_DIR/answered.json"
 jq '.data.output.structuredContent' "$PLAY_DIR/answered.json" > "$PLAY_DIR/frame.json"
 ```
 
-`cancel` takes `sessionId` and the exact returned `decisionId` and works
+`respond action cancel` takes `sessionId` and the exact returned `decisionId` and works
 only for cancellable questions. Both answer and cancel reject old decision IDs;
 read the new question before making another choice. Use `decision.reply` and
 `decision.cancel` for bound syntax; no `viewId` or engine revision is needed for
@@ -122,10 +122,10 @@ names or IDs; an ambiguous name returns candidates. Use `help` with a tool’s
 
 ## Check current state and return
 
-After a lost input reply, **do not invoke the action again**. Call `syncState` to
+After a lost input reply, **do not invoke the action again**. Call `observe` to
 read current state and check any retained uncertain receipt without resending
 input. If verification fails, stop and follow the resume instruction. Normal
-navigation stops need no recovery call. `receipt({sessionId,operationId})` nests
+navigation stops need no recovery call. `observe({sessionId,operationId})` nests
 historical evidence in query `result`; it does not replace the current scene
 or authorize answering an old question. A page restart can lose adapter-side correlation; a new adapter must
 not guess which earlier operation the caller missed.
@@ -138,9 +138,9 @@ an automatic retry of the old plan.
 
 Bookmark the run’s full URL. Wait for **Saved online** before switching browsers;
 the URL contains the private vault key. See [cloud saves](CLOUD_SAVES.md).
-`suspend({sessionId})` releases the engine while retaining its journal and
+`session({action:"suspend",sessionId})` releases the engine while retaining its journal and
 standing decision; it is not in-game quit. Return through the bookmark or
-`resume({sessionId})` on the same origin/profile and pinned runtime.
+`session({action:"resume",sessionId})` on the same origin/profile and pinned runtime.
 
 An instruction for an agent:
 

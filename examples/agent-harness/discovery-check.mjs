@@ -33,13 +33,14 @@ try{
       }
       if(req.url!=='/call'||req.method!=='POST')throw Error('Unknown route');
       if(ended||failed||++attempted>9)throw Error('Exercise stopped or call budget exhausted; not sent.');
-      if(!['create','syncState','inspect','pray','answer','suspend','help'].includes(command.name))throw Error('Model left the requested exercise.');
-      if(command.name==='create'&&++created!==1)throw Error('Model attempted a second creation.');
-      if(command.name==='answer'&&command.arguments?.value!==false)throw Error('Model did not explicitly decline the prayer.');
+      const intent=command.name+(command.arguments?.action?'.'+command.arguments.action:command.name==='interact'?'.discover':'');
+      if(!['session.create','observe','interact.discover','interact.pray','respond.answer','session.suspend','help'].includes(intent)||command.arguments?.operationId)throw Error('Model left the requested exercise.');
+      if(intent==='session.create'&&++created!==1)throw Error('Model attempted a second creation.');
+      if(intent==='respond.answer'&&command.arguments?.value!==false)throw Error('Model did not explicitly decline the prayer.');
       const response=(await client.callTool(command)).structuredContent;
-      if(command.name==='suspend'&&!response.error)ended=true;
+      if(intent==='session.suspend'&&!response.error)ended=true;
       transcript.push({command,response});
-      trace.push({tool:command.name,argumentKeys:Object.keys(command.arguments??{}),status:response.outcome?.status,error:response.error?.code,turn:response.basis?.turn,question:response.decision?.kind??null});
+      trace.push({tool:command.name,intent,argumentKeys:Object.keys(command.arguments??{}),status:response.outcome?.status,error:response.error?.code,turn:response.basis?.turn,question:response.decision?.kind??null});
       await writeFile(join(out,'private-transcript.json'),JSON.stringify(transcript));
       if(response.error)failed='MCP rejection: '+response.error.code;
       reply(200,{result:response});if(failed)child?.kill('SIGTERM');
@@ -51,7 +52,7 @@ try{
   closeSync(stdout);closeSync(stderr);
   timer=setTimeout(()=>{failed??='Two-minute deadline';child.kill('SIGKILL');},120000);
   const exit=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',(code,signal)=>resolve({code,signal}));});
-  const names=trace.map(t=>t.tool),passed=!!ready&&!failed&&exit.code===0&&created===1&&ended&&['create','syncState','inspect','pray','answer','suspend'].every(t=>names.includes(t));
+  const names=trace.map(t=>t.intent),passed=!!ready&&!failed&&exit.code===0&&created===1&&ended&&['session.create','observe','interact.discover','interact.pray','respond.answer','session.suspend'].every(t=>names.includes(t));
   await writeFile(join(out,'summary.json'),JSON.stringify({model:values.model,actualModel:ready?.model,provider:ready?.provider,objective,catalogCount:tools.length,catalogBytes:Buffer.byteLength(JSON.stringify(tools)),passed,failed,exit,attempted,trace,limits:'One bounded fresh-model usability sample, not a reliability or gameplay-skill benchmark. No production traffic; no argument repair or tool-name cheat sheet.'},null,2));
   console.log(JSON.stringify({passed,tools:names,summary:join(out,'summary.json')}));if(!passed)process.exitCode=1;
 }finally{

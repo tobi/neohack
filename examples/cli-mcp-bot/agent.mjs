@@ -164,24 +164,17 @@ const { tools: mcpTools = [] } = await mcpClient.listTools();
 log(`connected MCP HTTP ${mcpClient.initializeResult.protocolVersion} at ${MCP_HTTP_URL}; tools discovered: ${mcpTools.length}`);
 
 // A new MCP server has no in-memory active session. Load the saved recording
-// before asking the model to act. Stale IDs are cleared; contention is fatal.
+// before asking the model to act. A failed resume never authorizes a new run.
 if (lastSessionId) {
-  const resumed = await callBridge("resume", { sessionId: lastSessionId });
+  const resumed = await callBridge('session', { action:'resume', sessionId: lastSessionId });
   if (resumed.isError) {
     const code = resumed.error?.code ?? 'unknownError';
     const message = resumed.error?.message ?? resumed.text.slice(0, 300);
-    if (code === 'sessionBusy') {
-      log(`startup failed: ${code}: ${message}`);
-      await mcpClient.close();
-      if (mcpServer) mcpServer.kill('SIGTERM');
-      process.exitCode = 2;
-      throw new Error(`Session ${lastSessionId} is busy; stop the other agent before retrying`);
-    }
-    log(`saved session ${lastSessionId} unavailable (${code}: ${message}); starting a new adventure`);
-    lastSessionId = null;
-    state.gameId = null;
-    saveJson(STATE_F, state);
-    saveJson(CONV_F, []);
+    log(`startup failed: ${code}: ${message}`);
+    await mcpClient.close();
+    if (mcpServer) mcpServer.kill('SIGTERM');
+    process.exitCode = 2;
+    throw new Error(`Session ${lastSessionId} could not be resumed; preserve its state and resolve ${code} before playing.`);
   } else {
     latestRevision = resumed.structuredContent?.basis?.revision ?? null;
     const turn = resumed.structuredContent?.basis?.turn ?? '?';
@@ -267,13 +260,13 @@ const model = openai.chat(MODEL);
 let doctrine = '';
 try { doctrine = readFileSync(DOCTRINE_F, 'utf8'); } catch { doctrine = readFileSync(BUNDLED_DOCTRINE, 'utf8'); }
 const sessionInstruction = lastSessionId
-  ? `SESSION: resumed session "${lastSessionId}". Begin with syncState {"sessionId":"${lastSessionId}"}.`
-  : 'SESSION: start a NEW adventure. Your first action must be create {"role":"valkyrie"}.';
-const system = `${doctrine}\n\n${sessionInstruction}\nUse DecisionFrame v2: basis identifies session, revision, viewId, levelId and turn; scene.self holds position, location and vitals. Pass the exact basis.viewId on mutations except create/resume/suspend and answer/cancel. Answer the exact decision.id using decision.reply; cancellation must be offered by decision.cancel. step {target:{direction}} is one adjacent attempt; go takes to only. Read control.gate before acting. Fresh evidence is events; query data is result. Routine scenes are complete for the next decision; syncState additionally returns scene.world. Never reconstruct old observation/state/context envelopes.`;
+  ? `SESSION: resumed session "${lastSessionId}". Begin with observe {"sessionId":"${lastSessionId}"}.`
+  : 'SESSION: start a NEW adventure. Your first action must be session {"action":"create","role":"valkyrie"}.';
+const system = `${doctrine}\n\n${sessionInstruction}\nUse DecisionFrame v2: basis identifies session, revision, viewId, levelId and turn; scene.self holds position, location and vitals. Pass the exact basis.viewId on mutations except session create/resume/suspend and respond. Answer the exact decision.id using decision.reply; cancellation must be offered by decision.cancel. travel {mode:step,target:{direction}} is one adjacent attempt; mode to takes a destination. Actionless use/interact always discover for free; supply action to execute. Read control.gate before acting. Fresh evidence is events; query data is result. Routine scenes are complete for the next decision; observe additionally returns scene.world. Never reconstruct old observation/state/context envelopes.`;
 
 const initialPrompt = lastSessionId
   ? `Continue the resumed adventure (sessionId ${lastSessionId}). Observe, then play turn after turn. Descend as deep as you can.`
-  : 'Start a fresh adventure: create {"role":"valkyrie"}, then play. Descend as deep as you can.';
+  : 'Start a fresh adventure: session {"action":"create","role":"valkyrie"}, then play. Descend as deep as you can.';
 
 // Persistent conversation is resumed only with -c. A default invocation starts
 // both a new game and a fresh model conversation.
