@@ -42,7 +42,16 @@ export class RpcPeer{
       if(method==='ping')result={};
       else if(method==='tools/list')result={tools};
       else if(method==='tools/call'){
-        if(typeof params.name!=='string'||!tools.some(t=>t.name===params.name)||('arguments'in params&&!object(params.arguments)))throw new RpcError(-32602,'Unknown tool or invalid arguments; call help for schemas');
+        if(typeof params.name!=='string')throw new RpcError(-32602,'Tool name must be a string; use tools/list for available tools');
+        if(!tools.some(t=>t.name===params.name)){
+          const availableTools=tools.map(t=>t.name),name=params.name.slice(0,160);
+          // One bounded, escaped stderr record; never log arguments, session
+          // tokens or the whole request, and never contaminate stdio JSON-RPC.
+          console.error('[mcp] '+JSON.stringify({event:'unknownTool',transport:this.http?'http':'stdio',
+            requestId:typeof id==='string'?id.slice(0,160):id,tool:name,toolNameTruncated:params.name.length>160,availableTools}));
+          throw new RpcError(-32602,`Unknown tool ${JSON.stringify(name)}. Available tools: ${availableTools.join(', ')}. Use tools/list or help for schemas; no operation was sent.`);
+        }
+        if('arguments'in params&&!object(params.arguments))throw new RpcError(-32602,'Tool arguments must be an object; call help for schemas');
         const key=JSON.stringify(id);if(this.active.has(key))throw new RpcError(-32600,'Request ID already in flight');
         const controller=new AbortController();this.active.set(key,controller);
         try{result=await this.service.call(params.name,params.arguments??{},{signal:controller.signal});}finally{this.active.delete(key);}
