@@ -52,6 +52,11 @@ require that exact view except session create/resume/suspend and exact
 `respond` calls. Stale views reject without refreshing or retargeting input.
 Strict variants reject unrelated fields rather than silently ignoring them.
 
+A gameplay call that ends in death returns MCP `isError: true`, with the actual
+cause in `scene.end`. Its input was still accepted: retain the outcome and exact
+receipt; do not retry it. Further gameplay rejects without input. Postmortem
+observation, receipt reads and session cleanup remain available.
+
 ```js
 session({action: "create", role: "valkyrie"})
 travel({sessionId, viewId, mode: "step", target: {direction: "east"}})

@@ -18,6 +18,11 @@ export class McpService {
       // Tildes cannot form a fence inside a row: each row has a coordinate prefix.
       content.push({type:'text',text:`Perceived map (exact feature coordinates: scene.map.positions):\n~~~~text\n${map.text}\n~~~~`});
     }
-    return {isError:!!response.error,structuredContent:response,content};
+    // Death is a failed gameplay result, not a failed/uncertain submission.
+    // Keep its accepted outcome and exact receipt intact; postmortem reads
+    // remain successful and must not be mistaken for another fatal action.
+    const died=frame.control.gate==='ended'&&frame.scene?.end?.kind==='death'&&
+      (frame.outcome?.actionsTaken??0)>0;
+    return {isError:!!response.error||died,structuredContent:response,content};
   }
 }
