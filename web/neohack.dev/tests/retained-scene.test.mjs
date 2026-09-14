@@ -334,3 +334,45 @@ test("1,200 replay updates do not accumulate terrain work or scene nodes", async
   assert.equal(result.nodesAfter, result.nodesBefore);
   assert.ok(result.terrainChunks < 20, JSON.stringify(result));
 });
+
+test('world coordinates and alpha picking survive nested CSS scale, zoom, scrolling and camera motion',async t=>{
+  const page=await fixture(t);
+  const cases=await page.evaluate(()=>{
+    document.body.style.cssText='margin:0;height:2000px';
+    const host=document.createElement('div');
+    host.style.cssText='position:absolute;left:73px;top:187px;width:613.5px;height:379.25px;transform-origin:17px 31px';
+    const surface=document.createElement('canvas');host.append(surface);document.body.append(host);
+    const scene=new globalThis.art.RetainedScene(surface);
+    scene.setMotion(false);
+    const marker=document.createElement('div');
+    marker.style.cssText='position:absolute;width:0;height:0';
+    scene.camera.append(marker);
+    let cases=0;
+    for(const [sx,sy] of [[1,1],[.5,.5],[.75,1.25],[2,.5],[1.1,1.1]])for(const zoom of [.8,1,1.25]){
+      host.style.transform=`translate(11px,-7px) scale(${sx},${sy})`;
+      host.style.zoom=String(zoom);
+      window.scrollTo(0,113);
+      for(const [panX,panY,scale] of [[0,0,1],[-117,43,2.5],[31.25,-63.5,.75]]){
+        scene.moveCamera(panX,panY,scale);
+        for(const [x,y] of [[1,0],[9,10],[10,9],[79,20]]){
+          const expected={x:x*16+8,y:y*16+8};
+          marker.style.left=expected.x+'px';marker.style.top=expected.y+'px';
+          const rect=marker.getBoundingClientRect(),point=scene.worldPoint(rect.left,rect.top);
+          // CSS zoom quantizes layout to fractions of a CSS pixel. Permit
+          // subpixel rounding, never a changed ground cell or alpha hit.
+          if(Math.abs(point.x-expected.x)>.1||Math.abs(point.y-expected.y)>.1||Math.floor(point.x/16)!==x||Math.floor(point.y/16)!==y)
+            throw Error(JSON.stringify({sx,sy,zoom,panX,panY,scale,expected,actual:{x:point.x,y:point.y}}));
+          scene.reconcile([{key:'probe',signature:'probe',x:x*16,y:y*16,width:16,height:16,z:1,target:{x,y},paint:c=>{c.fillStyle='red';c.fillRect(6,6,4,4);}}]);
+          const picked=scene.pick(rect.left,rect.top);
+          if(picked?.x!==x||picked?.y!==y)throw Error('opaque pixel selected the wrong ground square');
+          marker.style.left=x*16+1+'px';marker.style.top=y*16+1+'px';
+          const transparent=marker.getBoundingClientRect();
+          if(scene.pick(transparent.left,transparent.top))throw Error('transparent padding selected an object');
+          cases++;
+        }
+      }
+    }
+    scene.destroy();host.remove();return cases;
+  });
+  assert.equal(cases,180);
+});

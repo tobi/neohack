@@ -112,6 +112,13 @@ export function resolveTarget(snapshot: Snapshot, target: AgentTarget, options: 
     const resolved = atPosition(snapshot, {x: cell.x, y: cell.y}, options);
     candidates.push({...resolved, position: {x: cell.x, y: cell.y}, ...(direction ? {direction} : {}), description: description(cell, direction)});
   }
+  // renderMap always places a known hero, even when world omits that cell.
+  // Symbol targeting must see that same displayed square, without inventing
+  // terrain or suppressing other apparent '@' occupants from ambiguity.
+  if (you && target.symbol === '@' && target.scope === 'level' && options.self &&
+      !snapshot.observation.world.some(cell => cell.x === you.x && cell.y === you.y)) {
+    candidates.push({...atPosition(snapshot, you, options), position: {...you}, description: 'you'});
+  }
   if (!candidates.length) throw new TargetError('targetNotFound', 'No displayed symbol matches in the requested scope.');
   if (candidates.length > 1) throw new TargetError('ambiguousTarget', 'Multiple displayed squares match; choose a coordinate or reference.', {candidates});
   return atPosition(snapshot, candidates[0]!.position, options);

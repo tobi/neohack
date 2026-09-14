@@ -245,11 +245,16 @@ int nnh_known_paths(const nnh_knowledge *basis, const nnh_known_cell *map, int *
 {
     static const int dx[] = {0,1,1,1,0,-1,-1,-1}, dy[] = {-1,-1,0,1,1,1,0,-1};
     int queue[NNH_MAP_CELLS];
-    int start = basis->origin_y * NNH_MAP_WIDTH + basis->origin_x;
+    int start;
     int head = 0, tail = 0, i;
     nnh_knowledge k = *basis;
+    /* Validate axes before flattening: an invalid x can otherwise alias a
+     * different row, and unbounded coordinates can overflow the product. */
     if (!basis->have_origin || !basis->ordinary_locomotion || !basis->direction_reliable ||
-        start < 0 || start >= NNH_MAP_CELLS || !map[start].in_bounds) return -1;
+        basis->origin_x < 1 || basis->origin_x >= NNH_MAP_WIDTH ||
+        basis->origin_y < 0 || basis->origin_y >= NNH_MAP_HEIGHT) return -1;
+    start = basis->origin_y * NNH_MAP_WIDTH + basis->origin_x;
+    if (!map[start].in_bounds) return -1;
     for (i = 0; i < NNH_MAP_CELLS; i++) parent[i] = -1;
     queue[tail++] = start; parent[start] = start;
     while (head < tail) {

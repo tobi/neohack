@@ -105,8 +105,14 @@ export class RetainedScene {
   }
   worldPoint(clientX: number, clientY: number) {
     const box = this.element.getBoundingClientRect();
+    const style = getComputedStyle(this.element);
+    // Client coordinates include ancestor CSS scale/zoom; camera coordinates
+    // do not. Recover local CSS pixels before inverting the animated camera.
+    // Computed dimensions retain fractional pixels (clientWidth rounds them).
+    const scaleX = box.width / parseFloat(style.width);
+    const scaleY = box.height / parseFloat(style.height);
     const transform = new DOMMatrix(getComputedStyle(this.camera).transform);
-    return new DOMPoint(clientX - box.left, clientY - box.top).matrixTransform(
+    return new DOMPoint((clientX - box.left) / scaleX, (clientY - box.top) / scaleY).matrixTransform(
       transform.inverse(),
     );
   }

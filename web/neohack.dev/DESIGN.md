@@ -872,7 +872,10 @@ keeps nearest-neighbor pixels while native camera coordinates snap to pixel unit
 Middle mouse drag pans without engine input, uses pointer capture and releases on
 pointer cancellation or window blur. Wheel events over HTML controls keep normal
 scrolling; browser Ctrl/Command zoom remains available. Tile picking follows the
-same current camera transform. Zoom buttons and Center remain keyboard alternatives.
+same current camera transform, after normalizing client coordinates for ancestor
+CSS scale/zoom and scrolling. Map cells retain absolute engine coordinates; crop
+origins and camera offsets are presentation only. Zoom buttons and Center remain
+keyboard alternatives.
 
 The title doorway has steady warm, stepped light from the first frame. An accessible
 button over the actual gate starts the existing traveler walk and portal sequence,
