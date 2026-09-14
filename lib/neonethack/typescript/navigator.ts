@@ -291,7 +291,11 @@ export class Navigator {
             const direction=door;
             return result((await planning.query(()=>this.game.actions({direction},{expectedRevision:this.game.state.revision}))).cell.terrain?.type==='openDoor'?'arrived':'interrupted');
           }
-          return result(frame.observation.location.id!==level?'arrived':'interrupted');
+          // Reaching the stair square is not descent success. Require the
+          // accepted climb to change levels, even at identical x/y coordinates.
+          return frame.observation.location.id!==level
+            ? result('arrived',{stop:{kind:'levelChanged',before:level,after:frame.observation.location.id}})
+            : result('interrupted');
         }
         if(frame.observation.location.id!==level) return result('changed',{stop:{kind:'levelChanged',before:level,after:frame.observation.location.id}});
         if(!frame.outcome.positionChanged) return result('interrupted',{stop:{kind:'positionUnchanged'}});
